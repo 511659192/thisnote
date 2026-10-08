@@ -37,11 +37,11 @@ public class NoteController {
             @RequestParam(required = false) String notebookId,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String text,
-            @RequestParam(defaultValue = "false") boolean includeArchived,
+
             @RequestParam(defaultValue = "500") int limit,
             @RequestParam(defaultValue = "0") int offset) {
         return noteService.list(new NoteService.Query(filter, tag, notebookId, type, text,
-                includeArchived, false, limit, offset));
+                false, limit, offset));
     }
 
     @GetMapping("/counts")
@@ -76,11 +76,6 @@ public class NoteController {
         return noteService.detail(id);
     }
 
-    @PostMapping("/{id}/duplicate")
-    public Dtos.NoteDetail duplicate(@PathVariable String id) {
-        return noteService.duplicate(id);
-    }
-
     @DeleteMapping("/{id}")
     public Map<String, Object> trash(@PathVariable String id,
                                      @RequestParam(defaultValue = "false") boolean hard) {
@@ -101,14 +96,6 @@ public class NoteController {
     @DeleteMapping("/trash")
     public Map<String, Object> emptyTrash() {
         return Map.of("deleted", noteService.emptyTrash());
-    }
-
-    @PostMapping("/{id}/archive")
-    public Map<String, Object> archive(@PathVariable String id, @RequestParam boolean value) {
-        Note n = noteService.require(id);
-        n.archived = value;
-        noteRepository.update(n);
-        return Map.of("archived", value);
     }
 
     // ---------------- tags ----------------

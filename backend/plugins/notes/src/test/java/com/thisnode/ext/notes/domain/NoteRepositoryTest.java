@@ -157,35 +157,27 @@ class NoteRepositoryTest {
     }
 
     @Test
-    @DisplayName("列表过滤（回收站 / 归档 / 标签 / 全文）在内存索引上等价于旧的 SQL 条件")
+    @DisplayName("列表过滤（回收站 / 标签 / 全文）在内存过滤上等价于旧的 SQL 条件")
     void listFiltersMatchTheOldSql() {
         String a = newNote("苹果笔记", "关于苹果的正文");
         String b = newNote("香蕉笔记", "关于香蕉的正文");
         assertThat(noteService.list(NoteService.Query.defaults())).hasSize(2);
 
         assertThat(noteService.list(new NoteService.Query("all", null, null, null, "苹果",
-                false, false, 500, 0)))
+                false, 500, 0)))
                 .extracting(s -> s.id()).containsExactly(a);
         assertThat(noteService.list(new NoteService.Query("all", null, null, null, "香蕉",
-                false, false, 500, 0)))
+                false, 500, 0)))
                 .extracting(s -> s.id()).containsExactly(b);
 
         tagRepository.setNodeTags(a, List.of("水果"));
         assertThat(noteService.list(new NoteService.Query("all", "水果", null, null, null,
-                false, false, 500, 0)))
+                false, 500, 0)))
                 .extracting(s -> s.id()).containsExactly(a);
-
-        noteRepository.setArchived(b, true);
-        assertThat(noteService.list(NoteService.Query.defaults())).extracting(s -> s.id())
-                .containsExactly(a);
-        assertThat(noteService.list(new NoteService.Query("all", null, null, null, null,
-                true, false, 500, 0))).hasSize(2);
-        assertThat(noteService.list(new NoteService.Query("archived", null, null, null, null,
-                false, false, 500, 0))).extracting(s -> s.id()).containsExactly(b);
 
         noteRepository.setDeleted(b, true);
         assertThat(noteService.list(new NoteService.Query("trash", null, null, null, null,
-                false, false, 500, 0))).extracting(s -> s.id()).containsExactly(b);
+                false, 500, 0))).extracting(s -> s.id()).containsExactly(b);
         assertThat(noteService.counts()).containsEntry("trash", 1).containsEntry("all", 1);
     }
 }

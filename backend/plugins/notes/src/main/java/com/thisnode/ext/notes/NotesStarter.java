@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * SBP 的 {@code SbpWebConfigurer} 把它们挂进主容器的 MVC —— 外部路径不变
  * （{@code /api/notes/**} 不存在，控制器本来就声明 {@code /api/**} 直连路径）。
  *
- * <p>{@code @EnableScheduling}：NoteSyncService（外部编辑轮询）与 SnapshotService
+ * <p>{@code @EnableScheduling}：NoteSyncService（外部编辑轮询）
  * （每日快照）的 @Scheduled 在插件容器里生效 —— 主体的开关管不到插件容器。
  *
  * <p>没有数据库、没有 MyBatis、也不扫 {@code @Mapper}：笔记数据以本地 md 文件为权威

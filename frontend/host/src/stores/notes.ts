@@ -57,7 +57,6 @@ export const useNoteStore = defineStore('notes', () => {
         recent: '最近',
         daily: '每日笔记',
         template: '模板',
-        archived: '归档',
         trash: '回收站',
       } as Record<ListFilter, string>
     )[filter.value]
@@ -296,24 +295,6 @@ export const useNoteStore = defineStore('notes', () => {
     await Promise.all([loadList(), refreshMeta()])
   }
 
-  /** 把一篇笔记移出它当前所在的某个分组。 */
-  async function removeNoteFromGroup(noteId: string, notebookId: string) {
-    await notebookApi.removeNode(notebookId, noteId)
-    await Promise.all([loadList(), refreshMeta()])
-  }
-
-  /** 把一篇笔记移出它所在的**所有**分组。 */
-  async function clearNoteGroups(noteId: string) {
-    // 详情里带着 notebooks；不是当前笔记时现取一次（列表摘要里没有这个字段）
-    const notebooks = current.value?.id === noteId
-      ? (current.value.notebooks ?? [])
-      : ((await noteApi.get(noteId)).notebooks ?? [])
-    for (const c of notebooks) {
-      await notebookApi.removeNode(c.id, noteId)
-    }
-    await Promise.all([loadList(), refreshMeta()])
-  }
-
   /** 打开某个分组：展开它的祖先链，并在右侧列表按它过滤。 */
   function openGroup(id: string) {
     for (const ancestor of ancestorsOf(id)) expandGroup(ancestor)
@@ -481,18 +462,6 @@ export const useNoteStore = defineStore('notes', () => {
     ui.toast(`已清空回收站（${res.deleted}）`, 'success')
   }
 
-  async function duplicate(id: string) {
-    const detail = await noteApi.duplicate(id)
-    await Promise.all([loadList(), refreshMeta()])
-    return detail
-  }
-
-  async function toggleArchive(id: string, value: boolean) {
-    await noteApi.archive(id, value)
-    if (current.value?.id === id) current.value.archived = value
-    await Promise.all([loadList(), refreshMeta()])
-  }
-
   async function updateMeta(patch: {
     status?: string
     source?: string
@@ -603,8 +572,6 @@ export const useNoteStore = defineStore('notes', () => {
     deleteGroup,
     moveGroup,
     moveNoteToGroup,
-    removeNoteFromGroup,
-    clearNoteGroups,
     openGroup,
     select,
     reloadCurrent,
@@ -617,8 +584,6 @@ export const useNoteStore = defineStore('notes', () => {
     restore,
     purge,
     emptyTrash,
-    duplicate,
-    toggleArchive,
     updateMeta,
     addTag,
     removeTag,

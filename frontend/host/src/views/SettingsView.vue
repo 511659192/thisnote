@@ -13,8 +13,8 @@ import {
 import { setApiBase, apiBase } from '@/core/http'
 import { useUiStore } from '@/stores/ui'
 import { useNoteStore } from '@/stores/notes'
-import { formatBytes, formatRelative } from '@/core/utils'
-import type { Snapshot, SystemInfo, SyncEvent } from '@/api/types'
+import { formatRelative } from '@/core/utils'
+import type { SystemInfo, SyncEvent } from '@/api/types'
 
 const ui = useUiStore()
 const route = useRoute()
@@ -26,7 +26,6 @@ const info = ref<SystemInfo | null>(null)
 const stats = ref<Record<string, unknown>>({})
 const mirror = ref<{ root: string; attachmentRoot: string; orphanFiles: number } | null>(null)
 const sync = ref<{ enabled: boolean; root: string; events: SyncEvent[]; orphans: string[] } | null>(null)
-const snapshots = ref<{ root: string; retentionDays: number; autoEnabled: boolean; recent: Snapshot[] } | null>(null)
 const busy = ref('')
 const apiBaseDraft = ref(apiBase.value)
 
@@ -149,12 +148,11 @@ function kindLabel(kind: PluginInfo['kind']): string {
 }
 
 async function refresh() {
-  ;[info.value, stats.value, mirror.value, sync.value, snapshots.value] = await Promise.all([
+  ;[info.value, stats.value, mirror.value, sync.value] = await Promise.all([
     systemApi.info(),
     systemApi.stats(),
     ioApi.mirrorInfo(),
     systemApi.syncStatus(),
-    systemApi.snapshots(),
   ])
   apiBaseDraft.value = apiBase.value
   await refreshPlugins()
@@ -183,17 +181,13 @@ function applyApiBase() {
   ui.toast('后端地址已更新，正在重载…')
   window.location.reload()
 }
-
-function deleteSnapshot(id: string) {
-  void withBusy('删除快照', () => systemApi.deleteSnapshot(id))
-}
 </script>
 
 <template>
   <div class="settings">
     <header class="tabs">
       <button :class="{ active: tab === 'sync' }" @click="tab = 'sync'">本地文件</button>
-      <button :class="{ active: tab === 'backup' }" @click="tab = 'backup'">快照与维护</button>
+      <button :class="{ active: tab === 'backup' }" @click="tab = 'backup'">维护</button>
       <button :class="{ active: tab === 'plugins' }" @click="tab = 'plugins'">插件</button>
       <button :class="{ active: tab === 'about' }" @click="tab = 'about'">关于</button>
       <div class="spacer"></div>
@@ -245,34 +239,6 @@ function deleteSnapshot(id: string) {
 
       <!-- ------------------------------ backup ------------------------------ -->
       <section v-if="tab === 'backup'" class="panel">
-        <h3>快照（F-P-04）</h3>
-        <p class="small muted">
-          每天自动备份一次，保留最近 {{ snapshots?.retentionDays ?? 7 }} 天。快照为 zip：直接打包
-          笔记目录（权威数据本身）与附件 —— 解压覆盖回去就是恢复。
-        </p>
-        <dl class="kv">
-          <dt>快照目录</dt><dd class="mono small">{{ snapshots?.root }}</dd>
-          <dt>自动快照</dt><dd>{{ snapshots?.autoEnabled ? '已开启' : '已关闭' }}</dd>
-        </dl>
-        <div class="row">
-          <button class="btn primary" @click="withBusy('创建快照', () => systemApi.createSnapshot('manual'))">
-            立即创建快照
-          </button>
-          <button class="btn" @click="withBusy('清理过期快照', () => systemApi.pruneSnapshots())">
-            清理超过保留期
-          </button>
-        </div>
-        <div class="divider"></div>
-        <div v-for="s in snapshots?.recent ?? []" :key="s.id" class="event">
-          <span class="chip">{{ s.kind }}</span>
-          <span class="small mono">{{ s.path.split(/[\\/]/).pop() }}</span>
-          <span class="small muted">{{ formatBytes(s.size) }} · {{ s.nodeCount }} 节点</span>
-          <span class="spacer"></span>
-          <span class="small muted">{{ formatRelative(s.createdAt) }}</span>
-          <button class="btn sm ghost" @click="deleteSnapshot(s.id)">✕</button>
-        </div>
-
-        <div class="divider"></div>
         <h3>维护</h3>
         <div class="row wrap">
           <button class="btn" @click="withBusy('重建索引', () => systemApi.reindex())">重扫笔记目录并重算链接</button>

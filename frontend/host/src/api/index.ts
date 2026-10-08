@@ -1,5 +1,5 @@
 import { http } from '@/core/http'
-import type { Notebook, OpEntry, Snapshot, SystemInfo, Tag, SyncEvent } from './types'
+import type { Notebook, OpEntry, SystemInfo, Tag, SyncEvent } from './types'
 
 export const tagApi = {
   list: () => http.get<Tag[]>('/api/tags'),
@@ -28,26 +28,11 @@ export const notebookApi = {
   remove: (id: string) => http.del<{ ok: boolean }>(`/api/notebooks/${id}`),
   addNode: (id: string, noteId: string) =>
     http.post<{ ok: boolean }>(`/api/notebooks/${id}/nodes`, undefined, { noteId }),
-  removeNode: (id: string, noteId: string) =>
-    http.del<{ ok: boolean }>(`/api/notebooks/${id}/nodes/${noteId}`),
 }
 
 export const systemApi = {
   health: () => http.get<Record<string, unknown>>('/api/health'),
   info: () => http.get<SystemInfo>('/api/info'),
-  snapshots: () =>
-    http.get<{
-      root: string
-      retentionDays: number
-      autoEnabled: boolean
-      count: number
-      latest: Snapshot | null
-      recent: Snapshot[]
-    }>('/api/snapshots'),
-  createSnapshot: (kind = 'manual') =>
-    http.post<Snapshot>('/api/snapshots', undefined, { kind }),
-  deleteSnapshot: (id: string) => http.del<{ ok: boolean }>(`/api/snapshots/${id}`),
-  pruneSnapshots: () => http.post<{ pruned: number }>('/api/snapshots/prune'),
   syncStatus: () =>
     http.get<{
       enabled: boolean

@@ -109,7 +109,7 @@ class NoteInboundCountTest {
         String a = newNote("甲", "见 [[乙]]");
         assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
 
-        noteService.patch(a, new Dtos.UpdateNodeRequest(null, "不再引用谁", null, null, null,
+        noteService.patch(a, new Dtos.UpdateNodeRequest(null, "不再引用谁", null, null,
                 null, null, null, null));
 
         assertThat(metaOf("乙").inboundCount()).isZero();

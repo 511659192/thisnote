@@ -39,7 +39,7 @@
 ## 7. 汇报「已删除」前必须核对实际执行,且 UI 元素的红框范围以用户为准
 
 - **纠正来源**：用户圈的三处之一含列表头（筛选框+＋按钮），我汇报「已移除整个 list-head」但实际**没有执行那条编辑**（验证 grep 只查了 searchApi/paletteOpen 等关键词，没覆盖该 UI）；侧栏「新建笔记」按钮在用户红框范围内，被我以「核心功能」为由擅自保留，用户追问「怎么还在」。
-- **事实依据**：NoteList.vue 的 list-head 直至下一轮才真正删除；创建类入口（侧栏按钮/＋按钮/新建第一篇/Ctrl+N）全部移除后，保留的只有：点击 [[未解析链接]] 建笔记（NoteView:365）、卡片内容拆新笔记（NoteView:173 toast）、后端 POST /api/notes（上述功能与复制一份/每日笔记的公共依赖）。
+- **事实依据**：NoteList.vue 的 list-head 直至下一轮才真正删除；创建入口经用户第三轮纠正后的**最终状态**：唯一入口是**侧栏「全部笔记」上方的新建笔记按钮**（AppSidebar 独立 section，无 Ctrl N 提示），列表上的 ＋ 按钮、Ctrl+N、空状态「新建第一篇」维持删除；另有独立功能保留——点击 [[未解析链接]] 建笔记、卡片内容拆新笔记（toast 文案含「新建笔记」属正常）、后端 POST /api/notes（公共依赖）。
 - **规则**：①每完成一个 UI 删除，立刻用「被删元素的**可见文案**」（如「在列表中筛选」「新建笔记」）grep 产物验证，不能只查接口名；②红框圈住多个元素时逐个与用户意图对齐，不自行裁剪范围；③判断「核心功能」可以保留，但必须在汇报里明示「这个我保留了、为什么」，让用户纠正。
 
 ## 8. 迁移逻辑已整体拔除:数据模型只有一个当前版本
@@ -47,3 +47,27 @@
 - **纠正来源**：用户问「Migration 还有迁移逻辑残留吗」，确认后指示「执行」（按「保认领、拔迁移」）。
 - **事实依据**：已删除——`NoteMigrationService`（v1→v2、refreshEmptySummaries、naming-v2、link-cache-v1 四项）改为 `StartupMaintenance`（只剩认领游离 md + 摘除消失卡片）；`CardFile.legacyNoteId`/`CardData.legacyNoteId`、`NoteMeta` v1 兼容构造器、`TagRepository` 扁平 tags.json 升级分支、`NoteSyncService` 的 vault-watch 旧键兼容、三个迁移测试用例。用户数据目录的 `containers.json` 孤儿文件已删（实测 7 篇 meta 全 v2、标记文件齐 → 迁移逻辑早已无事可做）。
 - **规则**：不再新增任何「老数据升级」代码——meta 就写当前 schema（v2），tags.json 就写台账格式，配置键只用 note-watch；文件镜像的常驻对账在 `StartupMaintenance.run()`（认领 + 摘除），不要往里加迁移步骤。
+
+## 9. 存储布局已按域分目录,新文件放对地方
+
+- **纠正来源**：用户问 NoteFilePaths 的文件类型并要求「将不同类型按照文件夹分割」，选定方案 A。
+- **事实依据**：布局为 `cards/`（卡片 md，唯一非隐藏层）+ `.notes/meta/<noteId>.json` + `.notes/ledgers/`（notebooks/tags/snapshots/settings）+ `.notes/logs/ops.jsonl`；`scanNotes` 只扫 meta 目录（NON_NOTE_META 黑名单已删）、`listCardFiles` 只扫 cards/（认领语义=放 cards/ 即建笔记）；认领的笔记直接落默认分组 `grp-default`（不变量在创建点收口，`assignOrphansToDefault` 兜底方法已删）。用户库已切换：16 个 md 在 cards/、8 个 meta 在 .notes/meta/、cards[].file 字段已批量加 `cards/` 前缀。
+- **规则**：新增持久化数据时先在 NoteFilePaths 里归入 cards/meta/ledgers/logs 四类之一并加对应方法；不要再把任何文件放回根目录或 .notes 根；认领/建笔记必须带归属分组。
+
+## 10. 复制(笔记级)与归档功能已整体移除
+
+- **纠正来源**：用户指示「删除复制 归档功能」。
+- **事实依据**：已删除——笔记级复制（NoteController /{id}/duplicate、NoteService.duplicate、前端菜单「复制一份」/store duplicate/noteApi.duplicate）；归档全链路（/api/notes/{id}/archive、NoteService patch 归档分支与 counts 统计、matches 的 archived 过滤、Query.includeArchived、NoteRepository.setArchived、NoteMeta/Note/NoteDetail/UpdateNodeRequest 的 archived 字段、前端 归档菜单/已归档 chip/toggleArchive/filterLabel/emptyState/ListFilter 成员）。**卡片级复制（Ctrl+D / blocks/{blockId}/duplicate）是画布编辑功能，保留**。数据文件里遗留的 "archived": false 字段靠 ignoreUnknown 忽略，触写时自然消失。
+- **规则**：NoteMeta 再加字段时注意 with* 工厂方法全部要同步；删除一个 DTO 字段 = 记录构造器参数变化，grep 所有构造调用点（含测试）逐个减参；「复制」一词有两处（笔记复制/卡片复制），删功能前先确认层级。
+
+## 11. 笔记右键菜单与分组改派入口的最终形态
+
+- **纠正来源**：用户逐项裁剪右键菜单（先删「移到回收站」，再删「移出分组」「移到收集箱」）。
+- **事实依据**：笔记右键菜单最终只剩「打开 / 移到分组…」，回收站视图下追加「恢复 / 彻底删除」。改派分组的唯一 UI 入口 = 笔记详情头部的下拉框 + 右键「移到分组…」（GroupPicker）。后端 `DELETE /api/notebooks/{id}/nodes/{nodeId}` 端点与前端 removeNoteFromGroup/clearNoteGroups/removeNode 随之删除；`removeNodeFromNotebook`/`clearNodeNotebooks` 仓储方法无调用方已删（`countNotebooksOf` 有测试用，保留）。
+- **规则**：分组改派只经「详情下拉框 / 移到分组…」两处；再写分组相关 UI 时先对照本条，别把移出/收集箱入口加回来。
+
+## 12. 快照功能已整体移除:当前目录即快照
+
+- **纠正来源**：用户裁定「当前目录既是快照,保留下来没有意义」。
+- **事实依据**：已删除——SnapshotService（含每日定时 autoSnapshot）、SnapshotLedger、/api/snapshots 全部端点（list/create/delete/prune）、Dtos.SnapshotDto、SystemInfo.snapshotRoot、NotesConfig.snapshotRoot 与启动建目录、NoteFilePaths.snapshotsFile、IoController 未使用的注入、前端 systemApi 四个函数/Snapshot 类型/设置页快照区块（tab「快照与维护」改名「维护」，formatBytes import 随删）。用户数据：ledgers/snapshots.json 与 ~/.thisnode/snapshots/（4 个 zip,148K）已删。
+- **规则**：笔记目录（cards/ + .notes/）就是权威数据的唯一副本，备份靠用户直接复制目录；不要再引入快照/版本化机制。NoteFilePaths 的 ledgers 目录现在只有 notebooks/tags/settings 三种台账。

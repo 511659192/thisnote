@@ -11,7 +11,6 @@ public class Note {
     public String type = "note";
     public String source;
     public String status;
-    public boolean archived;
     public boolean deleted;
     public Long deletedAt;
     public String dailyDate;

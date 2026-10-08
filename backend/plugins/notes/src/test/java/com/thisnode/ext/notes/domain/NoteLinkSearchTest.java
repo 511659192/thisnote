@@ -101,7 +101,7 @@ class NoteLinkSearchTest {
         String source = newNote("来源", "引用 [[旧标题]] 的正文");
 
         service.patch(target, new Dtos.UpdateNodeRequest(
-                "新标题", null, null, null, null, null, null, null, null));
+                "新标题", null, null, null, null, null, null, null));
 
         assertThat(composition.noteMarkdown(source)).contains("[[新标题]]");
         assertThat(composition.noteMarkdown(source)).doesNotContain("[[旧标题]]");

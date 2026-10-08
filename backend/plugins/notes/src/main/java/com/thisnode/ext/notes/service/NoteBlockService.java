@@ -146,7 +146,7 @@ public class NoteBlockService {
         String current = note.contentMd == null ? "" : note.contentMd;
         if (!next.equals(current)) {
             noteService.patch(note.id, new Dtos.UpdateNodeRequest(
-                    null, next, null, null, null, null, null, null, null));
+                    null, next, null, null, null, null, null, null));
         }
     }
 

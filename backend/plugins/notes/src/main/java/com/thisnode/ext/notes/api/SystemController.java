@@ -8,7 +8,6 @@ import com.thisnode.ext.notes.domain.OpsRepository;
 import com.thisnode.ext.notes.domain.TagRepository;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.service.NoteSyncService;
-import com.thisnode.ext.notes.service.SnapshotService;
 import com.thisnode.ext.notes.store.NoteStore;
 import com.thisnode.ext.notes.store.NoteCompositionService;
 import com.thisnode.ext.notes.store.NoteMeta;
@@ -28,7 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Health, settings, snapshots, note-directory status and repair endpoints. */
+/** Health, settings, note-directory status and repair endpoints. */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
@@ -36,7 +35,6 @@ public class SystemController {
 
     private final NoteRepository noteRepository;
     private final OpsRepository opsRepository;
-    private final SnapshotService snapshotService;
     private final NoteSyncService noteSync;
     private final NoteService noteService;
     private final NotesConfig notesConfig;
@@ -73,36 +71,11 @@ public class SystemController {
                 notesConfig.dataRoot().toString(),
                 notesConfig.markdownRoot().toString(),
                 notesConfig.attachmentRoot().toString(),
-                notesConfig.snapshotRoot().toString(),
                 noteRepository.countActive(),
                 composition.allBlocks().size(),
                 ManagementFactory.getRuntimeMXBean().getUptime());
     }
 
-    // ---------------- snapshots ----------------
-
-    @GetMapping("/snapshots")
-    public Map<String, Object> snapshots() {
-        return snapshotService.info();
-    }
-
-    @PostMapping("/snapshots")
-    public Dtos.SnapshotDto createSnapshot(@RequestParam(defaultValue = "manual") String kind) {
-        Dtos.SnapshotDto dto = snapshotService.create(kind);
-        noteService.log("system", dto.id(), "snapshot", Map.of("kind", kind));
-        return dto;
-    }
-
-    @DeleteMapping("/snapshots/{id}")
-    public Map<String, Object> deleteSnapshot(@PathVariable String id) {
-        snapshotService.delete(id);
-        return Map.of("ok", true);
-    }
-
-    @PostMapping("/snapshots/prune")
-    public Map<String, Object> pruneSnapshots() {
-        return Map.of("pruned", snapshotService.prune());
-    }
 
     // ---------------- notes sync (the Markdown directory is the data) ----------------
 
@@ -163,7 +136,6 @@ public class SystemController {
         m.put("tags", tagRepository.listWithCounts().size());
         m.put("noteBlocks", composition.allBlocks().size());
         m.put("ops", opsRepository.count());
-        m.put("snapshots", snapshotService.list().size());
         m.put("startedAt", Instant.ofEpochMilli(startedAt).toString());
         m.put("markdownRoot", notesConfig.markdownRoot().toString());
         m.put("dbVendor", "files");

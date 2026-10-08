@@ -7,7 +7,6 @@ export interface NoteQuery {
   notebookId?: string
   type?: string
   text?: string
-  includeArchived?: boolean
   limit?: number
   offset?: number
 }
@@ -36,7 +35,6 @@ export const noteApi = {
       contentMd?: string
       source?: string
       status?: string
-          archived?: boolean
       tags?: string[]
       aliases?: string[]
       notebookId?: string
@@ -44,11 +42,9 @@ export const noteApi = {
     },
   ) => http.patch<NoteDetail>(`/api/notes/${id}`, payload),
 
-  duplicate: (id: string) => http.post<NoteDetail>(`/api/notes/${id}/duplicate`),
   purge: (id: string) => http.del<{ ok: boolean }>(`/api/notes/${id}`, { hard: true }),
   restore: (id: string) => http.post<{ ok: boolean }>(`/api/notes/${id}/restore`),
-  emptyTrash: () => http.del<{ deleted: number }>('/api/notes/trash'),  archive: (id: string, value: boolean) =>
-    http.post<{ archived: boolean }>(`/api/notes/${id}/archive`, undefined, { value }),
+  emptyTrash: () => http.del<{ deleted: number }>('/api/notes/trash'),
 
   addTag: (id: string, name: string) =>
     http.post<NoteDetail['tags']>(`/api/notes/${id}/tags`, { name }),

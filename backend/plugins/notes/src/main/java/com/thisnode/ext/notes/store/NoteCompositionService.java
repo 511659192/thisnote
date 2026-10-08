@@ -515,7 +515,9 @@ public class NoteCompositionService {
                 : BlockMeta.fresh(Ids.newId(), 0, 0, "", null, null, now);
         CardRef ref = CardRef.of(block.id(), relative);
         String title = titleFromContent(content, file);
-        noteStore.writeNoteMeta(NoteMeta.fresh(Ids.newId(), title, "note", null, null, null, null, now)
+        // 认领的笔记也必须归属一个分组：直接落默认分组（不变量在创建点收口）。
+        noteStore.writeNoteMeta(NoteMeta.fresh(Ids.newId(), title, "note", null, null, null,
+                NotebookBook.DEFAULT_GROUP_ID, now)
                 .withCards(List.of(ref)));
         noteStore.writeBlockMeta(block, noteStore.cardPath(ref));
         refreshCachedView(noteIdOf(block.id()));

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { pageApi, type BlockPatch } from '@/api/page'
 import { ApiError } from '@/core/http'
 import type { NoteBlock, NoteBlockView, NotePageData } from '@/api/types'
@@ -107,6 +107,7 @@ export const usePageStore = defineStore('notePage', () => {
       pendingIds.value = pendingIds.value.filter((x) => !loaded.has(x))
       selection.value = []
       editingBlockId.value = null
+      restoreViewport(page.noteId)
       return page
     } catch (e) {
       ui.toast((e as Error).message, 'error')
@@ -478,6 +479,66 @@ export const usePageStore = defineStore('notePage', () => {
 
   function resetView() {
     viewport.value = { x: 0, y: 0, zoom: 1 }
+  }
+
+  // 视口按笔记持久化：刷新 / 换页回来还在原来的中心点。拖拽时每帧都会变，防抖落盘。
+
+  function viewportKey(id: string) {
+    return `thisnode.page.viewport.${id}`
+  }
+
+  let saveViewportTimer: ReturnType<typeof setTimeout> | null = null
+
+  watch([viewport, noteId], () => {
+    const id = noteId.value
+    if (!id) return
+    // 换笔记会先清掉上一篇的待写定时器，避免旧视口写进新笔记的键里。
+    if (saveViewportTimer) clearTimeout(saveViewportTimer)
+    saveViewportTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(viewportKey(id), JSON.stringify(viewport.value))
+      } catch {
+        /* 配额满 / 隐私模式：持久化失败不影响使用 */
+      }
+    }, 300)
+  })
+
+  // 刷新前的最后一次平移可能还在防抖窗口里，卸载前刷写一次。
+  window.addEventListener('beforeunload', () => {
+    const id = noteId.value
+    if (!id) return
+    if (saveViewportTimer) clearTimeout(saveViewportTimer)
+    try {
+      localStorage.setItem(viewportKey(id), JSON.stringify(viewport.value))
+    } catch {
+      /* ignore */
+    }
+  })
+
+  function restoreViewport(id: string) {
+    let next: Viewport = { x: 0, y: 0, zoom: 1 }
+    try {
+      const raw = localStorage.getItem(viewportKey(id))
+      const saved = raw ? (JSON.parse(raw) as Partial<Viewport>) : null
+      if (
+        saved &&
+        typeof saved.x === 'number' &&
+        typeof saved.y === 'number' &&
+        typeof saved.zoom === 'number' &&
+        Number.isFinite(saved.x) &&
+        Number.isFinite(saved.y) &&
+        Number.isFinite(saved.zoom)
+      ) {
+        next = {
+          x: saved.x,
+          y: saved.y,
+          zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, saved.zoom)),
+        }
+      }
+    } catch {
+      /* 坏数据按默认视口处理 */
+    }
+    viewport.value = next
   }
 
   function toggleGrid() {

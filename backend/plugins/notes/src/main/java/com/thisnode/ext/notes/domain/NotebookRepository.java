@@ -105,23 +105,6 @@ public class NotebookRepository {
         return DEFAULT_GROUP_ID;
     }
 
-    /**
-     * 把所有还没有归属的笔记收进默认分组，返回收编数量。
-     *
-     * <p>加载（认领外部 md）之后、导入之后都靠它兜底 —— 不变量不能只靠写入路径维持。
-     */
-    public int assignOrphansToDefault() {
-        ensureDefaultGroup();
-        int moved = 0;
-        for (NoteMeta meta : noteStore.scanNotes()) {
-            if (meta.notebookId() == null || meta.notebookId().isBlank()) {
-                noteStore.writeNoteMeta(meta.withNotebook(DEFAULT_GROUP_ID));
-                moved++;
-            }
-        }
-        return moved;
-    }
-
     public List<String> nodeIdsOf(String notebookId) {
         List<String> out = new ArrayList<>();
         for (NoteMeta meta : noteStore.scanNotes()) {
@@ -214,19 +197,6 @@ public class NotebookRepository {
     /** 单归属下「加入分组」就是「属于这个分组」：没有第二处归属可加。 */
     public void addNodeToNotebook(String nodeId, String notebookId) {
         setExclusiveGroup(nodeId, notebookId);
-    }
-
-    public void removeNodeFromNotebook(String nodeId, String notebookId) {
-        NoteMeta meta = noteStore.note(nodeId);
-        if (meta != null && notebookId != null && notebookId.equals(meta.notebookId())) {
-            ensureDefaultGroup();
-            noteStore.writeNoteMeta(meta.withNotebook(DEFAULT_GROUP_ID));
-        }
-    }
-
-    public void clearNodeNotebooks(String nodeId) {
-        removeNodeFromNotebook(nodeId, noteStore.note(nodeId) == null ? null
-                : noteStore.note(nodeId).notebookId());
     }
 
     public List<Dtos.NotebookDto> notebooksOf(String nodeId) {

@@ -64,14 +64,4 @@ public class NotebookController {
         return java.util.Map.of("ok", true);
     }
 
-    @DeleteMapping("/{id}/nodes/{nodeId}")
-    public java.util.Map<String, Object> removeNode(@PathVariable String id,
-                                                     @PathVariable String noteId) {
-        notebookRepository.removeNodeFromNotebook(noteId, id);
-        // 移出最后一个分组 = 回到默认分组，而不是变成无归属的笔记
-        if (notebookRepository.countNotebooksOf(noteId) == 0) {
-            notebookRepository.addNodeToNotebook(noteId, notebookRepository.ensureDefaultGroup());
-        }
-        return java.util.Map.of("ok", true);
-    }
 }

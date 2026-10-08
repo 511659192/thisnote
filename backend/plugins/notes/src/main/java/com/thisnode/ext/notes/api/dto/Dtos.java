@@ -37,7 +37,7 @@ public final class Dtos {
 
     public record NoteDetail(
             String id, String title, String contentMd, String type, String source, String status,
-            boolean archived, boolean deleted, String dailyDate,
+            boolean deleted, String dailyDate,
             /**
              * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
              * 前端拿这份清单去 {@code GET /api/notes/{id}/blocks?ids=}。
@@ -55,7 +55,6 @@ public final class Dtos {
     }
 
     public record UpdateNodeRequest(String title, String contentMd, String source, String status,
-                                    Boolean archived,
                                     List<String> tags, List<String> aliases, String notebookId,
                                     Boolean clearNotebook) {
     }
@@ -128,11 +127,7 @@ public final class Dtos {
     }
 
     public record SystemInfo(String version, String dbPath, String markdownRoot,
-                             String attachmentRoot, String snapshotRoot, long nodeCount,
+                             String attachmentRoot, long nodeCount,
                              long noteBlockCount, long uptimeMs) {
-    }
-
-    public record SnapshotDto(String id, String kind, String path, long size, int nodeCount,
-                              long createdAt) {
     }
 }

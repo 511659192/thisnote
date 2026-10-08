@@ -12,7 +12,7 @@ import BacklinksPanel from '@/components/BacklinksPanel.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import GroupPicker from '@/components/GroupPicker.vue'
 import { primaryLabel } from '@/core/utils'
-import type { NoteMeta, NoteBlockView } from '@/api/types'
+import type { NoteMeta, NoteBlockView, Notebook } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -229,24 +229,35 @@ async function createGroupFromPicker() {
   await pickGroup(created.id)
 }
 
+/** 笔记本下拉的选项：整棵分组树按深度平铺（不受侧栏折叠影响）。 */
+const notebookOptions = computed(() => {
+  const out: { group: Notebook; depth: number }[] = []
+  const walk = (parent: string | null, depth: number) => {
+    for (const g of nodes.notebooks.filter((n) => (n.parentId ?? null) === parent)) {
+      out.push({ group: g, depth })
+      walk(g.id, depth + 1)
+    }
+  }
+  walk(null, 0)
+  return out
+})
+
+async function changeNotebook(notebookId: string) {
+  const current = nodes.current
+  if (!current || current.notebooks?.[0]?.id === notebookId) return
+  await nodes.moveNoteToGroup(current.id, notebookId)
+  const picked = nodes.notebooks.find((n) => n.id === notebookId)
+  if (picked) nodes.current = { ...current, notebooks: [picked] }
+}
+
 function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
   const node = payload.node
   const entries: MenuEntry[] = [
     { label: '打开', action: () => openNode(node.id) },
     { label: '移到分组…', action: () => openGroupPicker(node.id) },
-    ...(nodes.activeNotebookId
-      ? [{
-          label: `移出「${nodes.notebooks.find((g) => g.id === nodes.activeNotebookId)?.title ?? '分组'}」`,
-          action: () => void nodes.removeNoteFromGroup(node.id, nodes.activeNotebookId as string),
-        }]
-      : []),
-    { label: '移到收集箱（默认分组）', action: () => void nodes.clearNoteGroups(node.id) },
-    { separator: true },
-    { label: '复制一份', action: () => nodes.duplicate(node.id) },
-    { label: node.archived ? '取消归档' : '归档', action: () => nodes.toggleArchive(node.id, !node.archived) },
-    { separator: true },
   ]
   if (trashMode()) {
+    entries.push({ separator: true })
     entries.push({ label: '恢复', action: () => nodes.restore(node.id) })
     entries.push({ label: '彻底删除', danger: true, action: () => nodes.purge(node.id) })
   }
@@ -317,10 +328,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                   :note-id="nodes.current.id"
                 />
               <span v-if="nodes.current.dailyDate" class="chip accent">{{ nodes.current.dailyDate }}</span>
-              <span v-if="nodes.current.archived" class="chip">已归档</span>
             </div>
 
             <div class="head-meta">
+              <select
+                class="notebook-select"
+                title="所属分组"
+                :value="nodes.current.notebooks?.[0]?.id ?? ''"
+                @change="changeNotebook(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="row in notebookOptions" :key="row.group.id" :value="row.group.id">
+                  {{ '　'.repeat(row.depth) }}{{ row.group.title }}
+                </option>
+              </select>
               <span v-for="t in page.tags" :key="t.id" class="chip tag-chip">
                 #{{ t.name }}
                 <button class="x" title="移除标签" @click="removeTag(t.name)">✕</button>
@@ -452,6 +472,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
+}
+.notebook-select {
+  padding: 2px 6px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: 12px;
 }
 .tag-chip {
   display: inline-flex;

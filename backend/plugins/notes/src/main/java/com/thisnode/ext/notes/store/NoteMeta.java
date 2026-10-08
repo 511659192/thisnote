@@ -16,8 +16,7 @@ import java.util.List;
  * <p><b>列表页缓存</b>：{@code summary}、{@code links}（出链清单）、{@code outboundCount}、
  * {@code inboundCount}、{@code unresolvedCount} 都是写入时算好的派生缓存 —— 列表页因此一个数字
  * 都不用读正文。其中 {@code inboundCount} 是跨笔记的：对端写入时按「旧清单 vs 新清单」的差集
- * 在这里做 ±1。它们都是可重建的缓存，不是第二份权威：丢了只影响列表显示，不影响任何数据
- * （{@code POST /api/maintenance/reindex} 会按各篇的 {@code links} 全量校准一遍）。
+ * 在这里做 ±1。它们都是可重建的缓存，不是第二份权威：丢了只影响列表显示，不影响任何数据。
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record NoteMeta(
@@ -28,7 +27,6 @@ public record NoteMeta(
         String dailyDate,
         String source,
         String status,
-        boolean archived,
         boolean deleted,
         Long deletedAt,
         List<String> tags,
@@ -65,94 +63,81 @@ public record NoteMeta(
 
     public static NoteMeta fresh(String id, String title, String type, String dailyDate,
                                  String source, String status, String notebookId, long now) {
-        return new NoteMeta(SCHEMA, id, title, type, dailyDate, source, status, false, false, null,
+        return new NoteMeta(SCHEMA, id, title, type, dailyDate, source, status, false, null,
                 List.of(), List.of(), notebookId, List.of(), "", List.of(), 0, 0, 0, now, now);
     }
 
     public NoteMeta touched(long now) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, aliases, notebookId, cards, summary, links, outboundCount,
                 inboundCount, unresolvedCount, createdAt, now);
     }
 
     public NoteMeta withTitle(String next) {
         return new NoteMeta(v, id, next == null ? "" : next, type, dailyDate, source, status,
-                archived, deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withType(String next) {
         return new NoteMeta(v, id, title, next, dailyDate, source, status,
-                archived, deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withDailyDate(String next) {
         return new NoteMeta(v, id, title, type, next, source, status,
-                archived, deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     /** 回收站状态：软删除只改这里，卡片文件原地保留，恢复就是把它翻回来。 */
     public NoteMeta withDeleted(boolean next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, next,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, next,
                 next ? (deletedAt == null ? updatedAt : deletedAt) : null,
                 tags, aliases, notebookId, cards, summary, links, outboundCount, inboundCount,
                 unresolvedCount, createdAt, updatedAt);
-    }
-
-    public NoteMeta withArchived(boolean next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, next, deleted,
-                deletedAt, tags, aliases, notebookId, cards, summary, links, outboundCount,
-                inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withSourceStatus(String nsource, String nstatus) {
         return new NoteMeta(v, id, title, type, dailyDate,
                 nsource == null ? source : nsource,
                 nstatus == null ? status : nstatus,
-                archived, deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, aliases, notebookId, cards, summary, links,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     /** 单归属：笔记必须属于一个分组，所以这里是赋值而不是增删。 */
     public NoteMeta withNotebook(String notebookId) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, aliases, notebookId, cards, summary, links, outboundCount,
                 inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withTags(List<String> next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, next == null ? List.of() : List.copyOf(next), aliases, notebookId,
                 cards, summary, links, outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withAliases(List<String> next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, next == null ? List.of() : List.copyOf(next), notebookId,
                 cards, summary, links, outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     /** 替换卡片清单（顺序即阅读顺序）。 */
     public NoteMeta withCards(List<CardRef> next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, aliases, notebookId,
                 next == null ? List.of() : List.copyOf(next), summary, links, outboundCount,
-                inboundCount, unresolvedCount, createdAt, updatedAt);
-    }
-
-    /** 升到指定 schema 版本（v1 → v2 迁移用）。 */
-    public NoteMeta withSchema(int next) {
-        return new NoteMeta(next, id, title, type, dailyDate, source, status, archived, deleted,
-                deletedAt, tags, aliases, notebookId, cards, summary, links, outboundCount,
                 inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     /** 更新列表页缓存（摘要 + 出链清单/计数 + 入链数 + 未解析数）。 */
     public NoteMeta withCachedView(String nextSummary, List<LinkRef> nextLinks, int nextOutbound,
                                    int nextInbound, int nextUnresolved) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, aliases, notebookId, cards,
                 nextSummary == null ? "" : nextSummary,
                 nextLinks == null ? List.of() : List.copyOf(nextLinks),
@@ -161,14 +146,14 @@ public record NoteMeta(
 
     /** 只改入链数（对端写入时用它做 ±1）。 */
     public NoteMeta withInboundCount(int next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, aliases, notebookId, cards, summary, links, outboundCount,
                 Math.max(0, next), unresolvedCount, createdAt, updatedAt);
     }
 
     /** 替换出链清单（"先写链接、后建笔记"时把 {@code to} 补上）。 */
     public NoteMeta withLinks(List<LinkRef> next) {
-        return new NoteMeta(v, id, title, type, dailyDate, source, status, archived, deleted,
+        return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, aliases, notebookId, cards, summary,
                 next == null ? List.of() : List.copyOf(next), outboundCount, inboundCount,
                 unresolvedCount, createdAt, updatedAt);
@@ -181,7 +166,7 @@ public record NoteMeta(
         }
         List<String> merged = new ArrayList<>(tags);
         for (String t : extra) {
-            if (t != null && !t.isBlank() && !merged.contains(t)) {
+            if (t != null && !t.isBlank()) {
                 merged.add(t);
             }
         }

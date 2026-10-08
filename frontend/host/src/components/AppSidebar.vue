@@ -73,8 +73,8 @@ function onVisibility() {
 /**
  * 侧栏只保留常用视图。
  *
- * <p>「每日笔记 / 模板 / 归档 / 回收站」已从侧栏移除（界面做减法）；底层能力都还在，
- * 回收站当前没有界面入口（软删数据仍完整，恢复走 API）。
+ * <p>「每日笔记 / 模板 / 回收站」已从侧栏移除（界面做减法）；底层能力都还在，
+ * 回收站当前没有界面入口（软删数据仍完整，恢复走 API）。归档功能已整体移除。
  */
 const filters = computed<{ key: ListFilter; label: string; icon: string }[]>(() => [
   { key: 'all', label: '全部笔记', icon: '▤' },
@@ -105,6 +105,11 @@ function openNotebook(id: string) {
   nodes.clearPluginFilter()
   nodes.openGroup(id)
   void router.push('/notes')
+}
+
+async function createNote() {
+  const detail = await nodes.createAndSelect({ title: '无标题笔记', contentMd: '' })
+  if (detail) void router.push(`/notes/${detail.id}`)
 }
 
 // ---------------------------------------------------------------- 分组树
@@ -230,6 +235,12 @@ onMounted(async () => {
 
 <template>
   <aside class="sidebar">
+    <div class="section">
+      <button class="new-note" @click="createNote">
+        <span class="plus">＋</span>
+        <span>新建笔记</span>
+      </button>
+    </div>
     <nav class="section scroll">
       <div class="group-title">笔记</div>
       <template v-for="f in filters" :key="f.key">
@@ -372,6 +383,25 @@ onMounted(async () => {
   overflow-y: auto;
   min-height: 0;
   padding-bottom: var(--space-3);
+}
+
+.new-note {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.new-note:hover {
+  filter: brightness(1.07);
+}
+.new-note .plus {
+  font-size: 15px;
 }
 
 .group-title {

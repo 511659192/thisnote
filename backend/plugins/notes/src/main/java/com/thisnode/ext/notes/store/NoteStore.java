@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -33,16 +32,6 @@ import java.util.stream.Stream;
 public class NoteStore {
 
     private static final Logger log = LoggerFactory.getLogger(NoteStore.class);
-
-    /**
-     * {@code .notes} 下与笔记无关的台账文件：扫描笔记时必须跳过。
-     *
-     * <p>漏掉一个的后果不是"少一篇笔记"，而是**多出一篇 id 为 null 的假笔记**（台账 JSON 被
-     * 反序列化成 NoteMeta，字段全空），它会进入列表、被前端当成笔记显示，还会让一切依赖 id 的
-     * 代码崩掉。所以下面还有一道"没有 id 就不是笔记 meta"的兜底。
-     */
-    private static final Set<String> NON_NOTE_META = Set.of(
-            "settings.json", "snapshots.json", "notebooks.json", "tags.json");
 
     private final NoteFilePaths noteFilePaths;
 
@@ -94,22 +83,19 @@ public class NoteStore {
     }
 
     /**
-     * 遍历笔记目录一次，拿到卡片文件清单。
+     * 遍历卡片目录一次，拿到卡片文件清单。
      *
      * <p>合并的理由是实测出来的：10000 个文件的一次 {@code Files.walk} 在这台机器上约 0.8s，
      * 分开扫三次就是启动时白花 1.6s。文件系统遍历是 O(卡片数) 的操作，**能少一次就少一次**。
      */
     public FileListing listFiles() {
         Map<String, Long> cards = new LinkedHashMap<>();
-        Path root = noteFilePaths.root();
-        if (!Files.isDirectory(root)) {
+        Path cardsDir = noteFilePaths.cardsDir();
+        if (!Files.isDirectory(cardsDir)) {
             return new FileListing(cards);
         }
-        try (Stream<Path> stream = Files.walk(root)) {
+        try (Stream<Path> stream = Files.walk(cardsDir)) {
             for (Path file : stream.filter(Files::isRegularFile).toList()) {
-                if (noteFilePaths.isMetaArea(file)) {
-                    continue;
-                }
                 if (!noteFilePaths.isContentFile(file)) {
                     continue;
                 }
@@ -120,7 +106,7 @@ public class NoteStore {
                 }
             }
         } catch (IOException e) {
-            log.warn("笔记目录目录无法遍历：{}（{}）", root, e.toString());
+            log.warn("卡片目录无法遍历：{}（{}）", noteFilePaths.relative(cardsDir), e.toString());
         }
         return new FileListing(cards);
     }
@@ -131,20 +117,20 @@ public class NoteStore {
     }
 
     /**
-     * 读全部笔记 meta（{@code .notes/<noteId>.json}）。
+     * 读全部笔记 meta（{@code .notes/meta/<noteId>.json}）。
      *
-     * <p>单个坏文件只跳过并记日志：meta 是用户可手改的，一个写坏的字符不该让整库打不开。
+     * <p>meta 目录里只有笔记 meta，不需要台账黑名单；单个坏文件只跳过并记日志：meta 是用户可
+     * 手改的，一个写坏的字符不该让整库打不开。
      */
     public List<NoteMeta> scanNotes() {
         List<NoteMeta> notes = new ArrayList<>();
-        Path metaDir = noteFilePaths.metaDir();
+        Path metaDir = noteFilePaths.noteMetaDir();
         if (!Files.isDirectory(metaDir)) {
             return notes;
         }
         try (Stream<Path> stream = Files.list(metaDir)) {
             for (Path file : stream.filter(Files::isRegularFile).toList()) {
-                String name = file.getFileName().toString();
-                if (!name.endsWith(".json") || NON_NOTE_META.contains(name)) {
+                if (!file.getFileName().toString().endsWith(".json")) {
                     continue;
                 }
                 NoteMeta meta = readMeta(file, NoteMeta.class);
@@ -168,7 +154,7 @@ public class NoteStore {
         if (noteId == null || noteId.isBlank()) {
             return null;
         }
-        Path file = noteFilePaths.metaDir().resolve(noteId + ".json");
+        Path file = noteFilePaths.noteMetaDir().resolve(noteId + ".json");
         if (!Files.isRegularFile(file)) {
             return null;
         }
@@ -262,12 +248,17 @@ public class NoteStore {
         deleteQuietly(noteFilePaths.noteMeta(noteId));
     }
 
-    /** 首次使用的 meta 目录要建出来，否则 scan() 与后面的写入都会落空。 */
+    /** 首次使用的目录要建出来，否则扫描与后面的写入都会落空。 */
     public void ensureDirs() {
         try {
-            Files.createDirectories(noteFilePaths.metaDir());
+            for (Path dir : new Path[]{
+                    noteFilePaths.cardsDir(), noteFilePaths.noteMetaDir(),
+                    noteFilePaths.ledgersDir(), noteFilePaths.logsDir()
+            }) {
+                Files.createDirectories(dir);
+            }
         } catch (IOException e) {
-            throw new UncheckedIOException("无法创建元数据目录 " + noteFilePaths.metaDir(), e);
+            throw new UncheckedIOException("无法创建笔记目录结构 " + noteFilePaths.root(), e);
         }
     }
 
@@ -285,13 +276,13 @@ public class NoteStore {
         // 笔记名、卡片描述都一样（同名同描述的两张卡）：把随机串逐段加长，直到不撞车。
         String hex = blockId.replace("-", "");
         for (int len = 12; len < hex.length(); len += 4) {
-            Path longer = noteFilePaths.root().resolve(prefix + "-" + hex.substring(0, len)
+            Path longer = noteFilePaths.cardsDir().resolve(prefix + "-" + hex.substring(0, len)
                     + NoteFilePaths.MD_SUFFIX);
             if (!Files.exists(longer)) {
                 return longer;
             }
         }
-        return noteFilePaths.root().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
+        return noteFilePaths.cardsDir().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
     }
 
     // ------------------------------------------------------------------- text

@@ -104,9 +104,6 @@ public class NoteService {
         if (req.status() != null) {
             n.status = req.status();
         }
-        if (req.archived() != null) {
-            n.archived = req.archived();
-        }
         noteRepository.update(n);
 
         if (req.tags() != null) {
@@ -220,25 +217,6 @@ public class NoteService {
         log("note", id, "purge", Map.of());
     }
 
-    public Dtos.NoteDetail duplicate(String id) {
-        Note src = noteRepository.findById(id);
-        if (src == null) {
-            throw new NotFoundException("node " + id);
-        }
-        Note copy = new Note();
-        copy.title = src.title + " 副本";
-        copy.contentMd = src.contentMd;
-        copy.type = "note".equals(src.type) ? "note" : src.type;
-        copy.source = src.source;
-        copy.status = src.status;
-        copy.id = noteRepository.insert(copy);
-        tagRepository.setNodeTags(copy.id, tagsOfNames(id));
-        setAliases(copy.id, aliasesOf(id));
-        reindexLinks(copy);
-        log("note", copy.id, "duplicate", Map.of("from", id));
-        return detail(copy.id);
-    }
-
     public int emptyTrash() {
         List<String> ids = new ArrayList<>();
         for (Note n : noteRepository.findAll()) {
@@ -272,7 +250,7 @@ public class NoteService {
         List<String> unresolved = unresolvedOf(n);
         NoteMeta detailMeta = noteStore.note(id);
         List<CardRef> detailCards = detailMeta == null ? List.of() : detailMeta.cards();
-        return new Dtos.NoteDetail(n.id, n.title, n.contentMd, n.type, n.source, n.status, n.archived, n.deleted, n.dailyDate, detailCards, tagsOfNames(id), aliasesOf(id), notebookRepository.notebooksOf(id), outbound, backlinks, unresolved, unlinkedMentions(n), n.createdAt, n.updatedAt);
+        return new Dtos.NoteDetail(n.id, n.title, n.contentMd, n.type, n.source, n.status, n.deleted, n.dailyDate, detailCards, tagsOfNames(id), aliasesOf(id), notebookRepository.notebooksOf(id), outbound, backlinks, unresolved, unlinkedMentions(n), n.createdAt, n.updatedAt);
     }
 
     private List<Dtos.BacklinkDto> enrichBacklinks(List<Dtos.BacklinkDto> raw) {
@@ -336,10 +314,10 @@ public class NoteService {
 
     // ================================================================= list
 
-    public record Query(String filter, String tag, String notebookId, String type, String text, boolean includeArchived,
+    public record Query(String filter, String tag, String notebookId, String type, String text,
                         boolean includeDeleted, int limit, int offset) {
         public static Query defaults() {
-            return new Query("all", null, null, null, null, false, false, 500, 0);
+            return new Query("all", null, null, null, null, false, 500, 0);
         }
     }
 
@@ -380,11 +358,6 @@ public class NoteService {
                     return false;
                 }
             }
-            case "archived" -> {
-                if (meta.deleted() || !meta.archived()) {
-                    return false;
-                }
-            }
             case "daily" -> {
                 if (meta.deleted() || !"daily".equals(meta.type())) {
                     return false;
@@ -395,9 +368,6 @@ public class NoteService {
                     return false;
                 }
             }
-        }
-        if (!"archived".equals(filter) && !"trash".equals(filter) && !query.includeArchived() && meta.archived()) {
-            return false;
         }
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.type())) {
             return false;
@@ -433,7 +403,6 @@ public class NoteService {
     public Map<String, Integer> counts() {
         Map<String, Integer> m = new LinkedHashMap<>();
         int all = 0;
-        int archived = 0;
         int trash = 0;
         int daily = 0;
         int template = 0;
@@ -442,11 +411,7 @@ public class NoteService {
                 trash++;
                 continue;
             }
-            if (n.archived) {
-                archived++;
-            } else {
-                all++;
-            }
+            all++;
             if ("daily".equals(n.type)) {
                 daily++;
             }
@@ -455,7 +420,6 @@ public class NoteService {
             }
         }
         m.put("all", all);
-        m.put("archived", archived);
         m.put("trash", trash);
         m.put("daily", daily);
         m.put("template", template);

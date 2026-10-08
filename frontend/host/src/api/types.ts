@@ -92,7 +92,6 @@ export interface NoteMeta {
   dailyDate?: string | null
   source?: string | null
   status?: string | null
-  archived: boolean
   deleted: boolean
   deletedAt?: number | null
   /** 标签名。颜色与计数只在独立的 `GET /api/tags` 目录里，列表接口不背。 */
@@ -145,7 +144,6 @@ export interface NoteDetail {
   type: NoteType
   source?: string | null
   status?: string | null
-  archived: boolean
   deleted: boolean
   dailyDate?: string | null
   /** 卡片清单（只有身份）：页面级数据按需取，见 {@link CardRef}。 */
@@ -161,21 +159,11 @@ export interface NoteDetail {
   updatedAt: number
 }
 
-export interface Snapshot {
-  id: string
-  kind: string
-  path: string
-  size: number
-  nodeCount: number
-  createdAt: number
-}
-
 export interface SystemInfo {
   version: string
   dbPath: string
   markdownRoot: string
   attachmentRoot: string
-  snapshotRoot: string
   nodeCount: number
   uptimeMs: number
 }
@@ -203,5 +191,4 @@ export type ListFilter =
   | 'recent'
   | 'daily'
   | 'template'
-  | 'archived'
   | 'trash'

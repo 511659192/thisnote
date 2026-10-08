@@ -26,8 +26,6 @@ const emptyState = computed(() => {
   switch (store.filter) {
     case 'trash':
       return '回收站是空的'
-    case 'archived':
-      return '没有归档的笔记'
     case 'daily':
       return '还没有每日笔记'
     case 'template':

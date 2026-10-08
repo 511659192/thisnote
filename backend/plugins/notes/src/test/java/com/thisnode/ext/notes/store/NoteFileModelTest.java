@@ -49,7 +49,8 @@ class NoteFileModelTest {
     @Test
     @DisplayName("没有 meta 的 md 被认领成一篇单卡笔记，并生成两份 meta")
     void claimsMdWithoutMeta() throws IOException {
-        Path md = root.resolve("我的第一篇笔记.md");
+        Path md = root.resolve("cards").resolve("我的第一篇笔记.md");
+        Files.createDirectories(md.getParent());
         Files.writeString(md, "# 会议记录\n\n今天讨论了三件事。", StandardCharsets.UTF_8);
 
         // 启动维护：认领未纳管的 md
@@ -59,8 +60,9 @@ class NoteFileModelTest {
         NoteMeta note = store.scanNotes().get(0);
         assertThat(note.title()).isEqualTo("会议记录");
 
-        // 笔记 meta 落在 .notes 下
-        assertThat(Files.exists(root.resolve(".notes").resolve(note.id() + ".json"))).isTrue();
+        // 笔记 meta 落在 .notes/meta 下
+        assertThat(Files.exists(root.resolve(".notes").resolve("meta").resolve(note.id() + ".json")))
+                .isTrue();
 
         // 一张卡：文件原地不动，meta 写进了它的头部注释，不再有 sidecar
         List<BlockMeta> blocks = composition.blocks(note.id());
@@ -170,7 +172,7 @@ class NoteFileModelTest {
     @DisplayName("笔记 meta 丢失时卡片仍在磁盘上，会被认领成一篇独立笔记")
     void orphanCardIsAdoptedAsItsOwnNote() throws IOException {
         writeCard("only", "card-x", "note-lost", 0, "孤立卡片的内容");
-        Files.deleteIfExists(root.resolve(".notes").resolve("note-lost.json"));
+        Files.deleteIfExists(root.resolve(".notes").resolve("meta").resolve("note-lost.json"));
 
         assertThat(store.note("note-lost")).isNull();
         assertThat(store.scanNotes()).isEmpty();
@@ -183,22 +185,24 @@ class NoteFileModelTest {
         assertThat(composition.allBlocks()).hasSize(1);
         assertThat(composition.content("card-x")).isEqualTo("孤立卡片的内容");
         assertThat(Files.exists(root.resolve(".notes")
-                .resolve(store.scanNotes().get(0).id() + ".json"))).isTrue();
+                .resolve("meta").resolve(store.scanNotes().get(0).id() + ".json"))).isTrue();
     }
 
     @Test
     @DisplayName("台账文件不会被当成笔记读：没有 id 的 json 一律跳过")
     void ledgerFilesAreNotNotes() throws IOException {
         Path metaDir = root.resolve(".notes");
-        Files.createDirectories(metaDir);
-        Files.writeString(metaDir.resolve("notebooks.json"),
+        Path ledgers = metaDir.resolve("ledgers");
+        Path noteMetas = metaDir.resolve("meta");
+        Files.createDirectories(ledgers);
+        Files.createDirectories(noteMetas);
+        Files.writeString(ledgers.resolve("notebooks.json"),
                 "{\"v\":1,\"notebooks\":[{\"v\":1,\"id\":\"grp-default\",\"type\":\"notebook\","
                         + "\"title\":\"收集箱\",\"parentId\":null,\"icon\":null,\"sortOrder\":0,"
                         + "\"createdAt\":1,\"updatedAt\":1}]}");
-        Files.writeString(metaDir.resolve("tags.json"), "{\"设计\":\"#ff0000\"}");
-        Files.writeString(metaDir.resolve("settings.json"), "{\"device_id\":\"x\"}");
-        Files.writeString(metaDir.resolve("snapshots.json"), "{\"v\":1,\"entries\":[]}");
-        Files.writeString(metaDir.resolve("random.json"), "{\"title\":\"手写但没有 id\"}");
+        Files.writeString(ledgers.resolve("tags.json"), "{\"设计\":\"#ff0000\"}");
+        Files.writeString(ledgers.resolve("settings.json"), "{\"device_id\":\"x\"}");
+        Files.writeString(noteMetas.resolve("random.json"), "{\"title\":\"手写但没有 id\"}");
 
         assertThat(store.scanNotes()).isEmpty();
     }
@@ -243,7 +247,8 @@ class NoteFileModelTest {
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
     private void writeCard(String slug, String blockId, String noteId, int slot, String content)
             throws IOException {
-        Path md = root.resolve(slug + "-" + NoteFilePaths.shortId(blockId) + ".md");
+        Path md = root.resolve("cards").resolve(slug + "-" + NoteFilePaths.shortId(blockId) + ".md");
+        Files.createDirectories(md.getParent());
         BlockMeta block = new BlockMeta(BlockMeta.SCHEMA, blockId, "",
                 0, slot * 300.0, BlockMeta.DEFAULT_W, BlockMeta.DEFAULT_H, slot,
                 null, null, false, Map.of(), 1L, 1L);
@@ -253,7 +258,7 @@ class NoteFileModelTest {
             List<CardRef> cards = new ArrayList<>(note.cards());
             cards.add(Math.max(0, Math.min(slot, cards.size())),
                     CardRef.of(blockId, store.paths().relative(md)));
-            store.writeNoteMeta(note.withSchema(NoteMeta.SCHEMA).withCards(cards));
+            store.writeNoteMeta(note.withCards(cards));
         }
     }
 }

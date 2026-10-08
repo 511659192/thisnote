@@ -46,7 +46,6 @@ public class NoteRepository {
         n.type = meta.type();
         n.source = meta.source();
         n.status = meta.status();
-        n.archived = meta.archived();
         n.deleted = meta.deleted();
         n.deletedAt = meta.deletedAt();
         n.dailyDate = meta.dailyDate();
@@ -150,7 +149,6 @@ public class NoteRepository {
                 .withType(n.type)
                 .withDailyDate(n.dailyDate)
                 .withSourceStatus(n.source, n.status)
-                .withArchived(n.archived)
                 .withDeleted(n.deleted)
                 .touched(now));
         n.updatedAt = now;
@@ -170,12 +168,6 @@ public class NoteRepository {
         }
     }
 
-    public void setArchived(String id, boolean archived) {
-        NoteMeta current = noteStore.note(id);
-        if (current != null) {
-            noteStore.writeNoteMeta(current.withArchived(archived).touched(System.currentTimeMillis()));
-        }
-    }
 
     /** 硬删除：卡片 md、sidecar 与笔记 meta 一起走（由组合层负责）。 */
     public void deleteHard(String id) {

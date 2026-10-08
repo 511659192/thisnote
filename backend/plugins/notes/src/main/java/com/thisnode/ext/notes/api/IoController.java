@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.api;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.service.NoteSyncService;
-import com.thisnode.ext.notes.service.SnapshotService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +25,6 @@ import java.util.Map;
 public class IoController {
 
     private final NoteService noteService;
-    private final SnapshotService snapshotService;
     private final NoteSyncService noteSync;
     private final NotesConfig notesConfig;
 
