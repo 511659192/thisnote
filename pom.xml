@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.6</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.thisnode</groupId>
+  <artifactId>thisnode-parent</artifactId>
+  <version>0.1.0</version>
+  <packaging>pom</packaging>
+  <name>thisnode</name>
+  <description>
+    thisnote 韧知笔记：插件契约（plugin-api）、插件侧共享支持（plugin-support）、各插件（独立构件）、应用（backend）。
+    插件只依赖 plugin-api 与 plugin-support —— 编译期就看不到核心内部类，因此可以单独发版、单独替换 jar。
+  </description>
+
+  <modules>
+    <module>backend/plugin-api</module>
+    <module>backend/plugin-support</module>
+    <module>backend/plugins/memory-curve</module>
+    <module>backend/plugins/notes</module>
+    <module>backend/plugins/favorite</module>
+    <module>backend/app</module>
+  </modules>
+
+  <properties>
+    <java.version>21</java.version>
+    <pf4j.version>3.16.0</pf4j.version>
+    <sbp.version>3.5.27</sbp.version>
+    <lombok.version>1.18.40</lombok.version>
+    <pf4j.version>3.16.0</pf4j.version>
+    <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- 自家模块：版本只在父 pom 里写一次，子模块声明时不带版本 -->
+      <dependency>
+        <groupId>com.thisnode</groupId>
+        <artifactId>plugin-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnode</groupId>
+        <artifactId>plugin-support</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnode</groupId>
+        <artifactId>plugin-memory-curve</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnode</groupId>
+        <artifactId>plugin-favorite</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <!-- Lombok：编译期生成构造器/getter 等样板。版本由 spring-boot-starter-parent 统一管理。
+           插件侧声明为 provided —— 注解在编译期就被处理掉，运行时不需要它。 -->
+      <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <version>${lombok.version}</version>
+      </dependency>
+
+      <!-- SBP（Spring Boot Plugin Framework）：版本只在这里写一次。 -->
+      <dependency>
+        <groupId>org.laxture</groupId>
+        <artifactId>sbp-core</artifactId>
+        <version>${sbp.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.laxture</groupId>
+        <artifactId>sbp-spring-boot-starter</artifactId>
+        <version>${sbp.version}</version>
+      </dependency>
+      <!-- PF4J 是 SBP 的底座；核心代码直接用它的 PluginManager/PluginWrapper，所以显式声明，
+           版本与 SBP 依赖的那份保持一致。Spring Boot 的 BOM 不管 PF4J，因此必须在这里锁一次，
+           插件与应用才会拿到同一个版本。 -->
+      <dependency>
+        <groupId>org.pf4j</groupId>
+        <artifactId>pf4j</artifactId>
+        <version>${pf4j.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <configuration>
+            <release>${java.version}</release>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>${exec-maven-plugin.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <profiles>
+    <!--
+      前端构建：**各前端所属模块自己接线**（backend → ../frontend/host；plugin-<id> → ../frontend/plugins/<id>），
+      因为前端代码已集中到仓库的 frontend/ 目录，不再位于各模块内部，激活路径只有各模块自己知道。
+      见各模块 pom 里的 `frontend` profile（激活条件不变：未设 thisnode.skip-frontend 且前端源码存在）。
+
+      为什么用文件存在性判断在这里是安全的：判断的是**源码树里**的文件（不是构建产物），
+      而 profile 激活在构建开始前求值 —— 干净检出时它也在。
+    -->
+
+    <!--
+      插件 jar 的描述符版本由 Maven 版本注入（`plugin.version=@project.version@`），
+      这里只负责把 plugin.properties 打开过滤。用 Spring Boot 父 pom 的 `@…@` 分隔符，
+      避免与其它 `${…}` 占位符（例如插件配置里的占位符）冲突。
+    -->
+    <profile>
+      <id>plugins</id>
+      <activation>
+        <file>
+          <exists>src/main/resources/plugin.properties</exists>
+        </file>
+      </activation>
+      <build>
+        <resources>
+          <resource>
+            <directory>src/main/resources</directory>
+            <filtering>true</filtering>
+            <includes>
+              <include>plugin.properties</include>
+            </includes>
+          </resource>
+          <resource>
+            <directory>src/main/resources</directory>
+            <filtering>false</filtering>
+            <excludes>
+              <exclude>plugin.properties</exclude>
+            </excludes>
+          </resource>
+        </resources>
+      </build>
+    </profile>
+  </profiles>
+</project>

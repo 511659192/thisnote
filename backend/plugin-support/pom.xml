@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.thisnode</groupId>
+    <artifactId>thisnode-parent</artifactId>
+    <version>0.1.0</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>plugin-support</artifactId>
+  <name>thisnode-plugin-support</name>
+  <description>
+    插件侧的共享支持：SBP 插件基类（契约与 PF4J 的接缝）。
+    由主应用打进自己的 jar，插件在运行期从主应用的类加载器拿到它 ——
+    与 sbp-core 同样的共享方式，所以插件自己的 jar 里不含它。依赖版本一律由父 pom 锁。
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.laxture</groupId>
+      <artifactId>sbp-core</artifactId>
+    </dependency>
+  </dependencies>
+</project>

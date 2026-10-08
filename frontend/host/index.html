@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon-64.png" />
+    <!--
+      前端是 qiankun 微前端的主应用：每个插件前端是一个微应用，由 loader.ts 在启动时
+      loadMicroApp 装载进这个隐藏容器。共享的 vue / vue-router / @thisnode/plugin-api
+      不靠 import map 了 —— 宿主把自己的模块命名空间注入微应用的沙箱（loader.ts 的
+      sandbox.modules），微应用里的裸 import 解析到的就是宿主正在用的同一份实例。
+    -->
+    <title>thisnode 韧知笔记</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- 插件微应用的挂载容器：插槽 UI 渲染在宿主各视图里，微应用本体只做注册，无需可见区域。
+         沙箱所需的 <qiankun-head> 由 loader 在 beforeLoad 里按需补建（容器每次装载会被 qiankun 清空）。 -->
+    <div id="plugin-microapps" style="display: none"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

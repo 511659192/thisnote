@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.thisnode</groupId>
+    <artifactId>thisnode-parent</artifactId>
+    <version>0.1.0</version>
+    <relativePath>../../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>plugin-memory-curve</artifactId>
+  <name>thisnode-plugin-memory-curve</name>
+  <properties>
+    <plugin.id>memory-curve</plugin.id>
+  </properties>
+
+  <description>记忆曲线插件：参考 Anki 的 SM-2 间隔重复，按卡片安排复习</description>
+
+  <!--
+    依赖面 = 契约 + 插件侧共享支持 + SBP —— 这就是「独立构件」的全部含义：本模块的 classpath 里
+    没有核心的 service/domain/api.dto，想调也调不到（编译期即失败，不靠约定或测试兜底）。
+    依赖版本一律由父 pom 锁（应用与插件必须同一套栈），运行期由主应用类加载器提供，不打进插件 jar。
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-support</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.laxture</groupId>
+      <artifactId>sbp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <!-- SBP 插件入口需要 @SpringBootApplication（spring-boot-autoconfigure）。 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- 交付:把自己的 jar 拷到仓库根的 plugins/(以 plugin.id 命名)。在插件模块做而非主体
+           dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件(踩过:plugins/ 里是 Oct 2 的旧 jar)。 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>copy-plugin-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                      tofile="${project.basedir}/../../../plugins/${plugin.id}.jar" overwrite="true"/>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+      前端构建：插件前端源码在仓库根的 frontend/plugins/memory-curve，这里接线 pnpm install + build
+      （产物由 Vite 直接落到本模块 src/main/resources/plugin/memory-curve/frontend，随 jar 发布）。
+      激活条件与后端一致：未设置 thisnode.skip-frontend 且前端源码存在。
+    -->
+    <profile>
+      <id>frontend</id>
+      <activation>
+        <property>
+          <name>!thisnode.skip-frontend</name>
+        </property>
+        <file>
+          <exists>../../../frontend/plugins/memory-curve/package.json</exists>
+        </file>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>pnpm-install</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../../frontend/plugins/memory-curve</workingDirectory>
+                  <arguments>
+                    <argument>install</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+              <execution>
+                <id>pnpm-build</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../../frontend/plugins/memory-curve</workingDirectory>
+                  <arguments>
+                    <argument>build</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+    
+    </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

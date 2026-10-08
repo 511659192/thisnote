@@ -1,0 +1,23 @@
+# 笔记核心插件的上下文配置（SBP 装载本插件时生效；独立运行未支持 —— 由主体托管）。
+#
+# 业务配置从主体 application.yml 随业务一起迁来（各应用持有自己的配置，sbp 约定）。
+# 没有数据源：笔记数据以本地 md 文件为权威（见 store 包），插件侧没有表也没有 mapper。
+
+thisnode:
+  # 每篇笔记的卡片上限（硬限制：超过时后端拒绝新增卡片，前端提前提示）。
+  max-blocks-per-note: 100
+  # Root of the human-readable Markdown mirror (F-P-03).
+  data-root: ${user.home}/.thisnode
+  markdown-root: ${user.home}/.thisnode/notes
+  attachment-root: ${user.home}/.thisnode/attachments
+  snapshot-root: ${user.home}/.thisnode/snapshots
+  snapshot-retention-days: 7
+  # Auto-snapshot a running instance once per day.
+  snapshot-auto: true
+  # Poll the Markdown mirror for external edits.
+  note-watch: true
+
+spring:
+  # SBP 会传递引入 Flyway；插件不连数据库，留着只是防它去动别的库。
+  flyway:
+    enabled: false

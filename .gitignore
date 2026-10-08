@@ -1,0 +1,46 @@
+# ---------- node / frontend ----------
+node_modules/
+frontend/host/dist/
+frontend/host/.vite/
+frontend/host/coverage/
+frontend/host/pnpm-lock.yaml
+*.tsbuildinfo
+
+# ---------- java / backend ----------
+# 注意：gitignore 不支持行内 # 注释，注释必须独立成行，否则整行变成字面文件名规则
+backend/app/target/
+target/
+*.class
+*.jar
+.mvn/wrapper/maven-wrapper.jar
+logs/
+
+# ---------- 前端构建产物（pnpm build / Vite outDir 直落后端资源目录，不入库） ----------
+backend/app/src/main/resources/static/
+backend/plugins/*/src/main/resources/plugin/*/frontend/
+
+# ---------- 外置插件交付物（package 阶段从各模块 target 拷贝而来，不入库） ----------
+plugins/*.jar
+plugins/*.zip
+plugins/disabled.txt
+plugins-dev/
+
+# ---------- 历史：outDir 曾少写 backend/ 时误落的产物目录（防再生成） ----------
+frontend/plugin-*/
+
+# ---------- runtime data (never commit user notes) ----------
+.thisnode/
+*.db
+*.db-wal
+*.db-shm
+/notes/
+attachments/
+snapshots/
+
+# ---------- local tooling ----------
+tools/__pycache__/
+*.pyc
+.vscode/
+.idea/
+*.log
+docs/

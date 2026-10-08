@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.thisnode</groupId>
+    <artifactId>thisnode-parent</artifactId>
+    <version>0.1.0</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>thisnode-backend</artifactId>
+  <name>thisnode-backend</name>
+  <description>thisnode local backend (REST + SQLite/MySQL + Markdown mirror)</description>
+
+  <dependencies>
+    <!-- 插件契约 + 插件侧共享支持。插件本体（favorite / memory-curve / baidu-pan）**不在**这里：
+         它们是 plugins/ 目录里各自独立的 jar，由 PF4J/SBP 在运行期装载 —— 核心编译期看不见它们，
+         所以换/加/删一个插件都不需要重新打包应用。见 docs/PLUGIN_PLATFORM.md。
+
+         plugin-support 必须由应用带着走：插件的 jar 里不含它，运行期从应用的类加载器取
+         （与 sbp-core 同样的共享方式）。 -->
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-support</artifactId>
+    </dependency>
+
+    <!-- SBP（Spring Boot Plugin Framework）：把单体变成可热装卸的模块化应用。
+         它构建在 PF4J 之上，插件就是一个独立的 Spring Boot 工程（自带 Controller/静态资源/持久化）。
+         版本由父 pom 锁。见 docs/PLUGIN_PLATFORM.md。 -->
+    <dependency>
+      <groupId>org.laxture</groupId>
+      <artifactId>sbp-spring-boot-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.pf4j</groupId>
+      <artifactId>pf4j</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <!-- AOP：Spring 代理的基础（@Transactional / @Async 之类注解生效的前提）。 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>thisnode-backend</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!--
+        交付形态是两份东西：应用 jar + plugins/ 目录里的插件 jar。
+        插件 jar 由各自模块产出，这里在 package 阶段把它们拷到仓库根的 plugins/，
+        所以 `mvn package` 之后直接 `java -jar backend/target/thisnode-backend.jar` 就能用，
+        不需要手工 cp。destFileName 固定成与 plugin.properties 里 plugin.id 一致的名字。
+        单独构建本模块时（-pl backend）插件不在反应堆里，用 -am 或先跑整仓构建。
+      -->
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+      前端构建（主应用）：前端代码集中仓库根的 frontend/host，这里用 exec 接线
+      pnpm install + build（产物由 Vite 直接落到 backend/src/main/resources/static）。
+      激活条件：未设置 thisnode.skip-frontend 且前端源码存在（干净检出时总在）。
+      只编后端：mvn package -Dthisnode.skip-frontend=true
+    -->
+    <profile>
+      <id>frontend</id>
+      <activation>
+        <property>
+          <name>!thisnode.skip-frontend</name>
+        </property>
+        <file>
+          <exists>../../frontend/host/package.json</exists>
+        </file>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>pnpm-install</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../frontend/host</workingDirectory>
+                  <arguments>
+                    <argument>install</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+              <execution>
+                <id>pnpm-build</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../frontend/host</workingDirectory>
+                  <arguments>
+                    <argument>build</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

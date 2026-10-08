@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.thisnode</groupId>
+    <artifactId>thisnode-parent</artifactId>
+    <version>0.1.0</version>
+    <relativePath>../../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>plugin-notes</artifactId>
+  <name>thisnode-plugin-notes</name>
+  <description>
+    笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / IO / Vault 同步）。
+    按 sbp 最佳实践，主体应用是纯平台（插件生命周期管理 + 共享 DataSource），业务领域以插件形态交付。
+    兄弟插件（favorite / memory-curve）**不依赖**本插件：各自的状态写在自己的文件里，
+    要展示的卡片内容由前端用本插件的公开 API（/api/nodes、/api/notes/{id}/page）现拼。
+  </description>
+
+  <properties>
+    <!-- plugin.version 由父 pom 的 Maven 过滤注入 plugin.properties，这里只声明 id/class 供引用 -->
+    <plugin.id>notes</plugin.id>
+  </properties>
+
+  <!--
+    依赖面 = 契约 + 插件侧共享支持 + SBP。与 favorite 等插件同构：运行期 Spring Web / JDBC /
+    MyBatis / 驱动由主体提供，插件 jar 不打这些依赖（普通 jar，不走 repackage）。
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-support</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.laxture</groupId>
+      <artifactId>sbp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.pf4j</groupId>
+      <artifactId>pf4j</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
+    <!-- Lombok：编译期生成 @RequiredArgsConstructor 等样板；provided 不进插件 jar。 -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- 插件为普通 jar（非 fat jar）：pf4j 直接装载，库由主体提供 —— 与其它插件一致，无需额外配置 -->
+
+      <!-- 交付:把自己的 jar 拷到仓库根的 plugins/(以 plugin.id 命名)。在插件模块做而非主体
+           dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件(踩过:plugins/ 里是 Oct 2 的旧 jar)。 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>copy-plugin-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                      tofile="${project.basedir}/../../../plugins/${plugin.id}.jar" overwrite="true"/>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

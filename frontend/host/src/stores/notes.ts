@@ -1,0 +1,630 @@
+import { defineStore } from 'pinia'
+import { computed, reactive, ref } from 'vue'
+import { noteApi } from '@/api/note'
+import { tagApi, notebookApi } from '@/api'
+import type { ListFilter, NoteDetail, NoteMeta, Notebook, Tag } from '@/api/types'
+import { getNoteListFilter } from '@thisnode/plugin-api'
+import { useUiStore } from './ui'
+
+const AUTOSAVE_DEBOUNCE_MS = 500
+
+/**
+ * Notes: list, selection, autosave and the derived counts used by the sidebar.
+ *
+ * Autosave is per-node debounced (F-P-01 防抖 500ms). A pending save is flushed when the
+ * user switches notes so fast navigation never loses the last keystrokes.
+ */
+export const useNoteStore = defineStore('notes', () => {
+  const ui = useUiStore()
+
+  const nodes = ref<NoteMeta[]>([])
+  const current = ref<NoteDetail | null>(null)
+  const loadingList = ref(false)
+  const loadingNode = ref(false)
+  const saving = ref(false)
+  const savedAt = ref<number | null>(null)
+  const counts = ref<Record<string, number>>({})
+  const tags = ref<Tag[]>([])
+  const notebooks = ref<Notebook[]>([])
+
+  const filter = ref<ListFilter>('all')
+  const activeTag = ref<string | null>(null)
+  const activeNotebookId = ref<string | null>(null)
+  const listQuery = ref('')
+  const selectedIds = ref<string[]>([])
+
+  /** Per-node pending content so switching notes mid-debounce is lossless. */
+  const pending = reactive<Record<string, { contentMd?: string; title?: string }>>({})
+  const timers = new Map<string, number>()
+  let detailToken = 0
+
+  const currentId = computed(() => current.value?.id ?? null)
+  const wordCount = computed(() => {
+    const text = current.value?.contentMd ?? ''
+    const cjk = (text.match(/[\u3400-\u9fff]/g) || []).length
+    const latin = (text.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_'-]+/g) || []).length
+    return cjk + latin
+  })
+
+  const filterLabel = computed(() => {
+    if (activeTag.value) return `#${activeTag.value}`
+    if (activeNotebookId.value) {
+      return notebooks.value.find((n) => n.id === activeNotebookId.value)?.title ?? '笔记本'
+    }
+    return (
+      {
+        all: '全部笔记',
+        recent: '最近',
+        daily: '每日笔记',
+        template: '模板',
+        archived: '归档',
+        trash: '回收站',
+      } as Record<ListFilter, string>
+    )[filter.value]
+  })
+
+  async function loadList() {
+    loadingList.value = true
+    try {
+      nodes.value = await noteApi.list({
+        filter: filter.value,
+        tag: activeTag.value ?? undefined,
+        notebookId: activeNotebookId.value ?? undefined,
+        text: listQuery.value || undefined,
+      })
+    } catch (e) {
+      ui.toast((e as Error).message, 'error')
+    } finally {
+      loadingList.value = false
+    }
+  }
+
+  /**
+   * 拉一次元数据（计数 / 标签 / 笔记本）。
+   *
+   * <p><b>并发去重</b>：一次调用就是三个请求，而启动时 App 与侧栏几乎同时调它
+   * （侧栏看到 notebooks 还空，于是又拉一次），不去重就是同一组请求打两遍。
+   * 并发调用共用同一个 Promise；**不带新鲜期** —— 写操作之后的刷新必须实时。
+   */
+  let metaInflight: Promise<void> | null = null
+
+  /**
+   * 插件提供的列表筛选（例如「收藏」）。
+   *
+   * <p>它只是给核心这份列表**加一个条件**：插件回答"哪些 id 命中"，列表渲染、点开笔记、
+   * 内容展示全由核心负责 —— 因此与「全部笔记/最近编辑」天然同构，不需要任何第二套布局。
+   */
+  const pluginFilter = ref<{ pluginId: string; filterId: string } | null>(null)
+  const pluginFilterIds = ref<Set<string> | null>(null)
+
+  async function setPluginFilter(pluginId: string, filterId: string): Promise<void> {
+    const filter = getNoteListFilter(filterId)
+    if (!filter) return
+    const ids = await filter.load()
+    pluginFilterIds.value = new Set(ids)
+    pluginFilter.value = { pluginId, filterId }
+  }
+
+  function clearPluginFilter(): void {
+    pluginFilter.value = null
+    pluginFilterIds.value = null
+  }
+
+  /** 列表真正渲染的内容：没启用插件筛选时就是原样，启用时按 id 过滤。 */
+  const notesView = computed(() => {
+    const ids = pluginFilterIds.value
+    if (!ids) return nodes.value
+    return nodes.value.filter((n) => ids.has(n.id))
+  })
+  async function refreshMeta(): Promise<void> {
+    if (metaInflight) {
+      return metaInflight
+    }
+    metaInflight = (async () => {
+      try {
+        const [c, t, n] = await Promise.all([noteApi.counts(), tagApi.list(), notebookApi.list()])
+        counts.value = c
+        tags.value = t
+        notebooks.value = n
+      } catch (e) {
+        /* meta refresh is best-effort */
+      } finally {
+        metaInflight = null
+      }
+    })()
+    return metaInflight
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  function setFilter(next: ListFilter) {
+    filter.value = next
+    activeTag.value = null
+    activeNotebookId.value = null
+    void loadList()
+  }
+
+  function setTag(tag: string | null) {
+    activeTag.value = tag
+    if (tag) {
+      filter.value = 'all'
+      activeNotebookId.value = null
+    }
+    void loadList()
+  }
+
+  function setNotebook(id: string | null) {
+    activeNotebookId.value = id
+    if (id) {
+      filter.value = 'all'
+      activeTag.value = null
+    }
+    void loadList()
+  }
+
+  // ---------------------------------------------------------------- 分组树
+  //
+  // 父子关系本来就存在后端（notebooks.parentId + type=group/notebook），这里只是把它读成树：
+  // 侧栏按 parentId 递归渲染，移动分组 = 改 parentId，笔记进分组 = 改笔记 meta 里的 notebookId。
+
+  /** 展开的分组 id（ref<Set> 必须整体替换才会触发更新）。持久化到 localStorage：树的展开状态
+      应该像文件管理器一样记住，不然每次刷新都要重新一层层点开。 */
+  const EXPANDED_KEY = 'thisnode.groups.expanded'
+  function loadExpanded(): Set<string> {
+    try {
+      const raw = localStorage.getItem(EXPANDED_KEY)
+      return new Set<string>(raw ? (JSON.parse(raw) as string[]) : [])
+    } catch {
+      return new Set()
+    }
+  }
+  function saveExpanded(next: Set<string>) {
+    expandedGroups.value = next
+    try {
+      localStorage.setItem(EXPANDED_KEY, JSON.stringify([...next]))
+    } catch {
+      // 存不进去也不影响本次会话
+    }
+  }
+
+  const expandedGroups = ref<Set<string>>(loadExpanded())
+  /** 「全部笔记」那一层的展开态：收起时侧栏只看核心视图，不显示分组树。 */
+  const groupsShown = ref(true)
+
+  const sortGroups = (a: Notebook, b: Notebook) =>
+    (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title, 'zh')
+
+  /** 顶层分组（没有父级的）。 */
+  const rootGroups = computed(() => notebooks.value.filter((g) => !g.parentId).sort(sortGroups))
+
+  /** 某个分组的直接子分组。 */
+  function childGroups(parentId: string): Notebook[] {
+    return notebooks.value.filter((g) => g.parentId === parentId).sort(sortGroups)
+  }
+
+  function hasChildren(id: string): boolean {
+    return notebooks.value.some((g) => g.parentId === id)
+  }
+
+  /**
+   * 按当前展开状态把树压平成一行行（带层级深度）。
+   *
+   * <p>侧栏用左内边距表现层级，就不用写递归组件了：树的深度靠数据表达，渲染保持一层循环。
+   */
+  const visibleGroups = computed(() => {
+    const out: { group: Notebook; depth: number }[] = []
+    const walk = (items: Notebook[], depth: number) => {
+      for (const group of items) {
+        out.push({ group, depth })
+        if (expandedGroups.value.has(group.id)) walk(childGroups(group.id), depth + 1)
+      }
+    }
+    walk(rootGroups.value, 0)
+    return out
+  })
+
+  function isGroupExpanded(id: string): boolean {
+    return expandedGroups.value.has(id)
+  }
+
+  function toggleGroup(id: string) {
+    const next = new Set(expandedGroups.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    saveExpanded(next)
+  }
+
+  function expandGroup(id: string) {
+    if (expandedGroups.value.has(id)) return
+    saveExpanded(new Set([...expandedGroups.value, id]))
+  }
+
+  /** 把 groupId 的祖先链收集出来 —— 定位到某个分组时要用它逐级展开。 */
+  function ancestorsOf(id: string): string[] {
+    const out: string[] = []
+    let cursor = notebooks.value.find((g) => g.id === id)?.parentId ?? null
+    while (cursor) {
+      out.push(cursor)
+      cursor = notebooks.value.find((g) => g.id === cursor)?.parentId ?? null
+    }
+    return out
+  }
+
+  /** candidate 是不是 groupId 的后代（移动分组时用来挡「移到自己里面」）。 */
+  function isDescendant(candidate: string, groupId: string): boolean {
+    let cursor: string | null = candidate
+    while (cursor) {
+      if (cursor === groupId) return true
+      cursor = notebooks.value.find((g) => g.id === cursor)?.parentId ?? null
+    }
+    return false
+  }
+
+  async function createGroup(title: string, parentId: string | null = null): Promise<Notebook> {
+    const created = await notebookApi.create(title, parentId)
+    if (parentId) expandGroup(parentId)
+    await refreshMeta()
+    return created
+  }
+
+  async function renameGroup(id: string, title: string) {
+    await notebookApi.update(id, { title })
+    await refreshMeta()
+  }
+
+  async function deleteGroup(id: string) {
+    await notebookApi.remove(id)
+    if (activeNotebookId.value === id) setNotebook(null)
+    await refreshMeta()
+  }
+
+  async function moveGroup(id: string, parentId: string | null) {
+    if (parentId && (parentId === id || isDescendant(parentId, id))) {
+      throw new Error('不能把分组移到它自己或它的子分组里')
+    }
+    await notebookApi.update(id, { parentId })
+    if (parentId) expandGroup(parentId)
+    await refreshMeta()
+  }
+
+  /** 把一篇笔记移到某个分组（单归属：会离开原来的分组）。 */
+  async function moveNoteToGroup(noteId: string, notebookId: string) {
+    await notebookApi.addNode(notebookId, noteId)
+    expandGroup(notebookId)
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  /** 把一篇笔记移出它当前所在的某个分组。 */
+  async function removeNoteFromGroup(noteId: string, notebookId: string) {
+    await notebookApi.removeNode(notebookId, noteId)
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  /** 把一篇笔记移出它所在的**所有**分组。 */
+  async function clearNoteGroups(noteId: string) {
+    // 详情里带着 notebooks；不是当前笔记时现取一次（列表摘要里没有这个字段）
+    const notebooks = current.value?.id === noteId
+      ? (current.value.notebooks ?? [])
+      : ((await noteApi.get(noteId)).notebooks ?? [])
+    for (const c of notebooks) {
+      await notebookApi.removeNode(c.id, noteId)
+    }
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  /** 打开某个分组：展开它的祖先链，并在右侧列表按它过滤。 */
+  function openGroup(id: string) {
+    for (const ancestor of ancestorsOf(id)) expandGroup(ancestor)
+    setNotebook(id)
+  }
+
+  function setListQuery(q: string) {
+    listQuery.value = q
+    void loadList()
+  }
+
+  async function select(id: string | null) {
+    await flushAll()
+    if (!id) {
+      current.value = null
+      return
+    }
+    if (current.value?.id === id) return
+    const token = ++detailToken
+    loadingNode.value = true
+    try {
+      const detail = await noteApi.get(id)
+      if (token !== detailToken) return
+      current.value = detail
+      savedAt.value = null
+    } catch (e) {
+      ui.toast((e as Error).message, 'error')
+    } finally {
+      if (token === detailToken) loadingNode.value = false
+    }
+  }
+
+  async function reloadCurrent() {
+    if (!current.value) return
+    const id = current.value.id
+    current.value = await noteApi.get(id)
+    await refreshMeta()
+  }
+
+  /** Patch the open note (title/tags/aliases…) and keep the cached detail in sync. */
+  async function patchCurrent(patch: {
+    title?: string
+    tags?: string[]
+    aliases?: string[]
+    status?: string
+    source?: string
+    notebookId?: string
+  }): Promise<NoteDetail | null> {
+    if (!current.value) return null
+    const id = current.value.id
+    try {
+      const detail = await noteApi.patch(id, patch)
+      current.value = detail
+      await Promise.all([loadList(), refreshMeta()])
+      return detail
+    } catch (e) {
+      ui.toast((e as Error).message, 'error')
+      return null
+    }
+  }
+
+  /** Apply a content/title edit locally and schedule a debounced save. */
+  function edit(patch: { contentMd?: string; title?: string }) {
+    const doc = current.value
+    if (!doc) return
+    if (patch.contentMd !== undefined) doc.contentMd = patch.contentMd
+    if (patch.title !== undefined) doc.title = patch.title
+
+    const bucket = pending[doc.id] ?? {}
+    Object.assign(bucket, patch)
+    pending[doc.id] = bucket
+
+    const existing = timers.get(doc.id)
+    if (existing) window.clearTimeout(existing)
+    timers.set(
+      doc.id,
+      window.setTimeout(() => void flush(doc.id), AUTOSAVE_DEBOUNCE_MS),
+    )
+  }
+
+  /** Immediately persist any debounced edit for one node. */
+  async function flush(id: string) {
+    const bucket = pending[id]
+    if (!bucket) return
+    delete pending[id]
+    const timer = timers.get(id)
+    if (timer) {
+      window.clearTimeout(timer)
+      timers.delete(id)
+    }
+    saving.value = true
+    try {
+      const detail = await noteApi.patch(id, bucket)
+      if (current.value?.id === id) {
+        // Keep local cursor/selection state authoritative: only merge server fields.
+        current.value.updatedAt = detail.updatedAt
+        current.value.backlinks = detail.backlinks
+        current.value.outbound = detail.outbound
+        current.value.unresolved = detail.unresolved
+        current.value.unlinkedMentions = detail.unlinkedMentions
+        current.value.tags = detail.tags
+      }
+      savedAt.value = Date.now()
+      scheduleListRefresh()
+    } catch (e) {
+      ui.toast(`保存失败：${(e as Error).message}`, 'error')
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function flushAll() {
+    await Promise.all(Object.keys(pending).map((id) => flush(id)))
+  }
+
+  let listRefreshTimer: number | null = null
+  function scheduleListRefresh() {
+    if (listRefreshTimer) window.clearTimeout(listRefreshTimer)
+    listRefreshTimer = window.setTimeout(() => void loadList(), 900)
+  }
+
+  async function createNode(payload: {
+    title?: string
+    contentMd?: string
+    type?: string
+    notebookId?: string
+    tags?: string[]
+  }): Promise<NoteDetail | null> {
+    try {
+      const detail = await noteApi.create(payload)
+      await Promise.all([loadList(), refreshMeta()])
+      return detail
+    } catch (e) {
+      ui.toast((e as Error).message, 'error')
+      return null
+    }
+  }
+
+  async function createAndSelect(payload: { title?: string; contentMd?: string; type?: string }) {
+    // 「新建时自动带入当前分组」：正看着某个分组时新建，笔记就落在那儿；
+    // 在顶层（全部笔记/最近编辑）新建则不带，由后端放进默认分组。
+    const detail = await createNode({ ...payload, notebookId: activeNotebookId.value ?? undefined })
+    if (detail) {
+      await select(detail.id)
+    }
+    return detail
+  }
+
+  async function restore(id: string) {
+    await noteApi.restore(id)
+    await Promise.all([loadList(), refreshMeta()])
+    ui.toast('已恢复', 'success')
+  }
+
+  async function purge(id: string) {
+    await noteApi.purge(id)
+    if (currentId.value === id) current.value = null
+    await Promise.all([loadList(), refreshMeta()])
+    ui.toast('已彻底删除', 'success')
+  }
+
+  async function emptyTrash() {
+    const res = await noteApi.emptyTrash()
+    await Promise.all([loadList(), refreshMeta()])
+    ui.toast(`已清空回收站（${res.deleted}）`, 'success')
+  }
+
+  async function duplicate(id: string) {
+    const detail = await noteApi.duplicate(id)
+    await Promise.all([loadList(), refreshMeta()])
+    return detail
+  }
+
+  async function toggleArchive(id: string, value: boolean) {
+    await noteApi.archive(id, value)
+    if (current.value?.id === id) current.value.archived = value
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  async function updateMeta(patch: {
+    status?: string
+    source?: string
+    aliases?: string[]
+    tags?: string[]
+    notebookId?: string
+    clearNotebook?: boolean
+  }) {
+    if (!current.value) return
+    const id = current.value.id
+    const detail = await noteApi.patch(id, patch)
+    const cursor = (document.activeElement as HTMLElement | null)?.tagName
+    current.value = detail
+    void cursor
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  async function addTag(name: string) {
+    if (!current.value || !name.trim()) return
+    const id = current.value.id
+    const detail = await noteApi.addTag(id, name.trim())
+    if (current.value?.id === id) current.value.tags = detail
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  async function removeTag(name: string) {
+    if (!current.value) return
+    const id = current.value.id
+    const detail = await noteApi.removeTag(id, name)
+    if (current.value?.id === id) current.value.tags = detail
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
+  async function openDaily() {
+    const detail = await noteApi.daily()
+    await Promise.all([loadList(), refreshMeta()])
+    await select(detail.id)
+    return detail
+  }
+
+  async function resolveStub(title: string) {
+    const from = currentId.value ?? undefined
+    const detail = await noteApi.resolveStub(title, from)
+    await Promise.all([loadList(), refreshMeta()])
+    return detail
+  }
+
+  async function renameTag(id: string, name: string) {
+    await tagApi.rename(id, name)
+    if (current.value) await reloadCurrent()
+    await refreshAll()
+  }
+
+  /** Re-read the current note from disk-backed state (after an external edit). */
+  async function syncFromServer() {
+    await loadList()
+    if (currentId.value) {
+      const id = currentId.value
+      const stale = pending[id]
+      if (!stale) {
+        current.value = await noteApi.get(id)
+      }
+    }
+  }
+
+  return {
+    pluginFilter,
+    pluginFilterIds,
+    setPluginFilter,
+    clearPluginFilter,
+    notesView,
+    nodes,
+    current,
+    currentId,
+    loadingList,
+    loadingNode,
+    saving,
+    savedAt,
+    counts,
+    tags,
+    notebooks,
+    filter,
+    activeTag,
+    activeNotebookId,
+    listQuery,
+    selectedIds,
+    wordCount,
+    filterLabel,
+    loadList,
+    refreshMeta,
+    refreshAll,
+    setFilter,
+    setTag,
+    setNotebook,
+    setListQuery,
+    // 分组树
+    expandedGroups,
+    groupsShown,
+    rootGroups,
+    childGroups,
+    hasChildren,
+    visibleGroups,
+    isGroupExpanded,
+    toggleGroup,
+    expandGroup,
+    createGroup,
+    renameGroup,
+    deleteGroup,
+    moveGroup,
+    moveNoteToGroup,
+    removeNoteFromGroup,
+    clearNoteGroups,
+    openGroup,
+    select,
+    reloadCurrent,
+    patchCurrent,
+    edit,
+    flush,
+    flushAll,
+    createNode,
+    createAndSelect,
+    restore,
+    purge,
+    emptyTrash,
+    duplicate,
+    toggleArchive,
+    updateMeta,
+    addTag,
+    removeTag,
+    openDaily,
+    resolveStub,
+    renameTag,
+    syncFromServer,
+  }
+})
