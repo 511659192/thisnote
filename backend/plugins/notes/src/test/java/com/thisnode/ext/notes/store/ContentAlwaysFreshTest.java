@@ -1,6 +1,8 @@
 package com.thisnode.ext.notes.store;
 
 import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.CardRepository;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,32 +28,34 @@ class ContentAlwaysFreshTest {
 
     private static final String NOTE = "note-fresh";
 
-    private NoteCompositionService composition;
+
+    private NoteRepository store;
+    private CardRepository cardRepository;
 
     @BeforeEach
     void setUp() {
         NotesConfig config = Mockito.mock(NotesConfig.class);
         Mockito.when(config.markdownRoot()).thenReturn(root);
-        NoteStore store = new NoteStore(config);
-        composition = new NoteCompositionService(store);
+        store = new NoteRepository(config);
+        cardRepository = new CardRepository(store);
         store.writeNoteMeta(NoteMeta.fresh(NOTE, "现读测试", "note", null, null, null, null, 1L));
     }
 
     private void putCard(String id, String body) {
-        composition.putBlock(NOTE, BlockMeta.fresh(id, 0, 0, "", null, null, 1L), body);
+        cardRepository.putCard(NOTE, CardMeta.fresh(id, 0, 0, "", null, null, 1L), body);
     }
 
     @Test
     @DisplayName("磁盘上直接改卡片正文后，content 立刻读到新内容（没有缓存）")
     void contentIsAlwaysReadFromDisk() throws IOException {
         putCard("card-1", "旧内容");
-        assertThat(composition.content("card-1")).isEqualTo("旧内容");
+        assertThat(store.content("card-1")).isEqualTo("旧内容");
 
-        Path file = composition.fileOf("card-1");
-        Files.writeString(file, CardFile.compose(composition.block("card-1"), "磁盘上新写的内容"),
+        Path file = store.fileOf("card-1");
+        Files.writeString(file, CardFile.compose(store.card("card-1"), "磁盘上新写的内容"),
                 StandardCharsets.UTF_8);
 
-        assertThat(composition.content("card-1")).isEqualTo("磁盘上新写的内容");
+        assertThat(store.content("card-1")).isEqualTo("磁盘上新写的内容");
     }
 
     @Test
@@ -60,10 +64,10 @@ class ContentAlwaysFreshTest {
         putCard("card-1", "第一段");
         putCard("card-2", "第二段");
 
-        Path file = composition.fileOf("card-2");
-        Files.writeString(file, CardFile.compose(composition.block("card-2"), "第二段（改过）"),
+        Path file = store.fileOf("card-2");
+        Files.writeString(file, CardFile.compose(store.card("card-2"), "第二段（改过）"),
                 StandardCharsets.UTF_8);
 
-        assertThat(composition.noteMarkdown(NOTE)).contains("第一段").contains("第二段（改过）");
+        assertThat(store.noteMarkdown(NOTE)).contains("第一段").contains("第二段（改过）");
     }
 }

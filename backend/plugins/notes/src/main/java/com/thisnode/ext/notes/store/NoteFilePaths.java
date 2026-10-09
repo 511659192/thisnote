@@ -11,23 +11,21 @@ import java.util.Locale;
  * <p>布局（{@code <root>} = {@code thisnode.markdown-root}），按域分目录：
  * <pre>
  *   notes\cards\&lt;笔记名&gt;-&lt;卡片描述&gt;-&lt;随机串&gt;.md   一张卡片一个 md，纯正文（不带 frontmatter）
- *   notes\.notes\meta\&lt;noteId&gt;.json               笔记级元数据（标题 / 标签 / 别名 / 回收站 / 归属分组）
- *   notes\.notes\ledgers\notebooks.json           分组台账
- *   notes\.notes\ledgers\tags.json                标签台账
- *   notes\.notes\ledgers\settings.json            笔记侧设置
- *   notes\.notes\logs\ops.jsonl                   操作日志，一行一条
+ *   notes\meta\&lt;noteId&gt;.json                       笔记级元数据（标题 / 标签 / 归属分组）
+ *   notes\ledgers\notebooks.json                   分组台账
+ *   notes\ledgers\tags.json                        标签台账
+ *   notes\ledgers\settings.json                    笔记侧设置
+ *   notes\logs\ops.jsonl                           操作日志，一行一条
  * </pre>
  *
- * <p>卡片内容是唯一放在隐藏目录外的文件；meta 目录里**只有**笔记 meta，扫描不需要黑名单。
+ * <p>cards/ 之外都是应用目录；cards 目录里**只有**卡片 md，扫描不需要黑名单。
  *
- * <p>文件名分两段：人读的 slug 与机器认的 blockId 前 8 位。slug 让文件在资源管理器里像笔记，
+ * <p>文件名分两段：人读的 slug 与机器认的 cardId 前 8 位。slug 让文件在资源管理器里像笔记，
  * 短 id 让两张同名卡片不互相覆盖。**身份由 meta 里的完整 id 决定**，改名不改变身份。
  */
 public final class NoteFilePaths {
 
-    /** 元数据根：隐藏目录，卡片扫描时整体跳过。 */
-    public static final String META_DIR = ".notes";
-    /** 卡片内容目录：笔记目录下唯一对用户可见的正文层。 */
+    /** 卡片内容目录。 */
     public static final String CARDS_DIR = "cards";
     public static final String MD_SUFFIX = ".md";
     public static final String META_SUFFIX = ".meta.json";
@@ -42,23 +40,19 @@ public final class NoteFilePaths {
         return root;
     }
 
-    public Path metaDir() {
-        return root.resolve(META_DIR);
-    }
-
     /** 笔记 meta 目录：里面只有 {@code <noteId>.json}。 */
     public Path noteMetaDir() {
-        return metaDir().resolve("meta");
+        return root.resolve("meta");
     }
 
-    /** 单文件台账目录：分组 / 标签 / 快照 / 设置。 */
+    /** 单文件台账目录：分组 / 标签 / 设置。 */
     public Path ledgersDir() {
-        return metaDir().resolve("ledgers");
+        return root.resolve("ledgers");
     }
 
     /** 日志目录。 */
     public Path logsDir() {
-        return metaDir().resolve("logs");
+        return root.resolve("logs");
     }
 
     /** 卡片内容目录。 */
@@ -96,12 +90,12 @@ public final class NoteFilePaths {
      * 同描述的两张卡不会互相覆盖。**身份在 meta 的 id 里，文件名只是给人看的** —— 所以标题变了
      * 不会去改文件名（那会让 Obsidian / Git 看到一次无意义的增删）。
      */
-    public Path blockContent(String noteSlug, String cardSlug, String blockId) {
-        return cardsDir().resolve(blockFilePrefix(noteSlug, cardSlug) + "-" + shortId(blockId) + MD_SUFFIX);
+    public Path cardFilePath(String noteSlug, String cardSlug, String cardId) {
+        return cardsDir().resolve(cardFilePrefix(noteSlug, cardSlug) + "-" + shortId(cardId) + MD_SUFFIX);
     }
 
     /** 卡片文件名前缀：{@code <笔记名>[-<卡片描述>]}。 */
-    public static String blockFilePrefix(String noteSlug, String cardSlug) {
+    public static String cardFilePrefix(String noteSlug, String cardSlug) {
         String prefix = noteSlug == null || noteSlug.isBlank() ? "untitled" : noteSlug;
         if (cardSlug != null && !cardSlug.isBlank() && !cardSlug.equals(prefix)) {
             prefix = prefix + "-" + cardSlug;
@@ -129,15 +123,9 @@ public final class NoteFilePaths {
                 && !name.toLowerCase(Locale.ROOT).endsWith(META_SUFFIX);
     }
 
-    /** 是否落在元数据目录内（卡片扫描要排除它）。 */
-    public boolean isMetaArea(Path file) {
-        Path abs = file.toAbsolutePath().normalize();
-        return abs.startsWith(metaDir());
-    }
-
     /** 卡片在 meta 里的 id 是完整 UUID，文件名只取前 8 位十六进制。 */
-    public static String shortId(String blockId) {
-        String hex = blockId == null ? "" : blockId.replace("-", "");
+    public static String shortId(String cardId) {
+        String hex = cardId == null ? "" : cardId.replace("-", "");
         if (hex.length() >= 8) {
             return hex.substring(0, 8).toLowerCase(Locale.ROOT);
         }
@@ -148,7 +136,7 @@ public final class NoteFilePaths {
      * 卡片的可读名：优先用户给卡片起的标题，其次正文第一个标题或第一行，都没有才叫 untitled。
      * 卡片标题是可选的，所以这里必须能退到正文。
      */
-    public static String blockSlug(String cardTitle, String contentMd) {
+    public static String cardSlug(String cardTitle, String contentMd) {
         if (cardTitle != null && !cardTitle.isBlank()) {
             return Markdown.slug(cardTitle);
         }

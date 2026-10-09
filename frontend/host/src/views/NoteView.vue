@@ -12,7 +12,7 @@ import BacklinksPanel from '@/components/BacklinksPanel.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import GroupPicker from '@/components/GroupPicker.vue'
 import { primaryLabel } from '@/core/utils'
-import type { NoteMeta, NoteBlockView, Notebook } from '@/api/types'
+import type { NoteMeta, CardView, Notebook } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -148,9 +148,9 @@ async function addCard() {
   if (created) await pageRef.value.beginEdit(created)
 }
 
-function onPageContext(p: { x: number; y: number; target: 'page' | 'block'; view?: NoteBlockView }) {
+function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }) {
   const entries: MenuEntry[] = []
-  if (p.target === 'block') {
+  if (p.target === 'card') {
     entries.push(
       { label: '编辑卡片内容', action: () => p.view && void pageRef.value?.beginEdit(p.view) },
       { label: '复制卡片', shortcut: 'Ctrl D', action: () => void page.duplicateSelected() },
@@ -179,12 +179,12 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'block'; view
       {
         label: '删除卡片（保留笔记内容）',
         danger: true,
-        action: () => p.view && void page.removeBlock(p.view.block.id, false),
+        action: () => p.view && void page.removeBlock(p.view.card.id, false),
       },
       {
         label: '删除卡片并删除整篇笔记',
         danger: true,
-        action: () => p.view && void page.removeBlock(p.view.block.id, true),
+        action: () => p.view && void page.removeBlock(p.view.card.id, true),
       },
     )
   } else {
@@ -258,7 +258,6 @@ function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
   ]
   if (trashMode()) {
     entries.push({ separator: true })
-    entries.push({ label: '恢复', action: () => nodes.restore(node.id) })
     entries.push({ label: '彻底删除', danger: true, action: () => nodes.purge(node.id) })
   }
   menu.value = { open: true, x: payload.x, y: payload.y, entries }

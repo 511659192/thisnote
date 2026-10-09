@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.MetaJson;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.store.TagBook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +37,7 @@ public class TagRepository {
 
     private static final Logger log = LoggerFactory.getLogger(TagRepository.class);
 
-    private final NoteStore noteStore;
+    private final NoteRepository noteRepository;
 
     /** 台账缓存：读一次就够（与分组台账同构）。 */
     private volatile TagBook book;
@@ -45,7 +45,7 @@ public class TagRepository {
     // ------------------------------------------------------------------ 台账读写
 
     private Path tagsFile() {
-        return noteStore.paths().tagsFile();
+        return noteRepository.paths().tagsFile();
     }
 
     private TagBook book() {
@@ -73,13 +73,13 @@ public class TagRepository {
             }
             return MetaJson.fromJson(raw, TagBook.class);
         } catch (IOException | RuntimeException e) {
-            log.warn("标签台账无法读取：{}（{}）", noteStore.paths().relative(file), e.toString());
+            log.warn("标签台账无法读取：{}（{}）", noteRepository.paths().relative(file), e.toString());
             return TagBook.empty();
         }
     }
 
     private void save(TagBook next) {
-        noteStore.writeJson(tagsFile(), next);
+        noteRepository.writeJson(tagsFile(), next);
         book = next;
     }
 
@@ -87,7 +87,7 @@ public class TagRepository {
     private TagBook withNoteTags(TagBook source) {
         TagBook merged = source;
         long now = System.currentTimeMillis();
-        for (NoteMeta meta : noteStore.scanNotes()) {
+        for (NoteMeta meta : noteRepository.scanNotes()) {
             for (String name : meta.tags()) {
                 if (merged.find(name) == null) {
                     merged = merged.with(TagBook.Tag.fresh(name, null, now));
@@ -150,17 +150,17 @@ public class TagRepository {
 
     /** Replace all tags of a node. */
     public void setNodeTags(String nodeId, List<String> names) {
-        NoteMeta meta = noteStore.note(nodeId);
+        NoteMeta meta = noteRepository.note(nodeId);
         if (meta == null) {
             return;
         }
         List<String> clean = cleaned(names);
-        noteStore.writeNoteMeta(meta.withTags(clean));
+        noteRepository.writeNoteMeta(meta.withTags(clean));
         registerAll(clean);
     }
 
     public void addNodeTag(String nodeId, String name) {
-        NoteMeta meta = noteStore.note(nodeId);
+        NoteMeta meta = noteRepository.note(nodeId);
         String clean = normalize(name);
         if (meta == null || clean.isEmpty()) {
             return;
@@ -168,13 +168,13 @@ public class TagRepository {
         if (!contains(meta.tags(), clean)) {
             List<String> next = new ArrayList<>(meta.tags());
             next.add(clean);
-            noteStore.writeNoteMeta(meta.withTags(next));
+            noteRepository.writeNoteMeta(meta.withTags(next));
         }
         register(clean);
     }
 
     public void removeNodeTag(String nodeId, String name) {
-        NoteMeta meta = noteStore.note(nodeId);
+        NoteMeta meta = noteRepository.note(nodeId);
         String clean = normalize(name);
         if (meta == null || clean.isEmpty()) {
             return;
@@ -185,13 +185,13 @@ public class TagRepository {
                 next.add(tag);
             }
         }
-        noteStore.writeNoteMeta(meta.withTags(next));
+        noteRepository.writeNoteMeta(meta.withTags(next));
     }
 
     // ------------------------------------------------------------------ 查询
 
     public List<Dtos.TagDto> tagsOf(String nodeId) {
-        NoteMeta meta = noteStore.note(nodeId);
+        NoteMeta meta = noteRepository.note(nodeId);
         return meta == null ? List.of() : toDtos(meta.tags(), book());
     }
 
@@ -202,7 +202,7 @@ public class TagRepository {
             return map;
         }
         for (String id : nodeIds) {
-            NoteMeta meta = noteStore.note(id);
+            NoteMeta meta = noteRepository.note(id);
             map.put(id, meta == null ? List.of() : sorted(meta.tags()));
         }
         return map;
@@ -214,7 +214,7 @@ public class TagRepository {
      */
     public List<Dtos.TagDto> listWithCounts() {
         Map<String, Integer> counts = new HashMap<>();
-        for (NoteMeta meta : noteStore.scanNotes()) {
+        for (NoteMeta meta : noteRepository.scanNotes()) {
             if (meta.deleted()) {
                 continue;
             }
@@ -241,7 +241,7 @@ public class TagRepository {
         if (from.isEmpty() || to.isEmpty() || from.equalsIgnoreCase(to)) {
             return;
         }
-        for (NoteMeta meta : noteStore.scanNotes()) {
+        for (NoteMeta meta : noteRepository.scanNotes()) {
             List<String> next = new ArrayList<>();
             boolean changed = false;
             for (String tag : meta.tags()) {
@@ -253,7 +253,7 @@ public class TagRepository {
                 }
             }
             if (changed) {
-                noteStore.writeNoteMeta(meta.withTags(cleaned(next)));
+                noteRepository.writeNoteMeta(meta.withTags(cleaned(next)));
             }
         }
         long now = System.currentTimeMillis();
@@ -281,31 +281,6 @@ public class TagRepository {
     }
 
     /** 删除标签：台账删条目 + 所有笔记 meta 里的归属一起清掉。 */
-    public void delete(String id) {
-        String name = normalize(id);
-        if (name.isEmpty()) {
-            return;
-        }
-        for (NoteMeta meta : noteStore.scanNotes()) {
-            List<String> next = new ArrayList<>();
-            boolean changed = false;
-            for (String tag : meta.tags()) {
-                if (tag.equalsIgnoreCase(name)) {
-                    changed = true;
-                } else {
-                    next.add(tag);
-                }
-            }
-            if (changed) {
-                noteStore.writeNoteMeta(meta.withTags(next));
-            }
-        }
-        TagBook current = book();
-        if (current.find(name) != null) {
-            save(current.without(name));
-        }
-    }
-
     public void rebuildFtsTags() {
         // 全文索引已换成内存实现：没有独立的标签索引列需要刷新。
     }

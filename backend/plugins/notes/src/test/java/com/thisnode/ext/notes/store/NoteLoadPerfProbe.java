@@ -1,6 +1,7 @@
 package com.thisnode.ext.notes.store;
 
 import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,12 +29,10 @@ class NoteLoadPerfProbe {
             Path caseRoot = Files.createTempDirectory("note-perf-" + cards + "-");
             NotesConfig config = Mockito.mock(NotesConfig.class);
             Mockito.when(config.markdownRoot()).thenReturn(caseRoot);
-            NoteStore store = new NoteStore(config);
+            NoteRepository store = new NoteRepository(config);
             seed(store, caseRoot, cards);
 
-            NoteCompositionService composition = new NoteCompositionService(store);
-            StartupMaintenance maintenance = new StartupMaintenance(store,
-                    composition);
+                StartupMaintenance maintenance = new StartupMaintenance(store);
 
             long t0 = System.nanoTime();
             maintenance.run();
@@ -45,12 +44,12 @@ class NoteLoadPerfProbe {
 
             String noteId = store.scanNotes().get(0).id();
             long t2 = System.nanoTime();
-            int blocks = composition.blocks(noteId).size();
-            int mdLen = composition.noteMarkdown(noteId).length();
+            int blocks = store.cards(noteId).size();
+            int mdLen = store.noteMarkdown(noteId).length();
             long pageMs = (System.nanoTime() - t2) / 1_000_000;
 
             long t3 = System.nanoTime();
-            int all = composition.allBlocks().size();
+            int all = store.allCards().size();
             long scanMs = (System.nanoTime() - t3) / 1_000_000;
 
             Runtime rt = Runtime.getRuntime();
@@ -66,7 +65,7 @@ class NoteLoadPerfProbe {
         }
     }
 
-    private void seed(NoteStore store, Path root, int cards) throws IOException {
+    private void seed(NoteRepository store, Path root, int cards) throws IOException {
         int notes = Math.max(1, cards / CARDS_PER_NOTE);
         long now = System.currentTimeMillis();
         String tag = root.getFileName().toString();
@@ -77,7 +76,7 @@ class NoteLoadPerfProbe {
                 String blockId = java.util.UUID.randomUUID().toString();
                 String slug = "卡片-" + n + "-" + c;
                 Path md = root.resolve(slug + "-" + NoteFilePaths.shortId(blockId) + ".md");
-                Files.writeString(md, CardFile.compose(new BlockMeta(BlockMeta.SCHEMA, blockId,
+                Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
                 refs.add(CardRef.of(blockId, root.relativize(md).toString().replace('\\', '/')));

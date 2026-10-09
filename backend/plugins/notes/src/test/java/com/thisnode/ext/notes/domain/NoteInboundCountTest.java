@@ -3,9 +3,8 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
-import com.thisnode.ext.notes.store.NoteCompositionService;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,8 +28,7 @@ class NoteInboundCountTest {
     @TempDir
     Path root;
 
-    private NoteStore store;
-    private NoteCompositionService composition;
+    private NoteRepository store;
     private NoteService noteService;
     private LinkRepository links;
 
@@ -38,21 +36,20 @@ class NoteInboundCountTest {
     void setUp() {
         NotesConfig config = Mockito.mock(NotesConfig.class);
         Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteStore(config);
-        composition = TestWiring.composition(store);
-        NoteRepository noteRepository = new NoteRepository(store, TestWiring.composition(store));
-        NoteBlockRepository blockRepository = new NoteBlockRepository(TestWiring.composition(store));
+        store = new NoteRepository(config);
+        NoteRepository noteRepository = store;
+        CardRepository blockRepository = new CardRepository(store);
         TagRepository tagRepository = new TagRepository(store);
         NotebookRepository notebookRepository = new NotebookRepository(store);
         OpsRepository opsRepository = new OpsRepository(store);
         links = Mockito.mock(LinkRepository.class);
         noteService = new NoteService(noteRepository, tagRepository, links, notebookRepository,
-                blockRepository, opsRepository, store, TestWiring.composition(store));
+                blockRepository, opsRepository);
     }
 
     private String newNote(String title, String contentMd) {
         return noteService.create(new Dtos.CreateNodeRequest(
-                title, contentMd, "note", null, null, null, null, null, null));
+                title, contentMd, "note", null, null, null, null, null));
     }
 
     private NoteMeta metaOf(String title) {
@@ -110,7 +107,9 @@ class NoteInboundCountTest {
         assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
 
         noteService.patch(a, new Dtos.UpdateNodeRequest(null, "不再引用谁", null, null,
-                null, null, null, null));
+                null, null, null));
+        System.out.println("[DEBUGOUT] 甲.meta=" + store.note(a));
+        System.out.println("[DEBUGOUT] 乙.meta=" + store.note(b));
 
         assertThat(metaOf("乙").inboundCount()).isZero();
         assertThat(b).isNotBlank();

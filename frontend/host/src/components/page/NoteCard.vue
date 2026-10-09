@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { NoteBlockView } from '@/api/types'
+import type { CardView } from '@/api/types'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 // '@/plugins' 触发插件自注册；registry 提供列表（直接导入，绕开类型推断上的环）。
 import '@/plugins'
@@ -21,21 +21,21 @@ import { BLOCK_MIN_H } from '@/stores/notePage'
  * of prose.
  */
 const props = defineProps<{
-  view: NoteBlockView
+  view: CardView
   selected: boolean
   editing: boolean
   focused: boolean
 }>()
 
 const emit = defineEmits<{
-  (e: 'pointerdown', p: { event: PointerEvent; view: NoteBlockView; mode: 'move' | 'resize'; handle?: string }): void
+  (e: 'pointerdown', p: { event: PointerEvent; view: CardView; mode: 'move' | 'resize'; handle?: string }): void
   (e: 'request-edit', id: string): void
-  (e: 'context', p: { event: MouseEvent; view: NoteBlockView }): void
-  (e: 'save', p: { blockId: string; contentMd: string }): void
+  (e: 'context', p: { event: MouseEvent; view: CardView }): void
+  (e: 'save', p: { cardId: string; contentMd: string }): void
   (e: 'end-edit'): void
   (e: 'toggle-collapse', id: string): void
   (e: 'focus', id: string): void
-  (e: 'fit-height', p: { blockId: string; h: number }): void
+  (e: 'fit-height', p: { cardId: string; h: number }): void
   // 卡片正文里的 wiki 链接/标签：预览组件只负责认出来，跳转要靠这里往上抛
   (e: 'open-note', id: string): void
   (e: 'create-note', title: string): void
@@ -68,10 +68,10 @@ const measure = ref<HTMLElement | null>(null)
 /** 预览态的渲染容器：量它里面内容根节点的自然高度。 */
 const readBody = ref<HTMLElement | null>(null)
 
-const block = computed(() => props.view.block)
-const content = computed(() => block.value.contentMd ?? '')
+const card = computed(() => props.view.card)
+const content = computed(() => card.value.contentMd ?? '')
 /** True while this card shows an editable textarea (source or split). */
-const sourceVisible = computed(() => !block.value.collapsed && contentMode.value !== 'preview')
+const sourceVisible = computed(() => !card.value.collapsed && contentMode.value !== 'preview')
 
 /**
  * Switch how this card shows its content; picking a writing mode starts the write.
@@ -87,7 +87,7 @@ function setMode(mode: ContentMode) {
     if (props.editing) emit('end-edit')
     return
   }
-  if (!props.editing) emit('request-edit', block.value.id)
+  if (!props.editing) emit('request-edit', card.value.id)
 }
 
 /**
@@ -98,7 +98,7 @@ const showDraftInPreview = computed(() => contentMode.value === 'split' && sourc
 const previewSource = computed(() => (showDraftInPreview.value ? draft.value : content.value))
 
 watch(
-  () => [props.editing, block.value.id] as const,
+  () => [props.editing, card.value.id] as const,
   async ([editing, id]) => {
     if (!editing) {
       // Leaving the card returns it to the preview, unless the user chose a mode themselves.
@@ -119,7 +119,7 @@ watch(
 )
 
 watch(
-  () => block.value.id,
+  () => card.value.id,
   () => {
     loadedFor.value = null
     draft.value = ''
@@ -160,7 +160,7 @@ function commit() {
   // Save what is in the DOM right now: an empty card must be recognisable as empty.
   const text = textarea.value ? textarea.value.value : draft.value
   draft.value = text
-  emit('save', { blockId: block.value.id, contentMd: text })
+  emit('save', { cardId: card.value.id, contentMd: text })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -186,15 +186,15 @@ function onKeydown(e: KeyboardEvent) {
  * 一次输入恰好跨过阈值时反复拉扯；88px 下限与页面的 BLOCK_MIN_H 一致。
  */
 function fitHeight() {
-  if (block.value.collapsed) return
+  if (card.value.collapsed) return
   const el = contentEl()
   if (!el) return
   // 有了真实信号才挂观察器（见 armFitObserver）：避免"每次打开笔记都贴合一次"。
   armFitObserver()
   const needed = Math.round(el.scrollHeight) + 24
   const target = Math.max(BLOCK_MIN_H, needed)
-  if (Math.abs(target - block.value.h) > 8) {
-    emit('fit-height', { blockId: block.value.id, h: target })
+  if (Math.abs(target - card.value.h) > 8) {
+    emit('fit-height', { cardId: card.value.id, h: target })
   }
 }
 
@@ -235,32 +235,32 @@ onBeforeUnmount(() => {
 
 <template>
   <article
-    class="block"
-    :data-block-id="block.id"
-    :class="{ selected, editing, collapsed: block.collapsed, focused }"
+    class="card"
+    :data-card-id="card.id"
+    :class="{ selected, editing, collapsed: card.collapsed, focused }"
     :style="{
-      transform: `translate3d(${block.x}px, ${block.y}px, 0)`,
-      width: `${block.w}px`,
-      height: block.collapsed ? '26px' : `${block.h}px`,
-      zIndex: block.z + 1,
+      transform: `translate3d(${card.x}px, ${card.y}px, 0)`,
+      width: `${card.w}px`,
+      height: card.collapsed ? '26px' : `${card.h}px`,
+      zIndex: card.z + 1,
     }"
     @pointerdown="onBodyPointerDown"
-    @dblclick.stop="emit('request-edit', block.id)"
+    @dblclick.stop="emit('request-edit', card.id)"
     @contextmenu.prevent.stop="emit('context', { event: $event, view })"
-    @click="emit('focus', block.id)"
+    @click="emit('focus', card.id)"
   >
     <!-- Card tools: hidden until the card is hovered or selected, so they cost no layout space
          and the content starts right at the top of the card. 插件贡献的开关排在最左。 -->
     <div class="card-tools">
-      <template v-if="!block.collapsed">
+      <template v-if="!card.collapsed">
         <component
           :is="plugin.cardComponent"
           v-for="plugin in activeCardPlugins()"
           :key="plugin.id"
-          :block-id="block.id"
+          :card-id="card.id"
         />
       </template>
-      <div v-if="!block.collapsed" class="modes" role="group" aria-label="卡片显示模式">
+      <div v-if="!card.collapsed" class="modes" role="group" aria-label="卡片显示模式">
         <button
           v-for="m in MODES"
           :key="m.mode"
@@ -276,18 +276,18 @@ onBeforeUnmount(() => {
       </div>
       <button
         class="collapse"
-        :class="{ active: block.collapsed }"
-        :title="block.collapsed ? '展开卡片' : '折叠卡片'"
+        :class="{ active: card.collapsed }"
+        :title="card.collapsed ? '展开卡片' : '折叠卡片'"
         @pointerdown.stop
-        @click.stop="emit('toggle-collapse', block.id)"
+        @click.stop="emit('toggle-collapse', card.id)"
       >
-        {{ block.collapsed ? '▸' : '▾' }}
+        {{ card.collapsed ? '▸' : '▾' }}
       </button>
     </div>
 
     <!-- body: source / source-beside-preview / preview -->
     <div
-      v-if="!block.collapsed && contentMode === 'split'"
+      v-if="!card.collapsed && contentMode === 'split'"
       class="body split"
     >
       <textarea
@@ -315,7 +315,7 @@ onBeforeUnmount(() => {
     </div>
 
     <textarea
-      v-else-if="!block.collapsed && contentMode === 'source'"
+      v-else-if="!card.collapsed && contentMode === 'source'"
       ref="textarea"
       v-model="draft"
       class="body edit"
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
       @input="fitHeight"
     ></textarea>
 
-    <div v-else-if="!block.collapsed" ref="readBody" class="body read">
+    <div v-else-if="!card.collapsed" ref="readBody" class="body read">
       <MarkdownPreview
         v-if="content"
         :content="content"
@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
 
     <!-- 边缘光标提示条：只负责 cursor（判定在 onBodyPointerDown 里按坐标做）。
          左/右/下=拉伸，上=移动；角落的光标由相邻边给出，行为上是双向拉伸。 -->
-    <template v-if="!block.collapsed">
+    <template v-if="!card.collapsed">
       <span
         v-for="pos in ['n', 'w', 'e', 's']"
         :key="'edge-' + pos"
@@ -364,7 +364,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.block {
+.card {
   position: absolute;
   top: 0;
   left: 0;
@@ -381,18 +381,18 @@ onBeforeUnmount(() => {
   user-select: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-.block.focused,
-.block.selected {
+.card.focused,
+.card.selected {
   border-color: var(--accent);
 }
-.block.selected {
+.card.selected {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent), var(--shadow);
 }
-.block.editing {
+.card.editing {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent), var(--shadow-lg);
 }
-.block.collapsed {
+.card.collapsed {
   height: 40px !important;
 }
 
@@ -415,16 +415,16 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 0.12s;
 }
-.block:hover .modes,
-.block.selected .modes,
-.block.focused .modes,
-.block.editing .modes,
-.block.collapsed .modes,
-.block:hover .collapse,
-.block.selected .collapse,
-.block.focused .collapse,
-.block.editing .collapse,
-.block.collapsed .collapse {
+.card:hover .modes,
+.card.selected .modes,
+.card.focused .modes,
+.card.editing .modes,
+.card.collapsed .modes,
+.card:hover .collapse,
+.card.selected .collapse,
+.card.focused .collapse,
+.card.editing .collapse,
+.card.collapsed .collapse {
   opacity: 1;
 }
 

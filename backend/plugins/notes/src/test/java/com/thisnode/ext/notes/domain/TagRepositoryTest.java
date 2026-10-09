@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.store.TagBook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,21 +22,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 标签台账（{@code .notes/tags.json}）：一个文件装全部标签，归属仍写在笔记 meta 里。
  *
- * <p>不启 Spring：{@link NoteStore} 只依赖 markdown 根目录，用临时目录直接跑。
+ * <p>不启 Spring：{@link NoteRepository} 只依赖 markdown 根目录，用临时目录直接跑。
  */
 class TagRepositoryTest {
 
     @TempDir
     Path root;
 
-    private NoteStore store;
+    private NoteRepository store;
     private TagRepository tags;
 
     @BeforeEach
     void setUp() {
         NotesConfig config = Mockito.mock(NotesConfig.class);
         Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteStore(config);
+        store = new NoteRepository(config);
         tags = new TagRepository(store);
     }
 
@@ -86,21 +86,6 @@ class TagRepositoryTest {
         assertThat(ledger().find("设计")).isNull();
         assertThat(ledger().find("设计原则").color()).isEqualTo("#ff0000");
         assertThat(tags.listWithCounts()).extracting(Dtos.TagDto::name).containsExactly("设计原则");
-    }
-
-    @Test
-    @DisplayName("删除：台账条目与所有笔记里的归属一起消失")
-    void deletesTagAndMemberships() throws IOException {
-        seedNote("n1", "设计");
-        seedNote("n2", "设计");
-        tags.setColor("设计", "#ff0000");
-
-        tags.delete("设计");
-
-        assertThat(store.note("n1").tags()).isEmpty();
-        assertThat(store.note("n2").tags()).isEmpty();
-        assertThat(ledger().find("设计")).isNull();
-        assertThat(tags.listWithCounts()).isEmpty();
     }
 
     @Test

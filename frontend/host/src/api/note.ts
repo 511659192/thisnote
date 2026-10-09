@@ -13,7 +13,6 @@ export interface NoteQuery {
 
 export const noteApi = {
   list: (query: NoteQuery = {}) => http.get<NoteMeta[]>('/api/notes', query as never),
-  counts: () => http.get<Record<string, number>>('/api/notes/counts'),
   get: (id: string) => http.get<NoteDetail>(`/api/notes/${id}`),
 
   create: (payload: {
@@ -22,7 +21,6 @@ export const noteApi = {
     type?: string
     dailyDate?: string
     tags?: string[]
-    aliases?: string[]
     source?: string
     status?: string
       notebookId?: string
@@ -36,25 +34,17 @@ export const noteApi = {
       source?: string
       status?: string
       tags?: string[]
-      aliases?: string[]
       notebookId?: string
       clearNotebook?: boolean
     },
-  ) => http.patch<NoteDetail>(`/api/notes/${id}`, payload),
+  ) => http.post<NoteDetail>(`/api/notes/${id}/patch`, payload),
 
-  purge: (id: string) => http.del<{ ok: boolean }>(`/api/notes/${id}`, { hard: true }),
-  restore: (id: string) => http.post<{ ok: boolean }>(`/api/notes/${id}/restore`),
-  emptyTrash: () => http.del<{ deleted: number }>('/api/notes/trash'),
+  purge: (id: string) => http.post<{ ok: boolean }>(`/api/notes/${id}/delete`),
 
   addTag: (id: string, name: string) =>
-    http.post<NoteDetail['tags']>(`/api/notes/${id}/tags`, { name }),
+    http.post<NoteDetail['tags']>(`/api/notes/${id}/tags/add`, { name }),
   removeTag: (id: string, name: string) =>
-    http.del<NoteDetail['tags']>(`/api/notes/${id}/tags/${encodeURIComponent(name)}`),
-  setTags: (id: string, names: string[]) =>
-    http.put<NoteDetail['tags']>(`/api/notes/${id}/tags`, names),
-
-  daily: (date?: string, templateId?: string) =>
-    http.post<NoteDetail>('/api/notes/daily', undefined, { date, templateId }),
+    http.post<NoteDetail['tags']>(`/api/notes/${id}/tags/remove`, undefined, { name }),
   resolveStub: (title: string, fromNodeId?: string) =>
     http.post<NoteDetail>('/api/notes/resolve-stub', { title, fromNodeId }),
 }

@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.MetaJson;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.util.Ids;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,12 +31,12 @@ public class OpsRepository {
     private static final Logger log = LoggerFactory.getLogger(OpsRepository.class);
     private static final String DEVICE_ID_KEY = "device_id";
 
-    private final NoteStore noteStore;
+    private final NoteRepository noteRepository;
     private volatile String deviceId;
     private volatile Integer cachedLines;
 
-    public OpsRepository(NoteStore noteStore) {
-        this.noteStore = noteStore;
+    public OpsRepository(NoteRepository noteRepository) {
+        this.noteRepository = noteRepository;
     }
 
     /** 组装一行操作日志；字段与旧的 ops 表一一对应。 */
@@ -72,7 +72,7 @@ public class OpsRepository {
     public void append(String entityType, String entityId, String action, String payloadJson) {
         OpLine line = new OpLine(Ids.newId(), deviceId(), entityType, entityId, action,
                 payloadJson, System.currentTimeMillis());
-        noteStore.appendLine(noteStore.paths().opsFile(), MetaJson.toJson(line));
+        noteRepository.appendLine(noteRepository.paths().opsFile(), MetaJson.toJson(line));
         Integer lines = cachedLines;
         cachedLines = lines == null ? null : lines + 1;
     }
@@ -106,15 +106,6 @@ public class OpsRepository {
         return out;
     }
 
-    public long count() {
-        Integer lines = cachedLines;
-        if (lines == null) {
-            lines = readLines().size();
-            cachedLines = lines;
-        }
-        return lines;
-    }
-
     // ------------------------------------------------------------------ helpers
 
     private OpLine parse(String json) {
@@ -127,7 +118,7 @@ public class OpsRepository {
     }
 
     private List<String> readLines() {
-        Path file = noteStore.paths().opsFile();
+        Path file = noteRepository.paths().opsFile();
         if (!Files.isRegularFile(file)) {
             return List.of();
         }
@@ -142,7 +133,7 @@ public class OpsRepository {
     }
 
     private Map<String, String> settings() {
-        Path file = noteStore.paths().settingsFile();
+        Path file = noteRepository.paths().settingsFile();
         try {
             if (!Files.isRegularFile(file)) {
                 return new LinkedHashMap<>();
@@ -156,6 +147,6 @@ public class OpsRepository {
     }
 
     private void saveSettings(Map<String, String> settings) {
-        noteStore.writeJson(noteStore.paths().settingsFile(), Collections.unmodifiableMap(settings));
+        noteRepository.writeJson(noteRepository.paths().settingsFile(), Collections.unmodifiableMap(settings));
     }
 }

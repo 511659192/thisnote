@@ -1,9 +1,9 @@
 import { http } from '@/core/http'
-import type { Notebook, OpEntry, SystemInfo, Tag, SyncEvent } from './types'
+import type { Notebook, OpEntry, Tag } from './types'
 
 export const tagApi = {
   list: () => http.get<Tag[]>('/api/tags'),
-  rename: (id: string, name: string) => http.put<{ ok: boolean }>(`/api/tags/${id}`, { name }),
+  rename: (id: string, name: string) => http.post<{ ok: boolean }>(`/api/tags/${id}/update`, { name }),
 }
 
 export const notebookApi = {
@@ -22,37 +22,17 @@ export const notebookApi = {
     parentId?: string | null
     icon?: string | null
     sortOrder?: number
-  }) => http.put<Notebook>(`/api/notebooks/${id}`, patch),
+  }) => http.post<Notebook>(`/api/notebooks/${id}/update`, patch),
 
-  rename: (id: string, title: string) => http.put<Notebook>(`/api/notebooks/${id}`, { title }),
-  remove: (id: string) => http.del<{ ok: boolean }>(`/api/notebooks/${id}`),
+  rename: (id: string, title: string) => http.post<Notebook>(`/api/notebooks/${id}/update`, { title }),
+  remove: (id: string) => http.post<{ ok: boolean }>(`/api/notebooks/${id}/delete`),
   addNode: (id: string, noteId: string) =>
     http.post<{ ok: boolean }>(`/api/notebooks/${id}/nodes`, undefined, { noteId }),
 }
 
 export const systemApi = {
-  health: () => http.get<Record<string, unknown>>('/api/health'),
-  info: () => http.get<SystemInfo>('/api/info'),
-  syncStatus: () =>
-    http.get<{
-      enabled: boolean
-      root: string
-      events: SyncEvent[]
-      orphans: string[]
-    }>('/api/notes/sync/status'),
-  setSyncEnabled: (value: boolean) =>
-    http.post<{ enabled: boolean }>('/api/notes/sync/enabled', undefined, { value }),
-  reconcile: () => http.post<{ applied: number; events: SyncEvent[] }>('/api/notes/sync/reconcile'),
   reindex: () =>
     http.post<{ links: number; mirrored: number; tookMs: number }>('/api/maintenance/reindex'),
-  stats: () => http.get<Record<string, unknown>>('/api/maintenance/stats'),
-}
-
-export const ioApi = {
-  mirrorRewrite: () =>
-    http.post<{ rewritten: number; root: string }>('/api/io/mirror/rewrite'),
-  mirrorInfo: () =>
-    http.get<{ root: string; attachmentRoot: string; orphanFiles: number }>('/api/io/mirror/info'),
 }
 
 export const attachmentApi = {

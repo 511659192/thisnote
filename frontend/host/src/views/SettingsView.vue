@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ioApi, systemApi } from '@/api'
+import { systemApi } from '@/api'
 import { pluginApi, type PluginConfigField, type PluginInfo } from '@/api/plugins'
 import {
   pluginSettings,
@@ -14,18 +14,13 @@ import { setApiBase, apiBase } from '@/core/http'
 import { useUiStore } from '@/stores/ui'
 import { useNoteStore } from '@/stores/notes'
 import { formatRelative } from '@/core/utils'
-import type { SystemInfo, SyncEvent } from '@/api/types'
 
 const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
 const nodes = useNoteStore()
 
-const tab = ref<'data' | 'sync' | 'backup' | 'plugins' | 'about'>('data')
-const info = ref<SystemInfo | null>(null)
-const stats = ref<Record<string, unknown>>({})
-const mirror = ref<{ root: string; attachmentRoot: string; orphanFiles: number } | null>(null)
-const sync = ref<{ enabled: boolean; root: string; events: SyncEvent[]; orphans: string[] } | null>(null)
+const tab = ref<'data' | 'backup' | 'plugins' | 'about'>('data')
 const busy = ref('')
 const apiBaseDraft = ref(apiBase.value)
 
@@ -148,12 +143,6 @@ function kindLabel(kind: PluginInfo['kind']): string {
 }
 
 async function refresh() {
-  ;[info.value, stats.value, mirror.value, sync.value] = await Promise.all([
-    systemApi.info(),
-    systemApi.stats(),
-    ioApi.mirrorInfo(),
-    systemApi.syncStatus(),
-  ])
   apiBaseDraft.value = apiBase.value
   await refreshPlugins()
 }
@@ -186,7 +175,7 @@ function applyApiBase() {
 <template>
   <div class="settings">
     <header class="tabs">
-      <button :class="{ active: tab === 'sync' }" @click="tab = 'sync'">本地文件</button>
+      <button :class="{ active: tab === 'data' }" @click="tab = 'data'">本地文件</button>
       <button :class="{ active: tab === 'backup' }" @click="tab = 'backup'">维护</button>
       <button :class="{ active: tab === 'plugins' }" @click="tab = 'plugins'">插件</button>
       <button :class="{ active: tab === 'about' }" @click="tab = 'about'">关于</button>
@@ -198,43 +187,14 @@ function applyApiBase() {
       <div v-if="busy" class="busy-bar">{{ busy }}…</div>
 
       <!-- ------------------------------ data ------------------------------ -->
-      <section v-if="tab === 'sync'" class="panel">
+      <section v-if="tab === 'data'" class="panel">
         <h3>笔记存储（本地文件）</h3>
         <p class="small muted">
           笔记以<strong>本地文件为权威</strong>：一张卡片 = 一个 .md，头部一行 meta 注释写着它归属
-          哪篇笔记与摆放位置，其余是正文。可直接在 Obsidian / VS Code 中编辑 —— 应用每 4 秒比对
-          一次目录指纹，外部改动（改 / 加 / 删文件）会自动重扫并重建链接与搜索索引。
+          哪篇笔记与摆放位置，其余是正文。可直接在 Obsidian / VS Code 中查看与编辑这些文件；
+          外部改动在应用重启时对齐（cards/ 里新增的 md 会被认领成笔记）。
         </p>
-        <dl class="kv">
-          <dt>笔记目录</dt><dd class="mono small">{{ mirror?.root }}</dd>
-          <dt>附件目录</dt><dd class="mono small">{{ mirror?.attachmentRoot }}</dd>
-          <dt>未纳管文件</dt><dd>{{ mirror?.orphanFiles ?? 0 }}（没有 meta 注释的 md 会被自动认领成笔记）</dd>
-          <dt>外部同步</dt>
-          <dd>
-            <button
-              class="btn sm"
-              :class="{ active: sync?.enabled }"
-              @click="withBusy('切换外部同步', () => systemApi.setSyncEnabled(!sync?.enabled))"
-            >
-              {{ sync?.enabled ? '已开启' : '已关闭' }}
-            </button>
-          </dd>
-        </dl>
-        <div class="row">
-          <button class="btn" @click="withBusy('立即比对', () => systemApi.reconcile())">立即比对一次</button>
-          <button class="btn" @click="withBusy('重扫保险库', () => ioApi.mirrorRewrite())">重新扫描笔记目录</button>
-        </div>
 
-        <div class="divider"></div>
-        <h3>最近的同步事件</h3>
-        <div v-if="!sync?.events.length" class="small muted">暂无事件。</div>
-        <div v-for="(e, i) in sync?.events ?? []" :key="i" class="event">
-          <span class="chip">{{ e.kind }}</span>
-          <span class="small">{{ e.title }}</span>
-          <span class="small muted">{{ e.message }}</span>
-          <span class="spacer"></span>
-          <span class="small muted">{{ formatRelative(e.at) }}</span>
-        </div>
       </section>
 
       <!-- ------------------------------ backup ------------------------------ -->
@@ -245,10 +205,6 @@ function applyApiBase() {
         </div>
         <dl class="kv" style="margin-top: 12px">
           <dt>存储</dt><dd class="mono small">本地文件（卡片 md + meta）</dd>
-          <dt>笔记 / 链接 / 标签</dt><dd>{{ stats.nodes }} / {{ stats.links }} / {{ stats.tags }}</dd>
-          <dt>笔记 / 卡片</dt><dd>{{ stats.nodes }} / {{ stats.noteBlocks }}</dd>
-          <dt>操作日志</dt><dd>{{ stats.ops }} 条</dd>
-          <dt>回收站</dt><dd>{{ stats.trash }}</dd>
         </dl>
       </section>
 
@@ -358,12 +314,6 @@ function applyApiBase() {
         <p class="small muted">
           本地优先的节点化知识工具。Note 是统一原子，一篇笔记 = 一个页面 = 一列卡片。
         </p>
-        <dl class="kv">
-          <dt>版本</dt><dd>{{ info?.version }}</dd>
-          <dt>数据库</dt><dd class="mono small">{{ info?.dbPath }}</dd>
-          <dt>节点数</dt><dd>{{ info?.nodeCount }}</dd>
-          <dt>运行时长</dt><dd>{{ Math.round((info?.uptimeMs ?? 0) / 1000) }} 秒</dd>
-        </dl>
         <div class="divider"></div>
         <h3>后端地址</h3>
         <div class="row">

@@ -73,8 +73,6 @@ const updated = computed(() => formatRelative(props.doc.updatedAt))
           <dd>{{ doc.status || '—' }}</dd>
           <dt>笔记本</dt>
           <dd>{{ doc.notebooks.map((c) => c.title).join('、') || '—' }}</dd>
-          <dt>别名</dt>
-          <dd>{{ doc.aliases.join('、') || '—' }}</dd>
         </dl>
       </template>
 

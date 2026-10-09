@@ -261,7 +261,6 @@ onMounted(async () => {
           </span>
           <span v-else class="ico">{{ f.icon }}</span>
           <span class="label">{{ f.label }}</span>
-          <span v-if="nodes.counts[f.key]" class="count">{{ nodes.counts[f.key] }}</span>
           <!-- 「全部笔记」是分组树的根：分组就是它的下一层；鼠标移上去图标变＋＝新建分组 -->
           <span
             v-if="f.key === 'all'"

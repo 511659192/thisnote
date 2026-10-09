@@ -3,11 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, usePageStore } from '@/stores/notePage'
 import { useUiStore } from '@/stores/ui'
 import { attachmentApi } from '@/api'
-import NoteBlock from './NoteBlock.vue'
+import NoteCard from './NoteCard.vue'
 import '@/plugins'
 import { activeCardPlugins } from '@/plugins'
-import type { NoteBlockView } from '@/api/types'
-import type { BlockPatch } from '@/api/page'
+import type { CardView } from '@/api/types'
+import type { CardPatch } from '@/api/page'
 
 /**
  * A note's page: a single column of cards that grows downwards.
@@ -25,7 +25,7 @@ const page = usePageStore()
 const ui = useUiStore()
 
 const emit = defineEmits<{
-  (e: 'context', p: { x: number; y: number; target: 'page' | 'block'; view?: NoteBlockView }): void
+  (e: 'context', p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }): void
   // 卡片正文里的链接点击：页面只做转发，由 NoteView 决定跳转还是新建
   (e: 'open-note', id: string): void
   (e: 'create-note', title: string): void
@@ -78,7 +78,7 @@ function watchSentinel() {
 // 插件底座：卡片集合变化时，让各插件批量装载自己的每卡片状态（每页一次请求）。
 // 只问仍在运行的插件——被停用的插件其端点会被拒绝，问了也只是白打一串 409。
 watch(
-  () => page.blocks.map((b) => b.block.id).join(','),
+  () => page.cards.map((b) => b.card.id).join(','),
   (ids) => {
     if (!ids) return
     for (const plugin of activeCardPlugins()) {
@@ -157,7 +157,7 @@ function onWheel(e: WheelEvent) {
 }
 
 function onSurfacePointerDown(e: PointerEvent) {
-  if ((e.target as HTMLElement).closest('.block')) return
+  if ((e.target as HTMLElement).closest('.card')) return
   if (e.button === 0 && e.altKey) {
     startPan(e)
     return
@@ -201,7 +201,7 @@ function onWindowPointerDown(e: PointerEvent) {
   const id = page.editingBlockId
   if (!id) return
   const target = e.target as HTMLElement | null
-  if (target && target.closest('.block.editing')) return
+  if (target && target.closest('.card.editing')) return
   void finishEditing(id)
 }
 
@@ -209,7 +209,7 @@ function onWindowPointerDown(e: PointerEvent) {
 
 function onBlockPointerDown(p: {
   event: PointerEvent
-  view: NoteBlockView
+  view: CardView
   mode: 'move' | 'resize'
   handle?: string
 }) {
@@ -217,11 +217,11 @@ function onBlockPointerDown(p: {
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
-  if (page.editingBlockId && page.editingBlockId !== view.block.id) {
+  if (page.editingBlockId && page.editingBlockId !== view.card.id) {
     void finishEditing()
   }
 
-  const id = view.block.id
+  const id = view.card.id
   const additive = event.shiftKey || event.metaKey || event.ctrlKey
   if (!page.selection.includes(id)) {
     page.select([id], additive)
@@ -238,8 +238,8 @@ function onBlockPointerDown(p: {
   drag.startWorld = page.screenToWorld(drag.startScreen)
   drag.origin = {}
   for (const selId of page.selection) {
-    const v = page.blocks.find((b) => b.block.id === selId)
-    if (v) drag.origin[selId] = { x: v.block.x, y: v.block.y, w: v.block.w, h: v.block.h }
+    const v = page.cards.find((b) => b.card.id === selId)
+    if (v) drag.origin[selId] = { x: v.card.x, y: v.card.y, w: v.card.w, h: v.card.h }
   }
   drag.moved = false
   drag.pending.clear()
@@ -270,15 +270,15 @@ function onPointerMove(e: PointerEvent) {
     const a = page.screenToWorld({ x: marquee.x, y: marquee.y })
     const b = page.screenToWorld({ x: marquee.x + marquee.w, y: marquee.y + marquee.h })
     page.select(
-      page.blocks
+      page.cards
         .filter(
           (v) =>
-            v.block.x + v.block.w >= a.x &&
-            v.block.y + v.block.h >= a.y &&
-            v.block.x <= b.x &&
-            v.block.y <= b.y,
+            v.card.x + v.card.w >= a.x &&
+            v.card.y + v.card.h >= a.y &&
+            v.card.x <= b.x &&
+            v.card.y <= b.y,
         )
-        .map((v) => v.block.id),
+        .map((v) => v.card.id),
     )
     return
   }
@@ -329,7 +329,7 @@ async function onPointerUp() {
   drag.mode = 'none'
   marquee.active = false
   if ((mode === 'move' || mode === 'resize') && moved && drag.pending.size) {
-    const patches: BlockPatch[] = [...drag.pending.entries()].map(([id, g]) => ({
+    const patches: CardPatch[] = [...drag.pending.entries()].map(([id, g]) => ({
       id,
       x: g.x,
       y: g.y,
@@ -347,15 +347,15 @@ async function onPointerUp() {
 
 // ---------------------------------------------------------------- editing
 
-async function beginEdit(view: NoteBlockView) {
-  page.editingBlockId = view.block.id
-  page.select([view.block.id])
+async function beginEdit(view: CardView) {
+  page.editingBlockId = view.card.id
+  page.select([view.card.id])
 }
 
 /**
  * Text most recently handed over by a card's blur handler, together with the save request
  * it started. `finishEditing` awaits the request before pruning, so the delete can never race
- * the save (which used to produce a "block not found" 404).
+ * the save (which used to produce a "card not found" 404).
  */
 const lastSave = reactive(new Map<string, { text: string; done: Promise<void> }>())
 
@@ -367,9 +367,9 @@ const lastSave = reactive(new Map<string, { text: string; done: Promise<void> }>
  * Reading the DOM is what makes "type, then click away" save instead of silently dropping the
  * edit — and dropping it used to delete the card as if it had been left empty.
  */
-function currentEditorText(blockId: string): string | null {
+function currentEditorText(cardId: string): string | null {
   const el = root.value?.querySelector<HTMLTextAreaElement>(
-    `article.block[data-block-id="${CSS.escape(blockId)}"] textarea.body.edit`,
+    `article.card[data-card-id="${CSS.escape(cardId)}"] textarea.body.edit`,
   )
   return el ? el.value : null
 }
@@ -378,12 +378,12 @@ function currentEditorText(blockId: string): string | null {
  * Leave the current card: save it first, then drop it if it turned out to be empty.
  *
  * Saving before deleting matters — a card deleted while its own save is in flight would make
- * the server answer "block not found".
+ * the server answer "card not found".
  */
-async function finishEditing(blockId?: string) {
-  const id = blockId ?? page.editingBlockId
+async function finishEditing(cardId?: string) {
+  const id = cardId ?? page.editingBlockId
   if (!id) return
-  const view = page.blocks.find((b) => b.block.id === id)
+  const view = page.cards.find((b) => b.card.id === id)
   if (!view) {
     page.editingBlockId = null
     return
@@ -400,8 +400,8 @@ async function finishEditing(blockId?: string) {
     lastSave.set(id, pending)
   }
   if (pending) await pending.done
-  const text = (pending?.text ?? view.block.contentMd ?? '').trim()
-  const title = (view.block.title ?? '').trim()
+  const text = (pending?.text ?? view.card.contentMd ?? '').trim()
+  const title = (view.card.title ?? '').trim()
   if (page.editingBlockId === id) page.editingBlockId = null
   if (text || title) return
   const removed = await page.removeIfEmpty(id)
@@ -411,17 +411,17 @@ async function finishEditing(blockId?: string) {
   }
 }
 
-function onSave(p: { blockId: string; contentMd: string }) {
+function onSave(p: { cardId: string; contentMd: string }) {
   // Writing a card's content ends its edit, which unmounts the textarea and fires one last blur
   // carrying the same text. Ignoring a save that would write what the card already holds stops
   // that trailing blur from sending a duplicate request.
-  const view = page.blocks.find((b) => b.block.id === p.blockId)
-  if (view && (view.block.contentMd ?? '') === p.contentMd) {
-    lastSave.set(p.blockId, { text: p.contentMd, done: Promise.resolve() })
+  const view = page.cards.find((b) => b.card.id === p.cardId)
+  if (view && (view.card.contentMd ?? '') === p.contentMd) {
+    lastSave.set(p.cardId, { text: p.contentMd, done: Promise.resolve() })
     return Promise.resolve()
   }
-  const done = page.writeContent(p.blockId, p.contentMd)
-  lastSave.set(p.blockId, { text: p.contentMd, done })
+  const done = page.writeContent(p.cardId, p.contentMd)
+  lastSave.set(p.cardId, { text: p.contentMd, done })
   return done
 }
 
@@ -429,28 +429,28 @@ function onSave(p: { blockId: string; contentMd: string }) {
  * Grow a card downwards to fit text the user just typed. Width is untouched: the card keeps the
  * width and left edge the user chose, and only the height follows the content.
  */
-function onFitHeight(p: { blockId: string; h: number }) {
-  const view = page.blocks.find((b) => b.block.id === p.blockId)
+function onFitHeight(p: { cardId: string; h: number }) {
+  const view = page.cards.find((b) => b.card.id === p.cardId)
   if (!view) return
   // 用户手动定过长度的卡片不再自动贴合（说了算的是用户，不是内容）。
-  if (page.isManualHeight(p.blockId)) return
+  if (page.isManualHeight(p.cardId)) return
   // 双向贴合（长高也缩回），再按视口封顶：卡片最高长到**浏览器底缘**，
   // 再多的内容在卡片内滚动，而不是把卡片撑出好几屏、在画布上够不着。
   const rect = root.value?.getBoundingClientRect()
-  const screenTop = (rect?.top ?? 0) + (view.block.y - page.viewport.y) * page.viewport.zoom
+  const screenTop = (rect?.top ?? 0) + (view.card.y - page.viewport.y) * page.viewport.zoom
   const available = Math.max(
     BLOCK_MIN_H * 2,
     Math.round((window.innerHeight - screenTop - 12) / Math.max(page.viewport.zoom, 0.01)),
   )
   const next = Math.min(Math.round(p.h), available)
-  if (next === view.block.h) return
-  view.block.h = next
-  void page.commit([{ id: p.blockId, h: next }]).catch(() => undefined)
+  if (next === view.card.h) return
+  view.card.h = next
+  void page.commit([{ id: p.cardId, h: next }]).catch(() => undefined)
 }
 
 /** Double-click empty space: a card whose top-left corner is the clicked point. */
 async function onDoubleClick(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('.block')) return
+  if ((e.target as HTMLElement).closest('.card')) return
   if (!page.requireCapacity()) return
   const world = page.screenToWorld(localPoint(e))
   // The clicked point is the card's left/top edge, so the card lands where the user aimed, and
@@ -541,13 +541,13 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-function onBlockContext(p: { event: MouseEvent; view: NoteBlockView }) {
-  if (!page.selection.includes(p.view.block.id)) page.select([p.view.block.id])
-  emit('context', { x: p.event.clientX, y: p.event.clientY, target: 'block', view: p.view })
+function onBlockContext(p: { event: MouseEvent; view: CardView }) {
+  if (!page.selection.includes(p.view.card.id)) page.select([p.view.card.id])
+  emit('context', { x: p.event.clientX, y: p.event.clientY, target: 'card', view: p.view })
 }
 
 function onSurfaceContext(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('.block')) return
+  if ((e.target as HTMLElement).closest('.card')) return
   e.preventDefault()
   emit('context', { x: e.clientX, y: e.clientY, target: 'page' })
 }
@@ -565,17 +565,17 @@ defineExpose({ size, beginEdit, finishEditing })
     @contextmenu="onSurfaceContext"
   >
     <div class="world" :style="worldStyle">
-      <NoteBlock
-        v-for="view in page.blocks"
-        :key="view.block.id"
+      <NoteCard
+        v-for="view in page.cards"
+        :key="view.card.id"
         :view="view"
-        :selected="page.selection.includes(view.block.id)"
-        :editing="page.editingBlockId === view.block.id"
-        :focused="page.selection.includes(view.block.id)"
+        :selected="page.selection.includes(view.card.id)"
+        :editing="page.editingBlockId === view.card.id"
+        :focused="page.selection.includes(view.card.id)"
         @pointerdown="onBlockPointerDown"
         @request-edit="
           (id: string) => {
-            const v = page.blocks.find((b) => b.block.id === id)
+            const v = page.cards.find((b) => b.card.id === id)
             if (v) beginEdit(v)
           }
         "
@@ -585,7 +585,7 @@ defineExpose({ size, beginEdit, finishEditing })
         @end-edit="finishEditing()"
         @toggle-collapse="
           (id: string) =>
-            page.commit([{ id, collapsed: !page.blocks.find((b) => b.block.id === id)?.block.collapsed }])
+            page.commit([{ id, collapsed: !page.cards.find((b) => b.card.id === id)?.card.collapsed }])
         "
         @focus="(id: string) => page.select([id])"
   @open-note="(id: string) => emit('open-note', id)"
@@ -613,7 +613,7 @@ defineExpose({ size, beginEdit, finishEditing })
       }"
     ></div>
 
-    <div v-if="!page.blocks.length && !page.loading" class="page-hint">
+    <div v-if="!page.cards.length && !page.loading" class="page-hint">
       <p>双击页面任意位置就能开始写</p>
     </div>
 

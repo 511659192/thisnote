@@ -71,3 +71,63 @@
 - **纠正来源**：用户裁定「当前目录既是快照,保留下来没有意义」。
 - **事实依据**：已删除——SnapshotService（含每日定时 autoSnapshot）、SnapshotLedger、/api/snapshots 全部端点（list/create/delete/prune）、Dtos.SnapshotDto、SystemInfo.snapshotRoot、NotesConfig.snapshotRoot 与启动建目录、NoteFilePaths.snapshotsFile、IoController 未使用的注入、前端 systemApi 四个函数/Snapshot 类型/设置页快照区块（tab「快照与维护」改名「维护」，formatBytes import 随删）。用户数据：ledgers/snapshots.json 与 ~/.thisnode/snapshots/（4 个 zip,148K）已删。
 - **规则**：笔记目录（cards/ + .notes/）就是权威数据的唯一副本，备份靠用户直接复制目录；不要再引入快照/版本化机制。NoteFilePaths 的 ledgers 目录现在只有 notebooks/tags/settings 三种台账。
+
+## 13. 外部同步子系统已整体移除:文件对齐只发生在启动时
+
+- **纠正来源**：用户裁定外部同步/未纳管文件/立即比对/重新扫描笔记目录「已经没有存在的意义了」。
+- **事实依据**：已删除——NoteSyncService（4 秒目录指纹轮询、reconcile、rescanNow、开关与事件）、IoController（/api/io/mirror/* 两端点）、SystemController 的 /api/notes/sync/* 三端点、@EnableScheduling（已无定时任务）、前端 ioApi/syncStatus/setSyncEnabled/reconcile/SyncEvent 类型与设置页「未纳管文件/外部同步/立即比对一次/重新扫描笔记目录/最近的同步事件」整块。**启动对账保留**：StartupMaintenance.run()（认领 cards/ 新 md + 摘除消失卡片）仍在启动时执行。描述文案已改为「外部改动在应用重启时对齐」。
+- **规则**：运行期间外部改动（Obsidian/VS Code 改 cards/ 文件）不会反映到应用，重启才对齐——回答相关问题时以此为准；不要再引入轮询/监视（watch）机制。
+
+## 14. /api/notes/counts 统计功能已移除
+
+- **纠正来源**：用户指名「NoteController#counts 移除统计数量的功能」。
+- **事实依据**：已删除——counts 端点、NoteService.counts()（all/trash/daily/template/links 统计）、前端 noteApi.counts、store counts ref 与 refreshMeta 加载、侧栏过滤行徽标、状态栏「笔记 N/链接 N」。**保留**：/api/notebooks 的分组行计数（NotebookRepository.countNotes，另一实现）、LinkRepository.total()（SystemController stats 仍用）。数据文件里的 "archived": false 等遗留字段被 ignoreUnknown 忽略。
+- **规则**：侧栏/状态栏不再显示任何数量徽标；分组行的计数来自 /api/notebooks（countNotes），别与已删的 counts 端点混淆。
+
+## 15. 别名(aliases)功能已整体移除:[[链接]]只认笔记标题
+
+- **纠正来源**：用户裁定「移除 aliases 相关，没看到别名的页面使用」（唯一显示处是 BacklinksPanel 的别名行，用户没注意到，已随功能一并删除）。
+- **事实依据**：已删除——NoteMeta.aliases 字段与 withAliases、NoteStore.titleIndex 的别名登记循环（[[解析]]只认标题）、NoteService 的 setAliases/aliasesOf/create・patch・改名跟随里的别名逻辑、PUT /api/notes/{id}/aliases 端点、LinkRepository.addAlias、Dtos 三个 record 的 aliases 字段、前端 BacklinksPanel 别名行/类型/payload。数据文件遗留的 "aliases": [] 由 ignoreUnknown 忽略。
+- **规则**：[[目标|显示文字]] 里的「别名」是链接显示文字（markdown.ts），与笔记别名无关，别混淆；创建/更新笔记的 payload 不再有 aliases 成员。
+
+## 16. /api/info 系统信息端点已移除
+
+- **纠正来源**：用户指名「移除 SystemController#info」。
+- **事实依据**：已删除——info 端点、Dtos.SystemInfo、前端 systemApi.info/SystemInfo 类型/SettingsView 的 info ref 与六行展示（本地文件 tab 的笔记目录/附件目录行、关于 tab 的版本/数据库/节点数/运行时长）。孤儿同步清理：SystemController 的 noteRepository 字段、Dtos/ManagementFactory import。stats 端点仍提供 markdownRoot 等信息；health 探活保留。
+- **规则**：设置页各 tab 现在只呈现操作与必要状态（stats 端点仍在，维护页可用）；不要再加「系统信息」类展示端点。
+
+## 17. /api/maintenance/stats 统计端点已移除
+
+- **纠正来源**：用户指名「移除 SystemController#stats」。
+- **事实依据**：已删除——stats 端点（nodes/trash/links/tags/noteBlocks/ops 等统计）、前端 systemApi.stats 与维护页的统计展示行、孤儿化的 OpsRepository.count()。SystemController 现在只剩 health + maintenance/reindex 两个端点、两个依赖（noteService/noteStore）。
+- **规则**：SystemController 职责=探活+重算链接；不要再往里加统计/信息类端点（info、stats 已先后移除）。
+
+## 18. 回收站与每日笔记的四个死端点已移除
+
+- **纠正来源**：用户问「trash/restore/emptyTrash/daily/resolveStub 是否都可移除」，确认后指示执行。
+- **事实依据**：已删除——POST /{id}/restore、DELETE /trash、POST /daily 三个端点与 NoteService 的 trash/restore/emptyTrash/dailyNote、NoteRepository 的 setDeleted/emptyTrash/findByDailyDate、前端 restore/emptyTrash/openDaily 动作与 api 函数、回收站菜单「恢复」。**保留**：DELETE /{id}（改为纯 purge 语义，彻底删除用）、POST /resolve-stub（画布点击 [[未解析链接]] 建笔记，活的）；NoteBlockService 删最后一张卡 deleteContent 时由 trash 改为 purge（回收站无意义后语义一致）。数据模型 deleted/deletedAt/trash 过滤分支暂保留（已无入口置位，遗留数据靠 ignoreUnknown）。
+- **规则**：删除类操作只有 purge（硬删）一条路；resolve-stub 是链接创建的核心，别动；验证端点删除时注意 DELETE /{id} 会吞掉 /trash 这类路径（返回 200 是 purge 命中，不是端点复活）。
+
+## 19. 死端点清零:端点面已与 UI 对齐
+
+- **纠正来源**：用户要求「盘点还有哪些死端点 一并清除」。
+- **事实依据**：全端点 × 前端调用交叉盘点后删除 2 个死端点——PUT /api/notes/{id}/tags（noteApi.setTags 零调用）与 DELETE /api/tags/{id}（前端根本不存在 tagApi.remove）+ TagRepository.delete 与其测试。其余端点全部有活调用方。`systemApi.health` 前端包装无调用已删（/api/health 端点保留——plugin-api 的 waitForBackend 启动探测直连它）。
+- **规则**：最终端点面 = notes（list/create/get/patch/purge/tags添加移除/resolve-stub）+ blocks 全套 + notebooks（list/create/update/delete/addNode）+ tags（list/rename）+ attachments + health/reindex。tools/reset_demo.py 依赖的 /api/maintenance/stats 已随统计移除失效（dev 工具，已知）。
+
+## 19. block→card 全量改名完成:一个业务一个名字闭环
+
+- **纠正来源**：用户确认 block ≡ card 并要求全量替换。
+- **事实依据**：后端 BlockMeta→CardMeta、NoteBlock*→Card*（Repository/Service/Controller/Dto/View/Patch）、API `/blocks`→`/cards`、JSON 键 blocks→cards、maxBlocksPerNote→maxCardsPerNote；前端 NoteBlock.vue→NoteCard.vue、类型与 pageApi 函数、notePage store 内部命名同步。35 测试全绿、typecheck 0、部署后 /cards 200、/blocks 404。同义包装（putBlock↔writeCard、removeBlock↔removeCard）已合并为单一方法。**JSON 键也同步**：CardsDto.blocks→cards、CardView.block→card（DTO record 组件名即 JSON 键，改名必须前后端同批核对）。
+- **规则**：新代码一律用 card 词根（CardMeta/writeCard/putCard/removeCard/cardId）；「块/block」只允许出现在讲历史迁移的注释里。
+
+## 20. .notes 隐藏层已移除:root 下直接分域目录
+
+- **纠正来源**：用户指示「NoteFilePaths 移除 .notes 这一层目录」。
+- **事实依据**：最终布局 = `cards/` + `meta/<noteId>.json` + `ledgers/`（notebooks/tags/settings）+ `logs/ops.jsonl`，全部直接在 markdown-root 下；NoteFilePaths 的 META_DIR/metaDir()/isMetaArea() 已删。用户库已切换（.notes 移除，meta 8 篇/ledgers 4 文件就位），应用重启后全部正常读取。设置页可见性说明：Obsidian 等外部工具现在能看到 meta/ledgers/logs 目录。
+- **规则**：NoteFilePaths 四个目录方法（cardsDir/noteMetaDir/ledgersDir/logsDir）都直接 root.resolve；不要再引入隐藏目录层或黑名单机制。
+
+## 21. HTTP 动词统一:读用 GET,写全用 POST+动作路径
+
+- **纠正来源**：用户指示「mapping 除了 GetMapping 其余都是用 PostMapping 区分用 /create /delete /patch 等区分」。
+- **事实依据**：全部控制器已改造——PATCH/PUT/DELETE 全部移除，写操作 = POST + 动作后缀（/patch、/delete、/update、/tags/add、/tags/remove、/create、/duplicate、/z）；GET 仅用于读（list/detail/health）。前端 pageApi/noteApi/notebookApi/tagApi 已同步。验证：GET notes/notebooks/tags 200；POST /{id}/patch、/tags/add、/tags/remove 200；默认分组删除 400（既有保护）；PATCH/PUT/DELETE 旧动词 404/405。
+- **规则**：新增端点一律 GET=读、POST=写+动作后缀路径；不再引入 PATCH/PUT/DELETE。tools/reset_demo.py 若用到旧动词端点需适配（dev 工具，已知）。

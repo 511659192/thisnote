@@ -1,11 +1,11 @@
 package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.store.BlockMeta;
+import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.store.CardFile;
-import com.thisnode.ext.notes.store.NoteCompositionService;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.CardRepository;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.plugin.api.ConflictException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,42 +27,42 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>为什么基线来自客户端而不是索引缓存：外部编辑后、下一次对账（默认 30s）之前，索引里还是
  * 旧内容 —— 只比缓存会漏判，于是把外部改动覆盖掉。这里因此直接比对**磁盘**，缓存里的旧值不算数。
  *
- * <p>不启 Spring：{@link NoteStore} 只依赖 markdown 根目录，用临时目录直接跑。
+ * <p>不启 Spring：{@link NoteRepository} 只依赖 markdown 根目录，用临时目录直接跑。
  */
 class NoteBlockConflictTest {
 
     @TempDir
     Path root;
 
-    private NoteStore store;
-    private NoteCompositionService composition;
-    private NoteBlockRepository repository;
+    private NoteRepository store;
+    private CardRepository cardRepository;
+    private CardRepository repository;
 
     @BeforeEach
     void setUp() {
         NotesConfig config = Mockito.mock(NotesConfig.class);
         Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteStore(config);
-        composition = TestWiring.composition(store);
-        repository = new NoteBlockRepository(TestWiring.composition(store));
+        store = new NoteRepository(config);
+        cardRepository = new CardRepository(store);
+        repository = new CardRepository(store);
     }
 
     /** 建一篇笔记 + 一张卡，返回卡片 id（正文 = 原始内容）。 */
     private String seedCard() {
         String noteId = "note-1";
         store.writeNoteMeta(NoteMeta.fresh(noteId, "笔记", "note", null, null, null, null, 1L));
-        composition.putBlock(noteId, BlockMeta.fresh("card-1", 0, 0, "", null, null, 1L), "原始内容");
+        cardRepository.putCard(noteId, CardMeta.fresh("card-1", 0, 0, "", null, null, 1L), "原始内容");
         return "card-1";
     }
 
     /** 绕过索引、直接改磁盘上的卡片文件：这正是外部编辑器（Obsidian / VS Code）在做的事。 */
     private void editOnDisk(String blockId, String body) throws IOException {
-        Path file = composition.fileOf(blockId);
-        Files.writeString(file, CardFile.compose(composition.block(blockId), body), StandardCharsets.UTF_8);
+        Path file = store.fileOf(blockId);
+        Files.writeString(file, CardFile.compose(store.card(blockId), body), StandardCharsets.UTF_8);
     }
 
     private String bodyOnDisk(String blockId) throws IOException {
-        return CardFile.bodyOf(Files.readString(composition.fileOf(blockId), StandardCharsets.UTF_8));
+        return CardFile.bodyOf(Files.readString(store.fileOf(blockId), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -103,7 +103,7 @@ class NoteBlockConflictTest {
     @DisplayName("卡片文件已被外部删掉 → 拒写（不把用户删掉的卡片复活）")
     void rejectsWhenFileIsGone() throws IOException {
         String blockId = seedCard();
-        Files.delete(composition.fileOf(blockId));
+        Files.delete(store.fileOf(blockId));
 
         assertThatThrownBy(() -> repository.setContent(blockId, "应用里的新内容", "原始内容"))
                 .isInstanceOf(ConflictException.class);

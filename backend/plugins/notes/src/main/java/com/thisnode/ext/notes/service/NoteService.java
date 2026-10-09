@@ -4,9 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.*;
 import com.thisnode.ext.notes.store.CardRef;
+import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.store.NoteStore;
-import com.thisnode.ext.notes.store.NoteCompositionService;
+import com.thisnode.ext.notes.domain.NoteRepository;
+import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.util.Markdown;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,7 @@ import java.time.LocalDate;
 import java.util.*;
 
 /**
- * Note aggregate: CRUD, list queries, tags/aliases, link re-indexing and [[ ]] resolution.
+ * Note aggregate: CRUD, list queries, tags, link re-indexing and [[ ]] resolution.
  *
  * <p>Everything the user writes flows through here so that three invariants hold: links are always
  * a projection of Markdown, the title/alias resolver is never stale, and every write lands in
@@ -32,10 +33,8 @@ public class NoteService {
     private final TagRepository tagRepository;
     private final LinkRepository linkRepository;
     private final NotebookRepository notebookRepository;
-    private final NoteBlockRepository blockRepository;
+    private final CardRepository cardRepository;
     private final OpsRepository opsRepository;
-    private final NoteStore noteStore;
-    private final NoteCompositionService composition;
     private final ObjectMapper json = new ObjectMapper();
 
     // ================================================================= create
@@ -52,6 +51,9 @@ public class NoteService {
             n.contentMd = "";
         }
         n.id = noteRepository.insert(n);
+        // 编排：首卡落盘（一篇笔记至少一张卡；正文只有一份，在卡片里）。
+        cardRepository.putCard(n.id, CardMeta.fresh(Ids.newId(), 0, 0, "", null, null,
+                System.currentTimeMillis()), n.contentMd == null ? "" : n.contentMd);
 
         if (req.tags() != null) {
             tagRepository.setNodeTags(n.id, req.tags());
@@ -62,15 +64,14 @@ public class NoteService {
                 tagRepository.setNodeTags(n.id, inline);
             }
         }
-        if (req.aliases() != null) {
-            setAliases(n.id, req.aliases());
-        }
         // 笔记必须归属一个分组：前端在某个分组里新建时会带上当前分组，没带就落默认分组。
         // 不变量在后端收口，客户端（含脚本、导入）不可能造出无归属的笔记。
         String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(n.id, groupId);
         reindexLinks(n);
         resolvePendingLinks(n);
+        // 列表页缓存（摘要/出链/入链）随首卡落定：原来由组合层 writeCard 顺带刷新。
+        noteRepository.refreshCachedView(n.id);
         log("note", n.id, "create", Map.of("title", n.title));
         return n.id;
     }
@@ -120,9 +121,6 @@ public class NoteService {
                 tagRepository.setNodeTags(id, merged);
             }
         }
-        if (req.aliases() != null) {
-            setAliases(id, req.aliases());
-        }
         if (Boolean.TRUE.equals(req.clearNotebook())) {
             // 单归属且必有归属：「移出分组」= 回到默认分组，不是变成无归属
             notebookRepository.setExclusiveGroup(id, notebookRepository.ensureDefaultGroup());
@@ -130,7 +128,10 @@ public class NoteService {
             notebookRepository.setExclusiveGroup(id, req.notebookId());
         }
         if (contentChanged) {
+            // 编排：整篇正文替换（写回首卡）→ 重算链接 → 刷新列表页缓存。
+            noteRepository.replaceNoteContent(id, n.contentMd);
             reindexLinks(n);
+            noteRepository.refreshCachedView(n.id);
         }
         if (renamed) {
             // Follow the rename through the note directory (like Obsidian) instead of leaving every
@@ -140,48 +141,12 @@ public class NoteService {
             invalidateResolver();
             resolvePendingLinks(n);
         }
-        if (req.aliases() != null) {
-            invalidateResolver();
-            resolvePendingLinks(n);
-        }
         log("note", id, "update", Map.of("title", n.title, "contentChanged", contentChanged));
         return n;
     }
 
-    /**
-     * 别名与笔记一起存在 meta 里（{@code .notes/<noteId>.json}）：改别名就是改那一个文件，
-     * 不会再有一张 node_aliases 表需要跟着同步。
-     */
-    public void setAliases(String noteId, List<String> aliases) {
-        NoteMeta meta = noteStore.note(noteId);
-        if (meta == null) {
-            return;
-        }
-        List<String> clean = new ArrayList<>();
-        if (aliases != null) {
-            for (String raw : aliases) {
-                String alias = raw == null ? "" : raw.trim();
-                if (!alias.isEmpty() && !clean.contains(alias)) {
-                    clean.add(alias);
-                }
-            }
-        }
-        noteStore.writeNoteMeta(meta.withAliases(clean));
-        invalidateResolver();
-    }
-
-    public List<String> aliasesOf(String noteId) {
-        NoteMeta meta = noteStore.note(noteId);
-        if (meta == null) {
-            return List.of();
-        }
-        List<String> out = new ArrayList<>(meta.aliases());
-        out.sort(String.CASE_INSENSITIVE_ORDER);
-        return out;
-    }
-
     public List<String> tagsOfNames(String noteId) {
-        NoteMeta meta = noteStore.note(noteId);
+        NoteMeta meta = noteRepository.note(noteId);
         if (meta == null) {
             return List.of();
         }
@@ -193,41 +158,12 @@ public class NoteService {
     // ================================================================= delete
 
     /**
-     * Soft delete → 回收站 (F-N-09)。
-     *
-     * <p>只改笔记 meta 里的标记：卡片 md 原地保留。数据库时代这里会删掉 note_blocks 行，再靠
-     * 笔记正文重建一张卡 —— 文件模型下没必要动文件，恢复就是把标记翻回来。
-     */
-    public void trash(String id) {
-        noteRepository.setDeleted(id, true);
-        log("note", id, "trash", Map.of());
-    }
-
-    public void restore(String id) {
-        noteRepository.setDeleted(id, false);
-        log("note", id, "restore", Map.of());
-    }
-
-    /**
-     * 硬删除：卡片 md、sidecar 与笔记 meta 一起消失（{@code NoteCompositionService#removeNote}）。
+     * 硬删除：卡片 md、sidecar 与笔记 meta 一起消失（仓库层 removeNote）。
      */
     public void purge(String id) {
         noteRepository.deleteHard(id);
         linkRepository.deleteOutbound(id);
         log("note", id, "purge", Map.of());
-    }
-
-    public int emptyTrash() {
-        List<String> ids = new ArrayList<>();
-        for (Note n : noteRepository.findAll()) {
-            if (n.deleted) {
-                ids.add(n.id);
-            }
-        }
-        for (String id : ids) {
-            purge(id);
-        }
-        return ids.size();
     }
 
     // ================================================================= read
@@ -248,9 +184,9 @@ public class NoteService {
         }
         List<Dtos.BacklinkDto> backlinks = enrichBacklinks(linkRepository.backlinks(id));
         List<String> unresolved = unresolvedOf(n);
-        NoteMeta detailMeta = noteStore.note(id);
+        NoteMeta detailMeta = noteRepository.note(id);
         List<CardRef> detailCards = detailMeta == null ? List.of() : detailMeta.cards();
-        return new Dtos.NoteDetail(n.id, n.title, n.contentMd, n.type, n.source, n.status, n.deleted, n.dailyDate, detailCards, tagsOfNames(id), aliasesOf(id), notebookRepository.notebooksOf(id), outbound, backlinks, unresolved, unlinkedMentions(n), n.createdAt, n.updatedAt);
+        return new Dtos.NoteDetail(n.id, n.title, n.contentMd, n.type, n.source, n.status, n.deleted, n.dailyDate, detailCards, tagsOfNames(id), notebookRepository.notebooksOf(id), outbound, backlinks, unresolved, unlinkedMentions(n), n.createdAt, n.updatedAt);
     }
 
     private List<Dtos.BacklinkDto> enrichBacklinks(List<Dtos.BacklinkDto> raw) {
@@ -323,7 +259,7 @@ public class NoteService {
 
     /**
      * 列表查询。过滤、排序直接在笔记 meta 上做，返回的就是 meta 本身：meta 是为列表准备的
-     * 轻量数据，一次目录遍历即可全部读出（NoteStore 无状态无缓存，读到的一定是最新文件），
+     * 轻量数据，一次目录遍历即可全部读出（NoteRepository 无状态无缓存，读到的一定是最新文件），
      * 摘要、标签、别名、归属、卡片清单与计数都是现成字段；唯一的例外是文字过滤按需读那篇的
      * 卡片正文。
      */
@@ -332,7 +268,7 @@ public class NoteService {
         String filter = query.filter() == null ? "all" : query.filter();
 
         List<NoteMeta> matched = new ArrayList<>();
-        for (NoteMeta meta : noteStore.scanNotes()) {
+        for (NoteMeta meta : noteRepository.scanNotes()) {
             if (matches(meta, query, filter)) {
                 matched.add(meta);
             }
@@ -391,7 +327,7 @@ public class NoteService {
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
             // 列表内的文字过滤要真正文 —— 按需加载这篇笔记的卡片，比"为了列表把全库读进内存"划算。
-            String body = composition.noteMarkdown(meta.id()).toLowerCase(Locale.ROOT);
+            String body = noteRepository.noteMarkdown(meta.id()).toLowerCase(Locale.ROOT);
             boolean hit = (meta.title() != null && meta.title().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
             if (!hit) {
                 return false;
@@ -400,32 +336,6 @@ public class NoteService {
         return true;
     }
 
-    public Map<String, Integer> counts() {
-        Map<String, Integer> m = new LinkedHashMap<>();
-        int all = 0;
-        int trash = 0;
-        int daily = 0;
-        int template = 0;
-        for (Note n : noteRepository.findAll()) {
-            if (n.deleted) {
-                trash++;
-                continue;
-            }
-            all++;
-            if ("daily".equals(n.type)) {
-                daily++;
-            }
-            if ("template".equals(n.type)) {
-                template++;
-            }
-        }
-        m.put("all", all);
-        m.put("trash", trash);
-        m.put("daily", daily);
-        m.put("template", template);
-        m.put("links", linkRepository.total());
-        return m;
-    }
 
     private int unresolvedCount(String content) {
         int n = 0;
@@ -436,29 +346,6 @@ public class NoteService {
         }
         return n;
     }
-
-    // ================================================================= daily / templates
-
-    /**
-     * 每日笔记 (F-N-06): one node per date, idempotent.
-     */
-    public String dailyNote(String date, String templateId) {
-        String d = date == null || date.isBlank() ? LocalDate.now().toString() : date;
-        Note existing = noteRepository.findByDailyDate(d);
-        if (existing != null) {
-            return existing.id;
-        }
-        String content = "# " + d + "\n\n";
-        if (templateId != null && !templateId.isBlank()) {
-            Note tpl = noteRepository.findById(templateId);
-            if (tpl != null) {
-                content = (tpl.contentMd == null ? "" : tpl.contentMd);
-            }
-        }
-        Dtos.CreateNodeRequest req = new Dtos.CreateNodeRequest(d, content, "daily", d, List.of("daily"), null, null, null, null);
-        return create(req);
-    }
-
 
     // ================================================================= links
 
@@ -493,8 +380,8 @@ public class NoteService {
             resolvePendingLinks(withContent(n));
         }
         // 兜底/修复：先按正文把各篇的缓存重算一遍，再按缓存把入链数全量校准。
-        composition.refreshAllCachedViews();
-        int fixed = composition.recalibrateInbound();
+        noteRepository.refreshAllCachedViews();
+        int fixed = noteRepository.recalibrateInbound();
         if (fixed > 0) {
             log("system", null, "inbound-recalibrated", Map.of("fixed", fixed));
         }
@@ -505,7 +392,7 @@ public class NoteService {
      * 给轻量视图的 Note 补上正文（会按需加载它所属的卡片）。
      */
     private Note withContent(Note n) {
-        n.contentMd = composition.noteMarkdown(n.id);
+        n.contentMd = noteRepository.noteMarkdown(n.id);
         return n;
     }
 
@@ -519,7 +406,6 @@ public class NoteService {
     public int resolvePendingLinks(Note target) {
         List<String> keys = new ArrayList<>();
         keys.add(target.title);
-        keys.addAll(aliasesOf(target.id));
         Set<String> normalized = new HashSet<>();
         for (String key : keys) {
             if (key != null && !key.isBlank()) {
@@ -528,7 +414,7 @@ public class NoteService {
             }
         }
         // 只动 meta 里缓存的出链：把指向本文的出链补上解析结果，并给本文 +1 入链。
-        int healed = composition.resolvePendingLinks(target.id, normalized);
+        int healed = noteRepository.resolvePendingLinks(target.id, normalized);
         if (healed > 0) {
             invalidateResolver();
             log("note", target.id, "links-resolved", Map.of("count", healed));
@@ -539,11 +425,11 @@ public class NoteService {
     // ---------------- title resolution ----------------
 
     /**
-     * 解析 {@code [[标题]]}：委托给索引（{@link NoteStore#resolveTitle}）。链接图、"重命名跟随"、
+     * 解析 {@code [[标题]]}：委托给索引（{@link NoteRepository#resolveTitle}）。链接图、"重命名跟随"、
      * 搜索的未解析判定都用同一份解析结果，各自缓存一份迟早会分叉。
      */
     public String resolveTitle(String target) {
-        return noteStore.resolveTitle(target);
+        return noteRepository.resolveTitle(target);
     }
 
     private void invalidateResolver() {
@@ -568,7 +454,7 @@ public class NoteService {
         int updated = 0;
         for (String sourceId : sourceIds) {
             boolean changed = false;
-            for (Dtos.NoteBlockDto block : blockRepository.blocks(sourceId)) {
+            for (Dtos.CardDto block : cardRepository.blocks(sourceId)) {
                 String body = block.contentMd();
                 if (body == null || body.isBlank()) {
                     continue;
@@ -578,7 +464,7 @@ public class NoteService {
                     rewritten = rewritten.replace(variants.get(i), replacements.get(i));
                 }
                 if (!rewritten.equals(body)) {
-                    blockRepository.setContent(block.id(), rewritten);
+                    cardRepository.setContent(block.id(), rewritten);
                     changed = true;
                 }
             }
@@ -592,20 +478,7 @@ public class NoteService {
             log("note", sourceId, "link-renamed", Map.of("from", oldTitle, "to", newTitle));
             updated++;
         }
-        for (String alias : aliasesOf(node.id)) {
-            if (alias.equals(oldTitle)) {
-                setAliases(node.id, replaceAlias(node.id, oldTitle, newTitle));
-            }
-        }
         return updated;
-    }
-
-    private List<String> replaceAlias(String noteId, String from, String to) {
-        List<String> out = new ArrayList<>();
-        for (String alias : aliasesOf(noteId)) {
-            out.add(alias.equals(from) ? to : alias);
-        }
-        return out;
     }
 
     /**
@@ -620,7 +493,7 @@ public class NoteService {
         if (existing != null) {
             return existing;
         }
-        String id = create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null, null, null, null, null));
+        String id = create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null, null, null, null));
         linkRepository.deleteStubByTitle(clean);
         if (fromNodeId != null && !fromNodeId.isBlank()) {
             Note from = noteRepository.findById(fromNodeId);

@@ -1,10 +1,12 @@
 package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.store.CardMeta;
+import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
-import com.thisnode.ext.notes.store.NoteCompositionService;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.CardRepository;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,8 +30,9 @@ class NoteLinkSearchTest {
     @TempDir
     Path root;
 
-    private NoteCompositionService composition;
     private NoteRepository nodes;
+    private NoteRepository store;
+    private CardRepository cardRepository;
     private TagRepository tags;
     private LinkRepository links;
     private NoteService service;
@@ -38,17 +42,16 @@ class NoteLinkSearchTest {
     void setUp() {
         NotesConfig config = Mockito.mock(NotesConfig.class);
         Mockito.when(config.markdownRoot()).thenReturn(root);
-        NoteStore store = new NoteStore(config);
-        composition = TestWiring.composition(store);
+        store = new NoteRepository(config);
+        cardRepository = new CardRepository(store);
 
-        nodes = new NoteRepository(store, TestWiring.composition(store));
-        NoteBlockRepository blocks = new NoteBlockRepository(TestWiring.composition(store));
+        nodes = store;
+        CardRepository blocks = new CardRepository(store);
         tags = new TagRepository(store);
         NotebookRepository notebooks = new NotebookRepository(store);
         OpsRepository ops = new OpsRepository(store);
-        links = new LinkRepository(store, TestWiring.composition(store));
-        service = new NoteService(nodes, tags, links, notebooks, blocks, ops,
-                store, TestWiring.composition(store));
+        links = new LinkRepository(store);
+        service = new NoteService(nodes, tags, links, notebooks, blocks, ops);
 
     }
 
@@ -57,7 +60,11 @@ class NoteLinkSearchTest {
         n.title = title;
         n.contentMd = contentMd;
         n.type = "note";
-        return nodes.insert(n);
+        String id = nodes.insert(n);
+        // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
+        cardRepository.putCard(id, CardMeta.fresh(Ids.newId(), 0, 0, "", null, null,
+                Instant.now().toEpochMilli()), contentMd);
+        return id;
     }
 
     @Test
@@ -88,7 +95,7 @@ class NoteLinkSearchTest {
         assertThat(links.outbound(source).get(0).toNodeId()).isNull();
 
         String target = service.create(new Dtos.CreateNodeRequest(
-                "以后才写的", "", "note", null, null, null, null, null, null));
+                "以后才写的", "", "note", null, null, null, null, null));
 
         assertThat(links.outbound(source).get(0).toNodeId()).isEqualTo(target);
         assertThat(links.stubExists("以后才写的")).isFalse();
@@ -101,10 +108,10 @@ class NoteLinkSearchTest {
         String source = newNote("来源", "引用 [[旧标题]] 的正文");
 
         service.patch(target, new Dtos.UpdateNodeRequest(
-                "新标题", null, null, null, null, null, null, null));
+                "新标题", null, null, null, null, null, null));
 
-        assertThat(composition.noteMarkdown(source)).contains("[[新标题]]");
-        assertThat(composition.noteMarkdown(source)).doesNotContain("[[旧标题]]");
+        assertThat(store.noteMarkdown(source)).contains("[[新标题]]");
+        assertThat(store.noteMarkdown(source)).doesNotContain("[[旧标题]]");
         assertThat(links.outbound(source).get(0).toNodeId()).isEqualTo(target);
     }
 

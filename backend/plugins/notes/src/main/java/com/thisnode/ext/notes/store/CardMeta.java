@@ -17,7 +17,7 @@ import java.util.Map;
  * 核心不认识任何具体插件的键。卡片文件被删除时扩展区一起消失，插件的从属数据不会留下孤儿。
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record BlockMeta(
+public record CardMeta(
         int v,
         String id,
         String title,
@@ -41,7 +41,7 @@ public record BlockMeta(
     public static final double MIN_W = 240;
     public static final double MIN_H = 88;
 
-    public BlockMeta {
+    public CardMeta {
         v = v <= 0 ? SCHEMA : v;
         title = title == null ? "" : title;
         // 非正数当作"没给尺寸"，用默认；给了正数就只夹到下限，不改用户的意图。
@@ -50,31 +50,31 @@ public record BlockMeta(
         ext = ext == null ? Map.of() : Map.copyOf(ext);
     }
 
-    public static BlockMeta fresh(String id, double x, double y, String title,
+    public static CardMeta fresh(String id, double x, double y, String title,
                                   String color, String status, long now) {
-        return new BlockMeta(SCHEMA, id, title, x, y, DEFAULT_W, DEFAULT_H, 0,
+        return new CardMeta(SCHEMA, id, title, x, y, DEFAULT_W, DEFAULT_H, 0,
                 color, status, false, Map.of(), now, now);
     }
 
-    public BlockMeta touched(long now) {
-        return new BlockMeta(v, id, title, x, y, w, h, z, color, status, collapsed,
+    public CardMeta touched(long now) {
+        return new CardMeta(v, id, title, x, y, w, h, z, color, status, collapsed,
                 ext, createdAt, now);
     }
 
-    public BlockMeta withGeometry(Double nx, Double ny, Double nw, Double nh, Integer nz) {
-        return new BlockMeta(v, id, title,
+    public CardMeta withGeometry(Double nx, Double ny, Double nw, Double nh, Integer nz) {
+        return new CardMeta(v, id, title,
                 nx == null ? x : nx, ny == null ? y : ny,
                 nw == null ? w : Math.max(MIN_W, nw), nh == null ? h : Math.max(MIN_H, nh),
                 nz == null ? z : nz, color, status, collapsed, ext, createdAt, updatedAt);
     }
 
-    public BlockMeta withTitle(String next) {
-        return new BlockMeta(v, id, next == null ? "" : next, x, y, w, h, z,
+    public CardMeta withTitle(String next) {
+        return new CardMeta(v, id, next == null ? "" : next, x, y, w, h, z,
                 color, status, collapsed, ext, createdAt, updatedAt);
     }
 
-    public BlockMeta withAppearance(String ncolor, String nstatus, Boolean ncollapsed) {
-        return new BlockMeta(v, id, title, x, y, w, h, z,
+    public CardMeta withAppearance(String ncolor, String nstatus, Boolean ncollapsed) {
+        return new CardMeta(v, id, title, x, y, w, h, z,
                 ncolor == null ? color : ncolor,
                 nstatus == null ? status : nstatus,
                 ncollapsed == null ? collapsed : ncollapsed,
@@ -82,14 +82,14 @@ public record BlockMeta(
     }
 
     /** 写入插件扩展区的一个分区；插件数据只走这条路，核心不解释它的内容。 */
-    public BlockMeta withExtension(String pluginId, Map<String, Object> value) {
+    public CardMeta withExtension(String pluginId, Map<String, Object> value) {
         Map<String, Object> next = new LinkedHashMap<>(ext);
         if (value == null) {
             next.remove(pluginId);
         } else {
             next.put(pluginId, value);
         }
-        return new BlockMeta(v, id, title, x, y, w, h, z, color, status, collapsed,
+        return new CardMeta(v, id, title, x, y, w, h, z, color, status, collapsed,
                 next, createdAt, updatedAt);
     }
 }

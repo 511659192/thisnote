@@ -30,7 +30,7 @@ public final class CardFile {
     }
 
     /** 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。 */
-    public static String compose(BlockMeta meta, String contentMd) {
+    public static String compose(CardMeta meta, String contentMd) {
         String json = MetaJson.toCompactJson(meta)
                 .replace("\r", " ")
                 .replace("\n", " ");
@@ -38,7 +38,7 @@ public final class CardFile {
     }
 
     /** 取头部注释里的 meta；没有注释、或注释坏了返回 {@code null}（调用方按"无元数据"处理）。 */
-    public static BlockMeta metaOf(String fileContent) {
+    public static CardMeta metaOf(String fileContent) {
         String firstLine = firstLineOf(fileContent);
         if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX)
                 || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
@@ -48,7 +48,7 @@ public final class CardFile {
                 .substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length())
                 .strip();
         try {
-            return MetaJson.fromJson(json, BlockMeta.class);
+            return MetaJson.fromJson(json, CardMeta.class);
         } catch (IOException | RuntimeException e) {
             return null;
         }

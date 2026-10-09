@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { pageApi, type BlockPatch } from '@/api/page'
+import { pageApi, type CardPatch } from '@/api/page'
 import { ApiError } from '@/core/http'
-import type { NoteBlock, NoteBlockView, NotePageData } from '@/api/types'
+import type { NoteCard, CardView, NotePageData } from '@/api/types'
 import { useUiStore } from './ui'
 
 export interface Viewport {
@@ -42,7 +42,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   const noteId = ref<string | null>(null)
   const noteTitle = ref('')
-  const blocks = ref<NoteBlockView[]>([])
+  const cards = ref<CardView[]>([])
   const tags = ref<NotePageData['tags']>([])
   const maxBlocks = ref(100)
   const loading = ref(false)
@@ -54,12 +54,12 @@ export const usePageStore = defineStore('notePage', () => {
   const snapToGrid = ref(localStorage.getItem('thisnote.page.snap') === 'on')
 
   /** 卡片总数（含尚未取回正文的那些）：容量校验与「还可以加几张」都按它算。 */
-  const count = computed(() => (totalCards.value > 0 ? totalCards.value : blocks.value.length))
+  const count = computed(() => (totalCards.value > 0 ? totalCards.value : cards.value.length))
   const full = computed(() => count.value >= maxBlocks.value)
   const remaining = computed(() => Math.max(0, maxBlocks.value - count.value))
   const limitLabel = computed(() => `${count.value} / ${maxBlocks.value} 张卡片`)
   const selectedBlocks = computed(() =>
-    blocks.value.filter((b) => selection.value.includes(b.block.id)),
+    cards.value.filter((b) => selection.value.includes(b.card.id)),
   )
   const singleSelected = computed(() =>
     selectedBlocks.value.length === 1 ? selectedBlocks.value[0] : null,
@@ -84,14 +84,14 @@ export const usePageStore = defineStore('notePage', () => {
   /** 下一页的哨兵落在已加载卡片的下方：靠近视口时取下一批（见 NotePage 的观察器）。 */
   const sentinelY = computed(() => {
     let lowest = 0
-    for (const b of blocks.value) lowest = Math.max(lowest, b.block.y + b.block.h)
+    for (const b of cards.value) lowest = Math.max(lowest, b.card.y + b.card.h)
     return lowest + 160
   })
 
   async function load(id: string, cardIds?: string[]) {
     loading.value = true
     try {
-      blocks.value = []
+      cards.value = []
       const all = cardIds ?? []
       totalCards.value = all.length
       const first = all.slice(0, PAGE_SIZE)
@@ -99,11 +99,11 @@ export const usePageStore = defineStore('notePage', () => {
       const page = await pageApi.get(id, first.length ? first : undefined)
       noteId.value = page.noteId
       noteTitle.value = page.noteTitle
-      blocks.value = page.blocks
+      cards.value = page.cards
       tags.value = page.tags
-      maxBlocks.value = page.maxBlocksPerNote || 100
+      maxBlocks.value = page.maxCardsPerNote || 100
       // 清单里可能含已被别处删掉的卡片：只惦记真正没取回来的那些。
-      const loaded = new Set(blocks.value.map((b) => b.block.id))
+      const loaded = new Set(cards.value.map((b) => b.card.id))
       pendingIds.value = pendingIds.value.filter((x) => !loaded.has(x))
       selection.value = []
       editingBlockId.value = null
@@ -124,11 +124,11 @@ export const usePageStore = defineStore('notePage', () => {
     const batch = pendingIds.value.slice(0, PAGE_SIZE)
     try {
       const page = await pageApi.get(id, batch)
-      const seen = new Set(blocks.value.map((b) => b.block.id))
-      for (const view of page.blocks) {
-        if (!seen.has(view.block.id)) blocks.value.push(view)
+      const seen = new Set(cards.value.map((b) => b.card.id))
+      for (const view of page.cards) {
+        if (!seen.has(view.card.id)) cards.value.push(view)
       }
-      const arrived = new Set(page.blocks.map((b) => b.block.id))
+      const arrived = new Set(page.cards.map((b) => b.card.id))
       // 别处删掉的卡片不会再回来：把这一批里没回来的从待取队列里摘掉，避免反复请求。
       pendingIds.value = pendingIds.value
         .slice(PAGE_SIZE)
@@ -143,11 +143,11 @@ export const usePageStore = defineStore('notePage', () => {
   /** Re-read the page without disturbing the viewport or the card being edited. */
   async function reload() {
     if (!noteId.value) return
-    const ids = blocks.value.map((b) => b.block.id)
+    const ids = cards.value.map((b) => b.card.id)
     const page = await pageApi.get(noteId.value, ids.length ? ids : undefined)
     const seen = new Set(ids)
-    const extra = page.blocks.filter((b) => !seen.has(b.block.id))
-    blocks.value = [...page.blocks, ...extra]
+    const extra = page.cards.filter((b) => !seen.has(b.card.id))
+    cards.value = [...page.cards, ...extra]
     noteTitle.value = page.noteTitle
     tags.value = page.tags
   }
@@ -173,11 +173,11 @@ export const usePageStore = defineStore('notePage', () => {
    * 只要不再编辑内容就不会被覆盖）。
    */
   const manualHeights = ref<Set<string>>(new Set())
-  function markManualHeight(blockId: string) {
-    manualHeights.value = new Set(manualHeights.value).add(blockId)
+  function markManualHeight(cardId: string) {
+    manualHeights.value = new Set(manualHeights.value).add(cardId)
   }
-  function isManualHeight(blockId: string) {
-    return manualHeights.value.has(blockId)
+  function isManualHeight(cardId: string) {
+    return manualHeights.value.has(cardId)
   }
 
   function select(ids: string[], additive = false) {
@@ -198,27 +198,27 @@ export const usePageStore = defineStore('notePage', () => {
   }
 
   function selectAll() {
-    selection.value = blocks.value.map((b) => b.block.id)
+    selection.value = cards.value.map((b) => b.card.id)
   }
 
   // ---------------------------------------------------------------- geometry
 
-  function localMove(patches: BlockPatch[]) {
+  function localMove(patches: CardPatch[]) {
     for (const p of patches) {
-      const view = blocks.value.find((b) => b.block.id === p.id)
+      const view = cards.value.find((b) => b.card.id === p.id)
       if (!view) continue
-      if (p.x !== undefined && p.x !== null) view.block.x = p.x
-      if (p.y !== undefined && p.y !== null) view.block.y = p.y
-      if (p.w !== undefined && p.w !== null) view.block.w = Math.max(BLOCK_MIN_W, p.w)
-      if (p.h !== undefined && p.h !== null) view.block.h = Math.max(BLOCK_MIN_H, p.h)
-      if (p.z !== undefined && p.z !== null) view.block.z = p.z
-      if (p.color !== undefined) view.block.color = p.color
-      if (p.status !== undefined) view.block.status = p.status
-      if (p.collapsed !== undefined && p.collapsed !== null) view.block.collapsed = p.collapsed
+      if (p.x !== undefined && p.x !== null) view.card.x = p.x
+      if (p.y !== undefined && p.y !== null) view.card.y = p.y
+      if (p.w !== undefined && p.w !== null) view.card.w = Math.max(BLOCK_MIN_W, p.w)
+      if (p.h !== undefined && p.h !== null) view.card.h = Math.max(BLOCK_MIN_H, p.h)
+      if (p.z !== undefined && p.z !== null) view.card.z = p.z
+      if (p.color !== undefined) view.card.color = p.color
+      if (p.status !== undefined) view.card.status = p.status
+      if (p.collapsed !== undefined && p.collapsed !== null) view.card.collapsed = p.collapsed
     }
   }
 
-  async function commit(patches: BlockPatch[]) {
+  async function commit(patches: CardPatch[]) {
     if (!noteId.value || patches.length === 0) return
     localMove(patches)
     try {
@@ -248,11 +248,11 @@ export const usePageStore = defineStore('notePage', () => {
   /** Clamp every card to the current surface width (called when the viewport resizes). */
   function clampWidths(surfaceWidth: number) {
     const max = Math.max(320, Math.min(LIMITS.maxW, surfaceWidth - LIMITS.minVisibleGap))
-    const patches: BlockPatch[] = []
-    for (const v of blocks.value) {
-      if (v.block.w > max) {
-        v.block.w = max
-        patches.push({ id: v.block.id, w: max })
+    const patches: CardPatch[] = []
+    for (const v of cards.value) {
+      if (v.card.w > max) {
+        v.card.w = max
+        patches.push({ id: v.card.id, w: max })
       }
     }
     if (patches.length && noteId.value) {
@@ -263,7 +263,7 @@ export const usePageStore = defineStore('notePage', () => {
   async function addBlock(
     at: { x: number; y: number },
     opts: { contentMd?: string; title?: string; w?: number; h?: number; surfaceWidth?: number } = {},
-  ): Promise<NoteBlockView | null> {
+  ): Promise<CardView | null> {
     if (!noteId.value) return null
     if (!requireCapacity()) return null
     try {
@@ -281,12 +281,12 @@ export const usePageStore = defineStore('notePage', () => {
       totalCards.value++
       // reload() 只按已装载的 ids 拉（懒加载分页），新建的卡不在其中 —— 不补进列表它就不会
       // 渲染，双击建卡看起来「没反应」，打进去的字也随编辑态一起丢掉。
-      let fresh = blocks.value.find((b) => b.block.id === created.block.id)
+      let fresh = cards.value.find((b) => b.card.id === created.card.id)
       if (!fresh) {
-        blocks.value.push(created)
+        cards.value.push(created)
         fresh = created
       }
-      selection.value = [fresh.block.id]
+      selection.value = [fresh.card.id]
       return fresh
     } catch (e) {
       ui.toast((e as Error).message, 'error')
@@ -300,17 +300,17 @@ export const usePageStore = defineStore('notePage', () => {
    *
    * The page always keeps at least one card, so the last remaining card is cleared instead.
    */
-  async function removeIfEmpty(blockId: string): Promise<boolean> {
+  async function removeIfEmpty(cardId: string): Promise<boolean> {
     if (!noteId.value) return false
-    const view = blocks.value.find((b) => b.block.id === blockId)
+    const view = cards.value.find((b) => b.card.id === cardId)
     if (!view) return false
-    if ((view.block.contentMd ?? '').trim() || (view.block.title ?? '').trim()) return false
+    if ((view.card.contentMd ?? '').trim() || (view.card.title ?? '').trim()) return false
     if (count.value <= 1) return false
     try {
-      await pageApi.removeBlock(noteId.value, blockId, false)
+      await pageApi.removeBlock(noteId.value, cardId, false)
       totalCards.value--
       await reload()
-      selection.value = selection.value.filter((id) => id !== blockId)
+      selection.value = selection.value.filter((id) => id !== cardId)
       return true
     } catch {
       return false
@@ -344,19 +344,19 @@ export const usePageStore = defineStore('notePage', () => {
    * <p>请求带上「编辑开始时卡片上的正文」作为基线：磁盘上已经不是那一份（外部编辑器改过）时
    * 后端回 409，这里提示并重新载入 —— **磁盘优先**，这次保存不会覆盖外部改动。
    */
-  async function writeContent(blockId: string, contentMd: string) {
+  async function writeContent(cardId: string, contentMd: string) {
     if (!noteId.value) return
-    const view = blocks.value.find((b) => b.block.id === blockId)
+    const view = cards.value.find((b) => b.card.id === cardId)
     if (!view) return
-    savingContent.value = blockId
+    savingContent.value = cardId
     // 基线必须在乐观改写之前取：它就是这次编辑开始时用户看到的正文。
-    const baseContentMd = view.block.contentMd ?? ''
+    const baseContentMd = view.card.contentMd ?? ''
     // Reflect the text before the round trip: writing a card ends its edit, and the trailing
     // blur must see the new text so it does not send the same content again.
-    view.block.contentMd = contentMd
+    view.card.contentMd = contentMd
     view.contentMd = contentMd
     try {
-      const updated = await pageApi.writeContent(noteId.value, blockId, contentMd, baseContentMd)
+      const updated = await pageApi.writeContent(noteId.value, cardId, contentMd, baseContentMd)
       if (updated.noteTitle) noteTitle.value = updated.noteTitle
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -366,7 +366,7 @@ export const usePageStore = defineStore('notePage', () => {
         // A card deleted while its content was still in flight is an expected race, not an
         // error worth shouting about.
         const message = (e as Error).message
-        if (!message.includes('block')) {
+        if (!message.includes('card')) {
           ui.toast(`保存失败：${message}`, 'error')
         }
       }
@@ -376,13 +376,13 @@ export const usePageStore = defineStore('notePage', () => {
     }
   }
 
-  async function removeBlock(blockId: string, deleteContent = false) {
+  async function removeBlock(cardId: string, deleteContent = false) {
     if (!noteId.value) return
-    await pageApi.removeBlock(noteId.value, blockId, deleteContent)
+    await pageApi.removeBlock(noteId.value, cardId, deleteContent)
     totalCards.value--
     // The remaining cards keep the positions the user gave them; the gap stays open.
     await reload()
-    selection.value = selection.value.filter((id) => id !== blockId)
+    selection.value = selection.value.filter((id) => id !== cardId)
   }
 
   async function removeSelected() {
@@ -411,7 +411,7 @@ export const usePageStore = defineStore('notePage', () => {
   async function duplicateSelected(dx = GRID * 2, dy = GRID * 2) {
     if (!noteId.value || !selection.value.length) return
     if (!requireCapacity()) return
-    const created: NoteBlock[] = []
+    const created: NoteCard[] = []
     for (const id of selection.value) {
       created.push(await pageApi.duplicateBlock(noteId.value, id, dx, dy))
     }
@@ -450,7 +450,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   /** Fit every card into the viewport (the page "zoom to fit" button). */
   function fit(size: { width: number; height: number }) {
-    const list = blocks.value.map((b) => b.block)
+    const list = cards.value.map((b) => b.card)
     if (!list.length) {
       viewport.value = { x: 0, y: 0, zoom: 1 }
       return
@@ -553,7 +553,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   /** Bounding box of all cards, for the minimap-less "fit" maths and the status bar. */
   const bounds = computed(() => {
-    const list = blocks.value.map((b) => b.block)
+    const list = cards.value.map((b) => b.card)
     if (!list.length) return { x: 0, y: 0, w: 900, h: 600 }
     const minX = Math.min(...list.map((b) => b.x))
     const minY = Math.min(...list.map((b) => b.y))
@@ -565,7 +565,7 @@ export const usePageStore = defineStore('notePage', () => {
   return {
     noteId,
     noteTitle,
-    blocks,
+    cards,
     tags,
     maxBlocks,
     loading,

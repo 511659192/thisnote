@@ -7,7 +7,6 @@ import com.thisnode.ext.notes.domain.TagRepository;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.store.NoteMeta;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,11 +43,6 @@ public class NoteController {
                 false, limit, offset));
     }
 
-    @GetMapping("/counts")
-    public Map<String, Integer> counts() {
-        return noteService.counts();
-    }
-
     @PostMapping
     public Dtos.NoteDetail create(@RequestBody Dtos.CreateNodeRequest req) {
         return noteService.detail(noteService.create(req));
@@ -60,82 +54,41 @@ public class NoteController {
     }
 
     /**
-     * 改笔记级字段（标题 / 标签 / 别名 / 来源 / 归档…）。
+     * 改笔记级字段（标题 / 标签 / 来源…）。
      *
      * <p><b>正文不在这里改</b>：带 {@code contentMd} 的整篇改写会把全文写进第一张卡、同时清空
      * 其余卡片的正文（{@code NoteCompositionService#replaceNoteContent}），是一次静默的数据丢失。正文一律走
-     * 卡片端点 {@code PATCH /api/notes/{noteId}/blocks/{blockId}/content}（那边带冲突保护）。
+     * 卡片端点 {@code POST /api/notes/{noteId}/cards/{cardId}/content}（那边带冲突保护）。
      */
-    @PatchMapping("/{id}")
+    @PostMapping("/{id}/patch")
     public Dtos.NoteDetail patch(@PathVariable String id, @RequestBody Dtos.UpdateNodeRequest req) {
         if (req != null && req.contentMd() != null) {
             throw new IllegalArgumentException(
-                    "整篇正文改写已停用：请在卡片里编辑（PATCH /api/notes/{noteId}/blocks/{blockId}/content）");
+                    "整篇正文改写已停用：请在卡片里编辑（PATCH /api/notes/{noteId}/cards/{cardId}/content）");
         }
         noteService.patch(id, req);
         return noteService.detail(id);
     }
 
-    @DeleteMapping("/{id}")
-    public Map<String, Object> trash(@PathVariable String id,
-                                     @RequestParam(defaultValue = "false") boolean hard) {
-        if (hard) {
-            noteService.purge(id);
-        } else {
-            noteService.trash(id);
-        }
+    @PostMapping("/{id}/delete")
+    public Map<String, Object> purge(@PathVariable String id) {
+        noteService.purge(id);
         return Map.of("ok", true);
-    }
-
-    @PostMapping("/{id}/restore")
-    public Map<String, Object> restore(@PathVariable String id) {
-        noteService.restore(id);
-        return Map.of("ok", true);
-    }
-
-    @DeleteMapping("/trash")
-    public Map<String, Object> emptyTrash() {
-        return Map.of("deleted", noteService.emptyTrash());
     }
 
     // ---------------- tags ----------------
 
-    @PostMapping("/{id}/tags")
+    @PostMapping("/{id}/tags/add")
     public List<Dtos.TagDto> addTag(@PathVariable String id, @RequestBody Map<String, String> body) {
         tagRepository.addNodeTag(id, body.getOrDefault("name", ""));
         noteService.require(id);
         return tagRepository.tagsOf(id);
     }
 
-    @DeleteMapping("/{id}/tags/{name}")
-    public List<Dtos.TagDto> removeTag(@PathVariable String id, @PathVariable String name) {
+    @PostMapping("/{id}/tags/remove")
+    public List<Dtos.TagDto> removeTag(@PathVariable String id, @RequestParam String name) {
         tagRepository.removeNodeTag(id, name);
         return tagRepository.tagsOf(id);
-    }
-
-    @PutMapping("/{id}/tags")
-    public List<Dtos.TagDto> setTags(@PathVariable String id, @RequestBody List<String> names) {
-        tagRepository.setNodeTags(id, names);
-        Note n = noteService.require(id);
-        noteRepository.update(n);
-        return tagRepository.tagsOf(id);
-    }
-
-    // ---------------- aliases ----------------
-
-    @PutMapping("/{id}/aliases")
-    public List<String> setAliases(@PathVariable String id, @RequestBody List<String> aliases) {
-        noteService.require(id);
-        noteService.setAliases(id, aliases);
-        return noteService.aliasesOf(id);
-    }
-
-    // ---------------- daily / templates ----------------
-
-    @PostMapping("/daily")
-    public Dtos.NoteDetail daily(@RequestParam(required = false) String date,
-                                 @RequestParam(required = false) String templateId) {
-        return noteService.detail(noteService.dailyNote(date, templateId));
     }
 
 

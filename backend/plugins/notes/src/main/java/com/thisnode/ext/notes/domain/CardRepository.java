@@ -1,27 +1,30 @@
 package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.store.BlockMeta;
-import com.thisnode.ext.notes.store.NoteCompositionService;
+import com.thisnode.ext.notes.store.CardFile;
+import com.thisnode.ext.notes.store.NoteFilePaths;
+import com.thisnode.ext.notes.store.CardMeta;
+import com.thisnode.ext.notes.store.CardRef;
+import com.thisnode.ext.notes.store.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.plugin.api.ConflictException;
-import org.springframework.stereotype.Repository;
-
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.stereotype.Repository;
 
 /**
  * 卡片：一篇笔记的页面由它们组成。
  *
- * <p>每张卡在磁盘上就是一个 md（正文）+ 一个同名 sidecar（{@code noteId}、位置与尺寸）。
- * 所以"卡片"既是文件也是内存里的一条记录，{@link NoteCompositionService} 负责让两者一致，这里只做装配：
- * 把 {@link BlockMeta} 与正文拼成 API 的 DTO，把调用方的意图翻成索引上的写操作。
+ * <p>每张卡在磁盘上就是一个 md（正文）。这里做卡片的读写与装配：把 {@link CardMeta} 与正文
+ * 拼成 API 的 DTO，把调用方的意图翻成 {@link NoteRepository} 上的文件读写。
  *
  * <p>几何语义与数据库时代一致：卡片各就各位、允许重叠，任何写入都不会顺手移动别的卡片。
  */
 @Repository
-public class NoteBlockRepository {
+public class CardRepository {
 
     /**
      * Card geometry. Cards are wide and roomy by default: a card holds a real piece of the
@@ -37,17 +40,19 @@ public class NoteBlockRepository {
     /** Left edge of the page column. */
     public static final int FLOW_X = 0;
 
-    private final NoteCompositionService cards;
+    private final NoteRepository noteRepository;
+    private final NoteFilePaths noteFilePaths;
 
-    public NoteBlockRepository(NoteCompositionService cards) {
-        this.cards = cards;
+    public CardRepository(NoteRepository noteRepository) {
+        this.noteRepository = noteRepository;
+        this.noteFilePaths = noteRepository.paths();
     }
 
-    private Dtos.NoteBlockDto dto(BlockMeta block) {
+    private Dtos.CardDto dto(CardMeta block) {
         // 归属不在卡片里（改由笔记持清单），所以经索引反查 —— 一次内存 map 查询，不读文件。
-        return new Dtos.NoteBlockDto(block.id(), cards.noteIdOf(block.id()), block.title(),
+        return new Dtos.CardDto(block.id(), noteRepository.noteIdOf(block.id()), block.title(),
                 block.x(), block.y(), block.w(), block.h(), block.z(),
-                block.color(), block.status(), block.collapsed(), cards.content(block.id()),
+                block.color(), block.status(), block.collapsed(), noteRepository.content(block.id()),
                 block.createdAt(), block.updatedAt());
     }
 
@@ -55,21 +60,21 @@ public class NoteBlockRepository {
      * Cards of a note in z order, exactly as they are stored. The order comes from the sidecar's
      * {@code z}; cards are never re-flowed, because that would move a card the user positioned.
      */
-    public List<Dtos.NoteBlockDto> blocks(String noteId) {
-        List<Dtos.NoteBlockDto> out = new ArrayList<>();
-        for (BlockMeta block : cards.blocks(noteId)) {
+    public List<Dtos.CardDto> blocks(String noteId) {
+        List<Dtos.CardDto> out = new ArrayList<>();
+        for (CardMeta block : noteRepository.cards(noteId)) {
             out.add(dto(block));
         }
         return out;
     }
 
-    public Dtos.NoteBlockDto find(String id) {
-        BlockMeta block = cards.block(id);
+    public Dtos.CardDto find(String id) {
+        CardMeta block = noteRepository.card(id);
         return block == null ? null : dto(block);
     }
 
     public int count(String noteId) {
-        return cards.blockCount(noteId);
+        return noteRepository.cardCount(noteId);
     }
 
     public String create(String noteId, Double x, Double y, Double w, Double h,
@@ -95,9 +100,9 @@ public class NoteBlockRepository {
                            String color, String status, String contentMd, String title) {
         double cardH = h == null ? DEFAULT_H : Math.max(MIN_H, h);
         double centre = y + cardH / 2;
-        List<BlockMeta> existing = cards.blocks(noteId);
+        List<CardMeta> existing = noteRepository.cards(noteId);
         int after = 0;
-        for (BlockMeta block : existing) {
+        for (CardMeta block : existing) {
             if (block.y() + block.h() / 2 < centre) {
                 after++;
             }
@@ -112,14 +117,14 @@ public class NoteBlockRepository {
                           Integer slot) {
         long now = System.currentTimeMillis();
         String id = Ids.newId();
-        // 几何默认值住在 BlockMeta 里，所以手写的注释与这里写出来的会被同一套规则归一化。
-        BlockMeta block = new BlockMeta(BlockMeta.SCHEMA, id,
+        // 几何默认值住在 CardMeta 里，所以手写的注释与这里写出来的会被同一套规则归一化。
+        CardMeta block = new CardMeta(CardMeta.SCHEMA, id,
                 title == null ? "" : title,
                 x == null ? 0 : Math.max(0, x), y == null ? 0 : Math.max(0, y),
                 w == null ? DEFAULT_W : Math.max(MIN_W, w),
                 h == null ? DEFAULT_H : Math.max(MIN_H, h),
                 slot == null ? -1 : slot, color, status, false, Map.of(), now, now);
-        cards.putBlock(noteId, block, contentMd == null ? "" : contentMd,
+        putCard(noteId, block, contentMd == null ? "" : contentMd,
                 slot == null ? -1 : slot);
         return id;
     }
@@ -127,29 +132,29 @@ public class NoteBlockRepository {
     /**
      * 保存卡片正文，并先做冲突保护：{@code baseContentMd} 是客户端编辑时所依据的正文。
      *
-     * <p>比对的是**磁盘**（{@link NoteCompositionService#contentOnDisk}）而不是索引缓存 —— 外部编辑之后、
+     * <p>比对的是**磁盘**（{@link #contentOnDisk(String)}）而不是索引缓存 —— 外部编辑之后、
      * 下一次对账之前缓存里还是旧内容。{@code null} 表示调用方不带基线（内部改写与旧客户端），
      * 保持原有行为。
      */
-    public void setContent(String blockId, String contentMd, String baseContentMd) {
-        rejectIfChangedOnDisk(blockId, baseContentMd);
-        setContent(blockId, contentMd);
+    public void setContent(String cardId, String contentMd, String baseContentMd) {
+        rejectIfChangedOnDisk(cardId, baseContentMd);
+        setContent(cardId, contentMd);
     }
 
-    public void setContent(String blockId, String contentMd) {
-        String noteId = cards.noteIdOf(blockId);
-        BlockMeta current = cards.block(blockId);
+    public void setContent(String cardId, String contentMd) {
+        String noteId = noteRepository.noteIdOf(cardId);
+        CardMeta current = noteRepository.card(cardId);
         if (noteId != null && current != null) {
-            cards.putBlock(noteId, current.touched(System.currentTimeMillis()), contentMd);
+            putCard(noteId, current.touched(System.currentTimeMillis()), contentMd);
         }
     }
 
     /** 磁盘上的正文与客户端依据的那份不一致就拒写；文件已被外部删掉同样拒写。 */
-    private void rejectIfChangedOnDisk(String blockId, String baseContentMd) {
+    private void rejectIfChangedOnDisk(String cardId, String baseContentMd) {
         if (baseContentMd == null) {
             return;
         }
-        String onDisk = cards.contentOnDisk(blockId);
+        String onDisk = noteRepository.contentOnDisk(cardId);
         if (onDisk == null) {
             throw new ConflictException("这张卡片的文件已不在磁盘上（可能被外部删除），已停止保存");
         }
@@ -161,8 +166,8 @@ public class NoteBlockRepository {
     /** All card contents for a note, in z order — the note's markdown is their join. */
     public List<String> contentsInOrder(String noteId) {
         List<String> out = new ArrayList<>();
-        for (BlockMeta block : cards.blocks(noteId)) {
-            out.add(cards.content(block.id()));
+        for (CardMeta block : noteRepository.cards(noteId)) {
+            out.add(noteRepository.content(block.id()));
         }
         return out;
     }
@@ -175,7 +180,7 @@ public class NoteBlockRepository {
      */
     public double[] nextFlowPosition(String noteId) {
         double bottom = 0;
-        for (BlockMeta block : cards.blocks(noteId)) {
+        for (CardMeta block : noteRepository.cards(noteId)) {
             bottom = Math.max(bottom, block.y() + block.h());
         }
         return new double[]{FLOW_X, bottom <= 0 ? 0 : bottom + FLOW_GAP};
@@ -199,12 +204,12 @@ public class NoteBlockRepository {
 
     public void update(String id, String title, Double x, Double y, Double w, Double h, Integer z,
                        String color, String status, Boolean collapsed,
-                       Dtos.NoteBlockDto prefetched) {
-        BlockMeta current = cards.block(id);
+                       Dtos.CardDto prefetched) {
+        CardMeta current = noteRepository.card(id);
         if (current == null) {
             return;
         }
-        cards.putBlockMeta(current
+        putCardMeta(current
                 .withGeometry(x, y, w, h, z)
                 .withTitle(title != null ? title : current.title())
                 .withAppearance(color, status, collapsed)
@@ -212,11 +217,11 @@ public class NoteBlockRepository {
     }
 
     /** Batched geometry write for drag / resize / distribute. */
-    public void updateBatch(List<Dtos.BlockPatch> patches) {
+    public void updateBatch(List<Dtos.CardPatch> patches) {
         if (patches == null || patches.isEmpty()) {
             return;
         }
-        for (Dtos.BlockPatch patch : patches) {
+        for (Dtos.CardPatch patch : patches) {
             if (patch == null || patch.id() == null) {
                 continue;
             }
@@ -225,13 +230,13 @@ public class NoteBlockRepository {
         }
     }
 
-    public List<Dtos.NoteBlockDto> findMany(List<String> ids) {
-        List<Dtos.NoteBlockDto> out = new ArrayList<>();
+    public List<Dtos.CardDto> findMany(List<String> ids) {
+        List<Dtos.CardDto> out = new ArrayList<>();
         if (ids == null) {
             return out;
         }
         for (String id : ids) {
-            BlockMeta block = cards.block(id);
+            CardMeta block = noteRepository.card(id);
             if (block != null) {
                 out.add(dto(block));
             }
@@ -243,7 +248,7 @@ public class NoteBlockRepository {
     public int nextZ(String noteId) {
         int top = 0;
         boolean any = false;
-        for (BlockMeta block : cards.blocks(noteId)) {
+        for (CardMeta block : noteRepository.cards(noteId)) {
             top = Math.max(top, block.z());
             any = true;
         }
@@ -253,7 +258,7 @@ public class NoteBlockRepository {
     public int lowestZ(String noteId) {
         int low = 0;
         boolean any = false;
-        for (BlockMeta block : cards.blocks(noteId)) {
+        for (CardMeta block : noteRepository.cards(noteId)) {
             low = any ? Math.min(low, block.z()) : block.z();
             any = true;
         }
@@ -261,7 +266,7 @@ public class NoteBlockRepository {
     }
 
     public void delete(String id) {
-        cards.removeBlock(id);
+        removeCard(id);
     }
 
     public void deleteMany(List<String> ids) {
@@ -269,8 +274,124 @@ public class NoteBlockRepository {
             return;
         }
         for (String id : ids) {
-            cards.removeBlock(id);
+            removeCard(id);
         }
     }
 
+    // ================================================================ 卡片写入（自 NoteRepository 移入）
+
+    /** 写一张卡片（追加到清单末尾）并刷新该笔记的列表页缓存。 */
+    public CardMeta putCard(String noteId, CardMeta block, String contentMd) {
+        return putCard(noteId, block, contentMd, -1);
+    }
+
+    /** 写一张卡片，插进清单第 {@code slot} 位（{@code slot < 0} 表示追加）。 */
+    public CardMeta putCard(String noteId, CardMeta block, String contentMd, int slot) {
+        NoteMeta note = noteRepository.note(noteId);
+        if (note == null) {
+            return null;
+        }
+        CardRef existing = refOf(note, block.id());
+        Path knownFile = existing == null ? null : noteRepository.cardPath(existing);
+        Path file = knownFile != null ? knownFile
+                : resolveContentPath(note.title(), NoteFilePaths.cardSlug(block.title(), contentMd),
+                        block.id());
+        noteRepository.writeText(file, CardFile.compose(block, contentMd));
+        CardRef ref = CardRef.of(block.id(), noteRepository.paths().relative(file));
+
+        List<CardRef> cardRefs = new ArrayList<>(note.cards());
+        int at = indexOf(cardRefs, block.id());
+        if (at >= 0) {
+            cardRefs.set(at, ref);
+        } else if (slot >= 0 && slot < cardRefs.size()) {
+            cardRefs.add(slot, ref);
+        } else {
+            cardRefs.add(ref);
+        }
+        noteRepository.writeNoteMeta(note.withCards(cardRefs).touched(System.currentTimeMillis()));
+        noteRepository.refreshCachedView(noteId);
+        return block;
+    }
+
+    /** 只改卡片元数据（重写头部注释，正文原样保留）。 */
+    public void writeCardMeta(CardMeta block, CardRef ref) {
+        Path contentFile = noteRepository.cardPath(ref);
+        String current = noteRepository.readText(contentFile);
+        if (current == null) {
+            noteRepository.writeText(contentFile, CardFile.compose(block, ""));
+            return;
+        }
+        noteRepository.writeText(contentFile, CardFile.compose(block, CardFile.bodyOf(current)));
+    }
+
+    /** 只改卡片元数据；与 {@link #writeCardMeta(CardMeta, CardRef)} 同义。 */
+    public void putCardMeta(CardMeta block) {
+        if (block == null) {
+            return;
+        }
+        NoteRepository.Owned owned = noteRepository.ownerOf(block.id());
+        if (owned == null) {
+            return;
+        }
+        noteRepository.writeCardMeta(block, noteRepository.cardPath(owned.ref()));
+    }
+
+    /** 删一张卡片：先摘出笔记清单，再删文件，最后刷新这篇笔记的列表页缓存。 */
+    public void removeCard(String cardId) {
+        NoteRepository.Owned owned = noteRepository.ownerOf(cardId);
+        if (owned == null) {
+            return;
+        }
+        noteRepository.deleteCardFiles(noteRepository.cardPath(owned.ref()));
+        List<CardRef> cardRefs = new ArrayList<>(owned.note().cards());
+        cardRefs.removeIf(ref -> ref.id().equals(cardId));
+        noteRepository.writeNoteMeta(owned.note().withCards(cardRefs).touched(System.currentTimeMillis()));
+        noteRepository.refreshCachedView(owned.note().id());
+    }
+
+    /** 卡片文件在磁盘上的路径（找不到给 {@code null}）。 */
+    public Path fileOf(String cardId) {
+        NoteRepository.Owned owned = noteRepository.ownerOf(cardId);
+        return owned == null ? null : noteRepository.cardPath(owned.ref());
+    }
+
+    /**
+     * 决定一张新卡片落在哪个文件：{@code <slug>-<shortId>.md}。同名文件已存在时把短 id 逐段加长，
+     * 实在不行用完整 id 兜底。
+     */
+    private Path resolveContentPath(String noteTitle, String cardSlug, String blockId) {
+        String noteSlug = NoteFilePaths.cardSlug(noteTitle, null);
+        String prefix = NoteFilePaths.cardFilePrefix(noteSlug, cardSlug);
+        Path candidate = noteFilePaths.cardFilePath(noteSlug, cardSlug, blockId);
+        if (!Files.exists(candidate)) {
+            return candidate;
+        }
+        String hex = blockId.replace("-", "");
+        for (int len = 12; len < hex.length(); len += 4) {
+            Path longer = noteFilePaths.cardsDir().resolve(prefix + "-" + hex.substring(0, len)
+                    + NoteFilePaths.MD_SUFFIX);
+            if (!Files.exists(longer)) {
+                return longer;
+            }
+        }
+        return noteFilePaths.cardsDir().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
+    }
+
+    private static CardRef refOf(NoteMeta note, String cardId) {
+        for (CardRef ref : note.cards()) {
+            if (ref.id().equals(cardId)) {
+                return ref;
+            }
+        }
+        return null;
+    }
+
+    private static int indexOf(List<CardRef> cardRefs, String cardId) {
+        for (int i = 0; i < cardRefs.size(); i++) {
+            if (cardRefs.get(i).id().equals(cardId)) {
+                return i;
+            }
+        }
+        return -1;
+    }
 }

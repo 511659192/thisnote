@@ -40,22 +40,22 @@ public final class Dtos {
             boolean deleted, String dailyDate,
             /**
              * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
-             * 前端拿这份清单去 {@code GET /api/notes/{id}/blocks?ids=}。
+             * 前端拿这份清单去 {@code GET /api/notes/{id}/cards?ids=}。
              */
             List<CardRef> cards,
-            List<String> tags, List<String> aliases, List<NotebookDto> notebooks,
+            List<String> tags, List<NotebookDto> notebooks,
             List<LinkDto> outbound, List<BacklinkDto> backlinks,
             List<String> unresolved, List<String> unlinkedMentions,
             long createdAt, long updatedAt) {
     }
 
     public record CreateNodeRequest(String title, String contentMd, String type, String dailyDate,
-                                    List<String> tags, List<String> aliases, String source,
+                                    List<String> tags, String source,
                                     String status, String notebookId) {
     }
 
     public record UpdateNodeRequest(String title, String contentMd, String source, String status,
-                                    List<String> tags, List<String> aliases, String notebookId,
+                                    List<String> tags, String notebookId,
                                     Boolean clearNotebook) {
     }
 
@@ -76,7 +76,7 @@ public final class Dtos {
      * note's content and stays empty unless the user names the card; when empty the UI shows
      * no title bar at all.
      */
-    public record NoteBlockDto(String id, String noteId, String title,
+    public record CardDto(String id, String noteId, String title,
                                double x, double y, double w, double h, int z,
                                String color, String status, boolean collapsed,
                                String contentMd, long createdAt, long updatedAt) {
@@ -88,16 +88,16 @@ public final class Dtos {
      * <p>A card's own text and title live on the block itself (one copy), so this view only
      * adds the note context the card needs for rendering.
      */
-    public record NoteBlockView(NoteBlockDto block, String contentMd, String noteTitle,
+    public record CardView(CardDto card, String contentMd, String noteTitle,
                                 List<TagDto> tags) {
     }
 
-    public record NoteBlocksDto(String noteId, String noteTitle,
-                                List<NoteBlockView> blocks, List<TagDto> tags,
-                                int maxBlocksPerNote, long updatedAt) {
+    public record CardsDto(String noteId, String noteTitle,
+                                List<CardView> cards, List<TagDto> tags,
+                                int maxCardsPerNote, long updatedAt) {
     }
 
-    public record CreateBlockRequest(Double x, Double y, Double w, Double h,
+    public record CreateCardRequest(Double x, Double y, Double w, Double h,
                                      String contentMd, String title, String color) {
     }
 
@@ -110,11 +110,11 @@ public final class Dtos {
     public record WriteContentRequest(String contentMd, String baseContentMd) {
     }
 
-    public record BlockPatch(String id, String title, Double x, Double y, Double w, Double h,
+    public record CardPatch(String id, String title, Double x, Double y, Double w, Double h,
                              Integer z, String color, String status, Boolean collapsed) {
     }
 
-    public record BatchBlockPatchRequest(List<BlockPatch> blocks) {
+    public record BatchCardPatchRequest(List<CardPatch> blocks) {
     }
 
 

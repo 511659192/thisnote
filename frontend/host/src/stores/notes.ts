@@ -9,7 +9,7 @@ import { useUiStore } from './ui'
 const AUTOSAVE_DEBOUNCE_MS = 500
 
 /**
- * Notes: list, selection, autosave and the derived counts used by the sidebar.
+ * Notes: list, selection and autosave.
  *
  * Autosave is per-node debounced (F-P-01 防抖 500ms). A pending save is flushed when the
  * user switches notes so fast navigation never loses the last keystrokes.
@@ -23,7 +23,6 @@ export const useNoteStore = defineStore('notes', () => {
   const loadingNode = ref(false)
   const saving = ref(false)
   const savedAt = ref<number | null>(null)
-  const counts = ref<Record<string, number>>({})
   const tags = ref<Tag[]>([])
   const notebooks = ref<Notebook[]>([])
 
@@ -121,8 +120,7 @@ export const useNoteStore = defineStore('notes', () => {
     }
     metaInflight = (async () => {
       try {
-        const [c, t, n] = await Promise.all([noteApi.counts(), tagApi.list(), notebookApi.list()])
-        counts.value = c
+        const [t, n] = await Promise.all([tagApi.list(), notebookApi.list()])
         tags.value = t
         notebooks.value = n
       } catch (e) {
@@ -334,11 +332,10 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  /** Patch the open note (title/tags/aliases…) and keep the cached detail in sync. */
+  /** Patch the open note (title/tags…) and keep the cached detail in sync. */
   async function patchCurrent(patch: {
     title?: string
     tags?: string[]
-    aliases?: string[]
     status?: string
     source?: string
     notebookId?: string
@@ -443,12 +440,6 @@ export const useNoteStore = defineStore('notes', () => {
     return detail
   }
 
-  async function restore(id: string) {
-    await noteApi.restore(id)
-    await Promise.all([loadList(), refreshMeta()])
-    ui.toast('已恢复', 'success')
-  }
-
   async function purge(id: string) {
     await noteApi.purge(id)
     if (currentId.value === id) current.value = null
@@ -456,16 +447,10 @@ export const useNoteStore = defineStore('notes', () => {
     ui.toast('已彻底删除', 'success')
   }
 
-  async function emptyTrash() {
-    const res = await noteApi.emptyTrash()
-    await Promise.all([loadList(), refreshMeta()])
-    ui.toast(`已清空回收站（${res.deleted}）`, 'success')
-  }
 
   async function updateMeta(patch: {
     status?: string
     source?: string
-    aliases?: string[]
     tags?: string[]
     notebookId?: string
     clearNotebook?: boolean
@@ -495,12 +480,6 @@ export const useNoteStore = defineStore('notes', () => {
     await Promise.all([loadList(), refreshMeta()])
   }
 
-  async function openDaily() {
-    const detail = await noteApi.daily()
-    await Promise.all([loadList(), refreshMeta()])
-    await select(detail.id)
-    return detail
-  }
 
   async function resolveStub(title: string) {
     const from = currentId.value ?? undefined
@@ -540,7 +519,6 @@ export const useNoteStore = defineStore('notes', () => {
     loadingNode,
     saving,
     savedAt,
-    counts,
     tags,
     notebooks,
     filter,
@@ -581,13 +559,10 @@ export const useNoteStore = defineStore('notes', () => {
     flushAll,
     createNode,
     createAndSelect,
-    restore,
     purge,
-    emptyTrash,
     updateMeta,
     addTag,
     removeTag,
-    openDaily,
     resolveStub,
     renameTag,
     syncFromServer,

@@ -1,5 +1,6 @@
 package com.thisnode.ext.notes.store;
 
+import com.thisnode.ext.notes.domain.NoteRepository;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,19 +17,17 @@ public class StartupMaintenance {
 
     private static final Logger log = LoggerFactory.getLogger(StartupMaintenance.class);
 
-    private final NoteStore noteStore;
-    private final NoteCompositionService composition;
+    private final NoteRepository noteRepository;
 
-    public StartupMaintenance(NoteStore noteStore, NoteCompositionService composition) {
-        this.noteStore = noteStore;
-        this.composition = composition;
+    public StartupMaintenance(NoteRepository noteRepository) {
+        this.noteRepository = noteRepository;
     }
 
     @PostConstruct
     public void run() {
-        noteStore.ensureDirs();
-        int claimed = composition.claimUnmanaged();
-        int dropped = composition.dropMissingCards();
+        noteRepository.ensureDirs();
+        int claimed = noteRepository.claimUnmanaged();
+        int dropped = noteRepository.dropMissingCards();
         if (claimed + dropped > 0) {
             log.info("启动维护：认领 {} / 摘除 {}", claimed, dropped);
         }

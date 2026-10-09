@@ -1,11 +1,9 @@
 package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.service.NoteBlockService;
+import com.thisnode.ext.notes.service.CardService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,63 +25,63 @@ import java.util.Map;
  * 分批用 {@code ids} 取——不带参数则整页返回。这样列表页不必背几何，长页面也不必一次拉全。
  */
 @RestController
-@RequestMapping("/api/notes/{noteId}/blocks")
+@RequestMapping("/api/notes/{noteId}/cards")
 @RequiredArgsConstructor
-public class NoteBlocksController {
+public class CardController {
 
-    private final NoteBlockService blockService;
+    private final CardService cardService;
 
     /** 这几张卡（{@code ids} 省略 = 整页）：卡片几何 + 它自己的正文。 */
     @GetMapping
-    public Dtos.NoteBlocksDto get(@PathVariable String noteId,
+    public Dtos.CardsDto get(@PathVariable String noteId,
                                   @RequestParam(required = false) List<String> ids) {
-        return blockService.page(noteId, ids);
+        return cardService.page(noteId, ids);
     }
 
     @PostMapping
-    public Dtos.NoteBlockView create(@PathVariable String noteId,
-                                     @RequestBody(required = false) Dtos.CreateBlockRequest req) {
-        return blockService.create(noteId, req);
+    public Dtos.CardView create(@PathVariable String noteId,
+                                     @RequestBody(required = false) Dtos.CreateCardRequest req) {
+        return cardService.create(noteId, req);
     }
 
     /** Write markdown typed inside a card back into the note. */
-    @PatchMapping("/{blockId}/content")
-    public Dtos.NoteBlockView writeContent(@PathVariable String noteId, @PathVariable String blockId,
+    @PostMapping("/{cardId}/content")
+    public Dtos.CardView writeContent(@PathVariable String noteId, @PathVariable String cardId,
                                            @RequestBody(required = false) Dtos.WriteContentRequest req) {
-        return blockService.writeContent(blockId,
+        return cardService.writeContent(cardId,
                 req == null || req.contentMd() == null ? "" : req.contentMd(),
                 req == null ? null : req.baseContentMd());
     }
 
-    @PatchMapping
+    @PostMapping("/patch")
     public Map<String, Object> batchUpdate(@PathVariable String noteId,
-                                           @RequestBody Dtos.BatchBlockPatchRequest req) {
-        blockService.batchUpdate(req);
+                                           @RequestBody Dtos.BatchCardPatchRequest req) {
+        cardService.batchUpdate(req);
         return Map.of("ok", true);
     }
 
-    @PatchMapping("/{blockId}")
-    public Dtos.NoteBlockDto update(@PathVariable String noteId, @PathVariable String blockId,
-                                    @RequestBody Dtos.BlockPatch patch) {
-        return blockService.update(blockId, patch);
+    @PostMapping("/{cardId}/patch")
+    public Dtos.CardDto update(@PathVariable String noteId, @PathVariable String cardId,
+                                    @RequestBody Dtos.CardPatch patch) {
+        return cardService.update(cardId, patch);
     }
 
-    @PostMapping("/{blockId}/duplicate")
-    public Dtos.NoteBlockDto duplicate(@PathVariable String noteId, @PathVariable String blockId,
+    @PostMapping("/{cardId}/duplicate")
+    public Dtos.CardDto duplicate(@PathVariable String noteId, @PathVariable String cardId,
                                        @RequestParam(defaultValue = "28") double dx,
                                        @RequestParam(defaultValue = "28") double dy) {
-        return blockService.duplicate(blockId, dx, dy);
+        return cardService.duplicate(cardId, dx, dy);
     }
 
     @PostMapping("/z")
-    public Dtos.NoteBlockDto zOrder(@PathVariable String noteId, @RequestBody Map<String, String> body) {
-        return blockService.zOrder(body.getOrDefault("id", ""), body.getOrDefault("op", "top"));
+    public Dtos.CardDto zOrder(@PathVariable String noteId, @RequestBody Map<String, String> body) {
+        return cardService.zOrder(body.getOrDefault("id", ""), body.getOrDefault("op", "top"));
     }
 
-    @DeleteMapping("/{blockId}")
-    public Map<String, Object> delete(@PathVariable String noteId, @PathVariable String blockId,
+    @PostMapping("/{cardId}/delete")
+    public Map<String, Object> delete(@PathVariable String noteId, @PathVariable String cardId,
                                       @RequestParam(defaultValue = "false") boolean deleteContent) {
-        blockService.delete(blockId, deleteContent);
+        cardService.delete(cardId, deleteContent);
         return Map.of("ok", true);
     }
 }

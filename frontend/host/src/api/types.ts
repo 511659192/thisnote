@@ -34,7 +34,7 @@ export type NoteType = 'note' | 'daily' | 'template'
  * `title` is an optional label the *user* gives the card. It is not note content, and when it
  * is empty the card shows no title bar at all.
  */
-export interface NoteBlock {
+export interface NoteCard {
   id: string
   noteId: string
   title: string
@@ -52,12 +52,12 @@ export interface NoteBlock {
 }
 
 /**
- * A block plus the note-level context it renders with, as delivered by the page endpoint.
- * Kept separate from {@link NoteBlock} so the card's own text lives in exactly one place.
+ * A card plus the note-level context it renders with, as delivered by the page endpoint.
+ * Kept separate from {@link NoteCard} so the card's own text lives in exactly one place.
  */
-export interface NoteBlockView {
-  block: NoteBlock
-  /** Mirror of `block.contentMd`, kept for convenience when rendering. */
+export interface CardView {
+  card: NoteCard
+  /** Mirror of `card.contentMd`, kept for convenience when rendering. */
   contentMd: string
   noteTitle: string
   tags: Tag[]
@@ -68,9 +68,9 @@ export interface NoteBlockView {
 export interface NotePageData {
   noteId: string
   noteTitle: string
-  blocks: NoteBlockView[]
+  cards: CardView[]
   tags: Tag[]
-  maxBlocksPerNote: number
+  maxCardsPerNote: number
   updatedAt: number
 }
 
@@ -96,7 +96,6 @@ export interface NoteMeta {
   deletedAt?: number | null
   /** 标签名。颜色与计数只在独立的 `GET /api/tags` 目录里，列表接口不背。 */
   tags: string[]
-  aliases: string[]
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由前端台账解析。 */
   notebookId?: string | null
   /** 本篇的卡片清单（顺序即阅读顺序）。 */
@@ -149,7 +148,6 @@ export interface NoteDetail {
   /** 卡片清单（只有身份）：页面级数据按需取，见 {@link CardRef}。 */
   cards: CardRef[]
   tags: string[]
-  aliases: string[]
   notebooks: Notebook[]
   outbound: Link[]
   backlinks: Backlink[]
@@ -157,15 +155,6 @@ export interface NoteDetail {
   unlinkedMentions: string[]
   createdAt: number
   updatedAt: number
-}
-
-export interface SystemInfo {
-  version: string
-  dbPath: string
-  markdownRoot: string
-  attachmentRoot: string
-  nodeCount: number
-  uptimeMs: number
 }
 
 export interface OpEntry {
@@ -178,13 +167,6 @@ export interface OpEntry {
 }
 
 /** 笔记目录的同步事件（外部改动被发现时产生），见后端的 NoteSyncService。 */
-export interface SyncEvent {
-  kind: string
-  title: string
-  message: string
-  at: number
-}
-
 /** List filter used by the sidebar (F-N-03). */
 export type ListFilter =
   | 'all'

@@ -4,7 +4,7 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.store.NoteStore;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,15 +37,14 @@ class NoteListTagsTest {
     void setUp() {
         NotesConfig config = Mockito.mock(NotesConfig.class);
         Mockito.when(config.markdownRoot()).thenReturn(root);
-        NoteStore store = new NoteStore(config);
-        NoteRepository noteRepository = new NoteRepository(store, TestWiring.composition(store));
-        NoteBlockRepository blockRepository = new NoteBlockRepository(TestWiring.composition(store));
+        NoteRepository store = new NoteRepository(config);
+        NoteRepository noteRepository = store;
+        CardRepository blockRepository = new CardRepository(store);
         tagRepository = new TagRepository(store);
         NotebookRepository notebookRepository = new NotebookRepository(store);
         OpsRepository opsRepository = new OpsRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, Mockito.mock(LinkRepository.class),
-                notebookRepository, blockRepository, opsRepository, store,
-                TestWiring.composition(store));
+                notebookRepository, blockRepository, opsRepository);
     }
 
     private String newNote(String title, List<String> tags) {
@@ -53,7 +52,7 @@ class NoteListTagsTest {
         n.title = title;
         n.contentMd = "";
         n.type = "note";
-        String id = noteService.create(new Dtos.CreateNodeRequest(title, "", "note", null, tags, null, null, null, null));
+        String id = noteService.create(new Dtos.CreateNodeRequest(title, "", "note", null, tags, null, null, null));
         return id;
     }
 

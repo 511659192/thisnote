@@ -32,8 +32,6 @@ const saveState = computed(() => {
     <span class="dot" :class="backendOnline ? 'ok' : 'bad'" :title="backendMessage"></span>
     <span class="small muted">{{ backendOnline ? '本地后端已连接' : backendMessage }}</span>
     <span class="divider-v"></span>
-    <span class="small muted">笔记 {{ nodes.counts.all ?? 0 }}</span>
-    <span class="small muted">链接 {{ nodes.counts.links ?? 0 }}</span>
     <template v-if="nodes.current">
       <span class="divider-v"></span>
       <span class="small muted">{{ nodes.wordCount }} 字</span>

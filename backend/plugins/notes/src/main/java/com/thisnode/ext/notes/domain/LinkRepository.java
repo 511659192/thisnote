@@ -3,8 +3,7 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.NoteMeta;
 import com.thisnode.ext.notes.store.LinkRef;
-import com.thisnode.ext.notes.store.NoteStore;
-import com.thisnode.ext.notes.store.NoteCompositionService;
+import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.util.Markdown;
 import org.springframework.stereotype.Repository;
 
@@ -26,17 +25,15 @@ import java.util.Set;
  * 所以这里不落盘、不存储，每次现算（读各篇 meta 里缓存的出链清单）。
  *
  * <p>于是所有"修复悬空链接""给 stub 改名""取消解析"之类的方法都成了空操作：一条链接是否解析，
- * 只取决于目标标题此刻存不存在（{@link NoteStore#resolveTitle}），不需要任何人去修补记录。
+ * 只取决于目标标题此刻存不存在（{@link NoteRepository#resolveTitle}），不需要任何人去修补记录。
  */
 @Repository
 public class LinkRepository {
 
-    private final NoteStore noteStore;
-    private final NoteCompositionService composition;
+    private final NoteRepository noteRepository;
 
-    public LinkRepository(NoteStore noteStore, NoteCompositionService composition) {
-        this.noteStore = noteStore;
-        this.composition = composition;
+    public LinkRepository(NoteRepository noteRepository) {
+        this.noteRepository = noteRepository;
     }
 
     public record LinkRow(String id, String fromNodeId, String toNodeId, String toTitle,
@@ -57,7 +54,7 @@ public class LinkRepository {
         Set<String> stubs = new LinkedHashSet<>();
         Map<String, String> display = new LinkedHashMap<>();
         int total = 0;
-        for (NoteMeta meta : noteStore.scanNotes()) {
+        for (NoteMeta meta : noteRepository.scanNotes()) {
             if (meta.deleted()) {
                 continue;
             }
@@ -106,11 +103,11 @@ public class LinkRepository {
         rows.sort((a, b) -> Long.compare(b.createdAt(), a.createdAt()));
         List<Dtos.BacklinkDto> out = new ArrayList<>();
         for (LinkRow row : rows) {
-            NoteMeta from = noteStore.note(row.fromNodeId());
+            NoteMeta from = noteRepository.note(row.fromNodeId());
             if (from == null || from.deleted()) {
                 continue;
             }
-            String content = composition.noteMarkdown(from.id());
+            String content = noteRepository.noteMarkdown(from.id());
             out.add(new Dtos.BacklinkDto(from.id(), from.title(), row.label(), null,
                     contextFor(content, from.id(), row.label()), from.updatedAt()));
         }
@@ -267,18 +264,4 @@ public class LinkRepository {
         return new ArrayList<>(Markdown.unresolvedLinks(contentMd));
     }
 
-    /** 别名与笔记一起存在 meta 里；重复别名忽略。 */
-    public void addAlias(String noteId, String alias) {
-        NoteMeta meta = noteStore.note(noteId);
-        if (meta == null || alias == null || alias.isBlank()) {
-            return;
-        }
-        String clean = alias.trim();
-        if (meta.aliases().contains(clean)) {
-            return;
-        }
-        List<String> next = new ArrayList<>(meta.aliases());
-        next.add(clean);
-        noteStore.writeNoteMeta(meta.withAliases(next));
-    }
 }
