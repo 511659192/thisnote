@@ -4,7 +4,7 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
 /**
  * Hash history：路径模式刷新会 404（后端纯 API，不再端出页面）。
  *
- * 前后端分离后，宿主是**纯壳**：这里没有任何业务路由 —— /notes、/notes/:id 由
+ * 产物分离后，宿主是**纯壳**：这里没有任何业务路由 —— /notes、/notes/:id 由
  * notes 微应用经 registerPluginRoute 登记（挂到 Shell 之下）。装载完成前，
  * 根路径与未知深链接落到 ShellHome 占位页，它在插件路由就绪后自动接过去。
  */

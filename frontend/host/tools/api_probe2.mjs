@@ -25,6 +25,6 @@ if (await firstNote.count()) {
   opened = page.url()
 }
 const cardsArea = await page.locator('[class*="note-page"], [class*="canvas"], .page').count()
-// 生产兜底：notes 前端走 /plugin-assets（dev server 关掉的场景在别处验证过产物 200）
+// 生产兜底：notes 界面侧走 /plugin-assets（dev server 关掉的场景在别处验证过产物 200）
 console.log(JSON.stringify({ afterDeepLink, opened, cardsArea, errors: errors.slice(0, 3) }, null, 1))
 await browser.close()

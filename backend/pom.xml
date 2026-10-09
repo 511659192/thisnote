@@ -19,7 +19,7 @@
   <description>
     thisnote 后端父工程：插件契约（plugin-api）、插件侧共享支持（plugin-support）、各插件（独立构件）、应用（app）。
     插件只依赖 plugin-api 与 plugin-support —— 编译期就看不到核心内部类，因此可以单独发版、单独替换 jar。
-    仓库根是 pnpm 工作区，不放 Maven 文件；Maven 构建全部从本目录（backend/）进行。
+    仓库根只作普通工作区，不放 Maven 文件；Maven 构建全部从本目录（backend/）进行。
   </description>
 
   <modules>
@@ -27,6 +27,7 @@
     <module>plugin-support</module>
     <module>plugins/memory-curve</module>
     <module>plugins/search</module>
+    <module>plugins/fuzzy-search</module>
     <module>plugins/notes</module>
     <module>plugins/favorite</module>
     <module>app</module>
@@ -38,7 +39,6 @@
     <sbp.version>3.5.27</sbp.version>
     <lombok.version>1.18.40</lombok.version>
     <pf4j.version>3.16.0</pf4j.version>
-    <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -105,25 +105,11 @@
             <release>${java.version}</release>
           </configuration>
         </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>exec-maven-plugin</artifactId>
-          <version>${exec-maven-plugin.version}</version>
-        </plugin>
       </plugins>
     </pluginManagement>
   </build>
 
   <profiles>
-    <!--
-      前端构建：**各前端所属模块自己接线**（app → ../frontend/host；plugin-<id> → ../../../frontend/plugins/<id>），
-      因为前端代码集中在仓库的 frontend/ 目录，不在各模块内部，激活路径只有各模块自己知道。
-      见各模块 pom 里的 `frontend` profile（激活条件不变：未设 thisnode.skip-frontend 且前端源码存在）。
-
-      为什么用文件存在性判断在这里是安全的：判断的是**源码树里**的文件（不是构建产物），
-      而 profile 激活在构建开始前求值 —— 干净检出时它也在。
-    -->
-
     <!--
       插件 jar 的描述符版本由 Maven 版本注入（`plugin.version=@project.version@`），
       这里只负责把 plugin.properties 打开过滤。用 Spring Boot 父 pom 的 `@…@` 分隔符，

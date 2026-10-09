@@ -5,7 +5,7 @@ package com.thisnode.plugin.api;
  *
  * <p>插件只声明「我有哪些配置」，底座负责存储、脱敏与渲染：值存在 {@code plugin_data}
  * （entityType={@code config}），{@link #secret()} 为真时读取接口只回「有没有值」不回内容，
- * 前端也只会把它渲染成密码框。
+ * 消费方也只会把它渲染成密码框。
  *
  * @param key          存储键，也是插件读取时的键
  * @param label        表单标签

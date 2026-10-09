@@ -20,7 +20,7 @@ import type { ListFilter, Notebook } from '@/api/types'
 /**
  * 笔记域的侧栏主面板：新建、视图筛选、分组树、插件筛选、插件入口与标签。
  *
- * <p>前后端分离后侧栏容器归宿主，本面板由 notes 经 registerSidebarPanel 登记。
+ * <p>产物分离后侧栏容器归宿主，本面板由 notes 经 registerSidebarPanel 登记。
  * 插件入口（复习/收藏徽标轨）与插件筛选同样只面向注册器渲染 ——
  * 宿主依旧不认识任何具体插件，展示形态与拆分前完全一致。
  */

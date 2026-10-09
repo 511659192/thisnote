@@ -156,7 +156,7 @@ public class PluginStateService {
      * 给管理页看的配置视图：按插件的 schema 组织。
      *
      * <p>敏感项只回 {@code hasValue}，<b>永不回传内容</b>——SecretKey 这类东西存进来就不该再出得去；
-     * 前端提交时留空表示「不改动」。
+     * 提交时留空表示「不改动」。
      */
     public List<Map<String, Object>> configView(Plugin plugin) {
         String pluginId = plugin.descriptor().id();
@@ -250,7 +250,7 @@ public class PluginStateService {
      * <p><b>不能在停用的外置插件上直接问</b>：它的 Spring 子容器已经关闭，而 {@code health()}
      * 通常要读自己的 bean，于是抛 {@code IllegalStateException: … has been closed already}，
      * 进了全局异常处理器就变成 <b>409</b> —— 一个插件停用会把整个插件列表（每项都要 describe）
-     * 一起打挂，前端连"它现在是停用的"都读不到。所以：没在服务的插件给静态结论，
+     * 一起打挂，调用方连"它现在是停用的"都读不到。所以：没在服务的插件给静态结论，
      * 真抛异常也降级成 unknown；管理面永远读得出来。
      */
     public PluginHealth healthOf(Plugin plugin) {

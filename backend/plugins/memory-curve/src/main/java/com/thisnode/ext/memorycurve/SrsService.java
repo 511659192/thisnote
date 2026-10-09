@@ -65,7 +65,7 @@ public class SrsService {
      *
      * <p>本插件因此是「纯状态管理器」：只管排期与开关，**不读笔记内容**，也不依赖核心插件 ——
      * 核心插件缺位时它照样能独立启动。代价是卡片被删后条目会残留（没有通知机制能感知），
-     * 所以 due 列表把它们原样返回，由前端跳过（卡片内容由前端自己取）。
+     * 所以 due 列表把它们原样返回，由界面侧跳过（卡片内容由界面侧自己取）。
      */
     private final PluginDataStore store;
     private final Path file;
@@ -233,7 +233,7 @@ public class SrsService {
     /**
      * 到期卡片：遍历自己的排期文件，取「已开启 + 到点」的那些。
      *
-     * <p>返回里只有排期与 blockId —— 卡片属于哪篇笔记、正文是什么，由前端自己取（本插件不读笔记数据）。
+     * <p>返回里只有排期与 blockId —— 卡片属于哪篇笔记、正文是什么，由界面侧自己取（本插件不读笔记数据）。
      */
     public List<Map<String, Object>> due(int limit) {
         long now = System.currentTimeMillis();

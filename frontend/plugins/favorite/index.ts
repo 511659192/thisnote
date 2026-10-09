@@ -3,7 +3,7 @@ import FavoriteTool from './FavoriteTool.vue'
 import { favoriteApi, FAVORITE_PLUGIN_ID } from './favoriteApi'
 
 /**
- * 收藏插件的前端注册 —— 「实体插件」的参考实现，只挂两个槽位：
+ * 收藏插件的界面侧注册 —— 「实体插件」的参考实现，只挂两个槽位：
  *
  * <ol>
  *   <li><b>笔记工具</b>：笔记标题旁的 ★ 开关；</li>

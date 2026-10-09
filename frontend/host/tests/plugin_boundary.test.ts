@@ -4,10 +4,10 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * 插件前端的边界约束。
+ * 插件界面的边界约束。
  *
  * <p>后端靠 Maven 强制"插件只能看见 plugin-api"（在插件里 import 核心类会**编译失败**）；
- * 前端没有等价机制，所以这里用测试守住同一条线：插件前端不得出现 `from '@/…'`
+ * 界面侧没有等价机制，所以这里用测试守住同一条线：插件界面不得出现 `from '@/…'`
  * 这类核心内部引用，只能用 `@thisnode/plugin-api`。
  */
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
@@ -23,8 +23,8 @@ function collect(dir: string): string[] {
   return out
 }
 
-describe('插件前端边界', () => {
-  it('插件前端只依赖 @thisnode/plugin-api，不得引用核心内部路径', () => {
+describe('插件界面边界', () => {
+  it('插件界面只依赖 @thisnode/plugin-api，不得引用核心内部路径', () => {
     const offenders: string[] = []
     for (const plugin of ['memory-curve', 'favorite']) {
       const dir = join(repoRoot, 'frontend', 'plugins', plugin)

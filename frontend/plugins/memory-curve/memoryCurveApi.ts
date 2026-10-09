@@ -39,7 +39,7 @@ export interface DueCard {
   gradePreview: Record<string, number>
 }
 
-/** 一张卡片的渲染内容（由前端自己从核心 API 拼出来） */
+/** 一张卡片的渲染内容（由界面侧自己从核心 API 拼出来） */
 export interface CardContent {
   noteTitle: string
   cardTitle: string
@@ -61,7 +61,7 @@ export const memoryCurveApi = {
     ),
   /** 删掉一条排期（复习页发现它是孤儿时调用）。 */
   forget: (blockId: string) =>
-    http.del<{ blockId: string; removed: boolean }>(
+    http.post<{ blockId: string; removed: boolean }>(
       `/api/plugins/memory-curve/forget`, undefined, { blockId },
     ),
 }
@@ -93,11 +93,11 @@ export async function loadCardContent(blockIds: string[]): Promise<Map<string, C
     for (const item of pages) {
       if (!item) continue
       for (const view of item.page.cards) {
-        if (want.has(view.block.id) && !found.has(view.block.id)) {
-          found.set(view.block.id, {
+        if (want.has(view.card.id) && !found.has(view.card.id)) {
+          found.set(view.card.id, {
             noteTitle: item.note.title,
-            cardTitle: view.block.title,
-            contentMd: view.block.contentMd,
+            cardTitle: view.card.title,
+            contentMd: view.card.contentMd,
           })
         }
       }

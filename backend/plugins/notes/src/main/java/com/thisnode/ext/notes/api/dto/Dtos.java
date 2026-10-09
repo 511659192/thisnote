@@ -9,7 +9,7 @@ import java.util.Map;
 
 /**
  * API payloads. Kept as records so the JSON contract is explicit and stable for the
- * Vue frontend (frontend/src/api/types.ts mirrors these).
+ * The UI mirrors these shapes (see the notes client types).
  */
 public final class Dtos {
 
@@ -34,7 +34,7 @@ public final class Dtos {
             boolean deleted, String dailyDate,
             /**
              * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
-             * 前端拿这份清单去 {@code GET /api/notes/cards?ids=}。
+             * 界面侧拿这份清单去 {@code GET /api/notes/cards?ids=}。
              */
             List<CardRef> cards,
             List<String> tags, List<NotebookDto> notebooks,

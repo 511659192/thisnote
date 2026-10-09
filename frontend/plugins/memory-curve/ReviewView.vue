@@ -67,7 +67,7 @@ async function loadQueue() {
     // 必须跳过它们：渲染成一张空白卡只会让人以为复习坏了。
     const live = due.filter((c) => content.has(c.blockId))
     orphanCount.value = due.length - live.length
-    // 顺手把孤儿清掉：本插件不读笔记数据，只有「前端刚在核心那边查过」这个时点才知道卡片没了。
+    // 顺手把孤儿清掉：本插件不读笔记数据，只有「界面侧刚在核心那边查过」这个时点才知道卡片没了。
     // 正常删除由主容器的 CardChangedEvent 兜住，这里补上外部重建/绕过 API 留下的那些。
     for (const gone of due.filter((c) => !content.has(c.blockId))) {
       void memoryCurveApi.forget(gone.blockId).catch(() => {})

@@ -17,7 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 平台侧的统一 JSON 错误渲染 —— 前端据此弹 toast，而不是看到堆栈。
+ * 平台侧的统一 JSON 错误渲染 —— 调用方据此弹 toast，而不是看到堆栈。
  *
  * <p><b>为什么在主体（平台）而不是核心插件：</b>插件控制器由 SBP 注册进主体的
  * {@code RequestMappingHandlerMapping}，但 {@code @RestControllerAdvice} 只会从**主体容器**

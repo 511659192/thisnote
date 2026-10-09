@@ -59,10 +59,9 @@
 
   <build>
     <plugins>
-      <!-- 交付:jar 拷到 backend/plugins-dist/(以 plugin.id 命名)；前端产物（前后端分离，不在 jar 里）
-           从 frontend/plugins/<id>/dist/ 拷到 backend/plugins-dist/frontend/<id>/，由 /plugin-assets 从磁盘端出。
-           在插件模块做而非主体 dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件
-           (踩过:plugins-dist/ 里是 Oct 2 的旧 jar)。 -->
+      <!-- 交付：把自己的 jar 拷到 backend/plugins-dist/（界面资源由界面侧自行交付，不经这里）。
+           在插件模块做而非主体 dependency:copy —— 后者从本地仓库解析，可能拿到陈旧构件
+           （踩过：plugins-dist/ 里是 Oct 2 的旧 jar）。 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
@@ -78,11 +77,6 @@
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
                       tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
-                <!-- 先清再拷：前端产物带 hash，只覆盖不清理会让历史版本的分片留在交付目录里 -->
-                <delete dir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" quiet="true"/>
-                <copy todir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" overwrite="true">
-                  <fileset dir="${project.basedir}/../../../frontend/plugins/memory-curve/dist" erroronmissingdir="false"/>
-                </copy>
               </target>
             </configuration>
           </execution>
@@ -91,61 +85,4 @@
     </plugins>
   </build>
 
-  <profiles>
-    <!--
-      前端构建：插件前端源码在仓库的 frontend/plugins/memory-curve，这里接线 pnpm install + build
-      （产物由 Vite 落到本模块 frontend-dist/，前后端分离不进 jar；antrun 再拷到 plugins-dist/frontend/）。
-      激活条件与后端一致：未设置 thisnode.skip-frontend 且前端源码存在。
-    -->
-    <profile>
-      <id>frontend</id>
-      <activation>
-        <property>
-          <name>!thisnode.skip-frontend</name>
-        </property>
-        <file>
-          <exists>../../../frontend/plugins/memory-curve/package.json</exists>
-        </file>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>pnpm-install</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>pnpm</executable>
-                  <workingDirectory>${project.basedir}/../../../frontend/plugins/memory-curve</workingDirectory>
-                  <arguments>
-                    <argument>install</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-              <execution>
-                <id>pnpm-build</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>pnpm</executable>
-                  <workingDirectory>${project.basedir}/../../../frontend/plugins/memory-curve</workingDirectory>
-                  <arguments>
-                    <argument>build</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-    
-    </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

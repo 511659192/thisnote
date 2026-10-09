@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** 探活端点：脚本、桌面壳与前端启动探测（waitForBackend）都靠它确认后端已经就绪。 */
+/** 探活端点：脚本、桌面壳与界面侧启动探测（waitForBackend）都靠它确认后端已经就绪。 */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor

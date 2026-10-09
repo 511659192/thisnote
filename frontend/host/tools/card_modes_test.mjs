@@ -47,7 +47,7 @@ const RUN = Date.now().toString().slice(-6)
 const created = []
 
 // 工具行元素计数包含记忆曲线的卡片徽标，所以先确保该插件处于启用状态
-// （插件被停用时徽标会被前端隐藏，元素数就少一个 —— 那是另一个测试的情形）。
+// （插件被停用时徽标会被界面侧隐藏，元素数就少一个 —— 那是另一个测试的情形）。
 await api('PUT', '/api/plugins/memory-curve/active?value=true').catch(() => undefined)
 
 async function newNote(title, contentMd = '') {

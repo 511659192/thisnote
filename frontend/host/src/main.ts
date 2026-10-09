@@ -34,7 +34,7 @@ async function bootstrap() {
   // 免得各视图的首个请求打在还没起来的端口上。
   await waitForBackend(20000)
 
-  // 按后端启用列表装载插件前端（生产 = 插件 jar 里的 plugin.js）。
+  // 按后端启用列表装载插件界面（生产 = 插件 jar 里的 plugin.js）。
   // 放在 isReady 之前：深链接（#/review、#/favorites）才能一次就匹配上插件路由。
   await loadActivePluginFrontends(router)
 

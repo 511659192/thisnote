@@ -18,7 +18,7 @@
 #   cd backend; java -jar app/target/thisnode-backend.jar --spring.profiles.active=dev
 #
 # Editing a plugin then needs just (Maven 父工程在 backend/，从那里执行):
-#   cd backend; mvn -pl :plugin-<id> -am compile -Dthisnode.skip-frontend=true     # -am: 父工程构件不在本地仓库
+#   cd backend; mvn -pl :plugin-<id> -am compile     # -am: 父工程构件不在本地仓库（界面侧构建不再经 Maven）
 #   curl -X POST http://127.0.0.1:45917/api/plugins/<id>/reload       # or the button in Settings -> Plugins
 
 param([switch]$Remove)

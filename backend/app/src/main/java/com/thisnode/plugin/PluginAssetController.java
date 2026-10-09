@@ -23,28 +23,28 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 /**
- * 插件前端的静态产物：{@code /plugin-assets/<id>/<相对路径>}。
+ * 插件界面产物：{@code /plugin-assets/<id>/<相对路径>}。
  *
  * <p>路径通配与附件端点同理，是**文件路径直通**的刻意例外（非资源路由）：plugin.js 内的
  * {@code ./chunk-*.js} 相对导入需要目录语义，query 形态会让相对解析落到页面根。
  *
- * <p><b>前后端分离</b>：前端产物不再打进插件 jar —— 各插件模块用 vite 产出到自己的
- * {@code frontend-dist/}，Maven 打包时由 antrun 拷到 {@code plugins-dist/frontend/<id>/}
- * （磁盘目录，与应用工作目录相对，见 {@code spring.sbp.plugins-frontend-root}）。
- * 这里按磁盘文件流式端出；换一份前端产物 = 换那个目录里的文件，不再需要重打插件 jar。
+ * <p><b>产物分离</b>：界面产物不再打进插件 jar —— 各插件模块把界面资源产出到自己的
+ * {@code dist/}，Maven 打包时由交付流程拷到 {@code plugin-assets/<id>/}
+ * （磁盘目录，与应用工作目录相对，见 {@code spring.sbp.plugins-assets-root}）。
+ * 这里按磁盘文件流式端出；换一份界面产物 = 换那个目录里的文件，不再需要重打插件 jar。
  *
  * <p>插件本体（descriptor + class）仍在 jar 里、由 PF4J 装载 —— 本控制器只借注册表做
  * <b>启停闸门</b>：只对 STARTED 的插件提供产物，否则"停用一个插件"在 HTTP 层面就等于没停
- * （前端虽然不请求了，但产物仍然拿得到）。
+ * （调用方虽然不请求了，但产物仍然拿得到）。
  *
  * <p>只读、且拒绝路径穿越；文件名带 hash 的分片（chunk-*.js）同样由这里端出。
  */
 @RestController
 public class PluginAssetController {
 
-    /** 插件前端产物的磁盘根（相对应用工作目录；与 jar 的 plugins-root 平行的前端交付区）。 */
-    @Value("${spring.sbp.plugins-frontend-root:plugins-dist/frontend}")
-    private Path frontendRoot;
+    /** 插件界面产物的磁盘根（相对应用工作目录；与 jar 的 plugins-root 平行的界面资源交付区）。 */
+    @Value("${spring.sbp.plugins-assets-root:plugin-assets}")
+    private Path assetsRoot;
 
     private final ObjectProvider<PluginManager> pluginManager;
 
@@ -74,7 +74,7 @@ public class PluginAssetController {
         if (relative.isEmpty() || relative.contains("..")) {
             return ResponseEntity.badRequest().build();
         }
-        Path base = frontendRoot.resolve(pluginId).normalize();
+        Path base = assetsRoot.resolve(pluginId).normalize();
         Path file = base.resolve(relative).normalize();
         if (!file.startsWith(base) || !Files.isRegularFile(file)) {
             return ResponseEntity.notFound().build();

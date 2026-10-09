@@ -3,9 +3,9 @@ import NoteView from './src/views/NoteView.vue'
 import NotesSidebarPanel from './src/components/NotesSidebarPanel.vue'
 
 /**
- * 笔记域微应用的前端注册 —— 前后端拆分对齐后的「核心业务域」参考实现。
+ * 笔记域微应用的界面侧注册 —— 产物分离对齐后的「核心业务域」参考实现。
  *
- * <p>后端：plugin-notes（kind=CORE 的插件 jar，不可停用）；前端：本微应用。
+ * <p>后端：plugin-notes（kind=CORE 的插件 jar，不可停用）；界面侧：本微应用。
  * 它登记两类插槽：
  *
  * <ol>

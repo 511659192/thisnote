@@ -4,7 +4,7 @@
  *  2. 记忆曲线微应用挂载 → 侧栏出现「🧠 复习」入口；
  *  3. 深链接 #/review 渲染出插件页面（共享 vue-router 生效）；
  *  4. 收藏微应用挂载 → 新建笔记标题旁出现「☆ 收藏」工具；
- *  5. 停用/启用闭环走前端生命周期（不刷新页面）。
+ *  5. 停用/启用闭环走界面生命周期（不刷新页面）。
  * 运行：node tools/qiankun_smoke_test.mjs（需要 backend + 宿主 + 插件 dev servers）
  */
 import { chromium } from 'playwright'
@@ -61,7 +61,7 @@ if (await newNoteBtn.isVisible().catch(() => false)) {
   console.log('  （没找到「新建」按钮，跳过收藏工具检查）')
 }
 
-// 5. 停用 → 启用闭环（qiankun 前端生命周期，不刷新页面；结束后恢复原状）
+// 5. 停用 → 启用闭环（qiankun 界面生命周期，不刷新页面；结束后恢复原状）
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1500)
 await page.locator('button:has-text("插件")').first().click()

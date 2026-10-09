@@ -10,4 +10,5 @@ export const PLUGIN_DEV_PORTS: Record<string, number> = {
   'memory-curve': 7112,
   notes: 7113,
   search: 7114,
+  'fuzzy-search': 7115,
 }

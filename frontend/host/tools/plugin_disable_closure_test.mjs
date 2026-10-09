@@ -1,7 +1,7 @@
 /**
  * 「停用插件」是否真闭环。
  *
- * 检查的是**前端有没有跟着变**：后端闸门早就拦得住端点（409），但如果前端还留着入口，
+ * 检查的是**界面侧有没有跟着变**：后端闸门早就拦得住端点（409），但如果界面侧还留着入口，
  * 用户看到的就是「点了没反应 / 页面说没有到期卡片」——那不叫停用，叫坏掉。
  *
  * 覆盖：停用后侧栏入口消失、卡片徽标消失、复习页给出明确解释且不产生 409；
@@ -94,10 +94,10 @@ const off = await snapshot(false)
 check('停用后：侧栏入口消失', off.nav === 0, `${off.nav} 个`)
 check('停用后：卡片徽标消失', off.chip === 0, `${off.chip} 个`)
 
-// 停用后连前端产物也不该再拿得到：与 SBP 自己的资源解析一致（PluginResourceResolver 只扫 STARTED）。
-// 否则"停用"在 HTTP 层面等于没停 —— 前端虽然不请求了，产物仍然拿得到。
+// 停用后连界面资源也不该再拿得到：与 SBP 自己的资源解析一致（PluginResourceResolver 只扫 STARTED）。
+// 否则"停用"在 HTTP 层面等于没停 —— 界面侧虽然不请求了，产物仍然拿得到。
 const assetWhileOff = await fetch(`${API}/plugin-assets/${PLUGIN}/plugin.js`)
-check('停用后：前端产物也拿不到（404）', assetWhileOff.status === 404, `HTTP ${assetWhileOff.status}`)
+check('停用后：界面资源也拿不到（404）', assetWhileOff.status === 404, `HTTP ${assetWhileOff.status}`)
 
 const stillQueue = await reviewText()
 check('停用后：复习页说明原因而不是假装没有卡片',
@@ -126,7 +126,7 @@ const back = await snapshot(false)
 check('重新启用：侧栏入口回来', back.nav === 1, `${back.nav} 个`)
 check('重新启用：卡片徽标回来', back.chip === 1, `${back.chip} 个`)
 const assetWhileOn = await fetch(`${API}/plugin-assets/${PLUGIN}/plugin.js`)
-check('重新启用：前端产物再次可取（200）', assetWhileOn.status === 200, `HTTP ${assetWhileOn.status}`)
+check('重新启用：界面资源再次可取（200）', assetWhileOn.status === 200, `HTTP ${assetWhileOn.status}`)
 const backQueue = await reviewText()
 check('重新启用：复习页回到正常队列', backQueue.includes('待复习') || backQueue.includes('没有到期的卡片'),
   backQueue.slice(0, 50))

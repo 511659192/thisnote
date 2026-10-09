@@ -53,7 +53,7 @@ public class NoteService {
                 tagRepository.setNodeTags(id, inline);
             }
         }
-        // 笔记必须归属一个分组：前端在某个分组里新建时会带上当前分组，没带就落默认分组。
+        // 笔记必须归属一个分组：界面侧在某个分组里新建时会带上当前分组，没带就落默认分组。
         // 不变量在后端收口，客户端（含脚本、导入）不可能造出无归属的笔记。
         String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(id, groupId);

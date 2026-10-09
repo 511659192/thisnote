@@ -4,7 +4,7 @@
 # 没有数据源：笔记数据以本地 md 文件为权威（见 store 包），插件侧没有表也没有 mapper。
 
 thisnode:
-  # 每篇笔记的卡片上限（硬限制：超过时后端拒绝新增卡片，前端提前提示）。
+  # 每篇笔记的卡片上限（硬限制：超过时后端拒绝新增卡片，界面侧提前提示）。
   max-blocks-per-note: 100
   # Root of the human-readable Markdown mirror (F-P-03).
   data-root: ${user.home}/.thisnode

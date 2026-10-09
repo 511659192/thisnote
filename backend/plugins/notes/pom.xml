@@ -17,7 +17,7 @@
     笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / IO / Vault 同步）。
     按 sbp 最佳实践，主体应用是纯平台（插件生命周期管理 + 共享 DataSource），业务领域以插件形态交付。
     兄弟插件（favorite / memory-curve）**不依赖**本插件：各自的状态写在自己的文件里，
-    要展示的卡片内容由前端用本插件的公开 API（/api/nodes、/api/notes/{id}/page）现拼。
+    要展示的卡片内容由界面侧用本插件的公开 API（/api/nodes、/api/notes/{id}/page）现拼。
   </description>
 
   <properties>
@@ -75,8 +75,9 @@
     <plugins>
       <!-- 插件为普通 jar（非 fat jar）：pf4j 直接装载，库由主体提供 —— 与其它插件一致，无需额外配置 -->
 
-      <!-- 交付:把自己的 jar 拷到 backend/plugins-dist/(以 plugin.id 命名)。在插件模块做而非主体
-           dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件(踩过:plugins-dist/ 里是 Oct 2 的旧 jar)。 -->
+      <!-- 交付：把自己的 jar 拷到 backend/plugins-dist/（界面资源由界面侧自行交付，不经这里）。
+           在插件模块做而非主体 dependency:copy —— 后者从本地仓库解析，可能拿到陈旧构件
+           （踩过：plugins-dist/ 里是 Oct 2 的旧 jar）。 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
@@ -92,11 +93,6 @@
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
                       tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
-                <!-- 先清再拷：前端产物带 hash，只覆盖不清理会让历史版本的分片留在交付目录里 -->
-                <delete dir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" quiet="true"/>
-                <copy todir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" overwrite="true">
-                  <fileset dir="${project.basedir}/../../../frontend/plugins/notes/dist" erroronmissingdir="false"/>
-                </copy>
               </target>
             </configuration>
           </execution>
@@ -105,60 +101,4 @@
     </plugins>
   </build>
 
-  <profiles>
-    <!--
-      前端构建：笔记域前端（前后端拆分对齐后宿主 UI 迁到 plugins/notes）在本模块的 frontend-dist，
-      这里接线 pnpm install + build（由 antrun 拷到 plugins-dist/frontend/notes/）。
-      激活条件与其它插件一致：未设置 thisnode.skip-frontend 且前端源码存在。
-    -->
-    <profile>
-      <id>frontend</id>
-      <activation>
-        <property>
-          <name>!thisnode.skip-frontend</name>
-        </property>
-        <file>
-          <exists>../../../frontend/plugins/notes/package.json</exists>
-        </file>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>pnpm-install</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>pnpm</executable>
-                  <workingDirectory>${project.basedir}/../../../frontend/plugins/notes</workingDirectory>
-                  <arguments>
-                    <argument>install</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-              <execution>
-                <id>pnpm-build</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>pnpm</executable>
-                  <workingDirectory>${project.basedir}/../../../frontend/plugins/notes</workingDirectory>
-                  <arguments>
-                    <argument>build</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

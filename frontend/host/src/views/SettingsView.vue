@@ -66,7 +66,7 @@ async function reloadPlugin(plugin: PluginInfo) {
     const updated = await pluginApi.reload(plugin.id)
     plugins.value = plugins.value.map((p) => (p.id === updated.id ? updated : p))
     await refreshPluginAvailability(true)
-    // 插件的类加载器与容器已在后端重建；前端侧同步重载微应用（卸载 + 装载），
+    // 插件的类加载器与容器已在后端重建；界面侧同步重载微应用（卸载 + 装载），
     // 换掉磁盘上的 jar 当场生效。
     await reloadPluginFrontend(plugin.id, router)
     ui.toast(`「${plugin.title}」已重载（v${updated.version}）`, 'success')

@@ -5,8 +5,8 @@ import { qiankun } from '@qiankunjs/bundler-plugin/vite'
 import { qiankunSharedDeps } from '@thisnode/plugin-api/vite'
 
 /**
- * 笔记域微应用 —— 前后端拆分对齐后的「核心业务域」：后端它是 plugin-notes（CORE jar），
- * 前端它是 notes 微应用（端口约定 7113）。路由（/notes、/notes/:id）与侧栏主面板
+ * 笔记域微应用 —— 产物分离对齐后的「核心业务域」：后端它是 plugin-notes（CORE jar），
+ * 界面侧它是 notes 微应用（端口约定 7113）。路由（/notes、/notes/:id）与侧栏主面板
  * 在 mount() 里经 @thisnode/plugin-api 登记，宿主只渲染容器。
  *
  * <p>共享依赖（vue / vue-router / pinia / @thisnode/plugin-api）一律**外置**：qiankun ESM
@@ -32,8 +32,8 @@ export default defineConfig({
       fileName: () => 'plugin.js',
       cssFileName: 'plugin',
     },
-    // 前后端分离：产物落在前端自己的 dist/（backend 树里不留任何前端产物），
-    // 打包时由 antrun 从这里拷到 backend/plugins-dist/frontend/notes/，/plugin-assets 从那里端出。
+    // 产物分离：产物落在界面侧自己的 dist/（backend 树里不留任何界面资源），
+    // 构建后由交付脚本送到 backend/plugin-assets/notes/，/plugin-assets 从那里端出。
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {

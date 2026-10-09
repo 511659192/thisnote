@@ -1,30 +1,27 @@
 import {
   registerListHeader,
   registerNoteListFilter,
-  registerTopbarSearch,
   unregisterPlugin,
 } from '@thisnode/plugin-api'
-import GlobalSearch from './GlobalSearch.vue'
 import SearchBox from './SearchBox.vue'
 import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './state'
 
 /**
- * 标题搜索插件的前端注册 —— 服务插件的最小参考实现。
+ * 标题搜索插件的界面侧注册 —— 服务插件的最小参考实现。
  *
  * <p>登记两类插槽：
  *
  * <ol>
- *   <li><b>列表页头部</b>：搜索框（输入即过滤）；</li>
+ *   <li><b>列表页头部</b>：搜索框（输入即过滤当前列表）；</li>
  *   <li><b>列表筛选</b>：`hidden` 筛选 —— 不在侧栏渲染行，由搜索框在输入时激活；
- *       load() 拉全量笔记列表（后端 limit 默认 500，本地工具足够）按标题包含匹配，
- *       返回命中的 id，列表随之收窄。</li>
+ *       load() 拉全量笔记列表按标题包含匹配，返回命中的 id，列表随之收窄。</li>
  * </ol>
  *
- * <p>没有后端端点：搜索在客户端对列表做标题包含匹配（本地工具，列表规模有限）。
+ * <p>没有后端端点：匹配在客户端完成（本地工具，列表规模有限）。
+ * 顶栏的跨标题/摘要模糊查询是**另一个插件**（fuzzy-search），两者互不依赖。
  */
 function register(): void {
   registerListHeader({ pluginId: PLUGIN_ID, component: SearchBox })
-  registerTopbarSearch({ pluginId: PLUGIN_ID, component: GlobalSearch })
   registerNoteListFilter({
     pluginId: PLUGIN_ID,
     id: FILTER_ID,

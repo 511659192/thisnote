@@ -5,13 +5,13 @@ import { SHARED_DEP_PREFIX } from '@thisnode/plugin-api/vite'
 import { PLUGIN_DEV_PORTS } from './devPorts'
 
 /**
- * 插件前端的 **qiankun 微应用装载器** —— 主应用侧的装配车间。
+ * 插件界面的 **qiankun 微应用装载器** —— 主应用侧的装配车间。
  *
- * <p>架构：每个插件前端是一个 qiankun 微应用（独立 dev server / 独立产物 / 生命周期），
+ * <p>架构：每个插件界面是一个 qiankun 微应用（独立 dev server / 独立产物 / 生命周期），
  * 主应用按后端 `/api/plugins` 的启用列表逐个 `loadMicroApp`，装进 index.html 里的
  * 隐藏容器。微应用的 `mount()` 里完成六个插槽的注册（卡片工具 / 笔记工具 / 设置面板 /
  * 侧栏入口 / 插件路由 / 列表筛选），`unmount()` 里注销 —— 于是「停用 / 重载插件」
- * 第一次成为前端的真实生命周期事件，不再依赖整页刷新。
+ * 第一次成为界面侧的真实生命周期事件，不再依赖整页刷新。
  *
  * <p><b>共享运行时</b>：沙箱里 fetch 的任何 URL 模块都是私有实例，所以共享的
  * vue / vue-router / @thisnode/plugin-api 不走 URL（那是旧 import map 方案，
@@ -23,7 +23,7 @@ import { PLUGIN_DEV_PORTS } from './devPorts'
  * <ul>
  *   <li><b>开发</b>：插件自己 dev server 的源码入口（端口约定见 {@link PLUGIN_DEV_PORTS}；
  *       dev server 没起时自动回退到后端端出的产物，只是没有插件源码级的调试体验）；</li>
- *   <li><b>生产</b>：后端从磁盘插件前端目录端出的 `/plugin-assets/<id>/...`（plugins-dist/frontend/，文件路径直通）。</li>
+ *   <li><b>生产</b>：后端从磁盘插件界面目录端出的 `/plugin-assets/<id>/...`（plugin-assets/，文件路径直通）。</li>
  * </ul>
  */
 
@@ -98,7 +98,7 @@ function buildHtmlEntry(moduleSrcUrl: string): string {
   return URL.createObjectURL(new Blob([html], { type: 'text/html' }))
 }
 
-/** 生产形态：后端从磁盘插件前端目录端出的产物（相对宿主页同源）。 */
+/** 生产形态：后端从磁盘插件界面目录端出的产物（相对宿主页同源）。 */
 function prodModuleSrcUrl(id: string): string {
   // 路径形态是刻意保留的：plugin.js 内的 `./chunk-*.js` 相对导入需要目录语义，
   // query 形态会让相对解析落到页面根（与附件通配同理，属文件路径直通而非资源路由）。
@@ -181,7 +181,7 @@ async function injectStyles(id: string): Promise<void> {
 
 /**
  * 装载单个插件微应用。mount 链完成（插槽注册完毕、插件路由已可解析）后才 resolve，
- * 深链接（#/review、#/favorites）因此能一次就匹配上。失败不抛出：插件前端的问题
+ * 深链接（#/review、#/favorites）因此能一次就匹配上。失败不抛出：插件界面的问题
  * 不该拖垮核心，控制台如实告警即可。
  */
 export async function loadPluginFrontend(id: string, router: Router): Promise<void> {
@@ -216,7 +216,7 @@ export async function loadPluginFrontend(id: string, router: Router): Promise<vo
     syncPluginRoutes(router)
   } catch (e) {
     microApps.delete(id)
-    console.warn(`[插件] ${id} 的前端装载失败：`, e)
+    console.warn(`[插件] ${id} 的界面装载失败：`, e)
   }
 }
 
@@ -233,11 +233,11 @@ export async function unloadPluginFrontend(id: string, router: Router): Promise<
   try {
     await app.unmount()
   } catch (e) {
-    console.warn(`[插件] ${id} 的前端卸载失败：`, e)
+    console.warn(`[插件] ${id} 的界面卸载失败：`, e)
   }
 }
 
-/** 重载 = 卸载再装载（换 jar 后点「重载」、开发期改插件前端代码后想立刻生效时用）。 */
+/** 重载 = 卸载再装载（换 jar 后点「重载」、开发期改插件界面代码后想立刻生效时用）。 */
 export async function reloadPluginFrontend(id: string, router: Router): Promise<void> {
   await unloadPluginFrontend(id, router)
   await loadPluginFrontend(id, router)
@@ -248,11 +248,11 @@ export async function loadActivePluginFrontends(router: Router): Promise<void> {
   let activeIds: string[]
   try {
     const plugins = await pluginApi.list()
-    // 前后端拆分对齐后，CORE 插件（notes）也有前端微应用 —— 全部启用中的插件都装载。
+    // 产物分离对齐后，CORE 插件（notes）也有界面微应用 —— 全部启用中的插件都装载。
     activeIds = plugins.filter((plugin) => plugin.active).map((plugin) => plugin.id)
   } catch (e) {
     // 后端没起来/列表拿不到：界面照常可用，只是没有插件入口
-    console.warn('[插件] 拿不到插件列表，跳过前端装载：', e)
+    console.warn('[插件] 拿不到插件列表，跳过界面装载：', e)
     return
   }
   await Promise.all(activeIds.map((id) => loadPluginFrontend(id, router)))

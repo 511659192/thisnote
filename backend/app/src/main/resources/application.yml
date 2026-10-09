@@ -13,7 +13,7 @@ spring:
     enabled: true
     # 插件目录：相对应用工作目录（约定从 backend/ 启动，即 backend/plugins-dist/）。
     plugins-root: plugins-dist
-    # 插件前端产物的磁盘根（前后端分离：前端不进 jar，antrun 拷到 plugins-dist/frontend/<id>/）。
+    # 插件界面产物的磁盘根（产物分离：界面侧不进 jar，antrun 拷到 plugins-dist/assets/<id>/）。
     # 官方管理端点（PluginManagerController）：/sbp/list、/sbp/start|stop|reload/{id}、/sbp/reload-all。
     # 界面上的插件管理页走我们自己的 /api/plugins（那边有配置、健康、per-entity 状态与停用闸门），
     # 这一份留给运维与脚本；服务只监听 127.0.0.1，不存在对外暴露。
@@ -25,11 +25,11 @@ spring:
     default-property-inclusion: non_null
   web:
     resources:
-      # 纯 API：后端不端出任何静态资源（宿主 SPA 前后端分离，由 frontend/host 自行 dev/部署）。
+      # 纯 API：后端不端出任何静态资源（宿主界面由界面侧独立提供与部署）。
       # 这行同时是护栏：Boot 默认资源链不注册，SBP 的 PluginResourceHandlerRegistrationCustomizer
       # 就没有挂载点 —— 那个 resolver 的 PluginManager 在主应用里恒为 null，一旦挂上默认链，
       # 任何走链的路径（含 /api 未命中与 /error）统一 500（实测坑，勿改回 true）。
-      # 插件前端产物与这件事无关：它由 PluginAssetController 走 /plugin-assets 从磁盘端出。
+      # 插件界面产物与这件事无关：它由 PluginAssetController 走 /plugin-assets 从磁盘端出。
       add-mappings: false
 
 logging:

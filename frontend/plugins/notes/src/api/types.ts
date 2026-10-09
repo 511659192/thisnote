@@ -96,7 +96,7 @@ export interface NoteMeta {
   deletedAt?: number | null
   /** 标签名。颜色与计数只在独立的 `GET /api/tags` 目录里，列表接口不背。 */
   tags: string[]
-  /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由前端台账解析。 */
+  /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
   /** 本篇的卡片清单（顺序即阅读顺序）。 */
   cards: CardRef[]

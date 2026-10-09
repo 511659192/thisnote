@@ -10,12 +10,12 @@ import org.pf4j.PluginWrapper;
  * 笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / IO / 笔记目录同步）。
  *
  * <p>按 sbp 最佳实践（参考 sbp-demo 的 plugin-app），主体应用是<b>纯平台</b>——只做插件生命周期
- * 管理、共享 DataSource 与前端产物托管，不带业务。业务领域以插件形态交付：本插件在自己的
+ * 管理、共享 DataSource 与界面产物托管，不带业务。业务领域以插件形态交付：本插件在自己的
  * Spring 子容器里运行，控制器由 SBP 挂进主 MVC（外部路径不变，仍是 {@code /api/**}）。
  *
  * <p>与兄弟插件的关系：<b>没有依赖</b>。favorite / memory-curve 各自把状态写进自己的文件
  * （{@code plugin-data.json} 与 {@code plugins/memory-curve/scheduling.meta}），不读笔记数据，
- * 因此本插件缺位时它们照样能独立启动；复习页与收藏列表要展示的卡片内容，由前端用本插件的
+ * 因此本插件缺位时它们照样能独立启动；复习页与收藏列表要展示的卡片内容，由界面侧用本插件的
  * 公开 API（{@code /api/notes}、{@code /api/notes/{id}/page}）现拼。
  *
  * <p><b>核心插件不允许停用</b>（{@link PluginKind#CORE}）：底座的管理面会直接拒绝

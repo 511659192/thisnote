@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ol>
  *   <li>{@code plugin.properties}（PF4J 的 PropertiesPluginDescriptorFinder 读它）；
  *   <li>{@code plugin.class} 指向的那个类（PF4J 用它做生命周期）；</li>
- *   <li>前端产物**不在 jar 里**（前后端分离）：必须已交付到 {@code plugins-dist/frontend/<id>/}；</li>
+ *   <li>界面产物**不在 jar 里**（产物分离）：必须已交付到 {@code plugins-dist/assets/<id>/}；</li>
  *   <li><b>版本单源</b>：描述符里的版本必须等于这个 jar 的构建版本 —— 手写常量会在这里被抓住。</li>
  * </ol>
  *
@@ -56,11 +56,13 @@ class PluginJarContractTest {
     @CsvSource({
             "notes,plugin-notes,notes,true",
             "favorite,plugin-favorite,favorite,true",
-            "memory-curve,plugin-memory-curve,memory-curve,true"
+            "memory-curve,plugin-memory-curve,memory-curve,true",
+            "search,plugin-search,search,true",
+            "fuzzy-search,plugin-fuzzy-search,fuzzy-search,true"
     })
-    void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasFrontend) throws Exception {
-        // 前后端拆分对齐后：notes 也有自己的前端（宿主 UI 的笔记域迁成了 notes 微应用）——
-        // 三个插件都有前端产物，全部走 plugins-dist/frontend/<id>/ 磁盘交付。
+    void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasAssets) throws Exception {
+        // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——
+        // 三个插件都有界面产物，全部走 plugins-dist/assets/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
 
         try (ZipFile zip = new ZipFile(jar.toFile())) {
@@ -93,14 +95,15 @@ class PluginJarContractTest {
                     .as("%s 必须在 jar 里", pluginClass)
                     .isNotNull();
 
-            // 3) 前端产物：前后端分离 —— 产物**不在 jar 里**，而是由 antrun 拷到
-            //    backend/plugins-dist/frontend/<id>/，/plugin-assets 从该磁盘目录端出。
-            if (hasFrontend) {
-                assertThat(zip.getEntry("plugin/" + pluginId + "/frontend/plugin.js"))
-                        .as("前端产物不得再打进插件 jar（前后端分离，由 /plugin-assets 从磁盘端出）")
-                        .isNull();
-                Path delivered = Path.of("..", "plugins-dist", "frontend", pluginId, "plugin.js").toAbsolutePath().normalize();
-                assertThat(delivered).as("前端产物必须已交付到 plugins-dist/frontend/<id>/（antrun 拷贝）")
+            // 3) 界面产物：产物分离 —— 产物**不在 jar 里**，而是由交付流程拷到
+            //    backend/plugins-dist/assets/<id>/，/plugin-assets 从该磁盘目录端出。
+            if (hasAssets) {
+                // jar 里不得有任何 "plugin/<id>/" 前缀的条目：界面资源一律走磁盘交付
+                assertThat(zip.stream().map(ZipEntry::getName).filter((n) -> n.startsWith("plugin/" + pluginId + "/")).count())
+                        .as("界面产物不得再打进插件 jar（产物分离，由 /plugin-assets 从磁盘端出）")
+                        .isZero();
+                Path delivered = Path.of("..", "plugin-assets", pluginId, "plugin.js").toAbsolutePath().normalize();
+                assertThat(delivered).as("界面产物必须已交付到 plugins-dist/assets/<id>/（antrun 拷贝）")
                         .exists();
             }
         }
