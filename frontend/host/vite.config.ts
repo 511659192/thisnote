@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url'
  * 主应用（qiankun 宿主）的构建与开发服务器。
  *
  * <p><b>插件前端不在这份 bundle 里</b>：每个插件前端是一个 qiankun 微应用，有自己的
- * dev server（开发）与自己的产物（生产，`/plugin-assets/<id>/`，随插件 jar 提供）。
+ * dev server（开发）与自己的产物（生产，`/plugin-assets/<id>/`，后端从磁盘目录提供）。
  * 主应用在运行时按启用列表 loadMicroApp 装载它们（见 src/plugins/loader.ts）。
  *
  * <p>共享运行时不再是 import map + /plugin-runtime.js：qiankun 的 ESM 沙箱里
@@ -30,7 +30,7 @@ export default defineConfig({
         target: process.env.THISNODE_BACKEND ?? 'http://127.0.0.1:45917',
         changeOrigin: true,
       },
-      // 插件前端产物由后端从插件 jar 里端出来（开发期 dev server 没起时的兜底）
+      // 插件前端产物由后端从磁盘目录端出来（开发期 dev server 没起时的兜底）
       '/plugin-assets': {
         target: process.env.THISNODE_BACKEND ?? 'http://127.0.0.1:45917',
         changeOrigin: true,
@@ -38,7 +38,9 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../../backend/app/src/main/resources/static', // 产物直落后端资源目录：IDEA 与 Maven 都能端出页面
+    // 前后端分离：产物落在本包 dist/（vite 默认），由前端自行部署；后端 jar 不再内嵌任何 UI。
+    // 开发期 dev server（5173）经代理访问后端（/api、/plugin-assets）。
+    outDir: 'dist',
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

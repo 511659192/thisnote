@@ -24,7 +24,7 @@ import { favoriteApi, FAVORITE_PLUGIN_ID } from './favoriteApi'
 function register(): void {
   registerNoteTool({
     pluginId: FAVORITE_PLUGIN_ID,
-    title: '收藏',
+    title: '收藏1',
     glyph: '☆',
     component: FavoriteTool,
   })
@@ -32,7 +32,7 @@ function register(): void {
   registerNoteListFilter({
     pluginId: FAVORITE_PLUGIN_ID,
     id: 'favorites',
-    label: '收藏',
+    label: '收藏2',
     icon: '★',
     /** 核心据此过滤自己的列表：插件只回答"哪些笔记被收藏了"。 */
     load: async () => (await favoriteApi.notes()).map((note) => note.id),

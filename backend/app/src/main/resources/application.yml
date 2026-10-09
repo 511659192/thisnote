@@ -7,10 +7,13 @@ spring:
   # SBP 会传递引入 Flyway；本应用不连数据库，留着只是防它去动别的库。
   flyway:
     enabled: false
-  # SBP：插件式扩展。插件 jar 放在应用工作目录的 plugins/ 下（交付形态见 README），
-  # 要用"开发模式"（从 target/classes 直接加载插件、免打包）见 application-dev.yml。
+  # SBP：插件式扩展。插件交付目录为 **backend/plugins-dist/**（相对应用工作目录；应用从 backend/ 启动，
+  # 交付形态 = app jar + plugins-dist/，丢一个 jar 进去就能装）。开发模式见 application-dev.yml。
   sbp:
     enabled: true
+    # 插件目录：相对应用工作目录（约定从 backend/ 启动，即 backend/plugins-dist/）。
+    plugins-root: plugins-dist
+    # 插件前端产物的磁盘根（前后端分离：前端不进 jar，antrun 拷到 plugins-dist/frontend/<id>/）。
     # 官方管理端点（PluginManagerController）：/sbp/list、/sbp/start|stop|reload/{id}、/sbp/reload-all。
     # 界面上的插件管理页走我们自己的 /api/plugins（那边有配置、健康、per-entity 状态与停用闸门），
     # 这一份留给运维与脚本；服务只监听 127.0.0.1，不存在对外暴露。
@@ -22,19 +25,12 @@ spring:
     default-property-inclusion: non_null
   web:
     resources:
-      # Boot 默认的 /** 静态资源映射必须关掉，改由 SpaResourceConfig 自己注册：
-      # SBP 的 PluginResourceHandlerRegistrationCustomizer 会往 Boot 的资源链上挂它的
-      # PluginResourceResolver，而那个 resolver 的 `@Autowired @Lazy PluginManager` 拿不到时
-      # 回落到 ApplicationContextProvider 按**调用方类加载器**查上下文 —— 主应用的上下文从未
-      # 注册进去（只有各插件的注册，见 SBP 的 SpringBootPlugin.start()），于是 PluginManager
-      # 为 null，任何走该链的路径（含 /api 未命中与 /error）统一 500。
-      # 插件前端产物与这件事无关：它由 PluginAssetController 走 /plugin-assets 端出。
+      # 纯 API：后端不端出任何静态资源（宿主 SPA 前后端分离，由 frontend/host 自行 dev/部署）。
+      # 这行同时是护栏：Boot 默认资源链不注册，SBP 的 PluginResourceHandlerRegistrationCustomizer
+      # 就没有挂载点 —— 那个 resolver 的 PluginManager 在主应用里恒为 null，一旦挂上默认链，
+      # 任何走链的路径（含 /api 未命中与 /error）统一 500（实测坑，勿改回 true）。
+      # 插件前端产物与这件事无关：它由 PluginAssetController 走 /plugin-assets 从磁盘端出。
       add-mappings: false
-
-thisnode:
-  # Set by the Tauri shell: exit when the parent closes our stdin (orphan protection).
-  # Left false so running the jar by hand is unaffected.
-  exit-on-stdin-close: ${THISNODE_EXIT_ON_STDIN_CLOSE:false}
 
 logging:
   level:

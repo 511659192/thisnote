@@ -1,6 +1,6 @@
-# Prepare the plugin development layout: plugins-dev/<id>/
+# Prepare the plugin development layout: backend/plugins-dev/<id>/
 #
-#   plugins-dev/memory-curve/
+#   backend/plugins-dev/memory-curve/
 #     plugin.properties                       <- copy of target/classes/plugin.properties (version filtered)
 #     classes -> backend/plugins/memory-curve/target/classes   (junction / symlink)
 #
@@ -11,21 +11,21 @@
 #   * CLASSES and resources are looked up in `classes/` (PF4J default layout), so pointing that
 #     junction at Maven's target/classes is enough - no classes-directories config needed.
 #
-#   pwsh tools\dev_plugins.ps1            # create (idempotent)
-#   pwsh tools\dev_plugins.ps1 -Remove    # delete
+#   pwsh backend\tools\dev_plugins.ps1            # create (idempotent)
+#   pwsh backend\tools\dev_plugins.ps1 -Remove    # delete
 #
-# Then start in development mode (both profiles: activating dev disables the mysql default):
-#   java -jar backend/app/target/thisnode-backend.jar --spring.profiles.active=dev,mysql
+# Then start in development mode (workdir = backend/, so plugins-dev resolves there):
+#   cd backend; java -jar app/target/thisnode-backend.jar --spring.profiles.active=dev
 #
-# Editing a plugin then needs just:
-#   mvn -pl :plugin-<id> -am compile -Dthisnode.skip-frontend=true     # -am: 父工程构件不在本地仓库
+# Editing a plugin then needs just (Maven 父工程在 backend/，从那里执行):
+#   cd backend; mvn -pl :plugin-<id> -am compile -Dthisnode.skip-frontend=true     # -am: 父工程构件不在本地仓库
 #   curl -X POST http://127.0.0.1:45917/api/plugins/<id>/reload       # or the button in Settings -> Plugins
 
 param([switch]$Remove)
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
-$devRoot = Join-Path $root 'plugins-dev'
+$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # 仓库根（脚本现居 backend/tools/，plugins-dev 由应用工作目录决定在根）
+$devRoot = Join-Path $root 'backend/plugins-dev'
 $plugins = @('notes', 'favorite', 'memory-curve')
 
 # Delete a link itself, never the directory it points at (Remove-Item would recurse into the target).
@@ -52,7 +52,7 @@ foreach ($p in $plugins) {
     $dir = Join-Path $devRoot $p
 
     if (-not (Test-Path $descriptor)) {
-        Write-Warning "$p is not built yet ($descriptor missing); run: mvn -pl :plugin-$p compile"
+        Write-Warning "$p is not built yet ($descriptor missing); run (from backend/): mvn -pl :plugin-$p compile"
         continue
     }
 

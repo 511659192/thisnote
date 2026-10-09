@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ol>
  *   <li>{@code plugin.properties}（PF4J 的 PropertiesPluginDescriptorFinder 读它）；
  *   <li>{@code plugin.class} 指向的那个类（PF4J 用它做生命周期）；</li>
- *   <li>自带前端产物 {@code plugin/<id>/frontend/plugin.js}；</li>
+ *   <li>前端产物**不在 jar 里**（前后端分离）：必须已交付到 {@code plugins-dist/frontend/<id>/}；</li>
  *   <li><b>版本单源</b>：描述符里的版本必须等于这个 jar 的构建版本 —— 手写常量会在这里被抓住。</li>
  * </ol>
  *
@@ -93,11 +93,15 @@ class PluginJarContractTest {
                     .as("%s 必须在 jar 里", pluginClass)
                     .isNotNull();
 
-            // 3) 前端产物：由 /plugin-assets 从同一个 jar 端出（纯后端插件没有）
+            // 3) 前端产物：前后端分离 —— 产物**不在 jar 里**，而是由 antrun 拷到
+            //    backend/plugins-dist/frontend/<id>/，/plugin-assets 从该磁盘目录端出。
             if (hasFrontend) {
                 assertThat(zip.getEntry("plugin/" + pluginId + "/frontend/plugin.js"))
-                        .as("插件前端产物必须在 jar 里（/plugin-assets 从它读取）")
-                        .isNotNull();
+                        .as("前端产物不得再打进插件 jar（前后端分离，由 /plugin-assets 从磁盘端出）")
+                        .isNull();
+                Path delivered = Path.of("..", "plugins-dist", "frontend", pluginId, "plugin.js").toAbsolutePath().normalize();
+                assertThat(delivered).as("前端产物必须已交付到 plugins-dist/frontend/<id>/（antrun 拷贝）")
+                        .exists();
             }
         }
     }

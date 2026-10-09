@@ -15,15 +15,12 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 logs/
 
-# ---------- 前端构建产物（pnpm build / Vite outDir 直落后端资源目录，不入库） ----------
-backend/app/src/main/resources/static/
-backend/plugins/*/src/main/resources/plugin/*/frontend/
+# ---------- 前端构建产物（pnpm build / Vite 产物，不入库） ----------
+backend/plugins/*/frontend-dist/
 
 # ---------- 外置插件交付物（package 阶段从各模块 target 拷贝而来，不入库） ----------
-plugins/*.jar
-plugins/*.zip
-plugins/disabled.txt
-plugins-dev/
+backend/plugins-dist/
+backend/plugins-dev/
 
 # ---------- 历史：outDir 曾少写 backend/ 时误落的产物目录（防再生成） ----------
 frontend/plugin-*/
@@ -44,3 +41,4 @@ tools/__pycache__/
 .idea/
 *.log
 docs/
+graphify-out/

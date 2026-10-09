@@ -96,7 +96,7 @@ check('停用后：卡片徽标消失', off.chip === 0, `${off.chip} 个`)
 
 // 停用后连前端产物也不该再拿得到：与 SBP 自己的资源解析一致（PluginResourceResolver 只扫 STARTED）。
 // 否则"停用"在 HTTP 层面等于没停 —— 前端虽然不请求了，产物仍然拿得到。
-const assetWhileOff = await fetch(`${API}/plugin-assets/${PLUGIN}/frontend/plugin.js`)
+const assetWhileOff = await fetch(`${API}/plugin-assets/${PLUGIN}/plugin.js`)
 check('停用后：前端产物也拿不到（404）', assetWhileOff.status === 404, `HTTP ${assetWhileOff.status}`)
 
 const stillQueue = await reviewText()
@@ -125,7 +125,7 @@ await settleAvailability()
 const back = await snapshot(false)
 check('重新启用：侧栏入口回来', back.nav === 1, `${back.nav} 个`)
 check('重新启用：卡片徽标回来', back.chip === 1, `${back.chip} 个`)
-const assetWhileOn = await fetch(`${API}/plugin-assets/${PLUGIN}/frontend/plugin.js`)
+const assetWhileOn = await fetch(`${API}/plugin-assets/${PLUGIN}/plugin.js`)
 check('重新启用：前端产物再次可取（200）', assetWhileOn.status === 200, `HTTP ${assetWhileOn.status}`)
 const backQueue = await reviewText()
 check('重新启用：复习页回到正常队列', backQueue.includes('待复习') || backQueue.includes('没有到期的卡片'),

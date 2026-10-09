@@ -8,7 +8,7 @@
     <groupId>com.thisnode</groupId>
     <artifactId>thisnode-parent</artifactId>
     <version>0.1.0</version>
-    <relativePath>../../pom.xml</relativePath>
+    <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>thisnode-backend</artifactId>
@@ -68,70 +68,12 @@
       </plugin>
 
       <!--
-        交付形态是两份东西：应用 jar + plugins/ 目录里的插件 jar。
-        插件 jar 由各自模块产出，这里在 package 阶段把它们拷到仓库根的 plugins/，
-        所以 `mvn package` 之后直接 `java -jar backend/target/thisnode-backend.jar` 就能用，
+        交付形态是两份东西：应用 jar + backend/plugins-dist/ 目录里的插件 jar。
+        插件 jar 由各自模块产出，这里在 package 阶段把它们拷到 plugins-dist/，
+        所以 `mvn package` 之后从 backend/ 直接 `java -jar app/target/thisnode-backend.jar` 就能用，
         不需要手工 cp。destFileName 固定成与 plugin.properties 里 plugin.id 一致的名字。
-        单独构建本模块时（-pl backend）插件不在反应堆里，用 -am 或先跑整仓构建。
+        单独构建本模块时（-pl app）插件不在反应堆里，用 -am 或先跑整仓构建。
       -->
     </plugins>
   </build>
-
-  <profiles>
-    <!--
-      前端构建（主应用）：前端代码集中仓库根的 frontend/host，这里用 exec 接线
-      pnpm install + build（产物由 Vite 直接落到 backend/src/main/resources/static）。
-      激活条件：未设置 thisnode.skip-frontend 且前端源码存在（干净检出时总在）。
-      只编后端：mvn package -Dthisnode.skip-frontend=true
-    -->
-    <profile>
-      <id>frontend</id>
-      <activation>
-        <property>
-          <name>!thisnode.skip-frontend</name>
-        </property>
-        <file>
-          <exists>../../frontend/host/package.json</exists>
-        </file>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>pnpm-install</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>pnpm</executable>
-                  <workingDirectory>${project.basedir}/../../frontend/host</workingDirectory>
-                  <arguments>
-                    <argument>install</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-              <execution>
-                <id>pnpm-build</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>pnpm</executable>
-                  <workingDirectory>${project.basedir}/../../frontend/host</workingDirectory>
-                  <arguments>
-                    <argument>build</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

@@ -8,7 +8,7 @@
     <groupId>com.thisnode</groupId>
     <artifactId>thisnode-parent</artifactId>
     <version>0.1.0</version>
-    <relativePath>../../../pom.xml</relativePath>
+    <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>plugin-favorite</artifactId>
@@ -59,8 +59,10 @@
 
   <build>
     <plugins>
-      <!-- 交付:把自己的 jar 拷到仓库根的 plugins/(以 plugin.id 命名)。在插件模块做而非主体
-           dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件(踩过:plugins/ 里是 Oct 2 的旧 jar)。 -->
+      <!-- 交付:jar 拷到 backend/plugins-dist/(以 plugin.id 命名)；前端产物（前后端分离，不在 jar 里）
+           从 frontend-dist/ 拷到 backend/plugins-dist/frontend/<id>/，由 /plugin-assets 从磁盘端出。
+           在插件模块做而非主体 dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件
+           (踩过:plugins-dist/ 里是 Oct 2 的旧 jar)。 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
@@ -75,7 +77,10 @@
             <configuration>
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                      tofile="${project.basedir}/../../../plugins/${plugin.id}.jar" overwrite="true"/>
+                      tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
+                <copy todir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" overwrite="true">
+                  <fileset dir="${project.basedir}/frontend-dist" erroronmissingdir="false"/>
+                </copy>
               </target>
             </configuration>
           </execution>
@@ -86,8 +91,8 @@
 
   <profiles>
     <!--
-      前端构建：插件前端源码在仓库根的 frontend/plugins/favorite，这里接线 pnpm install + build
-      （产物由 Vite 直接落到本模块 src/main/resources/plugin/favorite/frontend，随 jar 发布）。
+      前端构建：插件前端源码在仓库的 frontend/plugins/favorite，这里接线 pnpm install + build
+      （产物由 Vite 落到本模块 frontend-dist/，前后端分离不进 jar；antrun 再拷到 plugins-dist/frontend/）。
       激活条件与后端一致：未设置 thisnode.skip-frontend 且前端源码存在。
     -->
     <profile>

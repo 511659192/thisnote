@@ -8,7 +8,7 @@
     <groupId>com.thisnode</groupId>
     <artifactId>thisnode-parent</artifactId>
     <version>0.1.0</version>
-    <relativePath>../../../pom.xml</relativePath>
+    <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>plugin-notes</artifactId>
@@ -75,8 +75,8 @@
     <plugins>
       <!-- 插件为普通 jar（非 fat jar）：pf4j 直接装载，库由主体提供 —— 与其它插件一致，无需额外配置 -->
 
-      <!-- 交付:把自己的 jar 拷到仓库根的 plugins/(以 plugin.id 命名)。在插件模块做而非主体
-           dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件(踩过:plugins/ 里是 Oct 2 的旧 jar)。 -->
+      <!-- 交付:把自己的 jar 拷到 backend/plugins-dist/(以 plugin.id 命名)。在插件模块做而非主体
+           dependency:copy —— 后者从本地仓库解析,可能拿到陈旧构件(踩过:plugins-dist/ 里是 Oct 2 的旧 jar)。 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
@@ -91,7 +91,7 @@
             <configuration>
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                      tofile="${project.basedir}/../../../plugins/${plugin.id}.jar" overwrite="true"/>
+                      tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
               </target>
             </configuration>
           </execution>

@@ -22,8 +22,8 @@ import { PLUGIN_DEV_PORTS } from './devPorts'
  * 里面只有一个 module script，指向：
  * <ul>
  *   <li><b>开发</b>：插件自己 dev server 的源码入口（端口约定见 {@link PLUGIN_DEV_PORTS}；
- *       dev server 没起时自动回退到 jar 里的产物，只是没有插件源码级的调试体验）；</li>
- *   <li><b>生产</b>：后端从插件 jar 端出的 `/plugin-assets/<id>/frontend/plugin.js`。</li>
+ *       dev server 没起时自动回退到后端端出的产物，只是没有插件源码级的调试体验）；</li>
+ *   <li><b>生产</b>：后端从磁盘插件前端目录端出的 `/plugin-assets/<id>/plugin.js`（plugins-dist/frontend/）。</li>
  * </ul>
  */
 
@@ -94,9 +94,9 @@ function buildHtmlEntry(moduleSrcUrl: string): string {
   return URL.createObjectURL(new Blob([html], { type: 'text/html' }))
 }
 
-/** 生产形态：后端从插件 jar 里端出的产物（相对宿主页同源）。 */
+/** 生产形态：后端从磁盘插件前端目录端出的产物（相对宿主页同源）。 */
 function prodModuleSrcUrl(id: string): string {
-  return new URL(`/plugin-assets/${id}/frontend/plugin.js`, window.location.origin).href
+  return new URL(`/plugin-assets/${id}/plugin.js`, window.location.origin).href
 }
 
 /** 开发形态：插件自己 dev server 的源码入口；没起就回退 null。 */
@@ -108,7 +108,7 @@ async function devModuleSrcUrl(id: string): Promise<string | null> {
     const res = await fetch(src, { method: 'HEAD' })
     if (res.ok) return src
   } catch {
-    // dev server 没起，走 jar 兜底
+    // dev server 没起，走后端端出的产物兜底
   }
   return null
 }
@@ -117,7 +117,7 @@ async function moduleSrcUrlFor(id: string): Promise<string> {
   if (import.meta.env.DEV) {
     const dev = await devModuleSrcUrl(id)
     if (dev) return dev
-    console.info(`[插件] ${id} 的 dev server（端口 ${PLUGIN_DEV_PORTS[id] ?? '未约定'}）不可达，回退到 jar 里的产物`)
+    console.info(`[插件] ${id} 的 dev server（端口 ${PLUGIN_DEV_PORTS[id] ?? '未约定'}）不可达，回退到后端端出的产物`)
   }
   return prodModuleSrcUrl(id)
 }
@@ -158,7 +158,7 @@ function provisionNotebook(root: HTMLElement, id: string): HTMLElement {
  * 开发不走这里 —— 样式由插件 dev server 以 JS 注入，跟宿主的 HMR 体系一致。
  */
 async function injectStyles(id: string): Promise<void> {
-  const href = `/plugin-assets/${id}/frontend/plugin.css`
+  const href = `/plugin-assets/${id}/plugin.css`
   try {
     const res = await fetch(href, { method: 'HEAD' })
     if (!res.ok) return

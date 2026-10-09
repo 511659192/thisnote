@@ -1,8 +1,0 @@
-packages:
-  - 'frontend/host'
-  - 'frontend/plugin-api'
-  - 'frontend/plugins/favorite'
-  - 'frontend/plugins/memory-curve'
-
-allowBuilds:
-  esbuild: true
