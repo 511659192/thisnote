@@ -97,41 +97,6 @@ public class LinkRepository {
         return graph().inbound().getOrDefault(noteId, List.of());
     }
 
-    /** All links (with source content) used to build the backlink panel. */
-    public List<Dtos.BacklinkDto> backlinks(String noteId) {
-        List<LinkRow> rows = new ArrayList<>(inbound(noteId));
-        rows.sort((a, b) -> Long.compare(b.createdAt(), a.createdAt()));
-        List<Dtos.BacklinkDto> out = new ArrayList<>();
-        for (LinkRow row : rows) {
-            NoteMeta from = noteRepository.note(row.fromNodeId());
-            if (from == null || from.deleted()) {
-                continue;
-            }
-            String content = noteRepository.noteMarkdown(from.id());
-            out.add(new Dtos.BacklinkDto(from.id(), from.title(), row.label(), null,
-                    contextFor(content, from.id(), row.label()), from.updatedAt()));
-        }
-        return out;
-    }
-
-    /**
-     * The markdown line that produced the link, for the "被以下笔记引用" panel. Falls back to the
-     * opening of the linking note when the anchor label is unknown.
-     */
-    private String contextFor(String content, String fromId, String label) {
-        if (content == null) {
-            return "";
-        }
-        String needle = label != null && !label.isBlank() ? "[[" + label : "[[";
-        for (String line : content.split("\\r?\\n")) {
-            if (line.contains(needle) || (label != null && line.contains(label))) {
-                String trimmed = line.trim();
-                return trimmed.length() > 200 ? trimmed.substring(0, 200) + "…" : trimmed;
-            }
-        }
-        return Markdown.plainPreview(content, 120);
-    }
-
     public int countOutbound(String noteId) {
         return outbound(noteId).size();
     }

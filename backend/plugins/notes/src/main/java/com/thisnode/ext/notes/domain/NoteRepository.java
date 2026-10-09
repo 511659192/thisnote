@@ -4,6 +4,7 @@ import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.store.CardRef;
 import com.thisnode.ext.notes.store.CardFile;
+import com.thisnode.ext.notes.store.InboundRef;
 import com.thisnode.ext.notes.store.LinkRef;
 import com.thisnode.ext.notes.store.MetaJson;
 import com.thisnode.ext.notes.store.NoteFilePaths;
@@ -26,9 +27,11 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -53,117 +56,13 @@ public class NoteRepository {
     }
 
     /**
-     * 元数据 → Note 的**轻量视图**：只带 meta 的基本字段，不带正文。
-     *
-     * <p>列表/计数路径绝不能读卡片 —— 那会让"打开列表"退化成"读全库卡片"。需要真正文的调用方走
-     * {@link #findById(String)}。
+     * 建一篇笔记：生成 id 与时间戳，写 v2 meta。正文由调用方编排成首卡（一篇笔记至少一张卡）。
      */
-    private Note toNode(NoteMeta meta) {
-        Note n = new Note();
-        n.id = meta.id();
-        n.title = meta.title();
-        n.type = meta.type();
-        n.source = meta.source();
-        n.status = meta.status();
-        n.deleted = meta.deleted();
-        n.deletedAt = meta.deletedAt();
-        n.dailyDate = meta.dailyDate();
-        n.createdAt = meta.createdAt();
-        n.updatedAt = meta.updatedAt();
-        return n;
-    }
-
-    /** 带正文的视图（单篇读取用）：会按需读这篇笔记的卡片。 */
-    private Note toNodeWithContent(NoteMeta meta) {
-        Note n = toNode(meta);
-        n.contentMd = noteMarkdown(meta.id());
-        return n;
-    }
-
-    /** 标题兜底：没写标题就用正文首个标题，再没有才叫"无标题笔记"（旧 prepare() 的规则）。 */
-    private static String titleOf(Note n) {
-        if (n.title != null && !n.title.isBlank()) {
-            return n.title;
-        }
-        String fromHeading = Markdown.firstHeading(n.contentMd);
-        return fromHeading != null ? fromHeading : "无标题笔记";
-    }
-
-    public Note findById(String id) {
-        NoteMeta meta = note(id);
-        return meta == null ? null : toNodeWithContent(meta);
-    }
-
-    public List<Note> findByIds(List<String> ids) {
-        List<Note> out = new ArrayList<>();
-        if (ids == null) {
-            return out;
-        }
-        for (String id : ids) {
-            Note n = findById(id);
-            if (n != null) {
-                out.add(n);
-            }
-        }
-        return out;
-    }
-
-    /** Case-insensitive title lookup used by {@code [[link]]} resolution. */
-    public List<Note> findByExactTitle(String title) {
-        List<Note> out = new ArrayList<>();
-        String key = Markdown.normalizeTitle(title);
-        if (key.isEmpty()) {
-            return out;
-        }
-        for (NoteMeta meta : scanNotes()) {
-            if (!meta.deleted() && key.equals(Markdown.normalizeTitle(meta.title()))) {
-                out.add(toNode(meta));
-                if (out.size() >= 2) {
-                    break;
-                }
-            }
-        }
-        return out;
-    }
-
-    /**
-     * 建一篇笔记。
-     *
-     * <p>初始正文必须在这里就落成一张卡：文件模型下笔记没有正文存储，只有卡片有内容，少这一步就
-     * 等于把调用方给的正文丢掉（导入、每日笔记、从悬空链接建笔记都会走这里）。建卡由组合层完成。
-     */
-    public String insert(Note n) {
-        if (n.id == null) {
-            n.id = Ids.newId();
-        }
+    public String insert(String title, String type, String dailyDate, String source, String status) {
+        String id = Ids.newId();
         long now = System.currentTimeMillis();
-        n.createdAt = now;
-        n.updatedAt = now;
-        writeNoteMeta(NoteMeta.fresh(n.id, titleOf(n), n.type, n.dailyDate, n.source,
-                n.status, null, now));
-        return n.id;
-    }
-
-    /**
-     * 更新元数据，并在正文与当前拼接结果不一致时整篇替换正文。
-     *
-     * <p>正常编辑路径下两者必然相等（正文就是从卡片拼出来的，见
-     * {@code CardService.syncNoteFromBlocks}），所以这里通常什么都不做；只有导入 / 脚本
-     * 直接改正文时才会走到替换。
-     */
-    public void update(Note n) {
-        NoteMeta current = note(n.id);
-        if (current == null) {
-            return;
-        }
-        long now = System.currentTimeMillis();
-        writeNoteMeta(current.withTitle(titleOf(n))
-                .withType(n.type)
-                .withDailyDate(n.dailyDate)
-                .withSourceStatus(n.source, n.status)
-                .withDeleted(n.deleted)
-                .touched(now));
-        n.updatedAt = now;
+        writeNoteMeta(NoteMeta.fresh(id, title, type, dailyDate, source, status, null, now));
+        return id;
     }
 
     public void touch(String id) {
@@ -180,22 +79,8 @@ public class NoteRepository {
         if (note == null) {
             return;
         }
-        // 释放它对别人的入链，再删卡片文件与 meta。
-        Map<String, Integer> delta = new LinkedHashMap<>();
-        for (LinkRef link : note.links()) {
-            if (link.to() != null) {
-                delta.merge(link.to(), -1, Integer::sum);
-            }
-        }
-        delta.forEach((targetId, d) -> {
-            if (d == 0) {
-                return;
-            }
-            NoteMeta target = note(targetId);
-            if (target != null) {
-                writeNoteMeta(target.withInboundCount(target.inboundCount() + d));
-            }
-        });
+        // 把它对各对端入链缓存的条目摘掉，再删卡片文件与 meta。
+        syncInboundEntries(note, List.of(), null);
         for (CardRef ref : note.cards()) {
             deleteCardFiles(cardPath(ref));
         }
@@ -219,21 +104,13 @@ public class NoteRepository {
         return scanNotes().stream().filter(meta -> !meta.deleted()).count();
     }
 
-    public List<Note> findAllActive() {
-        List<Note> out = new ArrayList<>();
+    /** 未进回收站的全部笔记 meta（只读 meta 文件，不碰卡片）。 */
+    public List<NoteMeta> findAllActive() {
+        List<NoteMeta> out = new ArrayList<>();
         for (NoteMeta meta : scanNotes()) {
             if (!meta.deleted()) {
-                out.add(toNode(meta));
+                out.add(meta);
             }
-        }
-        return out;
-    }
-
-    /** 全部笔记，含回收站里的那些（{@link #findAllActive()} 会排除它们）。 */
-    public List<Note> findAll() {
-        List<Note> out = new ArrayList<>();
-        for (NoteMeta meta : scanNotes()) {
-            out.add(toNode(meta));
         }
         return out;
     }
@@ -641,8 +518,8 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     }
 
     /**
-     * 刷新一篇笔记 meta 里的列表页缓存：摘要 + 出链清单/计数 + 未解析数，并把入链数的变化按
-     * 「旧清单 → 新清单」的差集落到对端。
+     * 刷新一篇笔记 meta 里的列表页缓存：摘要 + 出链清单/计数 + 未解析数，并把「本篇引用了谁」
+     * 差集同步到各对端 meta 的入链缓存（详情页的引用面板读的就是那份）。
      *
      * <p>标题解析表一次现建、整批复用（不是缓存：这个方法返回即丢）。
      */
@@ -662,36 +539,64 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
             }
             links.add(LinkRef.of(link.target(), link.label(), to));
         }
-        applyInboundDelta(meta.links(), links);
+        syncInboundEntries(meta, links, markdown);
         NoteMeta next = meta.withCachedView(Markdown.plainPreview(markdown, 160), links,
-                links.size(), meta.inboundCount(), unresolved);
+                links.size(), unresolved);
         if (!next.equals(meta)) {
             writeNoteMeta(next);
         }
     }
 
-    /** 按「旧出链 → 新出链」的差集，给对端笔记的入链数 ±1。 */
-    public void applyInboundDelta(List<LinkRef> oldLinks, List<LinkRef> newLinks) {
-        Map<String, Integer> delta = new LinkedHashMap<>();
-        for (LinkRef link : oldLinks) {
+    /**
+     * 把「source 引用了谁」落到各对端 meta 的入链缓存：受影响的每个对端，先摘掉 source 的旧条目，
+     * 再按新出链逐条补上（条目数即入链数，{@code withInbound} 负责两者一致）。
+     */
+    private void syncInboundEntries(NoteMeta source, List<LinkRef> newLinks, String sourceMarkdown) {
+        Set<String> affected = new LinkedHashSet<>();
+        for (LinkRef link : source.links()) {
             if (link.to() != null) {
-                delta.merge(link.to(), -1, Integer::sum);
+                affected.add(link.to());
             }
         }
         for (LinkRef link : newLinks) {
             if (link.to() != null) {
-                delta.merge(link.to(), 1, Integer::sum);
+                affected.add(link.to());
             }
         }
-        delta.forEach((targetId, d) -> {
-            if (d == 0) {
-                return;
-            }
+        for (String targetId : affected) {
             NoteMeta target = note(targetId);
-            if (target != null) {
-                writeNoteMeta(target.withInboundCount(target.inboundCount() + d));
+            if (target == null) {
+                continue;
             }
-        });
+            List<InboundRef> entries = new ArrayList<>();
+            for (InboundRef entry : target.inbound()) {
+                if (!source.id().equals(entry.fromId())) {
+                    entries.add(entry);
+                }
+            }
+            for (LinkRef link : newLinks) {
+                if (targetId.equals(link.to())) {
+                    entries.add(new InboundRef(source.id(), link.label(),
+                            contextFor(sourceMarkdown, link.label()), source.updatedAt()));
+                }
+            }
+            writeNoteMeta(target.withInbound(entries));
+        }
+    }
+
+    /** 引用所在的那行 markdown，截到 200 字符；找不到就退回正文开头的纯文本预览。 */
+    private static String contextFor(String content, String label) {
+        if (content == null) {
+            return "";
+        }
+        String needle = label != null && !label.isBlank() ? "[[" + label : "[[";
+        for (String line : content.split("\\r?\\n")) {
+            if (line.contains(needle) || (label != null && line.contains(label))) {
+                String trimmed = line.trim();
+                return trimmed.length() > 200 ? trimmed.substring(0, 200) + "…" : trimmed;
+            }
+        }
+        return Markdown.plainPreview(content, 120);
     }
 
     private static CardRef refOf(NoteMeta note, String cardId) {
@@ -742,19 +647,6 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     }
 
     /** 删一张卡片：先摘出笔记清单，再删文件，最后刷新这篇笔记的列表页缓存。 */
-
-    /** 硬删除一篇笔记：它的卡片文件与 meta 一起走，并释放它对别人的入链。 */
-    public void removeNote(String noteId) {
-        NoteMeta note = note(noteId);
-        if (note == null) {
-            return;
-        }
-        applyInboundDelta(note.links(), List.of());
-        for (CardRef ref : note.cards()) {
-            deleteCardFiles(cardPath(ref));
-        }
-        deleteNoteMeta(noteId);
-    }
 
     /**
      * 整篇替换正文：单卡笔记就是替换那张卡；多卡笔记把全文写进第一张卡、**清空其余卡片的内容**。
@@ -832,22 +724,28 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return done;
     }
 
-    /** 按各篇 meta 里缓存的出链**全量校准**入链数（只读 meta，不碰正文）。 */
+    /** 按各篇 meta 里缓存的出链**全量重建**入链缓存（读引用者正文算 context；修复/升级用）。 */
     public int recalibrateInbound() {
-        Map<String, Integer> counts = new LinkedHashMap<>();
         List<NoteMeta> all = scanNotes();
+        Map<String, List<InboundRef>> entries = new LinkedHashMap<>();
         for (NoteMeta note : all) {
+            if (note.links().isEmpty()) {
+                continue;
+            }
+            String markdown = noteMarkdown(note.id());
             for (LinkRef link : note.links()) {
                 if (link.to() != null) {
-                    counts.merge(link.to(), 1, Integer::sum);
+                    entries.computeIfAbsent(link.to(), k -> new ArrayList<>())
+                            .add(new InboundRef(note.id(), link.label(),
+                                    contextFor(markdown, link.label()), note.updatedAt()));
                 }
             }
         }
         int fixed = 0;
         for (NoteMeta note : all) {
-            int want = counts.getOrDefault(note.id(), 0);
-            if (note.inboundCount() != want) {
-                writeNoteMeta(note.withInboundCount(want));
+            List<InboundRef> want = entries.getOrDefault(note.id(), List.of());
+            if (!note.inbound().equals(want)) {
+                writeNoteMeta(note.withInbound(want));
                 fixed++;
             }
         }

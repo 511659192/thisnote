@@ -294,6 +294,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         :current-id="nodes.currentId"
         @open="openNode"
         @context="onNodeContext"
+        @remove="(id: string) => nodes.purge(id)"
       />
 
       <template v-if="nodes.current">

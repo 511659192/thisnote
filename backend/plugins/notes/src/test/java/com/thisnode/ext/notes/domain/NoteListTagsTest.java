@@ -48,19 +48,14 @@ class NoteListTagsTest {
     }
 
     private String newNote(String title, List<String> tags) {
-        Note n = new Note();
-        n.title = title;
-        n.contentMd = "";
-        n.type = "note";
-        String id = noteService.create(new Dtos.CreateNodeRequest(title, "", "note", null, tags, null, null, null));
-        return id;
+        return noteService.create(new Dtos.CreateNodeRequest(title, "", "note", null, tags, null, null, null));
     }
 
     @Test
     @DisplayName("台账坏了也不影响列表：标签名只从笔记 meta 读")
     void listReadsTagsFromMetaOnly() throws IOException {
         newNote("甲", List.of("设计", "方法论"));
-        Path metaDir = root.resolve(".notes");
+        Path metaDir = root.resolve("meta");
         Files.createDirectories(metaDir);
         // 故意写坏台账（不是合法 JSON，也不是台账结构）
         Files.writeString(metaDir.resolve("tags.json"), "这不是 JSON {{{", StandardCharsets.UTF_8);

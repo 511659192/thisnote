@@ -13,10 +13,10 @@ import java.util.List;
  * 翻转为「笔记记卡片」。于是加载只需要读每个笔记的 meta（O(笔记数)），卡片正文按需读 ——
  * 上万张卡片时启动/重扫不再是"读一万个文件"。
  *
- * <p><b>列表页缓存</b>：{@code summary}、{@code links}（出链清单）、{@code outboundCount}、
- * {@code inboundCount}、{@code unresolvedCount} 都是写入时算好的派生缓存 —— 列表页因此一个数字
- * 都不用读正文。其中 {@code inboundCount} 是跨笔记的：对端写入时按「旧清单 vs 新清单」的差集
- * 在这里做 ±1。它们都是可重建的缓存，不是第二份权威：丢了只影响列表显示，不影响任何数据。
+ * <p><b>列表页缓存</b>：{@code summary}、{@code links}（出链清单）、{@code inbound}（入链清单，
+ * 对端写入时落过来）、{@code outboundCount}、{@code inboundCount}（恒等于 {@code inbound.size()}）、
+ * {@code unresolvedCount} 都是写入时算好的派生缓存 —— 列表与详情因此一个数字都不用现算。
+ * 它们都是可重建的缓存，不是第二份权威：丢了只影响列表显示，不影响任何数据。
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record NoteMeta(
@@ -38,9 +38,11 @@ public record NoteMeta(
         String summary,
         /** 出链清单（写时算好）：目标原文 + 显示文字 + 解析到的笔记 id。 */
         List<LinkRef> links,
+        /** 入链清单（对端写入时落过来）：谁引用我，详情页的引用面板直接用。 */
+        List<InboundRef> inbound,
         /** 出链数量（写入时算好，避免列表页为它读正文）。 */
         int outboundCount,
-        /** 入链数量（别人引用我）：由对端写入时维护，列表页直接用。 */
+        /** 入链数量（别人引用我）：恒等于 {@code inbound.size()}，由 withInbound 维护。 */
         int inboundCount,
         /** 未解析的 {@code [[链接]]} 数量。 */
         int unresolvedCount,
@@ -57,35 +59,36 @@ public record NoteMeta(
         cards = cards == null ? List.of() : List.copyOf(cards);
         summary = summary == null ? "" : summary;
         links = links == null ? List.of() : List.copyOf(links);
+        inbound = inbound == null ? List.of() : List.copyOf(inbound);
     }
 
     public static NoteMeta fresh(String id, String title, String type, String dailyDate,
                                  String source, String status, String notebookId, long now) {
         return new NoteMeta(SCHEMA, id, title, type, dailyDate, source, status, false, null,
-                List.of(), notebookId, List.of(), "", List.of(), 0, 0, 0, now, now);
+                List.of(), notebookId, List.of(), "", List.of(), List.of(), 0, 0, 0, now, now);
     }
 
     public NoteMeta touched(long now) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
-                deletedAt, tags, notebookId, cards, summary, links, outboundCount,
+                deletedAt, tags, notebookId, cards, summary, links, inbound, outboundCount,
                 inboundCount, unresolvedCount, createdAt, now);
     }
 
     public NoteMeta withTitle(String next) {
         return new NoteMeta(v, id, next == null ? "" : next, type, dailyDate, source, status,
-                deleted, deletedAt, tags, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, notebookId, cards, summary, links, inbound,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withType(String next) {
         return new NoteMeta(v, id, title, next, dailyDate, source, status,
-                deleted, deletedAt, tags, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, notebookId, cards, summary, links, inbound,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withDailyDate(String next) {
         return new NoteMeta(v, id, title, type, next, source, status,
-                deleted, deletedAt, tags, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, notebookId, cards, summary, links, inbound,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
@@ -93,7 +96,7 @@ public record NoteMeta(
     public NoteMeta withDeleted(boolean next) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, next,
                 next ? (deletedAt == null ? updatedAt : deletedAt) : null,
-                tags, notebookId, cards, summary, links, outboundCount, inboundCount,
+                tags, notebookId, cards, summary, links, inbound, outboundCount, inboundCount,
                 unresolvedCount, createdAt, updatedAt);
     }
 
@@ -101,53 +104,55 @@ public record NoteMeta(
         return new NoteMeta(v, id, title, type, dailyDate,
                 nsource == null ? source : nsource,
                 nstatus == null ? status : nstatus,
-                deleted, deletedAt, tags, notebookId, cards, summary, links,
+                deleted, deletedAt, tags, notebookId, cards, summary, links, inbound,
                 outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     /** 单归属：笔记必须属于一个分组，所以这里是赋值而不是增删。 */
     public NoteMeta withNotebook(String notebookId) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
-                deletedAt, tags, notebookId, cards, summary, links, outboundCount,
+                deletedAt, tags, notebookId, cards, summary, links, inbound, outboundCount,
                 inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
     public NoteMeta withTags(List<String> next) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, next == null ? List.of() : List.copyOf(next), notebookId,
-                cards, summary, links, outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
+                cards, summary, links, inbound, outboundCount, inboundCount,
+                unresolvedCount, createdAt, updatedAt);
     }
 
     /** 替换卡片清单（顺序即阅读顺序）。 */
     public NoteMeta withCards(List<CardRef> next) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, notebookId,
-                next == null ? List.of() : List.copyOf(next), summary, links, outboundCount,
-                inboundCount, unresolvedCount, createdAt, updatedAt);
+                next == null ? List.of() : List.copyOf(next), summary, links, inbound,
+                outboundCount, inboundCount, unresolvedCount, createdAt, updatedAt);
     }
 
-    /** 更新列表页缓存（摘要 + 出链清单/计数 + 入链数 + 未解析数）。 */
+    /** 更新列表页缓存（摘要 + 出链清单/计数 + 未解析数）。入链不在其列：只有对端能写它。 */
     public NoteMeta withCachedView(String nextSummary, List<LinkRef> nextLinks, int nextOutbound,
-                                   int nextInbound, int nextUnresolved) {
+                                   int nextUnresolved) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, notebookId, cards,
                 nextSummary == null ? "" : nextSummary,
                 nextLinks == null ? List.of() : List.copyOf(nextLinks),
-                nextOutbound, nextInbound, nextUnresolved, createdAt, updatedAt);
+                inbound, nextOutbound, inboundCount, nextUnresolved, createdAt, updatedAt);
     }
 
-    /** 只改入链数（对端写入时用它做 ±1）。 */
-    public NoteMeta withInboundCount(int next) {
+    /** 替换入链清单；入链数跟着变成清单长度（两者永远是同一个事实）。 */
+    public NoteMeta withInbound(List<InboundRef> next) {
+        List<InboundRef> list = next == null ? List.of() : List.copyOf(next);
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
-                deletedAt, tags, notebookId, cards, summary, links, outboundCount,
-                Math.max(0, next), unresolvedCount, createdAt, updatedAt);
+                deletedAt, tags, notebookId, cards, summary, links, list, outboundCount,
+                list.size(), unresolvedCount, createdAt, updatedAt);
     }
 
     /** 替换出链清单（"先写链接、后建笔记"时把 {@code to} 补上）。 */
     public NoteMeta withLinks(List<LinkRef> next) {
         return new NoteMeta(v, id, title, type, dailyDate, source, status, deleted,
                 deletedAt, tags, notebookId, cards, summary,
-                next == null ? List.of() : List.copyOf(next), outboundCount, inboundCount,
+                next == null ? List.of() : List.copyOf(next), inbound, outboundCount, inboundCount,
                 unresolvedCount, createdAt, updatedAt);
     }
 

@@ -33,8 +33,8 @@ public class NotebookController {
 
     @PostMapping("/update")
     public Dtos.NotebookDto update(@RequestParam String id, @RequestBody Dtos.NotebookRequest req) {
-        notebookRepository.update(id, req.title(), req.parentId(), req.icon(), req.sortOrder());
-        return notebookRepository.find(id);
+        return notebookRepository.update(id, req.title(), req.parentId(), req.icon(),
+                req.sortOrder());
     }
 
     @PostMapping("/delete")

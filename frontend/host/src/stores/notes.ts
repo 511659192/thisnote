@@ -266,8 +266,25 @@ export const useNoteStore = defineStore('notes', () => {
     return created
   }
 
+  /**
+   * update 是全量替换（parentId=null 就是移到顶层）：四个字段都要从当前台账值出发带上，
+   * 缺一个就等于显式清掉那个字段。
+   */
+  async function patchGroup(
+    id: string,
+    patch: { title?: string; parentId?: string | null },
+  ) {
+    const current = notebooks.value.find((n) => n.id === id)
+    await notebookApi.update(id, {
+      title: patch.title ?? current?.title ?? '',
+      parentId: patch.parentId !== undefined ? patch.parentId : (current?.parentId ?? null),
+      icon: current?.icon ?? null,
+      sortOrder: current?.sortOrder ?? null,
+    })
+  }
+
   async function renameGroup(id: string, title: string) {
-    await notebookApi.update(id, { title })
+    await patchGroup(id, { title })
     await refreshMeta()
   }
 
@@ -281,7 +298,7 @@ export const useNoteStore = defineStore('notes', () => {
     if (parentId && (parentId === id || isDescendant(parentId, id))) {
       throw new Error('不能把分组移到它自己或它的子分组里')
     }
-    await notebookApi.update(id, { parentId })
+    await patchGroup(id, { parentId })
     if (parentId) expandGroup(parentId)
     await refreshMeta()
   }

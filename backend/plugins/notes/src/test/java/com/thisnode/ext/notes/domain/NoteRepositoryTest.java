@@ -58,11 +58,7 @@ class NoteRepositoryTest {
     }
 
     private String newNote(String title, String contentMd) {
-        Note n = new Note();
-        n.title = title;
-        n.contentMd = contentMd;
-        n.type = "note";
-        String id = noteRepository.insert(n);
+        String id = noteRepository.insert(title, "note", null, null, null);
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
         cardRepository.putCard(id, CardMeta.fresh(Ids.newId(), 0, 0, "", null, null,
                 System.currentTimeMillis()), contentMd);
@@ -74,9 +70,8 @@ class NoteRepositoryTest {
     void contentBecomesACard() {
         String id = newNote("会议记录", "# 会议记录\n\n今天讨论了三件事。");
 
-        Note read = noteRepository.findById(id);
-        assertThat(read.title).isEqualTo("会议记录");
-        assertThat(read.contentMd).isEqualTo("# 会议记录\n\n今天讨论了三件事。");
+        assertThat(noteRepository.note(id).title()).isEqualTo("会议记录");
+        assertThat(noteRepository.noteMarkdown(id)).isEqualTo("# 会议记录\n\n今天讨论了三件事。");
 
         List<CardMeta> cards = store.cards(id);
         assertThat(cards).hasSize(1);
@@ -104,9 +99,9 @@ class NoteRepositoryTest {
         store.writeNoteMeta(store.note(id).withDeleted(true));
         noteRepository.deleteHard(id);
         assertThat(Files.exists(card)).isFalse();
-        assertThat(noteRepository.findById(id)).isNull();
+        assertThat(noteRepository.note(id)).isNull();
         assertThat(store.cards(id)).isEmpty();
-        assertThat(Files.exists(root.resolve(".notes").resolve(id + ".json"))).isFalse();
+        assertThat(Files.exists(root.resolve("meta").resolve(id + ".json"))).isFalse();
     }
 
     @Test

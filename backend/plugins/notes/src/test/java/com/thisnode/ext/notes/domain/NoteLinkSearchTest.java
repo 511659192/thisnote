@@ -56,11 +56,7 @@ class NoteLinkSearchTest {
     }
 
     private String newNote(String title, String contentMd) {
-        Note n = new Note();
-        n.title = title;
-        n.contentMd = contentMd;
-        n.type = "note";
-        String id = nodes.insert(n);
+        String id = nodes.insert(title, "note", null, null, null);
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
         cardRepository.putCard(id, CardMeta.fresh(Ids.newId(), 0, 0, "", null, null,
                 Instant.now().toEpochMilli()), contentMd);
@@ -80,8 +76,9 @@ class NoteLinkSearchTest {
         assertThat(out.get(1).toTitle()).isEqualTo("还没有的笔记");
 
         assertThat(links.inbound(target)).hasSize(1);
-        assertThat(links.backlinks(target)).singleElement()
-                .satisfies(back -> assertThat(back.noteId()).isEqualTo(source));
+        // 引用面板的数据源是对端 meta 里的入链缓存（不再有 backlinks 查询）
+        assertThat(nodes.note(target).inbound()).singleElement()
+                .satisfies(entry -> assertThat(entry.fromId()).isEqualTo(source));
         assertThat(links.total()).isEqualTo(2);
         assertThat(links.stubExists("还没有的笔记")).isTrue();
         assertThat(links.listStubs()).extracting(m -> m.get("title"))

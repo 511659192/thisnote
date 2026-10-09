@@ -142,6 +142,7 @@ public class NotebookRepository {
     }
 
     public String create(String title, String parentId, String icon, String type) {
+        String parent = requireParent(parentId);
         String id = Ids.newId();
         long now = System.currentTimeMillis();
         int max = 0;
@@ -151,28 +152,79 @@ public class NotebookRepository {
         save(book().with(NotebookBook.Notebook.fresh(id,
                 type == null || type.isBlank() ? NotebookBook.TYPE_NOTEBOOK : type,
                 title == null || title.isBlank() ? "新建笔记本" : title.trim(),
-                parentId, icon, max + 1, now)));
+                parent, icon, max + 1, now)));
         return id;
     }
 
-    public void update(String id, String title, String parentId, String icon, Integer sortOrder) {
+    /**
+     * 全量替换：四个字段一律以本次请求为准；{@code parentId} 传 {@code null} 就是移到顶层——
+     * 没有"没提到的字段保持不变"这个语义，调用方从台账当前值出发构造完整请求。
+     */
+    public Dtos.NotebookDto update(String id, String title, String parentId, String icon,
+                                   Integer sortOrder) {
         NotebookBook.Notebook current = book().find(id);
         if (current == null) {
-            return;
+            throw new IllegalArgumentException("分组不存在：" + id);
         }
-        save(book().with(current.patched(title, parentId, icon, sortOrder,
-                System.currentTimeMillis())));
+        if (DEFAULT_GROUP_ID.equals(id) && parentId != null) {
+            throw new IllegalArgumentException(
+                    "默认分组不能移到别的分组下：它是无归属笔记的落脚点");
+        }
+        String parent = requireParent(parentId);
+        assertNoCycle(id, parent);
+        save(book().with(new NotebookBook.Notebook(current.v(), id, current.type(),
+                title == null || title.isBlank() ? current.title() : title.trim(),
+                parent,
+                icon == null ? current.icon() : icon,
+                sortOrder == null ? current.sortOrder() : sortOrder,
+                current.createdAt(), System.currentTimeMillis())));
+        return find(id);
     }
 
-    /** 删分组：其中的笔记回到默认分组，绝不留下无归属的笔记。 */
+    /** 父级归一 + 存在性校验：null/空白 = 顶层；否则必须指向真实存在的分组。 */
+    private String requireParent(String parentId) {
+        if (parentId == null || parentId.isBlank()) {
+            return null;
+        }
+        String parent = parentId.trim();
+        if (book().find(parent) == null) {
+            throw new IllegalArgumentException("目标分组不存在：" + parent);
+        }
+        return parent;
+    }
+
+    /** 新父级不能是自己或自己的后代，否则那棵子树会从树上脱落。 */
+    private void assertNoCycle(String id, String parent) {
+        String cursor = parent;
+        while (cursor != null) {
+            if (cursor.equals(id)) {
+                throw new IllegalArgumentException("不能把分组移到它自己或它的子分组下面");
+            }
+            NotebookBook.Notebook next = book().find(cursor);
+            cursor = next == null ? null : next.parentId();
+        }
+    }
+
+    /** 删分组：其中的笔记回默认分组，子分组上提到被删分组的父级（不连坐、不留孤儿）。 */
     public void delete(String id) {
+        if (id == null) {
+            return;
+        }
         ensureDefaultGroup();
+        NotebookBook.Notebook gone = book().find(id);
+        String fallbackParent = gone == null ? null : gone.parentId();
         for (NoteMeta meta : noteRepository.scanNotes()) {
-            if (id != null && id.equals(meta.notebookId())) {
+            if (id.equals(meta.notebookId())) {
                 noteRepository.writeNoteMeta(meta.withNotebook(DEFAULT_GROUP_ID));
             }
         }
-        save(book().without(id));
+        NotebookBook next = book().without(id);
+        List<NotebookBook.Notebook> reparented = new ArrayList<>();
+        for (NotebookBook.Notebook notebook : next.notebooks()) {
+            reparented.add(id.equals(notebook.parentId())
+                    ? notebook.withParent(fallbackParent) : notebook);
+        }
+        save(new NotebookBook(next.v(), reparented));
     }
 
     public void setNodeNotebooks(String nodeId, List<String> notebookIds, boolean exclusive) {

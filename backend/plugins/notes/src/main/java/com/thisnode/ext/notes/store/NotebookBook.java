@@ -96,14 +96,9 @@ public record NotebookBook(int v,
             return new Notebook(SCHEMA, id, type, title, parentId, icon, sortOrder, now, now);
         }
 
-        public Notebook patched(String ntitle, String nparentId, String nicon, Integer nsortOrder,
-                                 long now) {
-            return new Notebook(v, id, type,
-                    ntitle == null || ntitle.isBlank() ? title : ntitle.trim(),
-                    nparentId == null ? parentId : nparentId,
-                    nicon == null ? icon : nicon,
-                    nsortOrder == null ? sortOrder : nsortOrder,
-                    createdAt, now);
+        /** 只换父级（删除分组时把子分组上提一级用）。 */
+        public Notebook withParent(String nparentId) {
+            return new Notebook(v, id, type, title, nparentId, icon, sortOrder, createdAt, updatedAt);
         }
     }
 }

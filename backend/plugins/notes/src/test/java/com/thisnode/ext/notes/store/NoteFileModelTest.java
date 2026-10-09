@@ -106,7 +106,7 @@ class NoteFileModelTest {
         Path b3 = store.fileOf("b3");
         assertThat(List.of(b1, b2, b3)).allSatisfy(p -> assertThat(Files.exists(p)).isTrue());
 
-        store.removeNote(now);
+        store.deleteHard(now);
 
         assertThat(Files.exists(b1)).isFalse();
         assertThat(Files.exists(b2)).isFalse();

@@ -115,3 +115,9 @@
   ③ 遇到编译错误才中途编译，编译通过不算"验证"；
   ④ 本项为**硬规则**，优先级高于仓库 AGENTS.md 里"TDD 触发"的条款，后续同类纠正也并入本条；
      2026-10-08 已按用户要求升级写入全局 `~/.zcode/AGENTS.md`（替换原「TDD 触发」条目）。
+
+## L11 DTO record 组件名即 JSON 键：改名轮必须前后端同批核对全部写端点 body
+
+- **纠正来源**：block→card 改名轮把 `CardsDto.blocks→cards`、`CardView.block→card` 改了，但漏了 `BatchCardPatchRequest.blocks`；前端一直发 `{cards}`，服务端 `req.blocks()` 恒为 null → 批量几何保存（拖动/缩放）静默空转，直到 2026-10-09 全端点实测才暴露。
+- **事实依据**：实测「批量 patch 已落盘」FAIL（x 停在旧值 10.0）；`Dtos.java:117` 组件名 `blocks` vs `page.ts` `{ cards }`。
+- **规则**：① 改 DTO 字段名后，立即 grep 前端全部对应 body 构造点逐个核对键名，不能只改「看得见的」两个；② 每个写端点的验收实测必须覆盖「写入后读回核值」，只看 200 不够；③ 记录组件名→JSON 键的映射清单放在 Dtos.java 类注释里，改名时对照。

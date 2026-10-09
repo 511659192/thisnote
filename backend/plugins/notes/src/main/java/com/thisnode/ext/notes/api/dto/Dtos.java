@@ -1,6 +1,8 @@
 package com.thisnode.ext.notes.api.dto;
 
 import com.thisnode.ext.notes.store.CardRef;
+import com.thisnode.ext.notes.store.InboundRef;
+import com.thisnode.ext.notes.store.LinkRef;
 
 import java.util.List;
 import java.util.Map;
@@ -27,24 +29,17 @@ public final class Dtos {
     }
 
     // ---------- nodes ----------
-    public record BacklinkDto(String noteId, String title, String label, String heading,
-                              String context, long updatedAt) {
-    }
-
-    public record LinkDto(String id, String fromNodeId, String toNodeId, String toTitle,
-                          String label, String type, boolean resolved) {
-    }
-
     public record NoteDetail(
             String id, String title, String contentMd, String type, String source, String status,
             boolean deleted, String dailyDate,
             /**
              * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
-             * 前端拿这份清单去 {@code GET /api/notes/{id}/cards?ids=}。
+             * 前端拿这份清单去 {@code GET /api/notes/cards?ids=}。
              */
             List<CardRef> cards,
             List<String> tags, List<NotebookDto> notebooks,
-            List<LinkDto> outbound, List<BacklinkDto> backlinks,
+            /** 出链/入链直接输出 meta 里写时算好的缓存（PO 直出），没有服务端拼装的第二层。 */
+            List<LinkRef> outbound, List<InboundRef> backlinks,
             List<String> unresolved, List<String> unlinkedMentions,
             long createdAt, long updatedAt) {
     }

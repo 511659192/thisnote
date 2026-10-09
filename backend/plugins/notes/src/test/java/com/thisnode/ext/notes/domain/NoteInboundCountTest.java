@@ -78,6 +78,12 @@ class NoteInboundCountTest {
 
         assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
         assertThat(metaOf("乙").links()).isEmpty();
+        // 入链清单随写落盘：详情页的引用面板直接读它（引用行原文 + 引用者 id）
+        assertThat(metaOf("乙").inbound()).singleElement().satisfies(entry -> {
+            assertThat(entry.fromId()).isEqualTo(metaOf("甲").id());
+            assertThat(entry.label()).isEmpty();
+            assertThat(entry.context()).contains("[[乙]]");
+        });
 
         NoteMeta jia = summaryOf("甲");
         assertThat(jia.outboundCount()).isEqualTo(1);

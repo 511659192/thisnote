@@ -2,9 +2,9 @@ package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardRepository;
-import com.thisnode.ext.notes.domain.Note;
 import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.domain.TagRepository;
+import com.thisnode.ext.notes.store.NoteMeta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -64,7 +64,7 @@ public class CardService {
      * {@code NoteService.create} 在新建笔记时建立。
      */
     public Dtos.CardsDto page(String noteId, List<String> ids) {
-        Note note = noteService.require(noteId);
+        NoteMeta note = noteService.require(noteId);
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);
         List<Dtos.CardDto> rows = cardRepository.cards(noteId);
         if (wanted != null) {
@@ -73,10 +73,10 @@ public class CardService {
         List<Dtos.TagDto> noteTags = tagRepository.tagsOf(noteId);
         List<Dtos.CardView> views = new ArrayList<>(rows.size());
         for (Dtos.CardDto b : rows) {
-            views.add(new Dtos.CardView(b, b.contentMd(), note.title, noteTags));
+            views.add(new Dtos.CardView(b, b.contentMd(), note.title(), noteTags));
         }
-        return new Dtos.CardsDto(note.id, note.title, views, noteTags,
-                maxCardsPerNote(), note.updatedAt);
+        return new Dtos.CardsDto(note.id(), note.title(), views, noteTags,
+                maxCardsPerNote(), note.updatedAt());
     }
 
     // ---------------------------------------------------------------- write
@@ -90,7 +90,7 @@ public class CardService {
 
     /** Add an empty (or seeded) card to a note's page. */
     public Dtos.CardView create(String noteId, Dtos.CreateCardRequest req) {
-        Note note = noteService.require(noteId);
+        noteService.require(noteId);
         requireCapacity(noteId, 1);
         String content = req == null || req.contentMd() == null ? "" : req.contentMd();
         String title = req == null || req.title() == null ? "" : req.title().trim();
@@ -103,10 +103,10 @@ public class CardService {
         String id = cardRepository.createAt(noteId, x, y,
                 req == null ? null : req.w(), req == null ? null : req.h(),
                 req == null ? null : req.color(), null, content, title);
-        syncNoteFromBlocks(note);
-        Note fresh = noteService.require(noteId);
+        syncNoteFromCards(noteId);
+        NoteMeta fresh = noteService.require(noteId);
         Dtos.CardDto stored = cardRepository.find(id);
-        return new Dtos.CardView(stored, stored.contentMd(), fresh.title,
+        return new Dtos.CardView(stored, stored.contentMd(), fresh.title(),
                 tagRepository.tagsOf(noteId));
     }
 
@@ -117,21 +117,21 @@ public class CardService {
      * 免得把外部编辑器改过的内容覆盖掉。
      */
     public Dtos.CardView writeContent(String cardId, String contentMd, String baseContentMd) {
-        Dtos.CardDto block = requireBlock(cardId);
+        Dtos.CardDto block = requireCard(cardId);
         cardRepository.setContent(cardId, contentMd, baseContentMd);
-        Note note = noteService.require(block.noteId());
-        syncNoteFromBlocks(note);
-        Note fresh = noteService.require(note.id);
+        NoteMeta note = noteService.require(block.noteId());
+        syncNoteFromCards(note.id());
+        NoteMeta fresh = noteService.require(note.id());
         return new Dtos.CardView(cardRepository.find(cardId),
-                contentMd == null ? "" : contentMd, fresh.title, tagRepository.tagsOf(note.id));
+                contentMd == null ? "" : contentMd, fresh.title(), tagRepository.tagsOf(note.id()));
     }
 
     /**
      * Rebuild the note's markdown from its cards (z order), so search, links, the Markdown
      * mirror and JSON export all see the text that was typed into the cards.
      */
-    private void syncNoteFromBlocks(Note note) {
-        List<String> parts = cardRepository.contentsInOrder(note.id);
+    private void syncNoteFromCards(String noteId) {
+        List<String> parts = cardRepository.contentsInOrder(noteId);
         StringBuilder joined = new StringBuilder();
         for (String part : parts) {
             if (part == null || part.isBlank()) {
@@ -143,23 +143,23 @@ public class CardService {
             joined.append(part.strip());
         }
         String next = joined.toString();
-        String current = note.contentMd == null ? "" : note.contentMd;
+        String current = noteRepository.noteMarkdown(noteId);
         if (!next.equals(current)) {
-            noteService.patch(note.id, new Dtos.UpdateNodeRequest(
+            noteService.patch(noteId, new Dtos.UpdateNodeRequest(
                     null, next, null, null, null, null, null));
         }
     }
 
-    private Dtos.CardDto requireBlock(String id) {
-        Dtos.CardDto block = cardRepository.find(id);
-        if (block == null) {
-            throw new NoteService.NotFoundException("block " + id);
+    private Dtos.CardDto requireCard(String id) {
+        Dtos.CardDto card = cardRepository.find(id);
+        if (card == null) {
+            throw new NoteService.NotFoundException("card " + id);
         }
-        return block;
+        return card;
     }
 
     public Dtos.CardDto update(String cardId, Dtos.CardPatch patch) {
-        requireBlock(cardId);
+        requireCard(cardId);
         cardRepository.update(cardId, patch.title(), patch.x(), patch.y(), patch.w(), patch.h(),
                 patch.z(), patch.color(), patch.status(), patch.collapsed());
         // Resizing a card leaves its neighbours exactly where they are: cards are positioned
@@ -181,7 +181,7 @@ public class CardService {
      * The new note starts with the card's text.
      */
     public Dtos.CardDto duplicate(String cardId, double dx, double dy) {
-        Dtos.CardDto src = requireBlock(cardId);
+        Dtos.CardDto src = requireCard(cardId);
         String newNoteId = noteService.create(new Dtos.CreateNodeRequest(
                 null, src.contentMd() == null ? "" : src.contentMd(), "note",
                 null, null, null, null, null));
@@ -197,8 +197,8 @@ public class CardService {
      * content; otherwise the note's markdown is rebuilt from the remaining cards.
      */
     public void delete(String cardId, boolean deleteContent) {
-        Dtos.CardDto block = requireBlock(cardId);
-        Note note = noteRepository.findById(block.noteId());
+        Dtos.CardDto block = requireCard(cardId);
+        NoteMeta note = noteRepository.note(block.noteId());
         if (cardRepository.count(block.noteId()) <= 1) {
             if (deleteContent) {
                 noteService.purge(block.noteId());
@@ -207,7 +207,7 @@ public class CardService {
             // Keep the page non-empty: clear the last card rather than leaving nothing.
             cardRepository.setContent(cardId, "");
             if (note != null) {
-                syncNoteFromBlocks(note);
+                syncNoteFromCards(note.id());
             }
             return;
         }
@@ -215,7 +215,7 @@ public class CardService {
         if (note != null) {
             // The gap the card leaves behind stays open: the remaining cards keep the positions
             // the user gave them.
-            syncNoteFromBlocks(note);
+            syncNoteFromCards(note.id());
         }
         noteService.log("note-block", cardId, "delete",
                 Map.of("noteId", block.noteId(), "deleteContent", deleteContent));
@@ -223,7 +223,7 @@ public class CardService {
 
     /** z-order: bring a card to the front or send it back. */
     public Dtos.CardDto zOrder(String cardId, String op) {
-        Dtos.CardDto block = requireBlock(cardId);
+        Dtos.CardDto block = requireCard(cardId);
         Integer z = switch (op == null ? "" : op) {
             case "top" -> cardRepository.nextZ(block.noteId());
             case "bottom" -> cardRepository.lowestZ(block.noteId());

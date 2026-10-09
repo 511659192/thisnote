@@ -117,23 +117,12 @@ export interface LinkRef {
   to?: string | null
 }
 
-export interface Backlink {
-  noteId: string
-  title: string
+/** meta 缓存的入链（PO 直出）：标题按 `fromId` 在笔记列表里现查。 */
+export interface InboundRef {
+  fromId: string
   label?: string | null
-  heading?: string | null
-  context?: string
+  context?: string | null
   updatedAt: number
-}
-
-export interface Link {
-  id: string
-  fromNodeId: string
-  toNodeId?: string | null
-  toTitle?: string | null
-  label?: string | null
-  type: string
-  resolved: boolean
 }
 
 export interface NoteDetail {
@@ -149,8 +138,8 @@ export interface NoteDetail {
   cards: CardRef[]
   tags: string[]
   notebooks: Notebook[]
-  outbound: Link[]
-  backlinks: Backlink[]
+  outbound: LinkRef[]
+  backlinks: InboundRef[]
   unresolved: string[]
   unlinkedMentions: string[]
   createdAt: number

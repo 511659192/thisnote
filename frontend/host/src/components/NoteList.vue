@@ -9,6 +9,7 @@ defineProps<{ nodes: NoteMeta[]; loading?: boolean; currentId?: string | null }>
 const emit = defineEmits<{
   (e: 'open', id: string): void
   (e: 'context', payload: { node: NoteMeta; x: number; y: number }): void
+  (e: 'remove', id: string): void
 }>()
 
 const store = useNoteStore()
@@ -41,6 +42,12 @@ function onContext(e: MouseEvent, node: NoteMeta) {
   e.preventDefault()
   emit('context', { node, x: e.clientX, y: e.clientY })
 }
+
+/** 右上角的删除入口：硬删除不可恢复，弹一次确认（与侧栏删分组同一模式）。 */
+function askRemove(node: NoteMeta) {
+  if (!window.confirm(`彻底删除「${node.title}」？\n\n卡片文件与笔记一起删除，无法恢复。`)) return
+  emit('remove', node.id)
+}
 </script>
 
 <template>
@@ -71,6 +78,12 @@ function onContext(e: MouseEvent, node: NoteMeta) {
       >
         <div class="row-1">
           <span class="title">{{ n.title }}</span>
+          <span
+            class="row-del"
+            role="button"
+            title="彻底删除"
+            @click.stop="askRemove(n)"
+          >×</span>
         </div>
         <!--
           归属分组：笔记必须有归属（默认是「收集箱」），后端只回 id，标题从侧栏台账解析。
@@ -151,6 +164,29 @@ function onContext(e: MouseEvent, node: NoteMeta) {
 .row-1 .fav {
   font-size: 11px;
   opacity: 0.7;
+}
+/* 右上角删除：悬停行时显现，点它不触发行打开 */
+.row-del {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: var(--radius);
+  color: var(--c-text-3);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+  user-select: none;
+}
+.note-row:hover .row-del {
+  opacity: 0.6;
+}
+.note-row:hover .row-del:hover {
+  opacity: 1;
+  color: var(--danger);
+  background: var(--c-surface-3);
 }
 /* 归属分组那行：比标签更淡，它是「位置」不是「属性」 */
 .groups {
