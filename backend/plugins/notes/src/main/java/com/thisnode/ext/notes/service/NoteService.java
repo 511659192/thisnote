@@ -349,28 +349,6 @@ public class NoteService {
     }
 
     /**
-     * Full re-index of every node's links (repair / post-import).
-     */
-    public int reindexAllLinks() {
-        // 维护操作：这里本来就要看全库正文，所以显式加载一次（而不是让调用点各自触发）。
-        int total = 0;
-        List<NoteMeta> active = noteRepository.findAllActive();
-        for (NoteMeta meta : active) {
-            total += reindexLinks(meta.id(), noteRepository.noteMarkdown(meta.id()));
-        }
-        for (NoteMeta meta : active) {
-            resolvePendingLinks(meta.id(), meta.title());
-        }
-        // 兜底/修复：先按正文把各篇的缓存重算一遍，再按缓存把入链数全量校准。
-        noteRepository.refreshAllCachedViews();
-        int fixed = noteRepository.recalibrateInbound();
-        if (fixed > 0) {
-            log("system", null, "inbound-recalibrated", Map.of("fixed", fixed));
-        }
-        return total;
-    }
-
-    /**
      * Heal unresolved links that now point at this node (or one of its aliases).
      *
      * <p>Supports the natural note-taking order: write {@code [[某概念]]} first, create the

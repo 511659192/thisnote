@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.thisnode</groupId>
+    <artifactId>thisnode-parent</artifactId>
+    <version>0.1.0</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>plugin-search</artifactId>
+  <name>thisnode-plugin-search</name>
+  <properties>
+    <plugin.id>search</plugin.id>
+  </properties>
+
+  <description>标题搜索插件：列表页头部的按标题过滤（服务插件参考实现，纯前端 + 零端点）</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.thisnode</groupId>
+      <artifactId>plugin-support</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.laxture</groupId>
+      <artifactId>sbp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- 交付:jar 拷到 backend/plugins-dist/；前端产物从 frontend-dist/ 拷到 plugins-dist/frontend/<id>/ -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>copy-plugin-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                      tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
+                <!-- 先清再拷：前端产物带 hash，只覆盖不清理会让历史版本的分片留在交付目录里 -->
+                <delete dir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" quiet="true"/>
+                <copy todir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" overwrite="true">
+                  <fileset dir="${project.basedir}/../../../frontend/plugins/search/dist" erroronmissingdir="false"/>
+                </copy>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>frontend</id>
+      <activation>
+        <property>
+          <name>!thisnode.skip-frontend</name>
+        </property>
+        <file>
+          <exists>../../../frontend/plugins/search/package.json</exists>
+        </file>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>pnpm-install</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../../frontend/plugins/search</workingDirectory>
+                  <arguments>
+                    <argument>install</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+              <execution>
+                <id>pnpm-build</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../../frontend/plugins/search</workingDirectory>
+                  <arguments>
+                    <argument>build</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

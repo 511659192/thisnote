@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { listHeaders_ } from '@thisnode/plugin-api'
 import { useNoteStore } from '@/stores/notes'
 import { useUiStore } from '@/stores/ui'
 import { formatDate } from '@/core/utils'
@@ -52,6 +53,12 @@ function askRemove(node: NoteMeta) {
 
 <template>
   <div class="note-list">
+    <!-- 列表页头部插槽：插件贡献的顶部工具（如标题搜索框）渲染在列表行上方 -->
+    <div v-if="listHeaders_().length" class="list-headers">
+      <template v-for="h in listHeaders_()" :key="h.pluginId">
+        <component :is="h.component" />
+      </template>
+    </div>
     <div class="list-body">
       <div v-if="loading" class="list-loading small muted">加载中…</div>
       <div v-else-if="!nodes.length" class="list-empty">
@@ -106,6 +113,12 @@ function askRemove(node: NoteMeta) {
 </template>
 
 <style scoped>
+.list-headers {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-2) 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
 .note-list {
   width: 296px;
   flex: 0 0 auto;

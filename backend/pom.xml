@@ -26,6 +26,7 @@
     <module>plugin-api</module>
     <module>plugin-support</module>
     <module>plugins/memory-curve</module>
+    <module>plugins/search</module>
     <module>plugins/notes</module>
     <module>plugins/favorite</module>
     <module>app</module>

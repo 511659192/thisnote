@@ -32,9 +32,9 @@ export default defineConfig({
       fileName: () => 'plugin.js',
       cssFileName: 'plugin',
     },
-    // 前后端分离：产物落在插件模块的 frontend-dist/（resources 之外，不进 jar），
-    // 由 antrun 拷到 backend/plugins-dist/frontend/notes/，/plugin-assets 从那里端出。
-    outDir: '../../../backend/plugins/notes/frontend-dist',
+    // 前后端分离：产物落在前端自己的 dist/（backend 树里不留任何前端产物），
+    // 打包时由 antrun 从这里拷到 backend/plugins-dist/frontend/notes/，/plugin-assets 从那里端出。
+    outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
       output: { chunkFileNames: 'chunk-[hash].js' },

@@ -5,10 +5,13 @@ import { useNoteStore } from '@/stores/notes'
 import { useUiStore } from '@/stores/ui'
 import { notebookApi } from '@/api'
 import {
+  activeListFilter_,
   activeNavEntries,
   activeNoteListFilters,
+  clearActiveListFilter,
   navBadges,
   refreshPluginAvailability,
+  setActiveListFilter,
   type NoteListFilter,
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
@@ -57,7 +60,10 @@ async function refreshPlugins() {
  * - <b>徽标</b>：切路由时刷新（从复习页回来，due 数就该变），有 3 秒在飞合并兜底。
  */
 watch(() => route.fullPath, () => void refreshPluginBadges())
-onMounted(() => {
+onMounted(async () => {
+  // 原 App.vue 的启动加载随域迁入：列表在应用启动时装好（面板跨路由常驻，
+  // 设置页等非笔记路由的侧栏也得有行可点）。
+  await nodes.refreshAll()
   void refreshPlugins()
   window.addEventListener('focus', onFocus)
   document.addEventListener('visibilitychange', onVisibility)
@@ -75,31 +81,31 @@ function onVisibility() {
 
 const filters = computed<{ key: ListFilter; label: string; icon: string }[]>(() => [
   { key: 'all', label: '全部笔记', icon: '▤' },
-  { key: 'recent', label: '最近编辑', icon: '⏱' },
 ])
 
 /** 插件提供的列表筛选（例如「收藏」）：和核心筛选同级，只是给同一份列表加一个条件。 */
-const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters())
+/** 侧栏只渲染可见筛选：hidden 的筛选（如搜索框）由插件自己的 UI 激活，不占侧栏行。 */
+const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters().filter((f) => !f.hidden))
 
 function openPluginFilter(filter: NoteListFilter) {
-  void nodes.setPluginFilter(filter.pluginId, filter.id)
+  setActiveListFilter(filter.pluginId, filter.id)
   void router.push('/notes')
 }
 
 function openFilter(key: ListFilter) {
-  nodes.clearPluginFilter()
+  clearActiveListFilter()
   nodes.setFilter(key)
   void router.push('/notes')
 }
 
 function openTag(name: string) {
-  nodes.clearPluginFilter()
+  clearActiveListFilter()
   nodes.setTag(name)
   void router.push('/notes')
 }
 
 function openNotebook(id: string) {
-  nodes.clearPluginFilter()
+  clearActiveListFilter()
   nodes.openGroup(id)
   void router.push('/notes')
 }
@@ -313,7 +319,7 @@ watch(
         v-for="pf in pluginFilters"
         :key="pf.id"
         class="nav-item"
-        :class="{ active: !isPluginPage && nodes.pluginFilter?.filterId === pf.id }"
+        :class="{ active: !isPluginPage && activeListFilter_()?.filterId === pf.id }"
         @click="openPluginFilter(pf)"
       >
         <span class="ico">{{ pf.icon || '★' }}</span>

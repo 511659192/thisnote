@@ -92,8 +92,10 @@
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
                       tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
+                <!-- 先清再拷：前端产物带 hash，只覆盖不清理会让历史版本的分片留在交付目录里 -->
+                <delete dir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" quiet="true"/>
                 <copy todir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" overwrite="true">
-                  <fileset dir="${project.basedir}/frontend-dist" erroronmissingdir="false"/>
+                  <fileset dir="${project.basedir}/../../../frontend/plugins/notes/dist" erroronmissingdir="false"/>
                 </copy>
               </target>
             </configuration>

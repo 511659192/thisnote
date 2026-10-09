@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { tagApi, notebookApi } from '@/api'
 import type { ListFilter, NoteDetail, NoteMeta, Notebook, Tag } from '@/api/types'
-import { getNoteListFilter } from '@thisnode/plugin-api'
+import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter } from '@thisnode/plugin-api'
 import { useUiStore } from './ui'
 
 const AUTOSAVE_DEBOUNCE_MS = 500
@@ -53,7 +53,6 @@ export const useNoteStore = defineStore('notes', () => {
     return (
       {
         all: '全部笔记',
-        recent: '最近',
         daily: '每日笔记',
         template: '模板',
         trash: '回收站',
@@ -92,20 +91,36 @@ export const useNoteStore = defineStore('notes', () => {
    * <p>它只是给核心这份列表**加一个条件**：插件回答"哪些 id 命中"，列表渲染、点开笔记、
    * 内容展示全由核心负责 —— 因此与「全部笔记/最近编辑」天然同构，不需要任何第二套布局。
    */
-  const pluginFilter = ref<{ pluginId: string; filterId: string } | null>(null)
+  /**
+   * 插件列表筛选：激活指针在注册表里（跨微应用共享 —— 搜索框等插件 UI 也设置它），
+   * 这里 watch 指针并调用筛选的 load() 取命中 id。null = 未激活（列表原样）。
+   */
+  const pluginFilter = computed(() => activeListFilter_())
   const pluginFilterIds = ref<Set<string> | null>(null)
 
-  async function setPluginFilter(pluginId: string, filterId: string): Promise<void> {
-    const filter = getNoteListFilter(filterId)
-    if (!filter) return
-    const ids = await filter.load()
-    pluginFilterIds.value = new Set(ids)
-    pluginFilter.value = { pluginId, filterId }
-  }
+  // 指针在注册表里（搜索框等任意微应用的 UI 都能设置）；这里 watch 它并调用筛选的 load()
+  // 取命中 id。竞态防护：load 返回时指针若已再变，丢弃本次结果。
+  watch(activeListFilter_, async (f) => {
+    if (!f) {
+      pluginFilterIds.value = null
+      return
+    }
+    const filter = getNoteListFilter(f.filterId)
+    if (!filter) {
+      pluginFilterIds.value = null
+      return
+    }
+    try {
+      const ids = await filter.load()
+      if (activeListFilter_() !== f) return
+      pluginFilterIds.value = new Set(ids)
+    } catch {
+      pluginFilterIds.value = null
+    }
+  })
 
   function clearPluginFilter(): void {
-    pluginFilter.value = null
-    pluginFilterIds.value = null
+    registryClearFilter()
   }
 
   /** 列表真正渲染的内容：没启用插件筛选时就是原样，启用时按 id 过滤。 */
@@ -526,7 +541,6 @@ export const useNoteStore = defineStore('notes', () => {
   return {
     pluginFilter,
     pluginFilterIds,
-    setPluginFilter,
     clearPluginFilter,
     notesView,
     nodes,

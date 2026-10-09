@@ -145,6 +145,7 @@ onMounted(async () => {
 <template>
   <div class="settings">
     <header class="tabs">
+      <button class="btn sm ghost" title="返回笔记" @click="$router.push('/notes')">← 返回笔记</button>
       <div class="tab-title">设置 · 插件</div>
       <div class="spacer"></div>
       <button class="btn sm" :disabled="!!busy" @click="refresh">刷新</button>
@@ -154,7 +155,7 @@ onMounted(async () => {
       <div v-if="busy" class="busy-bar">{{ busy }}…</div>
 
       <!-- ------------------------------ plugins ------------------------------ -->
-      <section v-if="tab === 'plugins'" class="panel">
+      <section class="panel">
         <h3>已安装的插件</h3>
         <p class="small muted">
           插件分两类：<b>卡片插件</b>给卡片右上角加工具（如记忆曲线）；<b>服务插件</b>提供整库范围的能力
@@ -272,6 +273,11 @@ onMounted(async () => {
   height: 40px;
   border-bottom: 1px solid var(--c-border);
   background: var(--c-surface);
+}
+.tab-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-2);
 }
 .tabs button {
   padding: 6px 10px;

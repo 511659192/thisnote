@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useUiStore } from '@/stores/ui'
-import { sidebarPanels_ } from '@thisnode/plugin-api'
+import { sidebarPanels_, topbarSearches_ } from '@thisnode/plugin-api'
 
 const ui = useUiStore()
 </script>
@@ -19,6 +19,10 @@ const ui = useUiStore()
         <span class="brand-mark">韧</span>
         <span class="brand-name">thisnode</span>
       </div>
+      <!-- 顶栏搜索插槽：插件交付的模糊查询（宿主只渲染容器） -->
+      <template v-for="w in topbarSearches_()" :key="w.pluginId">
+        <component :is="w.component" />
+      </template>
       <div class="spacer"></div>
       <button
         class="btn ghost icon"
@@ -38,8 +42,8 @@ const ui = useUiStore()
       <button
         class="btn ghost icon"
         :class="{ active: $route.name === 'settings' }"
-        title="设置"
-        @click="$router.push('/settings')"
+        :title="$route.name === 'settings' ? '关闭设置，返回笔记' : '设置'"
+        @click="$route.name === 'settings' ? $router.push('/notes') : $router.push('/settings')"
       >
         ⚙
       </button>

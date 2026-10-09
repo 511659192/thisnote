@@ -1,0 +1,122 @@
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+import { clearActiveListFilter, setActiveListFilter } from '@thisnode/plugin-api'
+import { FILTER_ID, PLUGIN_ID, matchCount, query as queryState, setQuery } from './state'
+
+/**
+ * 标题搜索框（列表页头部插槽的 UI）。
+ *
+ * <p>输入即激活本插件的列表筛选（防抖 250ms）—— 筛选的 load() 在 notes 域的
+ * watch 里被调用，按标题包含匹配返回命中的 id，列表随之收窄；字段右侧实时显示
+ * 「命中 N 篇」，Esc 或清空按钮撤掉筛选并复位。
+ * 这里不认识笔记列表的任何内部结构，只经注册表的激活指针说话。
+ */
+const query = queryState
+const inputEl = ref<HTMLInputElement | null>(null)
+let timer: number | null = null
+
+watch(query, (q) => {
+  if (timer) window.clearTimeout(timer)
+  timer = window.setTimeout(() => {
+    const trimmed = q.trim()
+    setQuery(trimmed)
+    if (trimmed) {
+      setActiveListFilter(PLUGIN_ID, FILTER_ID)
+    } else {
+      clearActiveListFilter()
+    }
+  }, 250)
+})
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    query.value = ''
+    inputEl.value?.blur()
+  }
+}
+</script>
+
+<template>
+  <div class="title-search" :class="{ filled: !!query }">
+    <span class="ico">🔍</span>
+    <input
+      ref="inputEl"
+      v-model="query"
+      class="input"
+      type="text"
+      placeholder="按标题搜索…"
+      spellcheck="false"
+      @keydown.esc="onKeydown"
+    />
+    <span v-if="query && matchCount !== null" class="count">{{ matchCount }} 篇</span>
+    <button v-if="query" class="clear" title="清空 (Esc)" @click="query = ''">×</button>
+  </div>
+</template>
+
+<style scoped>
+.title-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.title-search:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--c-border));
+}
+/* 聚焦：描边 + 一圈柔光，输入面提亮一档 */
+.title-search:focus-within {
+  border-color: var(--accent);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.title-search .ico {
+  flex: 0 0 auto;
+  opacity: 0.65;
+  font-size: 12px;
+  transition: opacity 0.15s ease;
+}
+.title-search:focus-within .ico {
+  opacity: 1;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--c-text);
+  font-size: 12.5px;
+}
+.input::placeholder {
+  color: var(--c-text-3);
+}
+.input:focus {
+  outline: none;
+}
+/* 命中计数：筛选生效期间的即时反馈 */
+.count {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+.clear {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--c-text-3);
+  font-size: 13px;
+  line-height: 1;
+}
+.clear:hover {
+  background: var(--c-surface-3);
+  color: var(--c-text);
+}
+</style>

@@ -280,7 +280,7 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   void applyRoute()
-  // 原宿主 App.vue 的启动刷新随域迁入：直链深页（#/notes/abc）时列表也要就位。
+  // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))

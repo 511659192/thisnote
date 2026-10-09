@@ -159,7 +159,6 @@ export interface OpEntry {
 /** List filter used by the sidebar (F-N-03). */
 export type ListFilter =
   | 'all'
-  | 'recent'
   | 'daily'
   | 'template'
   | 'trash'
