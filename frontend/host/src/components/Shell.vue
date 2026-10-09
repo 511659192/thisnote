@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useUiStore } from '@/stores/ui'
-import { shellState, toggleRightPanel, toggleTheme } from '@thisnode/plugin-api'
-import PluginNavRail from '@/components/PluginNavRail.vue'
+import { sidebarPanels_ } from '@thisnode/plugin-api'
 
 const ui = useUiStore()
 </script>
@@ -23,18 +22,18 @@ const ui = useUiStore()
       <div class="spacer"></div>
       <button
         class="btn ghost icon"
-        :class="{ active: shellState.rightPanelOpen }"
-        :title="shellState.rightPanelOpen ? '隐藏右侧面板（反向链接）' : '显示右侧面板（反向链接）'"
-        @click="toggleRightPanel()"
+        :class="{ active: ui.rightPanelOpen }"
+        :title="ui.rightPanelOpen ? '隐藏右侧面板（反向链接）' : '显示右侧面板（反向链接）'"
+        @click="ui.toggleRightPanel()"
       >
         ⊟
       </button>
       <button
         class="btn ghost icon"
-        :title="shellState.theme === 'dark' ? '切换到浅色' : '切换到深色'"
-        @click="toggleTheme()"
+        :title="ui.theme === 'dark' ? '切换到浅色' : '切换到深色'"
+        @click="ui.toggleTheme()"
       >
-        {{ shellState.theme === 'dark' ? '☀' : '☾' }}
+        {{ ui.theme === 'dark' ? '☀' : '☾' }}
       </button>
       <button
         class="btn ghost icon"
@@ -47,8 +46,12 @@ const ui = useUiStore()
     </header>
 
     <div class="body">
-      <!-- 侧栏 = 业务域登记的面板（notes 列表）+ 宿主自有 nav 轨 -->
-      <PluginNavRail v-show="!ui.sidebarCollapsed" />
+      <!-- 侧栏容器：内容全部来自登记的业务面板（notes 列表面板内含插件入口行） -->
+      <aside class="sidebar" v-show="!ui.sidebarCollapsed">
+        <template v-for="panel in sidebarPanels_()" :key="panel.pluginId">
+          <component :is="panel.component" />
+        </template>
+      </aside>
       <main class="main">
         <RouterView />
       </main>

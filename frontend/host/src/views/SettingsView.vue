@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { systemApi } from '@/api'
+import { useRouter } from 'vue-router'
 import { pluginApi, type PluginConfigField, type PluginInfo } from '@/api/plugins'
 import {
   pluginSettings,
@@ -10,17 +9,11 @@ import {
   unloadPluginFrontend,
   reloadPluginFrontend,
 } from '@/plugins'
-import { setApiBase, apiBase } from '@/core/http'
 import { useUiStore } from '@/stores/ui'
-import { formatRelative } from '@/core/utils'
 
 const ui = useUiStore()
-const route = useRoute()
 const router = useRouter()
-
-const tab = ref<'data' | 'backup' | 'plugins' | 'about'>('data')
 const busy = ref('')
-const apiBaseDraft = ref(apiBase.value)
 
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
@@ -141,70 +134,24 @@ function kindLabel(kind: PluginInfo['kind']): string {
 }
 
 async function refresh() {
-  apiBaseDraft.value = apiBase.value
   await refreshPlugins()
 }
 
 onMounted(async () => {
   await refresh()
-  // 支持 /settings?tab=plugins 直达（例如从「插件已停用」的提示点进来）
-  if (route.query.tab === 'plugins') tab.value = 'plugins'
 })
-
-async function withBusy(label: string, fn: () => Promise<unknown>) {
-  busy.value = label
-  try {
-    await fn()
-    ui.toast(`${label}完成`, 'success')
-  } catch (e) {
-    ui.toast(`${label}失败：${(e as Error).message}`, 'error')
-  } finally {
-    busy.value = ''
-    await refresh()
-  }
-}
-function applyApiBase() {
-  setApiBase(apiBaseDraft.value.trim())
-  ui.toast('后端地址已更新，正在重载…')
-  window.location.reload()
-}
 </script>
 
 <template>
   <div class="settings">
     <header class="tabs">
-      <button :class="{ active: tab === 'data' }" @click="tab = 'data'">本地文件</button>
-      <button :class="{ active: tab === 'backup' }" @click="tab = 'backup'">维护</button>
-      <button :class="{ active: tab === 'plugins' }" @click="tab = 'plugins'">插件</button>
-      <button :class="{ active: tab === 'about' }" @click="tab = 'about'">关于</button>
+      <div class="tab-title">设置 · 插件</div>
       <div class="spacer"></div>
       <button class="btn sm" :disabled="!!busy" @click="refresh">刷新</button>
     </header>
 
     <div class="body">
       <div v-if="busy" class="busy-bar">{{ busy }}…</div>
-
-      <!-- ------------------------------ data ------------------------------ -->
-      <section v-if="tab === 'data'" class="panel">
-        <h3>笔记存储（本地文件）</h3>
-        <p class="small muted">
-          笔记以<strong>本地文件为权威</strong>：一张卡片 = 一个 .md，头部一行 meta 注释写着它归属
-          哪篇笔记与摆放位置，其余是正文。可直接在 Obsidian / VS Code 中查看与编辑这些文件；
-          外部改动在应用重启时对齐（cards/ 里新增的 md 会被认领成笔记）。
-        </p>
-
-      </section>
-
-      <!-- ------------------------------ backup ------------------------------ -->
-      <section v-if="tab === 'backup'" class="panel">
-        <h3>维护</h3>
-        <div class="row wrap">
-          <button class="btn" @click="withBusy('重建索引', () => systemApi.reindex())">重扫笔记目录并重算链接</button>
-        </div>
-        <dl class="kv" style="margin-top: 12px">
-          <dt>存储</dt><dd class="mono small">本地文件（卡片 md + meta）</dd>
-        </dl>
-      </section>
 
       <!-- ------------------------------ plugins ------------------------------ -->
       <section v-if="tab === 'plugins'" class="panel">
@@ -306,30 +253,6 @@ function applyApiBase() {
       </section>
 
 
-      <!-- ------------------------------ about ------------------------------ -->
-      <section v-if="tab === 'about'" class="panel">
-        <h3>thisnode 韧知笔记 · MVP</h3>
-        <p class="small muted">
-          本地优先的节点化知识工具。Note 是统一原子，一篇笔记 = 一个页面 = 一列卡片。
-        </p>
-        <div class="divider"></div>
-        <h3>后端地址</h3>
-        <div class="row">
-          <input v-model="apiBaseDraft" class="input grow mono" placeholder="http://127.0.0.1:45917" />
-          <button class="btn" @click="applyApiBase">应用并重载</button>
-        </div>
-        <p class="small muted">
-          桌面壳会自动注入 <span class="mono">window.__THISNODE_API__</span>；此处仅用于自定义端口或远程调试。
-        </p>
-        <div class="divider"></div>
-        <h3>快捷键</h3>
-        <dl class="kv">
-          <dt>Ctrl/Cmd + S</dt><dd>立即保存</dd>
-          <dt>Ctrl/Cmd + D</dt><dd>复制选中卡片</dd>
-          <dt>Delete</dt><dd>删除选中卡片</dd>
-          <dt>Ctrl/Cmd + 1 / 0</dt><dd>适应内容 / 重置视图</dd>
-        </dl>
-      </section>
     </div>
   </div>
 </template>

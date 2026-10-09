@@ -1,26 +1,77 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
 import { useUiStore } from '@/stores/ui'
 import { notebookApi } from '@/api'
-import { activeNoteListFilters, type NoteListFilter } from '@thisnode/plugin-api'
+import {
+  activeNavEntries,
+  activeNoteListFilters,
+  navBadges,
+  refreshPluginAvailability,
+  type NoteListFilter,
+} from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import type { ListFilter, Notebook } from '@/api/types'
 
 /**
- * 笔记域的侧栏主面板：新建、视图筛选、分组树、插件筛选与标签。
+ * 笔记域的侧栏主面板：新建、视图筛选、分组树、插件筛选、插件入口与标签。
  *
- * <p>前后端分离后整个侧栏容器归宿主，业务面板由各域经
- * {@code registerSidebarPanel} 登记（本组件即 notes 的登记物）；
- * 插件 nav 入口（复习/收藏徽标轨）归宿主的 PluginNavRail，不在这里。
+ * <p>前后端分离后侧栏容器归宿主，本面板由 notes 经 registerSidebarPanel 登记。
+ * 插件入口（复习/收藏徽标轨）与插件筛选同样只面向注册器渲染 ——
+ * 宿主依旧不认识任何具体插件，展示形态与拆分前完全一致。
  */
 const nodes = useNoteStore()
 const router = useRouter()
 const route = useRoute()
 
-/** 本面板的选中态只在笔记路由上点亮；插件页面打开时让位。 */
-const onNotes = computed(() => route.path === '/notes' || route.path.startsWith('/notes/'))
+/**
+ * 侧栏的插件入口（原来是硬编码的「复习」按钮 —— 那等于让核心认识记忆曲线插件）。
+ * 现在只面向注册器：入口由插件登记，徽标数量由插件自己算，这里一个具体插件都不认识。
+ */
+const pluginNav = computed(() => activeNavEntries())
+
+/** 当前是否停在某个插件页面上：入口与核心视图同级，同一时刻只该有一行是亮的。 */
+const isPluginPage = computed(() => pluginNav.value.some((entry) => route.path === entry.to))
+const badges = ref<Record<string, number>>({})
+
+async function refreshPluginBadges() {
+  /**
+   * 不给「你正在看的那个插件页」取徽标：那份数据页面自己刚刚取过一遍，
+   * 再取一次就是同一份列表请求打两遍（从复习切到收藏时实测到过）。
+   * 等你离开这个页面时，它会被正常刷新。
+   */
+  const elsewhere = pluginNav.value.filter((entry) => route.path !== entry.to)
+  badges.value = await navBadges(elsewhere)
+}
+async function refreshPlugins() {
+  await refreshPluginAvailability()
+  await refreshPluginBadges()
+}
+/**
+ * 两个触发器各管各的，**切路由不再拉可用性快照**：
+ *
+ * - <b>可用性快照</b>（GET /api/plugins）：只在进应用、窗口获得焦点/变为可见、以及设置页
+ *   启停/重载之后拉。qiankun 生命周期之后，本窗口内的启停会直接装卸微应用并注销插槽，
+ *   注册表本身就是本窗口的权威；跨窗口/脚本/后端侧的外部变化，由「切回窗口」的焦点事件兜底。
+ * - <b>徽标</b>：切路由时刷新（从复习页回来，due 数就该变），有 3 秒在飞合并兜底。
+ */
+watch(() => route.fullPath, () => void refreshPluginBadges())
+onMounted(() => {
+  void refreshPlugins()
+  window.addEventListener('focus', onFocus)
+  document.addEventListener('visibilitychange', onVisibility)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', onFocus)
+  document.removeEventListener('visibilitychange', onVisibility)
+})
+function onFocus() {
+  void refreshPlugins()
+}
+function onVisibility() {
+  if (document.visibilityState === 'visible') void refreshPlugins()
+}
 
 const filters = computed<{ key: ListFilter; label: string; icon: string }[]>(() => [
   { key: 'all', label: '全部笔记', icon: '▤' },
@@ -197,7 +248,7 @@ watch(
       <template v-for="f in filters" :key="f.key">
         <button
           class="nav-item"
-          :class="{ active: onNotes && nodes.filter === f.key && !nodes.activeTag && !nodes.activeNotebookId }"
+          :class="{ active: !isPluginPage && nodes.filter === f.key && !nodes.activeTag && !nodes.activeNotebookId }"
           @click="openFilter(f.key)"
         >
           <!-- 「全部笔记」的图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
@@ -262,11 +313,29 @@ watch(
         v-for="pf in pluginFilters"
         :key="pf.id"
         class="nav-item"
-        :class="{ active: onNotes && nodes.pluginFilter?.filterId === pf.id }"
+        :class="{ active: !isPluginPage && nodes.pluginFilter?.filterId === pf.id }"
         @click="openPluginFilter(pf)"
       >
         <span class="ico">{{ pf.icon || '★' }}</span>
         <span class="label">{{ pf.label }}</span>
+      </button>
+
+      <!--
+        插件贡献的入口（复习 / 收藏…）与上面的核心视图**同一层级**：同样的行、同样的选中态、
+        同样的计数位 —— 还原拆分前的展示形式。核心依旧不认识任何一个具体插件。
+      -->
+      <button
+        v-for="entry in pluginNav"
+        :key="entry.pluginId"
+        class="nav-item plugin-entry"
+        :class="{ active: route.path === entry.to }"
+        @click="$router.push(entry.to)"
+      >
+        <span class="ico">{{ entry.glyph }}</span>
+        <span class="label">{{ entry.label }}</span>
+        <span v-if="(badges[entry.pluginId] ?? 0) > 0" class="count">
+          {{ (badges[entry.pluginId] ?? 0) > 50 ? '50+' : badges[entry.pluginId] }}
+        </span>
       </button>
 
       <template v-if="nodes.tags.length">

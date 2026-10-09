@@ -1,8 +1,4 @@
 import { http } from '@/core/http'
-export const systemApi = {
-  reindex: () =>
-    http.post<{ links: number; mirrored: number; tookMs: number }>('/api/maintenance/reindex'),
-}
 
 export const attachmentApi = {
   upload: (file: File) => {
