@@ -3,7 +3,8 @@ import type { Notebook, OpEntry, Tag } from './types'
 
 export const tagApi = {
   list: () => http.get<Tag[]>('/api/tags'),
-  rename: (id: string, name: string) => http.post<{ ok: boolean }>(`/api/tags/${id}/update`, { name }),
+  rename: (id: string, name: string) =>
+    http.post<{ ok: boolean }>('/api/tags/update', { name }, { id }),
 }
 
 export const notebookApi = {
@@ -22,12 +23,13 @@ export const notebookApi = {
     parentId?: string | null
     icon?: string | null
     sortOrder?: number
-  }) => http.post<Notebook>(`/api/notebooks/${id}/update`, patch),
+  }) => http.post<Notebook>('/api/notebooks/update', patch, { id }),
 
-  rename: (id: string, title: string) => http.post<Notebook>(`/api/notebooks/${id}/update`, { title }),
-  remove: (id: string) => http.post<{ ok: boolean }>(`/api/notebooks/${id}/delete`),
+  rename: (id: string, title: string) =>
+    http.post<Notebook>('/api/notebooks/update', { title }, { id }),
+  remove: (id: string) => http.post<{ ok: boolean }>('/api/notebooks/delete', undefined, { id }),
   addNode: (id: string, noteId: string) =>
-    http.post<{ ok: boolean }>(`/api/notebooks/${id}/nodes`, undefined, { noteId }),
+    http.post<{ ok: boolean }>('/api/notebooks/nodes', undefined, { id, noteId }),
 }
 
 export const systemApi = {

@@ -4,7 +4,6 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.NotebookRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,14 +31,14 @@ public class NotebookController {
         return notebookRepository.find(id);
     }
 
-    @PostMapping("/{id}/update")
-    public Dtos.NotebookDto update(@PathVariable String id, @RequestBody Dtos.NotebookRequest req) {
+    @PostMapping("/update")
+    public Dtos.NotebookDto update(@RequestParam String id, @RequestBody Dtos.NotebookRequest req) {
         notebookRepository.update(id, req.title(), req.parentId(), req.icon(), req.sortOrder());
         return notebookRepository.find(id);
     }
 
-    @PostMapping("/{id}/delete")
-    public java.util.Map<String, Object> delete(@PathVariable String id) {
+    @PostMapping("/delete")
+    public java.util.Map<String, Object> delete(@RequestParam String id) {
         if (NotebookRepository.DEFAULT_GROUP_ID.equals(id)) {
             throw new IllegalArgumentException("「" + NotebookRepository.DEFAULT_GROUP_TITLE
                     + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
@@ -55,8 +54,8 @@ public class NotebookController {
     }
 
     /** 把笔记移进这个分组（单归属：会离开原来的分组）。 */
-    @PostMapping("/{id}/nodes")
-    public java.util.Map<String, Object> addNode(@PathVariable String id,
+    @PostMapping("/nodes")
+    public java.util.Map<String, Object> addNode(@RequestParam String id,
                                                  @RequestParam String noteId) {
         notebookRepository.setExclusiveGroup(noteId, id);
         return java.util.Map.of("ok", true);

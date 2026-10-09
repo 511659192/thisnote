@@ -26,9 +26,10 @@ export interface CardPatch {
 export const pageApi = {
   /** 这几张卡（`ids` 省略 = 整页）：卡片几何 + 它自己的正文。 */
   get: (noteId: string, ids?: string[]) =>
-    http.get<NotePageData>(
-      `/api/notes/${noteId}/cards${ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : ''}`,
-    ),
+    http.get<NotePageData>('/api/notes/cards', {
+      noteId,
+      ids: ids && ids.length ? ids.map(encodeURIComponent).join(',') : undefined,
+    }),
 
   addBlock: (
     noteId: string,
@@ -41,13 +42,13 @@ export const pageApi = {
       title?: string
       color?: string
     },
-  ) => http.post<CardView>(`/api/notes/${noteId}/cards`, payload),
+  ) => http.post<CardView>('/api/notes/cards/create', payload, { noteId }),
 
-  patchBlocks: (noteId: string, cards: CardPatch[]) =>
-    http.post<{ ok: boolean }>(`/api/notes/${noteId}/cards/patch`, { cards }),
+  patchBlocks: (cards: CardPatch[]) =>
+    http.post<{ ok: boolean }>('/api/notes/cards/patch', { cards }),
 
-  patchBlock: (noteId: string, cardId: string, patch: CardPatch) =>
-    http.post<NoteCard>(`/api/notes/${noteId}/cards/${cardId}/patch`, patch),
+  patchBlock: (cardId: string, patch: CardPatch) =>
+    http.post<NoteCard>('/api/notes/cards/update', patch, { cardId }),
 
   /**
    * Write markdown typed inside a card back into the note.
@@ -55,21 +56,15 @@ export const pageApi = {
    * <p>`baseContentMd` 是编辑开始时卡片上的正文：磁盘上已经不是那一份时后端回 409，
    * 由调用方提示并重新载入 —— 不覆盖外部编辑器（Obsidian / VS Code）写进去的改动。
    */
-  writeContent: (noteId: string, cardId: string, contentMd: string, baseContentMd: string) =>
-    http.post<CardView>(`/api/notes/${noteId}/cards/${cardId}/content`, {
-      contentMd,
-      baseContentMd,
-    }),
+  writeContent: (cardId: string, contentMd: string, baseContentMd: string) =>
+    http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardId }),
 
-  duplicateBlock: (noteId: string, cardId: string, dx = 48, dy = 48) =>
-    http.post<NoteCard>(`/api/notes/${noteId}/cards/${cardId}/duplicate`, undefined, {
-      dx,
-      dy,
-    }),
+  duplicateBlock: (cardId: string, dx = 48, dy = 48) =>
+    http.post<NoteCard>('/api/notes/cards/duplicate', undefined, { cardId, dx, dy }),
 
-  removeBlock: (noteId: string, cardId: string, deleteContent = false) =>
-    http.post<{ ok: boolean }>(`/api/notes/${noteId}/cards/${cardId}/delete`, undefined, { deleteContent }),
+  removeBlock: (cardId: string, deleteContent = false) =>
+    http.post<{ ok: boolean }>('/api/notes/cards/delete', undefined, { cardId, deleteContent }),
 
-  zOrder: (noteId: string, id: string, op: 'top' | 'bottom' | 'up' | 'down') =>
-    http.post<NoteCard>(`/api/notes/${noteId}/cards/z`, { id, op }),
+  zOrder: (id: string, op: 'top' | 'bottom' | 'up' | 'down') =>
+    http.post<NoteCard>('/api/notes/cards/z', { id, op }),
 }

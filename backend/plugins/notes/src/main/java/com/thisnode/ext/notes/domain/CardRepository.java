@@ -2,9 +2,9 @@ package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.CardFile;
-import com.thisnode.ext.notes.store.NoteFilePaths;
 import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.store.CardRef;
+import com.thisnode.ext.notes.store.NoteFilePaths;
 import com.thisnode.ext.notes.store.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.plugin.api.ConflictException;
@@ -60,7 +60,7 @@ public class CardRepository {
      * Cards of a note in z order, exactly as they are stored. The order comes from the sidecar's
      * {@code z}; cards are never re-flowed, because that would move a card the user positioned.
      */
-    public List<Dtos.CardDto> blocks(String noteId) {
+    public List<Dtos.CardDto> cards(String noteId) {
         List<Dtos.CardDto> out = new ArrayList<>();
         for (CardMeta block : noteRepository.cards(noteId)) {
             out.add(dto(block));
@@ -278,7 +278,7 @@ public class CardRepository {
         }
     }
 
-    // ================================================================ 卡片写入（自 NoteRepository 移入）
+    // ================================================================ 卡片写入
 
     /** 写一张卡片（追加到清单末尾）并刷新该笔记的列表页缓存。 */
     public CardMeta putCard(String noteId, CardMeta block, String contentMd) {
@@ -297,7 +297,7 @@ public class CardRepository {
                 : resolveContentPath(note.title(), NoteFilePaths.cardSlug(block.title(), contentMd),
                         block.id());
         noteRepository.writeText(file, CardFile.compose(block, contentMd));
-        CardRef ref = CardRef.of(block.id(), noteRepository.paths().relative(file));
+        CardRef ref = CardRef.of(block.id(), noteFilePaths.relative(file));
 
         List<CardRef> cardRefs = new ArrayList<>(note.cards());
         int at = indexOf(cardRefs, block.id());

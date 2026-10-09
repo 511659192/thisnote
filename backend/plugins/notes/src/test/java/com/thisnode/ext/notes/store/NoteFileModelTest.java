@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 文件权威模型的基本规则：认领、聚合、往返、删除一致性。
  *
  * <p>这一组打在 {@link NoteRepository} 与
- * {@link NoteCompositionService} 上。因为读取改成"按需现扫"，断言里不再有
+ * {@link CardRepository} 上。因为读取改成"按需现扫"，断言里不再有
  * {@code load()}/{@code reload()} 这一步 —— 写完就能读到，读到的一定是磁盘现状。
  *
  * <p>这些测试不启 Spring —— {@link NoteRepository} 只依赖 markdown 根目录，用临时目录直接跑，

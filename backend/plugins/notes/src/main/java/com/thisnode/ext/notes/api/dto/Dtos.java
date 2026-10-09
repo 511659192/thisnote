@@ -59,11 +59,11 @@ public final class Dtos {
                                     Boolean clearNotebook) {
     }
 
-    // ---------- note page blocks ----------
+    // ---------- note page cards ----------
     //
-    // A note's page is made of blocks (cards). A block holds a fragment of *that note's*
-    // markdown plus its position on the page. There is no board/container entity: the note
-    // is the container, which is why these records carry noteId rather than boardId.
+    // A note's page is made of cards. A card holds a fragment of *that note's* markdown
+    // plus its position on the page. There is no board/container entity: the note is the
+    // container, which is why these records carry noteId rather than boardId.
 
     /**
      * A card on a note's page.
@@ -114,7 +114,7 @@ public final class Dtos {
                              Integer z, String color, String status, Boolean collapsed) {
     }
 
-    public record BatchCardPatchRequest(List<CardPatch> blocks) {
+    public record BatchCardPatchRequest(List<CardPatch> cards) {
     }
 
 

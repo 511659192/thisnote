@@ -222,7 +222,7 @@ export const usePageStore = defineStore('notePage', () => {
     if (!noteId.value || patches.length === 0) return
     localMove(patches)
     try {
-      await pageApi.patchBlocks(noteId.value, patches)
+      await pageApi.patchBlocks(patches)
     } catch (e) {
       ui.toast(`页面保存失败：${(e as Error).message}`, 'error')
       await reload()
@@ -256,7 +256,7 @@ export const usePageStore = defineStore('notePage', () => {
       }
     }
     if (patches.length && noteId.value) {
-      void pageApi.patchBlocks(noteId.value, patches).catch(() => undefined)
+      void pageApi.patchBlocks(patches).catch(() => undefined)
     }
   }
 
@@ -307,7 +307,7 @@ export const usePageStore = defineStore('notePage', () => {
     if ((view.card.contentMd ?? '').trim() || (view.card.title ?? '').trim()) return false
     if (count.value <= 1) return false
     try {
-      await pageApi.removeBlock(noteId.value, cardId, false)
+      await pageApi.removeBlock(cardId, false)
       totalCards.value--
       await reload()
       selection.value = selection.value.filter((id) => id !== cardId)
@@ -356,7 +356,7 @@ export const usePageStore = defineStore('notePage', () => {
     view.card.contentMd = contentMd
     view.contentMd = contentMd
     try {
-      const updated = await pageApi.writeContent(noteId.value, cardId, contentMd, baseContentMd)
+      const updated = await pageApi.writeContent(cardId, contentMd, baseContentMd)
       if (updated.noteTitle) noteTitle.value = updated.noteTitle
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -378,7 +378,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   async function removeBlock(cardId: string, deleteContent = false) {
     if (!noteId.value) return
-    await pageApi.removeBlock(noteId.value, cardId, deleteContent)
+    await pageApi.removeBlock(cardId, deleteContent)
     totalCards.value--
     // The remaining cards keep the positions the user gave them; the gap stays open.
     await reload()
@@ -396,7 +396,7 @@ export const usePageStore = defineStore('notePage', () => {
       return
     }
     for (const id of idsToDelete) {
-      await pageApi.removeBlock(noteId.value!, id, false)
+      await pageApi.removeBlock(id, false)
     }
     totalCards.value -= idsToDelete.length
     // Re-read rather than trusting the local list: the server re-flows the column, so
@@ -413,7 +413,7 @@ export const usePageStore = defineStore('notePage', () => {
     if (!requireCapacity()) return
     const created: NoteCard[] = []
     for (const id of selection.value) {
-      created.push(await pageApi.duplicateBlock(noteId.value, id, dx, dy))
+      created.push(await pageApi.duplicateBlock(id, dx, dy))
     }
     await reload()
     selection.value = created.map((b) => b.id)
@@ -422,7 +422,7 @@ export const usePageStore = defineStore('notePage', () => {
   async function zOrder(op: 'top' | 'bottom' | 'up' | 'down') {
     if (!noteId.value || !selection.value.length) return
     for (const id of selection.value) {
-      await pageApi.zOrder(noteId.value, id, op)
+      await pageApi.zOrder(id, op)
     }
     await reload()
   }

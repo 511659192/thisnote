@@ -8,10 +8,7 @@ import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.store.NoteMeta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -48,8 +45,8 @@ public class NoteController {
         return noteService.detail(noteService.create(req));
     }
 
-    @GetMapping("/{id}")
-    public Dtos.NoteDetail detail(@PathVariable String id) {
+    @GetMapping("/detail")
+    public Dtos.NoteDetail detail(@RequestParam String id) {
         return noteService.detail(id);
     }
 
@@ -57,36 +54,37 @@ public class NoteController {
      * 改笔记级字段（标题 / 标签 / 来源…）。
      *
      * <p><b>正文不在这里改</b>：带 {@code contentMd} 的整篇改写会把全文写进第一张卡、同时清空
-     * 其余卡片的正文（{@code NoteCompositionService#replaceNoteContent}），是一次静默的数据丢失。正文一律走
+     * 其余卡片的正文（{@code NoteRepository#replaceNoteContent}），是一次静默的数据丢失。正文一律走
      * 卡片端点 {@code POST /api/notes/{noteId}/cards/{cardId}/content}（那边带冲突保护）。
      */
-    @PostMapping("/{id}/patch")
-    public Dtos.NoteDetail patch(@PathVariable String id, @RequestBody Dtos.UpdateNodeRequest req) {
+    @PostMapping("/patch")
+    public Dtos.NoteDetail patch(@RequestParam String id, @RequestBody Dtos.UpdateNodeRequest req) {
         if (req != null && req.contentMd() != null) {
             throw new IllegalArgumentException(
-                    "整篇正文改写已停用：请在卡片里编辑（PATCH /api/notes/{noteId}/cards/{cardId}/content）");
+                    "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/{noteId}/cards/{cardId}/content）");
         }
         noteService.patch(id, req);
         return noteService.detail(id);
     }
 
-    @PostMapping("/{id}/delete")
-    public Map<String, Object> purge(@PathVariable String id) {
+    @PostMapping("/delete")
+    public Map<String, Object> purge(@RequestParam String id) {
         noteService.purge(id);
         return Map.of("ok", true);
     }
 
     // ---------------- tags ----------------
 
-    @PostMapping("/{id}/tags/add")
-    public List<Dtos.TagDto> addTag(@PathVariable String id, @RequestBody Map<String, String> body) {
-        tagRepository.addNodeTag(id, body.getOrDefault("name", ""));
+    @PostMapping("/tags/add")
+    public List<Dtos.TagDto> addTag(@RequestParam String id, @RequestParam String name) {
         noteService.require(id);
+        tagRepository.addNodeTag(id, name);
         return tagRepository.tagsOf(id);
     }
 
-    @PostMapping("/{id}/tags/remove")
-    public List<Dtos.TagDto> removeTag(@PathVariable String id, @RequestParam String name) {
+    @PostMapping("/tags/remove")
+    public List<Dtos.TagDto> removeTag(@RequestParam String id, @RequestParam String name) {
+        noteService.require(id);
         tagRepository.removeNodeTag(id, name);
         return tagRepository.tagsOf(id);
     }

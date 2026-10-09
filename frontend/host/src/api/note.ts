@@ -13,7 +13,7 @@ export interface NoteQuery {
 
 export const noteApi = {
   list: (query: NoteQuery = {}) => http.get<NoteMeta[]>('/api/notes', query as never),
-  get: (id: string) => http.get<NoteDetail>(`/api/notes/${id}`),
+  get: (id: string) => http.get<NoteDetail>('/api/notes/detail', { id }),
 
   create: (payload: {
     title?: string
@@ -37,14 +37,14 @@ export const noteApi = {
       notebookId?: string
       clearNotebook?: boolean
     },
-  ) => http.post<NoteDetail>(`/api/notes/${id}/patch`, payload),
+  ) => http.post<NoteDetail>('/api/notes/patch', payload, { id }),
 
-  purge: (id: string) => http.post<{ ok: boolean }>(`/api/notes/${id}/delete`),
+  purge: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
 
   addTag: (id: string, name: string) =>
-    http.post<NoteDetail['tags']>(`/api/notes/${id}/tags/add`, { name }),
+    http.post<NoteDetail['tags']>('/api/notes/tags/add', undefined, { id, name }),
   removeTag: (id: string, name: string) =>
-    http.post<NoteDetail['tags']>(`/api/notes/${id}/tags/remove`, undefined, { name }),
+    http.post<NoteDetail['tags']>('/api/notes/tags/remove', undefined, { id, name }),
   resolveStub: (title: string, fromNodeId?: string) =>
     http.post<NoteDetail>('/api/notes/resolve-stub', { title, fromNodeId }),
 }

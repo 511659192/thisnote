@@ -32,18 +32,16 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
- * 笔记的读写（**单一职责：只认笔记域**）。
+ * 笔记与卡片的存储层：笔记 meta 与卡片文件在这里落盘，列表页与出入链的缓存也在这里刷新。
  *
- * <p>卡片的事一概不在这里：读正文走 {@link NoteCompositionService#noteMarkdown}，建首卡走
- * {@link NoteCompositionService#createNote}，删笔记走 {@link NoteCompositionService#removeNote}。
- * 于是这个仓储里不再出现 {@code CardMeta}，也不再直接读写卡片文件。
+ * <p>磁盘模型：一篇笔记是一份 {@code meta/<id>.json} 加一叠卡片 md（{@code cards/}），卡片清单
+ * 记在 meta 里。这里只提供读写原语——meta 的增删改查、卡片文件的拼装与读取、缓存的刷新——
+ * **不做跨步骤编排**："写哪张卡、插到清单哪个位置"在 {@link CardRepository}，"建笔记先建首卡、
+ * 删笔记先删卡"这类流程在 {@code NoteService}/{@code CardService}。
  *
  * <p>与数据库时代最大的不同：笔记**没有自己的正文存储**。{@code contentMd} 是读时由卡片按清单
  * 顺序拼出来的派生值，写正文等于写卡片。因此不存在"更新正文"的独立路径，也就不可能出现笔记
  * 正文与卡片两份内容不一致。
- *
- * <p>方法签名刻意与旧的 JdbcTemplate 版本保持一致：上层 {@code NoteService}、控制器与前端不需要
- * 知道下面的存储换了。
  */
 @Repository
 public class NoteRepository {

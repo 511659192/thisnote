@@ -3,12 +3,11 @@ package com.thisnode.ext.notes.api;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.TagRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -26,8 +25,8 @@ public class TagController {
         return tagRepository.listWithCounts();
     }
 
-    @PostMapping("/{id}/update")
-    public Map<String, Object> rename(@PathVariable String id, @RequestBody Map<String, String> body) {
+    @PostMapping("/update")
+    public Map<String, Object> rename(@RequestParam String id, @RequestBody Map<String, String> body) {
         if (body.containsKey("color") && !body.containsKey("name")) {
             tagRepository.setColor(id, body.get("color"));
         } else {

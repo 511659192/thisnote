@@ -454,7 +454,7 @@ public class NoteService {
         int updated = 0;
         for (String sourceId : sourceIds) {
             boolean changed = false;
-            for (Dtos.CardDto block : cardRepository.blocks(sourceId)) {
+            for (Dtos.CardDto block : cardRepository.cards(sourceId)) {
                 String body = block.contentMd();
                 if (body == null || body.isBlank()) {
                     continue;

@@ -66,7 +66,7 @@ public class CardService {
     public Dtos.CardsDto page(String noteId, List<String> ids) {
         Note note = noteService.require(noteId);
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);
-        List<Dtos.CardDto> rows = cardRepository.blocks(noteId);
+        List<Dtos.CardDto> rows = cardRepository.cards(noteId);
         if (wanted != null) {
             rows = rows.stream().filter(b -> wanted.contains(b.id())).toList();
         }
@@ -169,7 +169,7 @@ public class CardService {
 
     /** Batched geometry write for drag / resize / distribute. */
     public void batchUpdate(Dtos.BatchCardPatchRequest req) {
-        List<Dtos.CardPatch> patches = req == null || req.blocks() == null ? List.of() : req.blocks();
+        List<Dtos.CardPatch> patches = req == null || req.cards() == null ? List.of() : req.cards();
         if (patches.isEmpty()) {
             return;
         }
