@@ -1,81 +1,27 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
 import { useUiStore } from '@/stores/ui'
 import { notebookApi } from '@/api'
-import '@/plugins'
-import { navBadges } from '@/plugins'
-import { activeNavEntries, refreshPluginAvailability } from '@/plugins'
+import { activeNoteListFilters, type NoteListFilter } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import type { ListFilter, Notebook } from '@/api/types'
-import { activeNoteListFilters, type NoteListFilter } from '@/plugins'
 
-const ui = useUiStore()
+/**
+ * 笔记域的侧栏主面板：新建、视图筛选、分组树、插件筛选与标签。
+ *
+ * <p>前后端分离后整个侧栏容器归宿主，业务面板由各域经
+ * {@code registerSidebarPanel} 登记（本组件即 notes 的登记物）；
+ * 插件 nav 入口（复习/收藏徽标轨）归宿主的 PluginNavRail，不在这里。
+ */
 const nodes = useNoteStore()
 const router = useRouter()
 const route = useRoute()
 
-/**
- * 侧栏的插件入口（原来是硬编码的「复习」按钮 —— 那等于让核心认识记忆曲线插件）。
- * 现在只面向注册器：入口由插件登记，徽标数量由插件自己算，核心一个具体插件都不认识。
- */
-const pluginNav = computed(() => activeNavEntries())
+/** 本面板的选中态只在笔记路由上点亮；插件页面打开时让位。 */
+const onNotes = computed(() => route.path === '/notes' || route.path.startsWith('/notes/'))
 
-/**
- * 当前是否停在某个插件页面上。
- *
- * <p>用来让核心视图不再显示为选中：插件入口与「全部笔记/最近编辑」同级，同一时刻只该有一行是亮的。
- */
-const isPluginPage = computed(() => pluginNav.value.some((entry) => route.path === entry.to))
-const badges = ref<Record<string, number>>({})
-async function refreshPluginBadges() {
-  /**
-   * 不给「你正在看的那个插件页」取徽标：那份数据页面自己刚刚取过一遍，
-   * 再取一次就是同一份列表请求打两遍（从复习切到收藏时实测到过）。
-   * 等你离开这个页面时，它会被正常刷新。
-   */
-  const elsewhere = pluginNav.value.filter((entry) => route.path !== entry.to)
-  badges.value = await navBadges(elsewhere)
-}
-async function refreshPlugins() {
-  await refreshPluginAvailability()
-  await refreshPluginBadges()
-}
-/**
- * 两个触发器各管各的，**切路由不再拉可用性快照**：
- *
- * - <b>可用性快照</b>（GET /api/plugins）：只在进应用、窗口获得焦点/变为可见、以及设置页
- *   启停/重载之后拉。qiankun 生命周期之后，本窗口内的启停会直接装卸微应用并注销插槽
- *   （SettingsView → loader → unregisterPlugin），注册表本身就是本窗口的权威；
- *   跨窗口 / 脚本 / 后端侧的外部变化，由「切回窗口」的焦点事件兜底 —— 那是这类改动
- *   真正发生的时刻。以前切路由也拉一次，代价是每点开一条笔记就打一遍 /api/plugins。
- * - <b>徽标</b>：切路由时刷新（从复习页回来，due 数就该变），有 3 秒在飞合并兜底，
- *   且只碰各插件自己的徽标端点。
- */
-watch(() => route.fullPath, () => void refreshPluginBadges())
-onMounted(() => {
-  void refreshPlugins()
-  window.addEventListener('focus', onFocus)
-  document.addEventListener('visibilitychange', onVisibility)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('focus', onFocus)
-  document.removeEventListener('visibilitychange', onVisibility)
-})
-function onFocus() {
-  void refreshPlugins()
-}
-function onVisibility() {
-  if (document.visibilityState === 'visible') void refreshPlugins()
-}
-
-/**
- * 侧栏只保留常用视图。
- *
- * <p>「每日笔记 / 模板 / 回收站」已从侧栏移除（界面做减法）；底层能力都还在，
- * 回收站当前没有界面入口（软删数据仍完整，恢复走 API）。归档功能已整体移除。
- */
 const filters = computed<{ key: ListFilter; label: string; icon: string }[]>(() => [
   { key: 'all', label: '全部笔记', icon: '▤' },
   { key: 'recent', label: '最近编辑', icon: '⏱' },
@@ -120,7 +66,10 @@ const DEFAULT_GROUP_ID = 'grp-default'
 /** 拖拽悬停中的分组（落点高亮）。 */
 const dragOverGroupId = ref<string | null>(null)
 const groupMenu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[] }>({
-  open: false, x: 0, y: 0, entries: [],
+  open: false,
+  x: 0,
+  y: 0,
+  entries: [],
 })
 
 async function promptNewGroup(parentId: string | null) {
@@ -226,15 +175,17 @@ async function onGroupDrop(e: DragEvent, groupId: string) {
   }
 }
 
-onMounted(async () => {
-  if (nodes.notebooks.length === 0) void nodes.refreshMeta()
-  // 先拿插件的启用状态，再取徽标——被停用的插件不该露出入口
-  await refreshPlugins()
-})
+watch(
+  () => nodes.notebooks.length,
+  (len) => {
+    if (len === 0) void nodes.refreshMeta()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar-panel">
     <div class="section">
       <button class="new-note" @click="createNote">
         <span class="plus">＋</span>
@@ -246,7 +197,7 @@ onMounted(async () => {
       <template v-for="f in filters" :key="f.key">
         <button
           class="nav-item"
-          :class="{ active: !isPluginPage && nodes.filter === f.key && !nodes.activeTag && !nodes.activeNotebookId }"
+          :class="{ active: onNotes && nodes.filter === f.key && !nodes.activeTag && !nodes.activeNotebookId }"
           @click="openFilter(f.key)"
         >
           <!-- 「全部笔记」的图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
@@ -306,34 +257,16 @@ onMounted(async () => {
         </template>
 
       </template>
-        <!-- 插件提供的筛选（例如「收藏」）：与核心筛选同组同级，因为它就是同一份列表的一个条件 -->
-        <button
-          v-for="pf in pluginFilters"
-          :key="pf.id"
-          class="nav-item"
-          :class="{ active: !isPluginPage && nodes.pluginFilter?.filterId === pf.id }"
-          @click="openPluginFilter(pf)"
-        >
-          <span class="ico">{{ pf.icon || '★' }}</span>
-          <span class="label">{{ pf.label }}</span>
-        </button>
-
-      <!--
-        插件贡献的入口（复习 / 收藏…）与上面的核心视图**同一层级**：同样的行、同样的选中态、
-        同样的计数位。核心依旧不认识任何一个具体插件——它只是把注册器里的入口渲染出来。
-      -->
+      <!-- 插件提供的筛选（例如「收藏」）：与核心筛选同组同级，因为它就是同一份列表的一个条件 -->
       <button
-        v-for="entry in pluginNav"
-        :key="entry.pluginId"
-        class="nav-item plugin-entry"
-        :class="{ active: route.path === entry.to }"
-        @click="$router.push(entry.to)"
+        v-for="pf in pluginFilters"
+        :key="pf.id"
+        class="nav-item"
+        :class="{ active: onNotes && nodes.pluginFilter?.filterId === pf.id }"
+        @click="openPluginFilter(pf)"
       >
-        <span class="ico">{{ entry.glyph }}</span>
-        <span class="label">{{ entry.label }}</span>
-        <span v-if="(badges[entry.pluginId] ?? 0) > 0" class="count">
-          {{ (badges[entry.pluginId] ?? 0) > 50 ? '50+' : badges[entry.pluginId] }}
-        </span>
+        <span class="ico">{{ pf.icon || '★' }}</span>
+        <span class="label">{{ pf.label }}</span>
       </button>
 
       <template v-if="nodes.tags.length">
@@ -364,13 +297,11 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.sidebar {
+.sidebar-panel {
   width: var(--sidebar-w);
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  background: var(--c-surface);
-  border-right: 1px solid var(--c-border);
   min-height: 0;
 }
 
@@ -428,7 +359,6 @@ onMounted(async () => {
   visibility: hidden;
   cursor: default;
 }
-/* 「全部笔记」右侧的总开关：收起时侧栏只剩核心视图 */
 .root-caret {
   margin-left: auto;
   padding: 0 2px;
@@ -440,14 +370,11 @@ onMounted(async () => {
   opacity: 0.5;
   font-size: 10px;
 }
-/* 拖拽悬停：让落点一眼可见（笔记拖进来 = 移到这个分组；分组拖进来 = 变成子分组） */
 .group-item.drop-target {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
   outline-offset: -2px;
 }
-/* 图标即按钮：平时显示原图标，鼠标移到这一行时换成 ＋（新建分组/子分组）。
-   这样「新建分组」不用额外占一行，就长在「全部笔记」的图标上。 */
 .ico-swap {
   flex: 0 0 auto;
   display: inline-flex;
@@ -466,19 +393,6 @@ onMounted(async () => {
 }
 .nav-item:hover .ico-swap .add {
   display: inline;
-}
-.mini {
-  margin-left: auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  color: var(--c-text-3);
-  font-size: 13px;
-  line-height: 1;
-}
-.mini:hover {
-  background: var(--c-surface-3);
-  color: var(--c-text);
 }
 
 .nav-item {

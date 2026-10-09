@@ -54,13 +54,13 @@ class PluginJarContractTest {
 
     @ParameterizedTest(name = "{2} 的 jar 携带完整的插件契约")
     @CsvSource({
-            "notes,plugin-notes,notes,false",
+            "notes,plugin-notes,notes,true",
             "favorite,plugin-favorite,favorite,true",
             "memory-curve,plugin-memory-curve,memory-curve,true"
     })
     void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasFrontend) throws Exception {
-        // notes 是核心业务插件（PluginKind.CORE）：没有前端产物，其余插件有 —— 用 hasFrontend
-        // 区分是否断言前端产物。
+        // 前后端拆分对齐后：notes 也有自己的前端（宿主 UI 的笔记域迁成了 notes 微应用）——
+        // 三个插件都有前端产物，全部走 plugins-dist/frontend/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
 
         try (ZipFile zip = new ZipFile(jar.toFile())) {

@@ -53,7 +53,7 @@ export const memoryCurveApi = {
     ),
   review: (blockId: string, grade: Grade) =>
     http.post<{ enabled: boolean; schedule: ScheduleView }>(
-      `/api/plugins/memory-curve/cards/${blockId}/review`, { grade },
+      `/api/plugins/memory-curve/review`, { grade }, { blockId },
     ),
   due: (limit = 50) =>
     http.get<DueCard[]>(
@@ -62,7 +62,7 @@ export const memoryCurveApi = {
   /** 删掉一条排期（复习页发现它是孤儿时调用）。 */
   forget: (blockId: string) =>
     http.del<{ blockId: string; removed: boolean }>(
-      `/api/plugins/memory-curve/cards/${blockId}`,
+      `/api/plugins/memory-curve/forget`, undefined, { blockId },
     ),
 }
 
@@ -83,8 +83,8 @@ export async function loadCardContent(blockIds: string[]): Promise<Map<string, C
     const pages = await Promise.all(batch.map(async (note) => {
       try {
         const page = await http.get<{
-          blocks: Array<{ block: { id: string; title: string; contentMd: string } }>
-        }>(`/api/notes/${note.id}/blocks`)
+          cards: Array<{ card: { id: string; title: string; contentMd: string } }>
+        }>('/api/notes/cards', { noteId: note.id })
         return { note, page }
       } catch {
         return null
@@ -92,7 +92,7 @@ export async function loadCardContent(blockIds: string[]): Promise<Map<string, C
     }))
     for (const item of pages) {
       if (!item) continue
-      for (const view of item.page.blocks) {
+      for (const view of item.page.cards) {
         if (want.has(view.block.id) && !found.has(view.block.id)) {
           found.set(view.block.id, {
             noteTitle: item.note.title,

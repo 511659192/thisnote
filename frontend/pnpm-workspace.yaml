@@ -3,6 +3,7 @@ packages:
   - 'plugin-api'
   - 'plugins/favorite'
   - 'plugins/memory-curve'
+  - 'plugins/notes'
 
 allowBuilds:
   esbuild: true

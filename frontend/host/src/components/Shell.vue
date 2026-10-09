@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useUiStore } from '@/stores/ui'
-import AppSidebar from '@/components/AppSidebar.vue'
-import StatusBar from '@/components/StatusBar.vue'
+import { shellState, toggleRightPanel, toggleTheme } from '@thisnode/plugin-api'
+import PluginNavRail from '@/components/PluginNavRail.vue'
 
 const ui = useUiStore()
 </script>
@@ -24,18 +23,18 @@ const ui = useUiStore()
       <div class="spacer"></div>
       <button
         class="btn ghost icon"
-        :class="{ active: ui.rightPanelOpen }"
-        :title="ui.rightPanelOpen ? '隐藏右侧面板（反向链接）' : '显示右侧面板（反向链接）'"
-        @click="ui.toggleRightPanel()"
+        :class="{ active: shellState.rightPanelOpen }"
+        :title="shellState.rightPanelOpen ? '隐藏右侧面板（反向链接）' : '显示右侧面板（反向链接）'"
+        @click="toggleRightPanel()"
       >
         ⊟
       </button>
       <button
         class="btn ghost icon"
-        :title="ui.theme === 'dark' ? '切换到浅色' : '切换到深色'"
-        @click="ui.toggleTheme()"
+        :title="shellState.theme === 'dark' ? '切换到浅色' : '切换到深色'"
+        @click="toggleTheme()"
       >
-        {{ ui.theme === 'dark' ? '☀' : '☾' }}
+        {{ shellState.theme === 'dark' ? '☀' : '☾' }}
       </button>
       <button
         class="btn ghost icon"
@@ -48,13 +47,13 @@ const ui = useUiStore()
     </header>
 
     <div class="body">
-      <AppSidebar v-show="!ui.sidebarCollapsed" />
+      <!-- 侧栏 = 业务域登记的面板（notes 列表）+ 宿主自有 nav 轨 -->
+      <PluginNavRail v-show="!ui.sidebarCollapsed" />
       <main class="main">
         <RouterView />
       </main>
     </div>
 
-    <StatusBar />
   </div>
 </template>
 

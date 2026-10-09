@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CardView } from '@/api/types'
-import MarkdownPreview from '@/components/MarkdownPreview.vue'
+import { host } from '@thisnode/plugin-api'
+
+/** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
+const MarkdownView = host().MarkdownView
 // '@/plugins' 触发插件自注册；registry 提供列表（直接导入，绕开类型推断上的环）。
 import '@/plugins'
 import { activeCardPlugins } from '@/plugins'
@@ -303,7 +306,7 @@ onBeforeUnmount(() => {
         @input="fitHeight"
       ></textarea>
       <div class="read pane">
-        <MarkdownPreview
+        <component :is="MarkdownView"
           v-if="previewSource"
           :content="previewSource"
           @open="(id: string) => emit('open-note', id)"
@@ -329,7 +332,7 @@ onBeforeUnmount(() => {
     ></textarea>
 
     <div v-else-if="!card.collapsed" ref="readBody" class="body read">
-      <MarkdownPreview
+      <component :is="MarkdownView"
         v-if="content"
         :content="content"
         @open="(id: string) => emit('open-note', id)"

@@ -11,10 +11,12 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +24,9 @@ import java.util.Locale;
 
 /**
  * 插件前端的静态产物：{@code /plugin-assets/<id>/<相对路径>}。
+ *
+ * <p>路径通配与附件端点同理，是**文件路径直通**的刻意例外（非资源路由）：plugin.js 内的
+ * {@code ./chunk-*.js} 相对导入需要目录语义，query 形态会让相对解析落到页面根。
  *
  * <p><b>前后端分离</b>：前端产物不再打进插件 jar —— 各插件模块用 vite 产出到自己的
  * {@code frontend-dist/}，Maven 打包时由 antrun 拷到 {@code plugins-dist/frontend/<id>/}
@@ -53,7 +58,7 @@ public class PluginAssetController {
         if (manager == null) {
             return ResponseEntity.notFound().build();
         }
-        // 注册表既是启停闸门，也是 pluginId 的白名单：未知 id（含恶意路径段）一律 404
+        // 注册表既是启停闸门，也是 pluginId 的白名单：未知 id（含恶意参数）一律 404
         PluginWrapper wrapper = manager.getPlugin(pluginId);
         if (wrapper == null || wrapper.getPluginState() != PluginState.STARTED) {
             return ResponseEntity.notFound().build();
@@ -65,7 +70,7 @@ public class PluginAssetController {
             return ResponseEntity.notFound().build();
         }
         String relative = uri.substring(at + prefix.length());
-        // 路径穿越与空路径都不放行（URL 解码后的 .. 也到不了这里： Spring 已解码，再验一次 normalize 前缀）
+        // 路径穿越与空路径都不放行（normalize 前缀再做一道保险）
         if (relative.isEmpty() || relative.contains("..")) {
             return ResponseEntity.badRequest().build();
         }

@@ -23,7 +23,7 @@ import { PLUGIN_DEV_PORTS } from './devPorts'
  * <ul>
  *   <li><b>开发</b>：插件自己 dev server 的源码入口（端口约定见 {@link PLUGIN_DEV_PORTS}；
  *       dev server 没起时自动回退到后端端出的产物，只是没有插件源码级的调试体验）；</li>
- *   <li><b>生产</b>：后端从磁盘插件前端目录端出的 `/plugin-assets/<id>/plugin.js`（plugins-dist/frontend/）。</li>
+ *   <li><b>生产</b>：后端从磁盘插件前端目录端出的 `/plugin-assets/<id>/...`（plugins-dist/frontend/，文件路径直通）。</li>
  * </ul>
  */
 
@@ -41,15 +41,19 @@ let sharedModulesPromise: Promise<Record<string, { namespace: ModuleNamespace }>
 
 function sharedSandboxModules(): Promise<Record<string, { namespace: ModuleNamespace }>> {
   sharedModulesPromise ??= (async () => {
-    // 三个 import 都发生在宿主自己的模块图里，拿到的就是宿主正在用的那份实例。
-    const [vue, vueRouter, pluginApiModule] = await Promise.all([
+    // 四个 import 都发生在宿主自己的模块图里，拿到的就是宿主正在用的那份实例。
+    // pinia 也在列：笔记域（notes 微应用）的 store 用 defineStore 定义，
+    // 宿主渲染它的组件时必须解析到宿主正在用的那个 pinia 实例。
+    const [vue, vueRouter, pinia, pluginApiModule] = await Promise.all([
       import('vue'),
       import('vue-router'),
+      import('pinia'),
       import('@thisnode/plugin-api'),
     ])
     return {
       vue: { namespace: vue },
       'vue-router': { namespace: vueRouter },
+      pinia: { namespace: pinia },
       '@thisnode/plugin-api': { namespace: pluginApiModule },
     }
   })()
@@ -65,7 +69,7 @@ function sharedSandboxModules(): Promise<Record<string, { namespace: ModuleNames
 function devSharedResolveHook(specifier: string, referrer: string): string {
   if (specifier.startsWith(SHARED_DEP_PREFIX)) {
     const name = decodeURIComponent(specifier.slice(SHARED_DEP_PREFIX.length).split('?')[0])
-    if (name === 'vue' || name === 'vue-router' || name === '@thisnode/plugin-api') return name
+    if (name === 'vue' || name === 'vue-router' || name === 'pinia' || name === '@thisnode/plugin-api') return name
     return specifier
   }
   const isUrlLike =
@@ -96,6 +100,8 @@ function buildHtmlEntry(moduleSrcUrl: string): string {
 
 /** 生产形态：后端从磁盘插件前端目录端出的产物（相对宿主页同源）。 */
 function prodModuleSrcUrl(id: string): string {
+  // 路径形态是刻意保留的：plugin.js 内的 `./chunk-*.js` 相对导入需要目录语义，
+  // query 形态会让相对解析落到页面根（与附件通配同理，属文件路径直通而非资源路由）。
   return new URL(`/plugin-assets/${id}/plugin.js`, window.location.origin).href
 }
 
@@ -242,11 +248,8 @@ export async function loadActivePluginFrontends(router: Router): Promise<void> {
   let activeIds: string[]
   try {
     const plugins = await pluginApi.list()
-    activeIds = plugins
-      .filter((plugin) => plugin.active)
-      // 核心插件（notes）是**纯后端**插件：没有前端产物，跳过装载（其余 kind 正常拉起微应用）
-      .filter((plugin) => plugin.kind !== 'core')
-      .map((plugin) => plugin.id)
+    // 前后端拆分对齐后，CORE 插件（notes）也有前端微应用 —— 全部启用中的插件都装载。
+    activeIds = plugins.filter((plugin) => plugin.active).map((plugin) => plugin.id)
   } catch (e) {
     // 后端没起来/列表拿不到：界面照常可用，只是没有插件入口
     console.warn('[插件] 拿不到插件列表，跳过前端装载：', e)
@@ -267,6 +270,7 @@ export function syncPluginRoutes(router: Router): void {
       path: route.path,
       name: route.name,
       component: route.component,
+      props: route.props,
     })
     registeredRoutes.set(route.name, route.pluginId)
   }

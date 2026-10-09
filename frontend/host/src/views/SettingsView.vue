@@ -12,13 +12,11 @@ import {
 } from '@/plugins'
 import { setApiBase, apiBase } from '@/core/http'
 import { useUiStore } from '@/stores/ui'
-import { useNoteStore } from '@/stores/notes'
 import { formatRelative } from '@/core/utils'
 
 const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
-const nodes = useNoteStore()
 
 const tab = ref<'data' | 'backup' | 'plugins' | 'about'>('data')
 const busy = ref('')

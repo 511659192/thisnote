@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { useUiStore } from '@/stores/ui'
+import { dismiss as shellDismiss, shellState } from '@thisnode/plugin-api'
 
-const ui = useUiStore()
+const state = shellState
 </script>
 
 <template>
   <div class="toast-host">
     <TransitionGroup name="toast">
       <div
-        v-for="t in ui.toasts"
+        v-for="t in state.toasts"
         :key="t.id"
         class="toast"
         :class="t.kind"
-        @click="ui.dismiss(t.id)"
+        @click="shellDismiss(t.id)"
       >
         <span class="icon">{{ t.kind === 'error' ? '⚠' : t.kind === 'success' ? '✓' : 'ℹ' }}</span>
         <span class="msg">{{ t.message }}</span>

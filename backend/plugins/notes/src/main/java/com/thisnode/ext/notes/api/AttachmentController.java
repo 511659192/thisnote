@@ -30,12 +30,18 @@ public class AttachmentController {
 
     private final AttachmentService attachmentService;
 
-    @PostMapping
+    @PostMapping("/upload")
     public Dtos.AttachmentDto upload(@RequestParam("file") MultipartFile file) throws IOException {
         return attachmentService.store(file);
     }
 
-    /** Serve an attachment by its relative path, e.g. /api/attachments/2025/01/ab12-pic.png */
+    /**
+     * Serve an attachment by its relative path, e.g. /api/attachments/2025/01/ab12-pic.png
+     *
+     * <p>路径通配在这里是**刻意保留的唯一例外**：附件 URL 以 {@code /api/attachments/<相对路径>}
+     * 的形态**持久化在笔记正文里**（老内容全是这样），改成 ?path= 会让存量笔记的图片全部 404。
+     * 新端点形态只此一处，不作为其它控制器的范式。
+     */
     @GetMapping("/**")
     public ResponseEntity<Resource> serve(HttpServletRequest request) throws IOException {
         String full = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);

@@ -1,81 +1,44 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import {
+  dismiss as shellDismiss,
+  setBusy as shellSetBusy,
+  shellState,
+  toast as shellToast,
+  toggleRightPanel as shellToggleRightPanel,
+  toggleTheme as shellToggleTheme,
+} from '@thisnode/plugin-api'
 
-export interface Toast {
-  id: number
-  kind: 'info' | 'success' | 'error'
-  message: string
-}
-
-let toastSeq = 0
-
-/** Shell-level UI state: theme, panels, palette, toasts. */
+/**
+ * 宿主壳级 UI 状态。
+ *
+ * 前后端分离后，theme / 右侧面板 / toast / busy 是**跨微应用共享**的壳级状态，
+ * 真身放在 {@link shellState}（@thisnode/plugin-api，模块级 reactive 单例）——
+ * notes 微应用与宿主看到的是同一份。这里只保留宿主独有的侧栏折叠，
+ * 并把共享状态以 Pinia 计算属性的形式代理出去，老调用点（ui.toast(...)）无需改动。
+ */
 export const useUiStore = defineStore('ui', () => {
-  const theme = ref<'light' | 'dark'>(
-    (localStorage.getItem('thisnode.theme') as 'light' | 'dark') || 'light',
-  )
   const sidebarCollapsed = ref(localStorage.getItem('thisnode.sidebar') === 'collapsed')
-  /**
-   * The backlinks panel starts closed: a note's page is the main surface and the panel covers
-   * its right third, which would hide (and block) any card organised there. Still a toggle.
-   */
-  const rightPanelOpen = ref(localStorage.getItem('thisnode.rightPanel') === 'open')
-  const toasts = ref<Toast[]>([])
-  const busy = ref(false)
-  const busyLabel = ref('')
-
-  function applyTheme() {
-    document.documentElement.dataset.theme = theme.value
-    localStorage.setItem('thisnode.theme', theme.value)
-  }
-
-  function toggleTheme() {
-    theme.value = theme.value === 'light' ? 'dark' : 'light'
-    applyTheme()
-  }
 
   function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
     localStorage.setItem('thisnode.sidebar', sidebarCollapsed.value ? 'collapsed' : 'open')
   }
 
-  function toggleRightPanel() {
-    rightPanelOpen.value = !rightPanelOpen.value
-    localStorage.setItem('thisnode.rightPanel', rightPanelOpen.value ? 'open' : 'closed')
-  }
-
-  function toast(message: string, kind: Toast['kind'] = 'info', ttl = 3200) {
-    const id = ++toastSeq
-    toasts.value.push({ id, kind, message })
-    setTimeout(() => {
-      toasts.value = toasts.value.filter((t) => t.id !== id)
-    }, ttl)
-  }
-
-  function dismiss(id: number) {
-    toasts.value = toasts.value.filter((t) => t.id !== id)
-  }
-
-  function setBusy(value: boolean, label = '') {
-    busy.value = value
-    busyLabel.value = label
-  }
-
-  applyTheme()
-
   return {
-    theme,
+    // —— 共享壳状态（真身在 @thisnode/plugin-api/shell-state）——
+    theme: computed(() => shellState.theme),
+    rightPanelOpen: computed(() => shellState.rightPanelOpen),
+    toasts: computed(() => shellState.toasts),
+    busy: computed(() => shellState.busy),
+    busyLabel: computed(() => shellState.busyLabel),
+    toggleTheme: shellToggleTheme,
+    toggleRightPanel: shellToggleRightPanel,
+    toast: shellToast,
+    dismiss: shellDismiss,
+    setBusy: shellSetBusy,
+    // —— 宿主独有 ——
     sidebarCollapsed,
-    rightPanelOpen,
-    toasts,
-    busy,
-    busyLabel,
-    toggleTheme,
     toggleSidebar,
-    toggleRightPanel,
-    toast,
-    dismiss,
-    setBusy,
-    applyTheme,
   }
 })

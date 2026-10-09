@@ -39,7 +39,7 @@ public class NoteController {
                 false, limit, offset));
     }
 
-    @PostMapping
+    @PostMapping("/create")
     public Dtos.NoteDetail create(@RequestBody Dtos.CreateNodeRequest req) {
         return noteService.detail(noteService.create(req));
     }

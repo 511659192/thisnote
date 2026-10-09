@@ -92,6 +92,9 @@
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
                       tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
+                <copy todir="${project.basedir}/../../plugins-dist/frontend/${plugin.id}" overwrite="true">
+                  <fileset dir="${project.basedir}/frontend-dist" erroronmissingdir="false"/>
+                </copy>
               </target>
             </configuration>
           </execution>
@@ -99,4 +102,61 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      前端构建：笔记域前端（前后端拆分对齐后宿主 UI 迁到 plugins/notes）在本模块的 frontend-dist，
+      这里接线 pnpm install + build（由 antrun 拷到 plugins-dist/frontend/notes/）。
+      激活条件与其它插件一致：未设置 thisnode.skip-frontend 且前端源码存在。
+    -->
+    <profile>
+      <id>frontend</id>
+      <activation>
+        <property>
+          <name>!thisnode.skip-frontend</name>
+        </property>
+        <file>
+          <exists>../../../frontend/plugins/notes/package.json</exists>
+        </file>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>pnpm-install</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../../frontend/plugins/notes</workingDirectory>
+                  <arguments>
+                    <argument>install</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+              <execution>
+                <id>pnpm-build</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>pnpm</executable>
+                  <workingDirectory>${project.basedir}/../../../frontend/plugins/notes</workingDirectory>
+                  <arguments>
+                    <argument>build</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

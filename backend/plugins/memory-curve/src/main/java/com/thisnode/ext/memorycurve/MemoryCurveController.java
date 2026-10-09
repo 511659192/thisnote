@@ -1,8 +1,6 @@
 package com.thisnode.ext.memorycurve;
 
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,14 +29,14 @@ public class MemoryCurveController {
         return srs.cardStates(ids);
     }
 
-    @GetMapping("/cards/{blockId}")
-    public Map<String, Object> card(@PathVariable String blockId) {
+    @GetMapping("/card")
+    public Map<String, Object> card(@RequestParam String blockId) {
         return srs.cardState(blockId);
     }
 
     /** Grade a card: 1=忘记 2=困难 3=良好 4=简单. */
-    @PostMapping("/cards/{blockId}/review")
-    public Map<String, Object> review(@PathVariable String blockId,
+    @PostMapping("/review")
+    public Map<String, Object> review(@RequestParam String blockId,
                                       @RequestBody ReviewRequest request) {
         if (request == null || request.grade() == null) {
             throw new IllegalArgumentException("缺少 grade");
@@ -60,8 +58,8 @@ public class MemoryCurveController {
      * 重建过），就顺手调这里清掉。本插件不读笔记数据，自己没有别的办法判断卡片还在不在 ——
      * 正常删除路径由主容器的 {@code CardChangedEvent} 负责，这里是兜底。
      */
-    @DeleteMapping("/cards/{blockId}")
-    public Map<String, Object> forget(@PathVariable String blockId) {
+    @PostMapping("/forget")
+    public Map<String, Object> forget(@RequestParam String blockId) {
         return Map.of("blockId", blockId, "removed", srs.forget(blockId));
     }
 

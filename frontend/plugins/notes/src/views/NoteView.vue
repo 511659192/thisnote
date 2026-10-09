@@ -8,6 +8,7 @@ import { usePageStore } from '@/stores/notePage'
 import { useUiStore } from '@/stores/ui'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
+import StatusBar from '@/components/StatusBar.vue'
 import BacklinksPanel from '@/components/BacklinksPanel.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import GroupPicker from '@/components/GroupPicker.vue'
@@ -279,6 +280,8 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   void applyRoute()
+  // 原宿主 App.vue 的启动刷新随域迁入：直链深页（#/notes/abc）时列表也要就位。
+  if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
@@ -427,6 +430,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       @create="createGroupFromPicker"
       @close="groupPicker = { open: false, noteId: null }"
     />
+    <StatusBar />
   </div>
 </template>
 

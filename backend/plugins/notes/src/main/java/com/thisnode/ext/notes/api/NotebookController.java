@@ -25,7 +25,7 @@ public class NotebookController {
         return notebookRepository.list("notebook");
     }
 
-    @PostMapping
+    @PostMapping("/create")
     public Dtos.NotebookDto create(@RequestBody Dtos.NotebookRequest req) {
         String id = notebookRepository.create(req.title(), req.parentId(), req.icon(), "notebook");
         return notebookRepository.find(id);
