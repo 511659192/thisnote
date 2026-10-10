@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.domain.TagBook;
-import com.thisnode.ext.notes.util.JsonFiles;
+import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.ext.notes.util.Tags;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -53,7 +53,7 @@ public class TagRepository {
     private TagBook load() {
         Path file = tagsFile();
         try {
-            TagBook loaded = JsonFiles.read(file, TagBook.class);
+            TagBook loaded = JsonFileUtils.read(file, TagBook.class);
             return loaded == null ? TagBook.empty() : loaded;
         } catch (IOException | RuntimeException e) {
             log.warn("标签台账无法读取：{}（{}）", paths.relative(file), e.toString());
@@ -62,7 +62,7 @@ public class TagRepository {
     }
 
     private void save(TagBook next) {
-        JsonFiles.write(tagsFile(), next);
+        JsonFileUtils.write(tagsFile(), next);
         book = next;
     }
 

@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.domain;
 
-import com.thisnode.ext.notes.util.Markdown;
+import com.thisnode.ext.notes.util.MarkdownUtils;
 
 import java.nio.file.Path;
 import java.util.Locale;
@@ -100,17 +100,17 @@ public final class NoteFilePaths {
      */
     public static String cardSlug(String cardTitle, String contentMd) {
         if (cardTitle != null && !cardTitle.isBlank()) {
-            return Markdown.slug(cardTitle);
+            return MarkdownUtils.slug(cardTitle);
         }
-        String heading = Markdown.firstHeading(contentMd);
+        String heading = MarkdownUtils.firstHeading(contentMd);
         if (heading != null && !heading.isBlank()) {
-            return Markdown.slug(heading);
+            return MarkdownUtils.slug(heading);
         }
         if (contentMd != null) {
             for (String line : contentMd.split("\\R")) {
                 String trimmed = line.trim();
                 if (!trimmed.isEmpty()) {
-                    return Markdown.slug(trimmed);
+                    return MarkdownUtils.slug(trimmed);
                 }
             }
         }

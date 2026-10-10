@@ -185,6 +185,27 @@ class NoteFileModelTest {
     }
 
     @Test
+    @DisplayName("新版 meta 的 cardRefs 字段可加载，明细正文可查询")
+    void readsLegacyCardsFieldFromNoteMeta() throws IOException {
+        Path card = store.writeCard("旧笔记", CardMeta.newCardMeta("card-legacy", 0, 0, "", null, null, 1L),
+                "旧格式中的正文", null);
+        Path metaDir = root.resolve("meta");
+        Files.createDirectories(metaDir);
+        String legacyMeta = com.alibaba.fastjson2.JSON.toJSONString(Map.of(
+                "v", 2, "id", "note-legacy", "title", "旧笔记", "type", "note",
+                "cardRefs", List.of(Map.of("id", "card-legacy",
+                        "file", root.relativize(card).toString().replace(java.io.File.separatorChar, '/'))),
+                "createdAt", 1, "updatedAt", 1));
+        Files.writeString(metaDir.resolve("note-legacy.json"), legacyMeta, StandardCharsets.UTF_8);
+
+        NoteMeta loaded = store.getOne("note-legacy");
+
+        assertThat(loaded).isNotNull();
+        assertThat(loaded.cardRefs()).hasSize(1);
+        assertThat(store.noteMarkdown("note-legacy")).isEqualTo("旧格式中的正文");
+    }
+
+    @Test
     @DisplayName("台账文件不会被当成笔记读：没有 id 的 json 一律跳过")
     void ledgerFilesAreNotNotes() throws IOException {
         Path ledgers = root.resolve("ledgers");

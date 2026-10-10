@@ -2,6 +2,8 @@ package com.thisnode.ext.notes.util;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -18,10 +20,8 @@ import java.nio.file.StandardOpenOption;
  * <p>笔记 meta、卡片正文、标签台账都要写文件，但它们的仓储不该为了借这个方法而互相依赖，
  * 所以"怎么写才安全"只在这里有一份实现。
  */
-public final class JsonFiles {
-
-    private JsonFiles() {
-    }
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class JsonFileUtils {
 
     public static void writeText(Path file, String text) {
         try {
@@ -35,7 +35,6 @@ public final class JsonFiles {
         }
     }
 
-    /** 人类可读的缩进 JSON（meta 与台账都是用户会打开看的文件）。 */
     public static void write(Path file, Object value) {
         writeText(file, JSON.toJSONString(value, JSONWriter.Feature.PrettyFormat));
     }

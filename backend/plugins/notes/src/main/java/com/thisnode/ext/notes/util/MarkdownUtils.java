@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  * Markdown helpers: {@code [[wiki link]]} extraction (F-L-01), frontmatter parsing for
  * Obsidian import, and title/filesystem slug rules.
  */
-public final class Markdown {
+public final class MarkdownUtils {
 
     /** {@code [[Target]]}, {@code [[Target|Label]]}, {@code [[Target#Heading]]}. */
     private static final Pattern WIKI_LINK = Pattern.compile(
@@ -25,7 +25,7 @@ public final class Markdown {
     private static final Pattern FRONTMATTER = Pattern.compile("^---\\r?\\n(.*?)\\r?\\n---\\r?\\n?", Pattern.DOTALL);
     private static final Pattern TAG_TOKEN = Pattern.compile("(?:^|\\s)#([\\p{L}\\p{N}_/-]{1,64})");
 
-    private Markdown() {
+    private MarkdownUtils() {
     }
 
     public record WikiLink(String target, String label, String heading) {

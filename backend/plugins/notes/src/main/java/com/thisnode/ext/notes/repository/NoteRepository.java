@@ -3,8 +3,8 @@ package com.thisnode.ext.notes.repository;
 import com.alibaba.fastjson2.JSONFactory;
 import com.thisnode.ext.notes.domain.*;
 import com.thisnode.ext.notes.util.Ids;
-import com.thisnode.ext.notes.util.JsonFiles;
-import com.thisnode.ext.notes.util.Markdown;
+import com.thisnode.ext.notes.util.JsonFileUtils;
+import com.thisnode.ext.notes.util.MarkdownUtils;
 import com.thisnode.ext.notes.util.Tags;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -210,7 +210,7 @@ public class NoteRepository {
             if (meta.title() == null || meta.title().isBlank()) {
                 continue;
             }
-            index.putIfAbsent(Markdown.normalizeTitle(meta.title()), meta.id());
+            index.putIfAbsent(MarkdownUtils.normalizeTitle(meta.title()), meta.id());
         }
         return index;
     }
@@ -242,7 +242,7 @@ public class NoteRepository {
         if (target == null || target.isBlank()) {
             return null;
         }
-        return titleIndex().get(Markdown.normalizeTitle(target));
+        return titleIndex().get(MarkdownUtils.normalizeTitle(target));
     }
 
     // ------------------------------------------------------------------ write
@@ -335,16 +335,16 @@ public class NoteRepository {
     }
 
     public void writeText(Path file, String text) {
-        JsonFiles.writeText(file, text);
+        JsonFileUtils.writeText(file, text);
     }
 
     public void writeJson(Path file, Object value) {
-        JsonFiles.write(file, value);
+        JsonFileUtils.write(file, value);
     }
 
     public <T> T readMeta(Path file, Class<T> type) {
         try {
-            return JsonFiles.read(file, type);
+            return JsonFileUtils.read(file, type);
         } catch (IOException | RuntimeException e) {
             if (Files.exists(file)) {
                 log.warn("元数据无法解析，已跳过：{}（{}）", noteFilePaths.relative(file), e.toString());
@@ -809,7 +809,7 @@ public class NoteRepository {
      * 标题兜底：正文首个标题 → 文件名（去掉 .md 与尾部随机串）→ "无标题笔记"。
      */
     private static String titleFromContent(String content, Path file) {
-        String heading = Markdown.firstHeading(content);
+        String heading = MarkdownUtils.firstHeading(content);
         if (heading != null && !heading.isBlank()) {
             return heading;
         }

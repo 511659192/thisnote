@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.util.Markdown;
+import com.thisnode.ext.notes.util.MarkdownUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -27,7 +27,7 @@ public class LinkRepository {
         if (note == null || note.title().isBlank()) {
             return List.of();
         }
-        List<String> variants = Markdown.wikiLinkVariants(note.title());
+        List<String> variants = MarkdownUtils.wikiLinkVariants(note.title());
         List<String> out = new ArrayList<>();
         for (NoteMeta other : noteRepository.findAll()) {
             if (other.id().equals(noteId)) {

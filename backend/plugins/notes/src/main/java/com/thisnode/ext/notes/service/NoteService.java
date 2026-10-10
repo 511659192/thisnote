@@ -6,7 +6,7 @@ import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.util.Ids;
-import com.thisnode.ext.notes.util.Markdown;
+import com.thisnode.ext.notes.util.MarkdownUtils;
 import com.thisnode.ext.notes.util.Tags;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -46,7 +46,7 @@ public class NoteService {
             setTags(id, req.tags());
         } else {
             // Inline #tags in the body are picked up automatically.
-            List<String> inline = Markdown.inlineTags(content);
+            List<String> inline = MarkdownUtils.inlineTags(content);
             if (!inline.isEmpty()) {
                 setTags(id, inline);
             }
@@ -65,7 +65,7 @@ public class NoteService {
         if (title != null && !title.isBlank()) {
             return title;
         }
-        String fromHeading = Markdown.firstHeading(contentMd);
+        String fromHeading = MarkdownUtils.firstHeading(contentMd);
         return fromHeading != null ? fromHeading : "无标题笔记";
     }
 
@@ -99,7 +99,7 @@ public class NoteService {
         if (req.tags() != null) {
             setTags(id, req.tags());
         } else if (contentChanged) {
-            List<String> inline = Markdown.inlineTags(nextContent);
+            List<String> inline = MarkdownUtils.inlineTags(nextContent);
             if (!inline.isEmpty()) {
                 List<String> merged = new ArrayList<>(tagsOfNames(id));
                 for (String t : inline) {
@@ -234,7 +234,7 @@ public class NoteService {
      */
     public List<String> unresolvedOf(String contentMd) {
         List<String> out = new ArrayList<>();
-        for (String target : Markdown.unresolvedLinks(contentMd)) {
+        for (String target : MarkdownUtils.unresolvedLinks(contentMd)) {
             if (resolveTitle(target) == null) {
                 out.add(target);
             }
@@ -254,8 +254,8 @@ public class NoteService {
         }
         String lower = body.toLowerCase(Locale.ROOT);
         List<String> linkedTitles = new ArrayList<>();
-        for (Markdown.WikiLink l : Markdown.wikiLinks(body)) {
-            linkedTitles.add(Markdown.normalizeTitle(l.target()));
+        for (MarkdownUtils.WikiLink l : MarkdownUtils.wikiLinks(body)) {
+            linkedTitles.add(MarkdownUtils.normalizeTitle(l.target()));
         }
         List<NoteMeta> others = new ArrayList<>();
         for (NoteMeta other : noteRepository.findAll()) {
@@ -269,7 +269,7 @@ public class NoteService {
             if (scanned++ >= 400) {
                 break;
             }
-            if (lower.contains(other.title().toLowerCase(Locale.ROOT)) && !linkedTitles.contains(Markdown.normalizeTitle(other.title()))) {
+            if (lower.contains(other.title().toLowerCase(Locale.ROOT)) && !linkedTitles.contains(MarkdownUtils.normalizeTitle(other.title()))) {
                 out.add(other.title());
                 if (out.size() >= 8) {
                     break;
@@ -351,7 +351,7 @@ public class NoteService {
 
     private int unresolvedCount(String content) {
         int n = 0;
-        for (String target : Markdown.unresolvedLinks(content)) {
+        for (String target : MarkdownUtils.unresolvedLinks(content)) {
             if (resolveTitle(target) == null) {
                 n++;
             }
@@ -387,7 +387,7 @@ public class NoteService {
         if (oldTitle == null || newTitle == null || oldTitle.equals(newTitle)) {
             return 0;
         }
-        List<String> variants = Markdown.wikiLinkVariants(oldTitle);
+        List<String> variants = MarkdownUtils.wikiLinkVariants(oldTitle);
         List<String> replacements = List.of("[[" + newTitle + "]]", "[[ " + newTitle + " ]]", "[[ " + newTitle + "|");
         List<String> sourceIds = sourceIdsIn == null ? List.of() : sourceIdsIn;
         int updated = 0;
