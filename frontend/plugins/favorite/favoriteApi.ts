@@ -10,7 +10,6 @@ export interface FavoriteNote {
 }
 
 export const FAVORITE_PLUGIN_ID = 'favorite'
-export const ENTITY_NOTE = 'note'
 
 export const favoriteApi = {
   /** 收藏了哪些笔记（插件端点：状态只有 id，标题与预览由插件回核心取）。 */
@@ -18,11 +17,11 @@ export const favoriteApi = {
 
   /** 某篇笔记是否被收藏。 */
   isFavorite: async (noteId: string): Promise<boolean> => {
-    const map = await pluginApi.states(FAVORITE_PLUGIN_ID, ENTITY_NOTE, [noteId])
+    const map = await pluginApi.states(FAVORITE_PLUGIN_ID, [noteId])
     return map[noteId] === true
   },
 
   /** 收藏 / 取消收藏。 */
   setFavorite: (noteId: string, value: boolean) =>
-    pluginApi.setState(FAVORITE_PLUGIN_ID, ENTITY_NOTE, noteId, value),
+    pluginApi.setState(FAVORITE_PLUGIN_ID, noteId, value),
 }

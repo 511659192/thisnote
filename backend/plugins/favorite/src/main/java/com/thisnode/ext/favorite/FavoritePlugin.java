@@ -19,7 +19,6 @@ public class FavoritePlugin extends SpringBootPlugin {
 
     /** 端点前缀与数据分区用的 id；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "favorite";
-    public static final String ENTITY_TYPE_NOTE = "note";
 
     public FavoritePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的

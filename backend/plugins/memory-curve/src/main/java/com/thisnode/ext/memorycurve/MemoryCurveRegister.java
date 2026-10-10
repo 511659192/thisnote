@@ -24,8 +24,8 @@ public class MemoryCurveRegister implements PluginRegister {
 
     /** 卡片被开启记忆曲线时，建一条「立即到期」的排期（插件容器里的 bean，可直接注入服务）。 */
     @Override
-    public void onEntityStateChanged(String entityType, String entityId, boolean enabled) {
-        if (SrsService.ENTITY_TYPE_CARD.equals(entityType) && enabled) {
+    public void onEntityStateChanged(String entityId, boolean enabled) {
+        if (enabled) {
             srs.createIfAbsent(entityId);
         }
     }

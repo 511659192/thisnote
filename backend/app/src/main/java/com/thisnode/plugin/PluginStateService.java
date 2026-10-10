@@ -17,11 +17,8 @@ import java.util.Map;
  * 由 PF4J 的插件状态（以及它自己的停用名单 {@code plugins/disabled.txt}）决定。
  * 这里只做转发与通知，不再另存一份标记 —— 两份真相源迟早会打架。
  *
- * <p>插件自己的数据都在 {@link PluginDataStore}（一个文件）里按 entityType 分区：
- * <ul>
- *   <li>{@code card}/{@code note}/… —— per-entity 开关（卡片插件用，键 {@code enabled}）；</li>
- *   <li>{@code config} —— 插件配置项（entityId = pluginId，键 = 配置项 key）。</li>
- * </ul>
+ * <p>插件自己的数据都在 {@link PluginDataStore}（一个文件）：只有两级，「某插件记着哪些实体开着」。
+ * 平台不解释实体是什么，也没有配置项这一层（早先的 {@code config} 分区已删——没有插件用过）。
  *
  * <p>状态翻转一律在这里通知插件，而不是在 REST 层：任何调用方（控制器、测试、将来的服务）都得到
  * 同一个生命周期——插件恰好在状态落定之后、且只被通知一次。
@@ -44,16 +41,16 @@ public class PluginStateService {
 
     // ------------------------------------------------------------------ per-entity
 
-    public boolean isEnabled(String pluginId, String entityType, String entityId) {
-        return store.isEnabled(pluginId, entityType, entityId);
+    public boolean isEnabled(String pluginId, String entityId) {
+        return store.isEnabled(pluginId, entityId);
     }
 
     /**
      * Enabled-ness for many entities at once, so a page of cards costs one query instead of one
      * per card. Untouched ids come back {@code false}.
      */
-    public Map<String, Boolean> enabledMap(String pluginId, String entityType, List<String> entityIds) {
-        return store.enabledMap(pluginId, entityType, entityIds);
+    public Map<String, Boolean> enabledMap(String pluginId, List<String> entityIds) {
+        return store.enabledMap(pluginId, entityIds);
     }
 
     /**
@@ -62,14 +59,14 @@ public class PluginStateService {
      * <p>方向与 {@link #enabledMap} 相反：那个问「这些实体里哪些开着」，这个问「开着的都有谁」——
      * 插件画自己的列表（收藏页之类）用后者。
      */
-    public List<String> enabledEntityIds(String pluginId, String entityType) {
-        return store.enabledEntityIds(pluginId, entityType);
+    public List<String> enabledEntityIds(String pluginId) {
+        return store.enabledEntityIds(pluginId);
     }
 
-    public void setEnabled(String pluginId, String entityType, String entityId, boolean enabled) {
-        store.setEnabled(pluginId, entityType, entityId, enabled);
+    public void setEnabled(String pluginId, String entityId, boolean enabled) {
+        store.setEnabled(pluginId, entityId, enabled);
         // Fired after the persist, so the hook's own reads observe the new state.
-        registry.entityStateChanged(pluginId, entityType, entityId, enabled);
+        registry.entityStateChanged(pluginId, entityId, enabled);
     }
 
     // ------------------------------------------------------------------ 全局启停
@@ -119,61 +116,6 @@ public class PluginStateService {
             }
         }
         notifyGlobalState(pluginId, active);
-    }
-
-    // ------------------------------------------------------------------ 配置
-
-    /**
-     * 插件的配置原始值（不脱敏）；插件自己读配置用这个。
-     */
-    public Map<String, String> configValues(String pluginId) {
-        return store.values(pluginId, PluginDataStore.ENTITY_CONFIG, pluginId);
-    }
-
-    /**
-     * 单项配置，缺失或空白时给默认值。
-     */
-    public String configValue(String pluginId, String key, String fallback) {
-        String value = store.value(pluginId, PluginDataStore.ENTITY_CONFIG, pluginId, key);
-        return value == null || value.isBlank() ? fallback : value;
-    }
-
-    /**
-     * 写一项配置；{@code null} 表示删除该项（回到 schema 默认值）。
-     */
-    public void setConfigValue(String pluginId, String key, String value) {
-        if (value == null) {
-            store.remove(pluginId, PluginDataStore.ENTITY_CONFIG, pluginId, key);
-        } else {
-            store.put(pluginId, PluginDataStore.ENTITY_CONFIG, pluginId, key, value);
-        }
-    }
-
-    /**
-     * 给管理页看的配置视图：按插件的 schema 组织。
-     *
-     * <p>敏感项只回 {@code hasValue}，<b>永不回传内容</b>——SecretKey 这类东西存进来就不该再出得去；
-     * 提交时留空表示「不改动」。
-     */
-    public List<Map<String, Object>> configView(String pluginId) {
-        Map<String, String> stored = configValues(pluginId);
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (PluginConfigField field : registry.configSchema(pluginId)) {
-            String value = stored.get(field.key());
-            boolean hasValue = value != null && !value.isBlank();
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("key", field.key());
-            item.put("label", field.label());
-            item.put("type", field.type().name().toLowerCase(java.util.Locale.ROOT));
-            item.put("required", field.required());
-            item.put("secret", field.secret());
-            item.put("help", field.help());
-            item.put("defaultValue", field.defaultValue());
-            item.put("hasValue", hasValue);
-            item.put("value", field.secret() ? null : (hasValue ? value : field.defaultValue()));
-            out.add(item);
-        }
-        return out;
     }
 
     // ------------------------------------------------------------------ 重载
@@ -275,21 +217,6 @@ public class PluginStateService {
         }
     }
 
-    /**
-     * 配置变更后的通知，同样是尽力而为：停用的外置插件容器已关，跳过即可
-     * （值已经落盘，插件下次启动会读到）。
-     */
-    public void notifyConfigChanged(String pluginId) {
-        if (isExternal(pluginId) && !isActive(pluginId)) {
-            return;
-        }
-        try {
-            registry.configChanged(pluginId);
-        } catch (RuntimeException e) {
-            log.warn("通知插件 {} 配置已变更失败：{}", pluginId, e.toString());
-        }
-    }
-
     /** 该 id 是不是 PF4J/SBP 装载的外置插件（内置插件没有自己的类加载器）。 */
     private boolean isExternal(String pluginId) {
         return registry.pluginClassLoader(pluginId) != null;
@@ -298,7 +225,7 @@ public class PluginStateService {
     // ------------------------------------------------------------------ 管理视图
 
     /**
-     * 管理页要的所有东西：描述 + 全局启停 + 健康 + 配置视图 + 磁盘版本。
+     * 管理页要的所有东西：描述 + 全局启停 + 健康 + 磁盘版本。
      */
     public Map<String, Object> describe(String pluginId) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -311,7 +238,6 @@ public class PluginStateService {
         out.put("active", isActive(pluginId));
         PluginHealth health = healthOf(pluginId);
         out.put("health", Map.of("status", health.status(), "message", health.message()));
-        out.put("configSchema", configView(pluginId));
         // 磁盘上那个 jar 的版本：与 version（正在跑的实例）不同就说明"换了 jar，还没重载"。
         String diskVersion = diskVersion(pluginId);
         out.put("diskVersion", diskVersion);

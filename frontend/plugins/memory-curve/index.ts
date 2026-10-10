@@ -53,7 +53,7 @@ export const memoryCurve = {
     const current = this.stateOf(cardId)
     const next = !current.enabled
     await import('@thisnode/plugin-api').then((m) =>
-      m.pluginApi.setState('memory-curve', 'card', cardId, next),
+      m.pluginApi.setState('memory-curve', cardId, next),
     )
     const updated = this.stateOf(cardId)
     updated.enabled = next

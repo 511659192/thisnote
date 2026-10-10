@@ -6,7 +6,7 @@ import { favoriteApi } from './favoriteApi'
  * 收藏插件的「笔记工具」：笔记标题旁的 ★ 开关。
  *
  * <p>它是**实体插件**的 UI 形态：底座把 noteId 递进来，插件自己读状态、自己切换。
- * 状态存在底座的 plugin_data 里（entityType=note），核心的表里没有 favorite 这一列。
+ * 状态存在底座的插件数据文件里（只有「插件 + 实体 id」两级），核心的表里没有 favorite 这一列。
  */
 const props = defineProps<{ noteId: string }>()
 

@@ -37,7 +37,6 @@ import java.util.Properties;
 public class SrsService {
 
     public static final String PLUGIN_ID = "memory-curve";
-    public static final String ENTITY_TYPE_CARD = "card";
 
     /** Short steps a card walks before graduating into day-scale review (Anki's 1m/10m). */
     private static final long[] LEARNING_STEPS_MS = {60_000L, 600_000L};
@@ -79,14 +78,11 @@ public class SrsService {
     }
 
     /**
-     * Reads the enable flag straight from {@code plugin_data} rather than through
-     * {@code PluginStateService}: that service announces state flips to plugins, and this plugin is
-     * one of the things it announces to — a field-level cycle Spring cannot wire. So we read the
-     * KV store directly, which is the plugin-facing half of that same foundation.
+     * 直接问插件数据，而不是走 {@code PluginStateService}：那个服务负责把状态翻转通知给插件，
+     * 而本插件正是被通知的一方 —— 直接注入就是 Spring 装不出来的环。所以读它的另一半（面向插件的读写面）。
      */
     private boolean enabled(String cardId) {
-        return Boolean.parseBoolean(
-                store.value(PLUGIN_ID, ENTITY_TYPE_CARD, cardId, "enabled"));
+        return store.isEnabled(PLUGIN_ID, cardId);
     }
 
     /** Enabled + schedule for one card. Schedule is {@code null} until the first review. */

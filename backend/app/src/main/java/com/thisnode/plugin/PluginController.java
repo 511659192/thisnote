@@ -1,12 +1,9 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.PluginConfigField;
-import com.thisnode.plugin.api.PluginDataStore;
 import com.thisnode.plugin.api.PluginHealth;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 插件管理面：列表、全局启停、配置、健康，以及通用的 per-entity 状态。
+ * 插件管理面：列表、全局启停、健康，以及通用的 per-entity 状态。
  *
  * <p>URL 约定：<b>非 RESTful</b> —— 只有 GET（读）与 POST（写 + 动作路径），没有任何路径
  * 变量，标识一律走 {@code @RequestParam}（插件 id 用 {@code pluginId}）。
@@ -29,7 +26,7 @@ public class PluginController {
 
     /** 管理面用到的子路径；插件自有端点不得占用这些名字。 */
     static final List<String> MANAGEMENT_SEGMENTS =
-            List.of("detail", "states", "state", "entities", "config", "health", "active", "reload");
+            List.of("detail", "states", "state", "entities", "health", "active", "reload");
 
     private final PluginRegistry registry;
     private final PluginStateService states;
@@ -39,7 +36,7 @@ public class PluginController {
         this.states = states;
     }
 
-    /** 全部插件的管理视图：描述 + 全局启停 + 健康 + 配置 schema。 */
+    /** 全部插件的管理视图：描述 + 全局启停 + 健康。 */
     @GetMapping
     public List<Map<String, Object>> plugins() {
         return registry.ids().stream().map(states::describe).toList();
@@ -74,37 +71,6 @@ public class PluginController {
         return states.describe(pluginId);
     }
 
-    @GetMapping("/config")
-    public List<Map<String, Object>> config(@RequestParam String pluginId) {
-        registry.get(pluginId);
-        return states.configView(pluginId);
-    }
-
-    /**
-     * 写配置。
-     *
-     * <p>语义刻意做成「只改你给的键」：请求里没出现的键保持原值；敏感项传空串表示<b>不改动</b>
-     * （因为读取时它本来就是空的，若把空串当清空，用户每保存一次就会把密钥擦掉）。
-     */
-    @PostMapping("/config/update")
-    public Map<String, Object> updateConfig(@RequestParam String pluginId,
-                                            @RequestBody Map<String, String> values) {
-        registry.get(pluginId);
-        for (PluginConfigField field : registry.configSchema(pluginId)) {
-            if (!values.containsKey(field.key())) {
-                continue;
-            }
-            String value = values.get(field.key());
-            boolean blank = value == null || value.isBlank();
-            if (blank && field.secret()) {
-                continue; // 留空 = 不改动
-            }
-            states.setConfigValue(pluginId, field.key(), blank ? null : value);
-        }
-        states.notifyConfigChanged(pluginId);
-        return states.describe(pluginId);
-    }
-
     @GetMapping("/health")
     public PluginHealth health(@RequestParam String pluginId) {
         registry.get(pluginId);
@@ -116,10 +82,9 @@ public class PluginController {
     /** Enabled-ness for a batch of entities, so a page of cards costs one request. */
     @GetMapping("/states")
     public Map<String, Boolean> states(@RequestParam String pluginId,
-                                       @RequestParam String entityType,
                                        @RequestParam List<String> ids) {
         registry.get(pluginId);
-        return states.enabledMap(pluginId, entityType, ids);
+        return states.enabledMap(pluginId, ids);
     }
 
     /**
@@ -129,10 +94,9 @@ public class PluginController {
      * 具体内容由插件通过门面回核心取。
      */
     @GetMapping("/entities")
-    public List<String> entities(@RequestParam String pluginId,
-                                 @RequestParam String entityType) {
+    public List<String> entities(@RequestParam String pluginId) {
         registry.get(pluginId);
-        return states.enabledEntityIds(pluginId, entityType);
+        return states.enabledEntityIds(pluginId);
     }
 
     /**
@@ -142,10 +106,9 @@ public class PluginController {
      */
     @GetMapping("/state")
     public Map<String, Object> state(@RequestParam String pluginId,
-                                     @RequestParam String entityType,
                                      @RequestParam String entityId) {
         registry.get(pluginId);
-        return Map.of("enabled", states.isEnabled(pluginId, entityType, entityId), "active",
+        return Map.of("enabled", states.isEnabled(pluginId, entityId), "active",
                 states.isActive(pluginId));
     }
 
@@ -156,11 +119,10 @@ public class PluginController {
      */
     @PostMapping("/state/set")
     public Map<String, Object> setState(@RequestParam String pluginId,
-                                        @RequestParam String entityType,
                                         @RequestParam String entityId,
                                         @RequestParam boolean value) {
         registry.get(pluginId);
-        states.setEnabled(pluginId, entityType, entityId, value);
+        states.setEnabled(pluginId, entityId, value);
         return Map.of("enabled", value);
     }
 }

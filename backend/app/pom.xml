@@ -38,9 +38,23 @@
       <artifactId>pf4j</artifactId>
     </dependency>
 
+    <!-- Spring Web。**注意别把 Jackson 从它里面排掉**：notes 插件自己的 jar 不带 Jackson，
+         它的文件 meta（MetaJson + 几张卡片/笔记元数据类的 @JsonProperty）是借平台 classpath 上的
+         Jackson 跑的（插件类加载器对非自有类直接委托父加载器）。真要摘，得先把 note meta 也换成
+         fastjson2——那会动到盘上的笔记文件格式，单独做。 -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- fastjson2：平台自己的 JSON（插件状态文件的读写 + HTTP 的 JSON）。 -->
+    <dependency>
+      <groupId>com.alibaba.fastjson2</groupId>
+      <artifactId>fastjson2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.alibaba.fastjson2</groupId>
+      <artifactId>fastjson2-extension-spring6</artifactId>
     </dependency>
     <!-- AOP：Spring 代理的基础（@Transactional / @Async 之类注解生效的前提）。 -->
     <dependency>

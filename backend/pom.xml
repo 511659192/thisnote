@@ -37,7 +37,7 @@
     <pf4j.version>3.16.0</pf4j.version>
     <sbp.version>3.5.27</sbp.version>
     <lombok.version>1.18.40</lombok.version>
-    <pf4j.version>3.16.0</pf4j.version>
+    <fastjson2.version>2.0.61</fastjson2.version>
   </properties>
 
   <dependencyManagement>
@@ -65,6 +65,20 @@
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <version>${lombok.version}</version>
+      </dependency>
+
+      <!-- fastjson2：后端统一用它做 JSON（插件状态文件、HTTP 的 JSON）。版本只在这里写一次。 -->
+      <dependency>
+        <groupId>com.alibaba.fastjson2</groupId>
+        <artifactId>fastjson2</artifactId>
+        <version>${fastjson2.version}</version>
+      </dependency>
+
+      <!-- fastjson2 的 Spring 6 适配：HttpMessageConverter（把 HTTP 的 JSON 交给 fastjson2）。 -->
+      <dependency>
+        <groupId>com.alibaba.fastjson2</groupId>
+        <artifactId>fastjson2-extension-spring6</artifactId>
+        <version>${fastjson2.version}</version>
       </dependency>
 
       <!-- SBP（Spring Boot Plugin Framework）：版本只在这里写一次。 -->

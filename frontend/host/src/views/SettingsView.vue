@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { pluginApi, type PluginConfigField, type PluginInfo } from '@/api/plugins'
+import { pluginApi, type PluginInfo } from '@/api/plugins'
 import {
   pluginSettings,
   refreshPluginAvailability,
@@ -18,7 +18,6 @@ const busy = ref('')
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
 const openPlugin = ref('')
-const configDrafts = ref<Record<string, Record<string, string>>>({})
 
 async function refreshPlugins() {
   try {
@@ -77,45 +76,6 @@ async function reloadPlugin(plugin: PluginInfo) {
 
 function togglePluginPanel(plugin: PluginInfo) {
   openPlugin.value = openPlugin.value === plugin.id ? '' : plugin.id
-  if (openPlugin.value === plugin.id && !configDrafts.value[plugin.id]) {
-    configDrafts.value[plugin.id] = {}
-  }
-}
-
-/** 只提交用户改动过的键；敏感项留空表示不改动（后端也是这个语义）。 */
-async function savePluginConfig(plugin: PluginInfo) {
-  const draft = configDrafts.value[plugin.id] ?? {}
-  const payload: Record<string, string> = {}
-  for (const field of plugin.configSchema) {
-    if (!(field.key in draft)) continue
-    const value = draft[field.key] ?? ''
-    if (field.secret && value === '') continue
-    payload[field.key] = value
-  }
-  if (Object.keys(payload).length === 0) {
-    ui.toast('没有需要保存的改动')
-    return
-  }
-  try {
-    const updated = await pluginApi.updateConfig(plugin.id, payload)
-    plugins.value = plugins.value.map((p) => (p.id === updated.id ? updated : p))
-    configDrafts.value[plugin.id] = {}
-    ui.toast('配置已保存', 'success')
-  } catch (e) {
-    ui.toast(`保存失败：${(e as Error).message}`, 'error')
-  }
-}
-
-function draftValue(plugin: PluginInfo, field: PluginConfigField): string {
-  const draft = configDrafts.value[plugin.id]
-  if (draft && field.key in draft) return draft[field.key]
-  return field.secret ? '' : (field.value ?? '')
-}
-
-function setDraft(plugin: PluginInfo, field: PluginConfigField, value: string) {
-  const draft = configDrafts.value[plugin.id] ?? {}
-  draft[field.key] = value
-  configDrafts.value[plugin.id] = draft
 }
 
 function healthClass(plugin: PluginInfo): string {
@@ -199,44 +159,9 @@ onMounted(async () => {
           <p class="small muted plugin-desc">{{ plugin.description }}</p>
 
           <div v-if="openPlugin === plugin.id" class="plugin-body">
-            <!-- 插件自带的功能面板（如网盘的授权/备份） -->
+            <!-- 插件自带的设置面板（由插件自己注册，平台不掺和它的内容） -->
             <component :is="pluginSettings(plugin.id)" v-if="pluginSettings(plugin.id)" />
-
-            <!-- 通用配置表单：配置是平台级能力，与插件自带面板并存而不是二选一 -->
-            <template v-if="plugin.configSchema.length">
-              <h4 v-if="pluginSettings(plugin.id)" class="config-title">插件配置</h4>
-              <div v-for="field in plugin.configSchema" :key="field.key" class="field">
-                <label class="small">
-                  {{ field.label }}
-                  <span v-if="field.required" class="muted">（必填）</span>
-                </label>
-                <input
-                  v-if="field.type !== 'boolean'"
-                  class="input"
-                  :type="field.type === 'password' ? 'password' : (field.type === 'number' ? 'number' : 'text')"
-                  :placeholder="field.secret && field.hasValue
-                    ? '已保存（留空不改动）'
-                    : (field.defaultValue ?? '')"
-                  :value="draftValue(plugin, field)"
-                  @input="setDraft(plugin, field, ($event.target as HTMLInputElement).value)"
-                />
-                <label v-else class="checkline small">
-                  <input
-                    type="checkbox"
-                    :checked="draftValue(plugin, field) === 'true'"
-                    @change="setDraft(plugin, field,
-                      ($event.target as HTMLInputElement).checked ? 'true' : 'false')"
-                  />
-                  开启
-                </label>
-                <p v-if="field.help" class="small muted field-help">{{ field.help }}</p>
-              </div>
-              <div class="row">
-                <button class="btn primary" @click="savePluginConfig(plugin)">保存配置</button>
-              </div>
-            </template>
-
-            <p v-else-if="!pluginSettings(plugin.id)" class="small muted">这个插件没有可配置项。</p>
+            <p v-else class="small muted">这个插件没有自己的设置面板。</p>
 
             <p v-if="plugin.migrationLocation" class="small muted mono plugin-migration">
               自带迁移：{{ plugin.migrationLocation }}
@@ -356,12 +281,6 @@ onMounted(async () => {
 .lines li {
   line-height: 1.6;
 }
-.checkline {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: var(--space-2) 0 0;
-}
 
 /* --- 插件管理 --- */
 .plugin-card {
@@ -412,19 +331,5 @@ onMounted(async () => {
 }
 .plugin-migration {
   margin-top: var(--space-2);
-}
-.field {
-  margin-bottom: var(--space-2);
-}
-.field .input {
-  width: 100%;
-  margin-top: 3px;
-}
-.field-help {
-  margin: 3px 0 0;
-}
-.config-title {
-  margin: var(--space-3) 0 var(--space-2);
-  font-size: 13px;
 }
 </style>

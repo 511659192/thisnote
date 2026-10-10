@@ -1,6 +1,5 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.PluginConfigField;
 import com.thisnode.plugin.api.PluginHealth;
 import com.thisnode.plugin.api.PluginRegister;
 import org.pf4j.PluginDescriptor;
@@ -176,12 +175,6 @@ public class PluginRegistry {
         return register == null ? PluginHealth.ok("运行正常") : register.health();
     }
 
-    /** 插件声明的配置项；没提供扩展即「无配置」。 */
-    public List<PluginConfigField> configSchema(String pluginId) {
-        PluginRegister register = register(pluginId);
-        return register == null ? List.of() : register.configSchema();
-    }
-
     /** 通知插件的全局启停（尽力而为：没有提供扩展就跳过）。 */
     public void globalStateChanged(String pluginId, boolean enabled) {
         PluginRegister register = register(pluginId);
@@ -191,18 +184,10 @@ public class PluginRegistry {
     }
 
     /** 通知插件的 per-entity 状态翻转（没有提供扩展就跳过）。 */
-    public void entityStateChanged(String pluginId, String entityType, String entityId, boolean enabled) {
+    public void entityStateChanged(String pluginId, String entityId, boolean enabled) {
         PluginRegister register = register(pluginId);
         if (register != null) {
-            register.onEntityStateChanged(entityType, entityId, enabled);
-        }
-    }
-
-    /** 通知插件的配置已变更（没有提供扩展就跳过）。 */
-    public void configChanged(String pluginId) {
-        PluginRegister register = register(pluginId);
-        if (register != null) {
-            register.onConfigChanged();
+            register.onEntityStateChanged(entityId, enabled);
         }
     }
 }

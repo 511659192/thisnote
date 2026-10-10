@@ -2,8 +2,6 @@ package com.thisnode.plugin.api;
 
 import org.pf4j.ExtensionPoint;
 
-import java.util.List;
-
 /**
  * 插件向平台贡献的全部能力（**唯一的扩展点**）。
  *
@@ -24,9 +22,9 @@ public interface PluginRegister extends ExtensionPoint {
      * 版本（支持 semver 范围，例如 {@code >=3.0.0}），平台拿这个常量交给 PF4J 的
      * {@code VersionManager} 校验 —— 版本机制完全走框架，没有自定义的 apiVersion 字段。
      *
-     * <p>改契约（新增/改语义的方法、动 {@link PluginDataStore} 的键格式）时递增它。
+     * <p>改契约（新增/改语义的方法、动 {@link PluginDataStore} 的文件格式）时递增它。
      */
-    String CONTRACT_VERSION = "3.0.0";
+    String CONTRACT_VERSION = "4.0.0";
 
     /** 管理页上的显示名。 */
     String title();
@@ -54,15 +52,6 @@ public interface PluginRegister extends ExtensionPoint {
         return PluginHealth.ok("运行正常");
     }
 
-    /** 声明自己需要哪些配置项；不覆写即「无配置」。 */
-    default List<PluginConfigField> configSchema() {
-        return List.of();
-    }
-
-    /** 配置被改动之后的通知（例如清掉缓存的凭据）。 */
-    default void onConfigChanged() {
-    }
-
     /**
      * 自己的全局启停。收到 {@code false} 之后，平台会拦下该插件自有端点的请求（管理面除外）。
      *
@@ -77,10 +66,12 @@ public interface PluginRegister extends ExtensionPoint {
      * <p>这是插件初始化/释放自己数据的时机：记忆曲线插件在卡片被开启时建一条「立即到期」的排期，
      * 卡片关闭时保留它（历史不丢）。
      *
-     * @param entityType 实体类型，例如 {@code "card"}
-     * @param entityId   实体 id
-     * @param enabled    新状态
+     * <p>没有 entityType 参数：平台不解释实体是什么（见 {@link PluginDataStore}），
+     * 每个插件只有一类实体，id 自己就说明了一切。
+     *
+     * @param entityId 实体 id
+     * @param enabled  新状态
      */
-    default void onEntityStateChanged(String entityType, String entityId, boolean enabled) {
+    default void onEntityStateChanged(String entityId, boolean enabled) {
     }
 }
