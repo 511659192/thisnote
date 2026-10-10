@@ -6,10 +6,11 @@ import org.pf4j.Extension;
 import org.springframework.stereotype.Component;
 
 /**
- * 插件向平台贡献的全部能力（唯一的 PF4J 扩展点）：显示名/说明/健康 + 可选的状态回调。
+ * 插件向平台贡献的全部能力（唯一的 PF4J 扩展点）：显示名/说明/健康 + per-entity 状态回调。
  *
- * <p>写成插件容器里的 bean（@Component）—— SBP 的扩展工厂优先从容器取 bean，
- * 于是扩展类也能注入插件自己的服务。
+ * <p>这里**必须**加 {@code @Component}：本扩展注入了插件自己的 {@link SrsService}（有参构造），
+ * 而 SBP 的扩展工厂在找不到对应 bean 时会退回反射实例化（要求无参构造）—— 注册成 bean 才走
+ * 「从插件容器取、带注入」那条路。不需要注入的扩展只需 {@code @Extension}。
  */
 @Extension
 @Component
@@ -24,7 +25,7 @@ public class MemoryCurveRegister implements PluginRegister {
     /** 卡片被开启记忆曲线时，建一条「立即到期」的排期（插件容器里的 bean，可直接注入服务）。 */
     @Override
     public void onEntityStateChanged(String entityType, String entityId, boolean enabled) {
-        if (SrsService.ENTITY_TYPE_BLOCK.equals(entityType) && enabled) {
+        if (SrsService.ENTITY_TYPE_CARD.equals(entityType) && enabled) {
             srs.createIfAbsent(entityId);
         }
     }

@@ -300,11 +300,11 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * {@code knownFile} 非空表示这张卡已经在盘上了（只改内容）——**沿用原路径**，绝不因为标题变了
      * 就改名：文件名只是给人看的，身份在 meta 的 id 里。
      */
-    public Path writeBlock(String noteTitle, CardMeta block, String contentMd, Path knownFile) {
+    public Path writeCard(String noteTitle, CardMeta card, String contentMd, Path knownFile) {
         Path file = knownFile != null ? knownFile
-                : resolveContentPath(noteTitle, NoteFilePaths.cardSlug(block.title(), contentMd),
-                        block.id());
-        writeText(file, CardFile.compose(block, contentMd));
+                : resolveContentPath(noteTitle, NoteFilePaths.cardSlug(card.title(), contentMd),
+                        card.id());
+        writeText(file, CardFile.compose(card, contentMd));
         return file;
     }
 
@@ -494,17 +494,17 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * <p>{@code slot < 0} 表示追加；清单顺序就是阅读顺序，所以"在两卡之间插一张"只需插进清单，
      * 不必改动其他卡片。写入后顺带刷新这篇笔记的列表页缓存。
      */
-    public CardMeta writeCard(String noteId, CardMeta block, String contentMd, int slot) {
+    public CardMeta writeCard(String noteId, CardMeta card, String contentMd, int slot) {
         NoteMeta note = note(noteId);
         if (note == null) {
             return null;
         }
-        CardRef existing = refOf(note, block.id());
-        Path written = writeBlock(note.title(), block, contentMd, cardPath(existing));
-        CardRef ref = CardRef.of(block.id(), paths().relative(written));
+        CardRef existing = refOf(note, card.id());
+        Path written = writeCard(note.title(), card, contentMd, cardPath(existing));
+        CardRef ref = CardRef.of(card.id(), paths().relative(written));
 
         List<CardRef> cards = new ArrayList<>(note.cards());
-        int at = indexOf(cards, block.id());
+        int at = indexOf(cards, card.id());
         if (at >= 0) {
             cards.set(at, ref);
         } else if (slot >= 0 && slot < cards.size()) {
@@ -514,7 +514,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         }
         writeNoteMeta(note.withCards(cards).touched(System.currentTimeMillis()));
         refreshCachedView(noteId);
-        return block;
+        return card;
     }
 
     /**
@@ -618,18 +618,18 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     }
 
     /** 只改元数据（重写头部注释，正文原样保留）。 */
-    public void writeCardMeta(CardMeta block, Path contentFile) {
+    public void writeCardMeta(CardMeta card, Path contentFile) {
         String current = readText(contentFile);
         if (current == null) {
-            writeText(contentFile, CardFile.compose(block, ""));
+            writeText(contentFile, CardFile.compose(card, ""));
             return;
         }
-        writeText(contentFile, CardFile.compose(block, CardFile.bodyOf(current)));
+        writeText(contentFile, CardFile.compose(card, CardFile.bodyOf(current)));
     }
 
     /** 只改元数据（拖动 / 缩放 / 收起 / 插件扩展区）：重写头部注释，正文原样保留。 */
-    public CardMeta writeCardMeta(String cardId, CardMeta block) {
-        if (block == null) {
+    public CardMeta writeCardMeta(String cardId, CardMeta card) {
+        if (card == null) {
             return null;
         }
         CardRef ref = refOfId(cardId);
@@ -639,11 +639,11 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         Path contentFile = cardPath(ref);
         String current = readText(contentFile);
         if (current == null) {
-            writeText(contentFile, CardFile.compose(block, ""));
-            return block;
+            writeText(contentFile, CardFile.compose(card, ""));
+            return card;
         }
-        writeText(contentFile, CardFile.compose(block, CardFile.bodyOf(current)));
-        return block;
+        writeText(contentFile, CardFile.compose(card, CardFile.bodyOf(current)));
+        return card;
     }
 
     /** 删一张卡片：先摘出笔记清单，再删文件，最后刷新这篇笔记的列表页缓存。 */
@@ -808,11 +808,11 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     /** 读卡片上的插件扩展区（没有就给空 map）。 */
     public Map<String, Object> extension(String cardId, String pluginId) {
-        CardMeta block = card(cardId);
-        if (block == null) {
+        CardMeta card = card(cardId);
+        if (card == null) {
             return Map.of();
         }
-        Object value = block.ext().get(pluginId);
+        Object value = card.ext().get(pluginId);
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> out = new LinkedHashMap<>();
             map.forEach((k, v) -> out.put(String.valueOf(k), v));
@@ -823,11 +823,11 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     /** 写卡片上的插件扩展区。 */
     public CardMeta putExtension(String cardId, String pluginId, Map<String, Object> value) {
-        CardMeta block = card(cardId);
-        if (block == null) {
+        CardMeta card = card(cardId);
+        if (card == null) {
             return null;
         }
-        return writeCardMeta(cardId, block.withExtension(pluginId, value));
+        return writeCardMeta(cardId, card.withExtension(pluginId, value));
     }
 
     // ---- 与拆分前同名的方法（语义一致）：让调用方迁移只改注入类型，减少本批改动面 ----
@@ -915,17 +915,17 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         CardData data = noteStoreRead(file);
         long now = System.currentTimeMillis();
         String content = data == null ? "" : data.content();
-        CardMeta block = data != null && data.meta() != null
+        CardMeta card = data != null && data.meta() != null
                 ? data.meta()
                 : CardMeta.fresh(Ids.newId(), 0, 0, "", null, null, now);
-        CardRef ref = CardRef.of(block.id(), relative);
+        CardRef ref = CardRef.of(card.id(), relative);
         String title = titleFromContent(content, file);
         // 认领的笔记也必须归属一个分组：直接落默认分组（不变量在创建点收口）。
         writeNoteMeta(NoteMeta.fresh(Ids.newId(), title, "note", null, null, null,
                 NotebookBook.DEFAULT_GROUP_ID, now)
                 .withCards(List.of(ref)));
-        writeCardMeta(block, cardPath(ref));
-        refreshCachedView(noteIdOf(block.id()));
+        writeCardMeta(card, cardPath(ref));
+        refreshCachedView(noteIdOf(card.id()));
     }
 
     private CardData noteStoreRead(Path file) {

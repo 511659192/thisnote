@@ -1,5 +1,6 @@
 package com.thisnode.config;
 
+import com.thisnode.plugin.PluginDataStore;
 import com.thisnode.plugin.PluginEndpointGate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -22,16 +23,19 @@ import java.nio.file.Paths;
 public class ThisnodeConfig {
 
     /**
-     * 插件状态与配置的 KV：**一个 JSON 文件**（{@code <data-root>/plugin-data.json}）。
+     * 插件状态与配置：**一个 JSON 文件**（{@code <data-root>/plugin-data.json}）。
      *
      * <p>它的前身是 {@code plugin_data} 表 —— 笔记数据文件化之后，这是平台里最后一张被
-     * 真正读写的表，换成文件之后数据库里不再有任何被应用读写的表。文件路径默认与
-     * 保险库同级（{@code ~/.thisnode/}），因为它不是笔记数据，不该混进保险库目录。
+     * 真正读写的表，换成文件之后数据库里不再有任何被应用读写的表。文件是**分层 JSON**
+     * （pluginId → entityType → entityId → key → value），可手工查看与修改，改了下次请求即生效。
+     * 文件路径默认与保险库同级（{@code ~/.thisnode/}）：它不是笔记数据，不该混进保险库目录。
+     *
+     * <p>实现（{@code JsonPluginDataStore}）放在平台侧：契约模块保持零实现依赖。
      */
     @Bean
     public com.thisnode.plugin.api.PluginDataStore pluginDataStore(
             @Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        return new com.thisnode.plugin.api.PluginDataStore(
+        return new PluginDataStore(
                 Paths.get(dataRoot, "plugin-data.json"));
     }
 

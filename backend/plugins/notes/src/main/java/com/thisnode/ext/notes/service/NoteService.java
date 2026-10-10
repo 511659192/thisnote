@@ -406,8 +406,8 @@ public class NoteService {
         int updated = 0;
         for (String sourceId : sourceIds) {
             boolean changed = false;
-            for (Dtos.CardDto block : cardRepository.cards(sourceId)) {
-                String body = block.contentMd();
+            for (Dtos.CardDto card : cardRepository.cards(sourceId)) {
+                String body = card.contentMd();
                 if (body == null || body.isBlank()) {
                     continue;
                 }
@@ -416,7 +416,7 @@ public class NoteService {
                     rewritten = rewritten.replace(variants.get(i), replacements.get(i));
                 }
                 if (!rewritten.equals(body)) {
-                    cardRepository.setContent(block.id(), rewritten);
+                    cardRepository.setContent(card.id(), rewritten);
                     changed = true;
                 }
             }

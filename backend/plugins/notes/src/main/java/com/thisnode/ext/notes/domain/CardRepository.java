@@ -48,12 +48,12 @@ public class CardRepository {
         this.noteFilePaths = noteRepository.paths();
     }
 
-    private Dtos.CardDto dto(CardMeta block) {
+    private Dtos.CardDto dto(CardMeta card) {
         // 归属不在卡片里（改由笔记持清单），所以经索引反查 —— 一次内存 map 查询，不读文件。
-        return new Dtos.CardDto(block.id(), noteRepository.noteIdOf(block.id()), block.title(),
-                block.x(), block.y(), block.w(), block.h(), block.z(),
-                block.color(), block.status(), block.collapsed(), noteRepository.content(block.id()),
-                block.createdAt(), block.updatedAt());
+        return new Dtos.CardDto(card.id(), noteRepository.noteIdOf(card.id()), card.title(),
+                card.x(), card.y(), card.w(), card.h(), card.z(),
+                card.color(), card.status(), card.collapsed(), noteRepository.content(card.id()),
+                card.createdAt(), card.updatedAt());
     }
 
     /**
@@ -62,15 +62,15 @@ public class CardRepository {
      */
     public List<Dtos.CardDto> cards(String noteId) {
         List<Dtos.CardDto> out = new ArrayList<>();
-        for (CardMeta block : noteRepository.cards(noteId)) {
-            out.add(dto(block));
+        for (CardMeta card : noteRepository.cards(noteId)) {
+            out.add(dto(card));
         }
         return out;
     }
 
     public Dtos.CardDto find(String id) {
-        CardMeta block = noteRepository.card(id);
-        return block == null ? null : dto(block);
+        CardMeta card = noteRepository.card(id);
+        return card == null ? null : dto(card);
     }
 
     public int count(String noteId) {
@@ -102,8 +102,8 @@ public class CardRepository {
         double centre = y + cardH / 2;
         List<CardMeta> existing = noteRepository.cards(noteId);
         int after = 0;
-        for (CardMeta block : existing) {
-            if (block.y() + block.h() / 2 < centre) {
+        for (CardMeta card : existing) {
+            if (card.y() + card.h() / 2 < centre) {
                 after++;
             }
         }
@@ -118,13 +118,13 @@ public class CardRepository {
         long now = System.currentTimeMillis();
         String id = Ids.newId();
         // 几何默认值住在 CardMeta 里，所以手写的注释与这里写出来的会被同一套规则归一化。
-        CardMeta block = new CardMeta(CardMeta.SCHEMA, id,
+        CardMeta card = new CardMeta(CardMeta.SCHEMA, id,
                 title == null ? "" : title,
                 x == null ? 0 : Math.max(0, x), y == null ? 0 : Math.max(0, y),
                 w == null ? DEFAULT_W : Math.max(MIN_W, w),
                 h == null ? DEFAULT_H : Math.max(MIN_H, h),
                 slot == null ? -1 : slot, color, status, false, Map.of(), now, now);
-        putCard(noteId, block, contentMd == null ? "" : contentMd,
+        putCard(noteId, card, contentMd == null ? "" : contentMd,
                 slot == null ? -1 : slot);
         return id;
     }
@@ -166,8 +166,8 @@ public class CardRepository {
     /** All card contents for a note, in z order — the note's markdown is their join. */
     public List<String> contentsInOrder(String noteId) {
         List<String> out = new ArrayList<>();
-        for (CardMeta block : noteRepository.cards(noteId)) {
-            out.add(noteRepository.content(block.id()));
+        for (CardMeta card : noteRepository.cards(noteId)) {
+            out.add(noteRepository.content(card.id()));
         }
         return out;
     }
@@ -180,8 +180,8 @@ public class CardRepository {
      */
     public double[] nextFlowPosition(String noteId) {
         double bottom = 0;
-        for (CardMeta block : noteRepository.cards(noteId)) {
-            bottom = Math.max(bottom, block.y() + block.h());
+        for (CardMeta card : noteRepository.cards(noteId)) {
+            bottom = Math.max(bottom, card.y() + card.h());
         }
         return new double[]{FLOW_X, bottom <= 0 ? 0 : bottom + FLOW_GAP};
     }
@@ -236,20 +236,20 @@ public class CardRepository {
             return out;
         }
         for (String id : ids) {
-            CardMeta block = noteRepository.card(id);
-            if (block != null) {
-                out.add(dto(block));
+            CardMeta card = noteRepository.card(id);
+            if (card != null) {
+                out.add(dto(card));
             }
         }
         return out;
     }
 
-    /** Highest z on the page; the next block goes on top. */
+    /** Highest z on the page; the next card goes on top. */
     public int nextZ(String noteId) {
         int top = 0;
         boolean any = false;
-        for (CardMeta block : noteRepository.cards(noteId)) {
-            top = Math.max(top, block.z());
+        for (CardMeta card : noteRepository.cards(noteId)) {
+            top = Math.max(top, card.z());
             any = true;
         }
         return any ? top + 1 : 1;
@@ -258,8 +258,8 @@ public class CardRepository {
     public int lowestZ(String noteId) {
         int low = 0;
         boolean any = false;
-        for (CardMeta block : noteRepository.cards(noteId)) {
-            low = any ? Math.min(low, block.z()) : block.z();
+        for (CardMeta card : noteRepository.cards(noteId)) {
+            low = any ? Math.min(low, card.z()) : card.z();
             any = true;
         }
         return any ? low - 1 : -1;
@@ -281,26 +281,26 @@ public class CardRepository {
     // ================================================================ 卡片写入
 
     /** 写一张卡片（追加到清单末尾）并刷新该笔记的列表页缓存。 */
-    public CardMeta putCard(String noteId, CardMeta block, String contentMd) {
-        return putCard(noteId, block, contentMd, -1);
+    public CardMeta putCard(String noteId, CardMeta card, String contentMd) {
+        return putCard(noteId, card, contentMd, -1);
     }
 
     /** 写一张卡片，插进清单第 {@code slot} 位（{@code slot < 0} 表示追加）。 */
-    public CardMeta putCard(String noteId, CardMeta block, String contentMd, int slot) {
+    public CardMeta putCard(String noteId, CardMeta card, String contentMd, int slot) {
         NoteMeta note = noteRepository.note(noteId);
         if (note == null) {
             return null;
         }
-        CardRef existing = refOf(note, block.id());
+        CardRef existing = refOf(note, card.id());
         Path knownFile = existing == null ? null : noteRepository.cardPath(existing);
         Path file = knownFile != null ? knownFile
-                : resolveContentPath(note.title(), NoteFilePaths.cardSlug(block.title(), contentMd),
-                        block.id());
-        noteRepository.writeText(file, CardFile.compose(block, contentMd));
-        CardRef ref = CardRef.of(block.id(), noteFilePaths.relative(file));
+                : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
+                        card.id());
+        noteRepository.writeText(file, CardFile.compose(card, contentMd));
+        CardRef ref = CardRef.of(card.id(), noteFilePaths.relative(file));
 
         List<CardRef> cardRefs = new ArrayList<>(note.cards());
-        int at = indexOf(cardRefs, block.id());
+        int at = indexOf(cardRefs, card.id());
         if (at >= 0) {
             cardRefs.set(at, ref);
         } else if (slot >= 0 && slot < cardRefs.size()) {
@@ -310,30 +310,30 @@ public class CardRepository {
         }
         noteRepository.writeNoteMeta(note.withCards(cardRefs).touched(System.currentTimeMillis()));
         noteRepository.refreshCachedView(noteId);
-        return block;
+        return card;
     }
 
     /** 只改卡片元数据（重写头部注释，正文原样保留）。 */
-    public void writeCardMeta(CardMeta block, CardRef ref) {
+    public void writeCardMeta(CardMeta card, CardRef ref) {
         Path contentFile = noteRepository.cardPath(ref);
         String current = noteRepository.readText(contentFile);
         if (current == null) {
-            noteRepository.writeText(contentFile, CardFile.compose(block, ""));
+            noteRepository.writeText(contentFile, CardFile.compose(card, ""));
             return;
         }
-        noteRepository.writeText(contentFile, CardFile.compose(block, CardFile.bodyOf(current)));
+        noteRepository.writeText(contentFile, CardFile.compose(card, CardFile.bodyOf(current)));
     }
 
     /** 只改卡片元数据；与 {@link #writeCardMeta(CardMeta, CardRef)} 同义。 */
-    public void putCardMeta(CardMeta block) {
-        if (block == null) {
+    public void putCardMeta(CardMeta card) {
+        if (card == null) {
             return;
         }
-        NoteRepository.Owned owned = noteRepository.ownerOf(block.id());
+        NoteRepository.Owned owned = noteRepository.ownerOf(card.id());
         if (owned == null) {
             return;
         }
-        noteRepository.writeCardMeta(block, noteRepository.cardPath(owned.ref()));
+        noteRepository.writeCardMeta(card, noteRepository.cardPath(owned.ref()));
     }
 
     /** 删一张卡片：先摘出笔记清单，再删文件，最后刷新这篇笔记的列表页缓存。 */

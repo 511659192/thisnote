@@ -115,7 +115,7 @@ function askRemove(node: NoteMeta) {
 <style scoped>
 .list-headers {
   flex: 0 0 auto;
-  padding: var(--space-2) var(--space-2) 0;
+  padding: 4px var(--space-2) 4px;
   border-bottom: 1px solid var(--c-border);
 }
 

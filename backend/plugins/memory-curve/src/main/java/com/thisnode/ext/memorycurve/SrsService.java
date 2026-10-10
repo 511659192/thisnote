@@ -37,7 +37,7 @@ import java.util.Properties;
 public class SrsService {
 
     public static final String PLUGIN_ID = "memory-curve";
-    public static final String ENTITY_TYPE_BLOCK = "block";
+    public static final String ENTITY_TYPE_CARD = "card";
 
     /** Short steps a card walks before graduating into day-scale review (Anki's 1m/10m). */
     private static final long[] LEARNING_STEPS_MS = {60_000L, 600_000L};
@@ -61,7 +61,7 @@ public class SrsService {
 
     /**
      * 排期存放在**本插件自己的 meta 文件**里（{@code <data-root>/plugins/memory-curve/scheduling.meta}，
-     * Properties 格式：{@code blockId|字段 = 值}）。
+     * Properties 格式：{@code cardId|字段 = 值}）。
      *
      * <p>本插件因此是「纯状态管理器」：只管排期与开关，**不读笔记内容**，也不依赖核心插件 ——
      * 核心插件缺位时它照样能独立启动。代价是卡片被删后条目会残留（没有通知机制能感知），
@@ -69,7 +69,7 @@ public class SrsService {
      */
     private final PluginDataStore store;
     private final Path file;
-    private Map<String, BlockSchedule> schedules;
+    private Map<String, CardSchedule> schedules;
 
     public SrsService(PluginDataStore store,
                       @org.springframework.beans.factory.annotation.Value(
@@ -84,35 +84,35 @@ public class SrsService {
      * one of the things it announces to — a field-level cycle Spring cannot wire. So we read the
      * KV store directly, which is the plugin-facing half of that same foundation.
      */
-    private boolean enabled(String blockId) {
+    private boolean enabled(String cardId) {
         return Boolean.parseBoolean(
-                store.value(PLUGIN_ID, ENTITY_TYPE_BLOCK, blockId, "enabled"));
+                store.value(PLUGIN_ID, ENTITY_TYPE_CARD, cardId, "enabled"));
     }
 
     /** Enabled + schedule for one card. Schedule is {@code null} until the first review. */
-    public Map<String, Object> cardState(String blockId) {
-        BlockSchedule s = load(blockId);
-        BlockSchedule basis = s == null ? newBlockSchedule(blockId) : s;
+    public Map<String, Object> cardState(String cardId) {
+        CardSchedule s = load(cardId);
+        CardSchedule basis = s == null ? newCardSchedule(cardId) : s;
         return Map.of(
-                "blockId", blockId,
-                "enabled", enabled(blockId),
-                "schedule", s == null ? ScheduleView.empty(blockId) : ScheduleView.of(s),
+                "cardId", cardId,
+                "enabled", enabled(cardId),
+                "schedule", s == null ? ScheduleView.empty(cardId) : ScheduleView.of(s),
                 "gradePreview", previewDue(basis, System.currentTimeMillis()));
     }
 
     /** Enabled + schedule for many cards, so a page costs one request. */
-    public List<Map<String, Object>> cardStates(List<String> blockIds) {
-        List<Map<String, Object>> out = new ArrayList<>(blockIds.size());
-        for (String blockId : blockIds) {
-            out.add(cardState(blockId));
+    public List<Map<String, Object>> cardStates(List<String> cardIds) {
+        List<Map<String, Object>> out = new ArrayList<>(cardIds.size());
+        for (String cardId : cardIds) {
+            out.add(cardState(cardId));
         }
         return out;
     }
 
     /** A synthetic schedule for a card that has no row yet (brand-new shape). */
-    private BlockSchedule newBlockSchedule(String blockId) {
-        BlockSchedule s = new BlockSchedule();
-        s.setBlockId(blockId);
+    private CardSchedule newCardSchedule(String cardId) {
+        CardSchedule s = new CardSchedule();
+        s.setCardId(cardId);
         s.setState("new");
         s.setEase(EASE_INIT);
         s.setLearningStep(0);
@@ -120,13 +120,13 @@ public class SrsService {
     }
 
     /** First grade on a freshly enabled card: a new schedule due immediately. */
-    public void createIfAbsent(String blockId) {
-        if (load(blockId) != null) {
+    public void createIfAbsent(String cardId) {
+        if (load(cardId) != null) {
             return;
         }
         long now = System.currentTimeMillis();
-        BlockSchedule s = new BlockSchedule();
-        s.setBlockId(blockId);
+        CardSchedule s = new CardSchedule();
+        s.setCardId(cardId);
         s.setState("new");
         s.setEase(EASE_INIT);
         s.setIntervalDays(0);
@@ -140,18 +140,18 @@ public class SrsService {
     }
 
     /** Grade a card: 1=忘记 2=困难 3=良好 4=简单. Returns the updated state. */
-    public ScheduleView review(String blockId, int grade) {
+    public ScheduleView review(String cardId, int grade) {
         if (grade < 1 || grade > 4) {
             throw new IllegalArgumentException("评分必须是 1..4");
         }
-        if (!enabled(blockId)) {
+        if (!enabled(cardId)) {
             throw new IllegalStateException("该卡片未开启记忆曲线");
         }
-        BlockSchedule s = load(blockId);
+        CardSchedule s = load(cardId);
         if (s == null) {
             // 排期丢失（meta 被手工改坏、卡片是导入进来的）：当作全新卡片，而不是报错。
-            createIfAbsent(blockId);
-            s = load(blockId);
+            createIfAbsent(cardId);
+            s = load(cardId);
         }
         long now = System.currentTimeMillis();
         apply(s, grade, now);
@@ -162,7 +162,7 @@ public class SrsService {
         return ScheduleView.of(s);
     }
 
-    private void apply(BlockSchedule s, int grade, long now) {
+    private void apply(CardSchedule s, int grade, long now) {
         boolean learning = "new".equals(s.getState()) || "learning".equals(s.getState());
         boolean relearning = "relearning".equals(s.getState());
 
@@ -219,7 +219,7 @@ public class SrsService {
         s.setDueAt(now + DAY_MS);
     }
 
-    private void graduate(BlockSchedule s, long now) {
+    private void graduate(CardSchedule s, long now) {
         s.setState("review");
         s.setLearningStep(0);
         s.setIntervalDays(DAILY_INTERVAL_DAYS);
@@ -233,18 +233,18 @@ public class SrsService {
     /**
      * 到期卡片：遍历自己的排期文件，取「已开启 + 到点」的那些。
      *
-     * <p>返回里只有排期与 blockId —— 卡片属于哪篇笔记、正文是什么，由界面侧自己取（本插件不读笔记数据）。
+     * <p>返回里只有排期与 cardId —— 卡片属于哪篇笔记、正文是什么，由界面侧自己取（本插件不读笔记数据）。
      */
     public List<Map<String, Object>> due(int limit) {
         long now = System.currentTimeMillis();
         int cap = Math.max(1, Math.min(limit, 200));
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (BlockSchedule s : schedules().values()) {
-            if (!enabled(s.getBlockId()) || s.getDueAt() > now) {
+        for (CardSchedule s : schedules().values()) {
+            if (!enabled(s.getCardId()) || s.getDueAt() > now) {
                 continue;
             }
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("blockId", s.getBlockId());
+            row.put("cardId", s.getCardId());
             row.put("dueAt", s.getDueAt());
             row.put("state", s.getState());
             row.put("learningStep", s.getLearningStep());
@@ -258,7 +258,7 @@ public class SrsService {
 
     // -------------------------------------------------- 排期读写（自己的排期文件）
 
-    private Map<String, BlockSchedule> schedules() {
+    private Map<String, CardSchedule> schedules() {
         if (schedules != null) {
             return schedules;
         }
@@ -271,12 +271,12 @@ public class SrsService {
     }
 
     /** 读一张卡片的排期；没有排期返回 {@code null}。 */
-    private BlockSchedule load(String blockId) {
-        return schedules().get(blockId);
+    private CardSchedule load(String cardId) {
+        return schedules().get(cardId);
     }
 
-    private void save(BlockSchedule s) {
-        schedules().put(s.getBlockId(), s);
+    private void save(CardSchedule s) {
+        schedules().put(s.getCardId(), s);
         saveAll();
     }
 
@@ -285,17 +285,17 @@ public class SrsService {
      *
      * @return 是否真的删掉了一条（没排期过返回 false）
      */
-    public synchronized boolean forget(String blockId) {
-        if (schedules().remove(blockId) == null) {
+    public synchronized boolean forget(String cardId) {
+        if (schedules().remove(cardId) == null) {
             return false;
         }
         saveAll();
         return true;
     }
 
-    /** 把排期条目落成 {@code blockId|key = value} 的 Properties 行。 */
-    private Map<String, BlockSchedule> loadAll() {
-        Map<String, BlockSchedule> out = new LinkedHashMap<>();
+    /** 把排期条目落成 {@code cardId|key = value} 的 Properties 行。 */
+    private Map<String, CardSchedule> loadAll() {
+        Map<String, CardSchedule> out = new LinkedHashMap<>();
         if (!java.nio.file.Files.isRegularFile(file)) {
             return out;
         }
@@ -311,11 +311,11 @@ public class SrsService {
             if (sep <= 0) {
                 continue;
             }
-            String blockId = name.substring(0, sep);
+            String cardId = name.substring(0, sep);
             String key = name.substring(sep + 1);
-            BlockSchedule s = out.computeIfAbsent(blockId, k -> {
-                BlockSchedule fresh = new BlockSchedule();
-                fresh.setBlockId(blockId);
+            CardSchedule s = out.computeIfAbsent(cardId, k -> {
+                CardSchedule fresh = new CardSchedule();
+                fresh.setCardId(cardId);
                 return fresh;
             });
             applyProperty(s, key, props.getProperty(name));
@@ -325,9 +325,9 @@ public class SrsService {
 
     private void saveAll() {
         java.util.Properties props = new java.util.Properties();
-        for (BlockSchedule s : schedules.values()) {
+        for (CardSchedule s : schedules.values()) {
             for (Map.Entry<String, String> kv : scheduleFields(s).entrySet()) {
-                props.setProperty(s.getBlockId() + "|" + kv.getKey(), kv.getValue());
+                props.setProperty(s.getCardId() + "|" + kv.getKey(), kv.getValue());
             }
         }
         try {
@@ -336,7 +336,7 @@ public class SrsService {
                     java.nio.file.StandardOpenOption.CREATE,
                     java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
                     java.nio.file.StandardOpenOption.WRITE)) {
-                props.store(out, "memory-curve schedules: blockId|key = value");
+                props.store(out, "memory-curve schedules: cardId|key = value");
             }
         } catch (IOException e) {
             throw new UncheckedIOException("排期写入失败 " + file, e);
@@ -344,7 +344,7 @@ public class SrsService {
     }
 
     /** 排期条目的键值投影（键名与旧表列名一一对应，便于人工核对）。 */
-    private static Map<String, String> scheduleFields(BlockSchedule s) {
+    private static Map<String, String> scheduleFields(CardSchedule s) {
         Map<String, String> out = new LinkedHashMap<>();
         out.put("state", s.getState());
         out.put("ease", String.valueOf(s.getEase()));
@@ -359,7 +359,7 @@ public class SrsService {
         return out;
     }
 
-    private static void applyProperty(BlockSchedule s, String key, String value) {
+    private static void applyProperty(CardSchedule s, String key, String value) {
         switch (key) {
             case "state" -> s.setState(value);
             case "ease" -> s.setEase(parseNumber(value, EASE_INIT));
@@ -399,10 +399,10 @@ public class SrsService {
      * <p>实现上直接复用 {@link #apply}——把同一套调度逻辑在副本上跑一遍，预览就永远和真实
      * 评分一致；单独再写一份「间隔公式」迟早会漂移。
      */
-    private Map<Integer, Long> previewDue(BlockSchedule basis, long now) {
+    private Map<Integer, Long> previewDue(CardSchedule basis, long now) {
         Map<Integer, Long> out = new java.util.LinkedHashMap<>();
         for (int g = 1; g <= 4; g++) {
-            BlockSchedule copy = new BlockSchedule();
+            CardSchedule copy = new CardSchedule();
             copy.setState(basis.getState());
             copy.setEase(basis.getEase());
             copy.setIntervalDays(basis.getIntervalDays());
@@ -415,15 +415,15 @@ public class SrsService {
     }
 
     /** The API shape of one card's schedule; {@code due} is computed, not stored. */
-    public record ScheduleView(String blockId, String state, double ease, double intervalDays,
+    public record ScheduleView(String cardId, String state, double ease, double intervalDays,
                                long dueAt, Long lastReviewedAt, int reps, int lapses, boolean due) {
 
-        public static ScheduleView empty(String blockId) {
-            return new ScheduleView(blockId, "new", EASE_INIT, 0, 0, null, 0, 0, false);
+        public static ScheduleView empty(String cardId) {
+            return new ScheduleView(cardId, "new", EASE_INIT, 0, 0, null, 0, 0, false);
         }
 
-        public static ScheduleView of(BlockSchedule s) {
-            return new ScheduleView(s.getBlockId(), s.getState(), s.getEase(), s.getIntervalDays(),
+        public static ScheduleView of(CardSchedule s) {
+            return new ScheduleView(s.getCardId(), s.getState(), s.getEase(), s.getIntervalDays(),
                     s.getDueAt(), s.getLastReviewedAt(), s.getReps(), s.getLapses(),
                     s.getDueAt() <= System.currentTimeMillis());
         }

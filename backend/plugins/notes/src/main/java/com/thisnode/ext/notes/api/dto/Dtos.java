@@ -80,7 +80,7 @@ public final class Dtos {
     /**
      * A card together with the note-level context it renders with.
      *
-     * <p>A card's own text and title live on the block itself (one copy), so this view only
+     * <p>A card's own text and title live on the card itself (one copy), so this view only
      * adds the note context the card needs for rendering.
      */
     public record CardView(CardDto card, String contentMd, String noteTitle,
@@ -119,10 +119,5 @@ public final class Dtos {
     // ---------- ops / system ----------
     public record OpDto(String id, String entityType, String entityId, String action,
                         String payload, long createdAt) {
-    }
-
-    public record SystemInfo(String version, String dbPath, String markdownRoot,
-                             String attachmentRoot, long nodeCount,
-                             long noteBlockCount, long uptimeMs) {
     }
 }

@@ -57,8 +57,8 @@ function onKeydown(e: KeyboardEvent) {
 .title-search {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
+  gap: 6px;
+  padding: 2px 9px;
   border: 1px solid var(--c-border);
   border-radius: 999px;
   background: var(--c-bg);
@@ -85,6 +85,9 @@ function onKeydown(e: KeyboardEvent) {
 .input {
   flex: 1;
   min-width: 0;
+  /* 覆盖全局 .input 的 6px 纵向内边距：这里要的是一个薄字段，不是表单控件 */
+  padding: 0;
+  height: 18px;
   border: none;
   background: transparent;
   color: var(--c-text);

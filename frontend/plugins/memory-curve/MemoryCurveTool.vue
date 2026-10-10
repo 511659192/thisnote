@@ -10,9 +10,9 @@ import type { Grade } from './memoryCurveApi'
  * 已开启：徽标**常驻可见**，直接显示状态——「已到期」高亮 /「N天后」倒计时——
  * 这就是开启与未开启在卡片上肉眼可见的差异。点击打开复习浮层。
  */
-const props = defineProps<{ blockId: string }>()
+const props = defineProps<{ cardId: string }>()
 
-const card = computed(() => memoryCurve.stateOf(props.blockId))
+const card = computed(() => memoryCurve.stateOf(props.cardId))
 const open = ref(false)
 const busy = ref(false)
 const pos = ref({ top: 0, left: 0 })
@@ -39,7 +39,7 @@ const stateLabel = computed(() => {
 
 /** 徽标文案：已到期 / 倒计时 / 新卡片。 */
 const chipLabel = computed(() => {
-  if (!schedule.value.blockId) return '未复习'
+  if (!schedule.value.cardId) return '未复习'
   if (due.value) return '已到期'
   const days = schedule.value.intervalDays
   if (days >= 1) return `${Math.round(days)}天后`
@@ -66,7 +66,7 @@ async function onChipClick(e: MouseEvent) {
   if (!enabled.value) {
     busy.value = true
     try {
-      await memoryCurve.toggle(props.blockId)
+      await memoryCurve.toggle(props.cardId)
     } finally {
       busy.value = false
     }
@@ -83,7 +83,7 @@ async function onChipClick(e: MouseEvent) {
 async function grade(g: Grade) {
   busy.value = true
   try {
-    await memoryCurve.review(props.blockId, g)
+    await memoryCurve.review(props.cardId, g)
     open.value = false
   } finally {
     busy.value = false
@@ -93,7 +93,7 @@ async function grade(g: Grade) {
 async function disable() {
   busy.value = true
   try {
-    await memoryCurve.toggle(props.blockId)
+    await memoryCurve.toggle(props.cardId)
     open.value = false
   } finally {
     busy.value = false
@@ -101,7 +101,7 @@ async function disable() {
 }
 
 // 卡片被删除时收起浮层，避免悬空。
-watch(() => props.blockId, () => { open.value = false })
+watch(() => props.cardId, () => { open.value = false })
 </script>
 
 <template>

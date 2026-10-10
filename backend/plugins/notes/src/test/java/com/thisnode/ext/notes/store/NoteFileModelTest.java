@@ -66,15 +66,15 @@ class NoteFileModelTest {
         assertThat(Files.exists(root.resolve("meta").resolve(note.id() + ".json"))).isTrue();
 
         // 一张卡：文件原地不动，meta 写进了它的头部注释，不再有 sidecar
-        List<CardMeta> blocks = store.cards(note.id());
-        assertThat(blocks).hasSize(1);
-        assertThat(store.noteIdOf(blocks.get(0).id())).isEqualTo(note.id());
-        assertThat(store.content(blocks.get(0).id())).contains("今天讨论了三件事");
+        List<CardMeta> cards = store.cards(note.id());
+        assertThat(cards).hasSize(1);
+        assertThat(store.noteIdOf(cards.get(0).id())).isEqualTo(note.id());
+        assertThat(store.content(cards.get(0).id())).contains("今天讨论了三件事");
         assertThat(Files.exists(NoteFilePaths.sidecarFor(md))).isFalse();
         assertThat(Files.readString(md, StandardCharsets.UTF_8))
                 .startsWith(CardFile.META_PREFIX)
-                .contains(blocks.get(0).id());
-        assertThat(store.fileOf(blocks.get(0).id())).isEqualTo(md);
+                .contains(cards.get(0).id());
+        assertThat(store.fileOf(cards.get(0).id())).isEqualTo(md);
     }
 
     @Test
@@ -85,8 +85,8 @@ class NoteFileModelTest {
         writeCard("first", "card-b", noteId, 1, "第二段");
         writeCard("second", "card-a", noteId, 0, "第一段");
 
-        List<CardMeta> blocks = store.cards(noteId);
-        assertThat(blocks).extracting(CardMeta::id).containsExactly("card-a", "card-b");
+        List<CardMeta> cards = store.cards(noteId);
+        assertThat(cards).extracting(CardMeta::id).containsExactly("card-a", "card-b");
         assertThat(store.noteMarkdown(noteId)).isEqualTo("第一段\n\n第二段");
     }
 
@@ -136,15 +136,15 @@ class NoteFileModelTest {
         assertThat(note.tags()).containsExactly("标签一");
         assertThat(note.notebookId()).isEqualTo("grp-default");
 
-        CardMeta block = store.card("b1");
-        assertThat(block.title()).isEqualTo("卡片标题");
-        assertThat(block.x()).isEqualTo(12.5);
-        assertThat(block.y()).isEqualTo(340.25);
-        assertThat(block.w()).isEqualTo(500);
-        assertThat(block.z()).isEqualTo(3);
-        assertThat(block.color()).isEqualTo("#ff0000");
-        assertThat(block.status()).isEqualTo("doing");
-        assertThat(block.collapsed()).isTrue();
+        CardMeta card = store.card("b1");
+        assertThat(card.title()).isEqualTo("卡片标题");
+        assertThat(card.x()).isEqualTo(12.5);
+        assertThat(card.y()).isEqualTo(340.25);
+        assertThat(card.w()).isEqualTo(500);
+        assertThat(card.z()).isEqualTo(3);
+        assertThat(card.color()).isEqualTo("#ff0000");
+        assertThat(card.status()).isEqualTo("doing");
+        assertThat(card.collapsed()).isTrue();
         assertThat(store.content("b1")).isEqualTo("正文内容");
 
         assertThat(store.extension("b1", "memory-curve"))
@@ -208,7 +208,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("遗留的 sidecar 不会被清理，也不会污染索引")
     void legacySidecarIsIgnoredNotSwept() throws IOException {
-        Path md = store.writeBlock("残留测试", new CardMeta(CardMeta.SCHEMA, "bbbbbbbb-2222", "",
+        Path md = store.writeCard("残留测试", new CardMeta(CardMeta.SCHEMA, "bbbbbbbb-2222", "",
                 0, 0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, 0, null, null, false,
                 Map.of(), 1L, 1L), "残留卡片正文", null);
         Path sidecar = NoteFilePaths.sidecarFor(md);
@@ -243,19 +243,19 @@ class NoteFileModelTest {
     }
 
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
-    private void writeCard(String slug, String blockId, String noteId, int slot, String content)
+    private void writeCard(String slug, String cardId, String noteId, int slot, String content)
             throws IOException {
-        Path md = root.resolve("cards").resolve(slug + "-" + NoteFilePaths.shortId(blockId) + ".md");
+        Path md = root.resolve("cards").resolve(slug + "-" + NoteFilePaths.shortId(cardId) + ".md");
         Files.createDirectories(md.getParent());
-        CardMeta block = new CardMeta(CardMeta.SCHEMA, blockId, "",
+        CardMeta card = new CardMeta(CardMeta.SCHEMA, cardId, "",
                 0, slot * 300.0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, slot,
                 null, null, false, Map.of(), 1L, 1L);
-        store.writeBlock("测试笔记", block, content, md);
+        store.writeCard("测试笔记", card, content, md);
         NoteMeta note = store.readMeta(store.paths().noteMeta(noteId), NoteMeta.class);
         if (note != null) {
             List<CardRef> cards = new ArrayList<>(note.cards());
             cards.add(Math.max(0, Math.min(slot, cards.size())),
-                    CardRef.of(blockId, store.paths().relative(md)));
+                    CardRef.of(cardId, store.paths().relative(md)));
             store.writeNoteMeta(note.withCards(cards));
         }
     }

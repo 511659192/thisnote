@@ -1,6 +1,6 @@
 package com.thisnode.api;
 
-import com.thisnode.plugin.api.BlockLimitException;
+import com.thisnode.plugin.api.CardLimitException;
 import com.thisnode.plugin.api.ConflictException;
 import com.thisnode.plugin.api.NotFoundException;
 import org.slf4j.Logger;
@@ -22,7 +22,7 @@ import java.util.Map;
  * <p><b>为什么在主体（平台）而不是核心插件：</b>插件控制器由 SBP 注册进主体的
  * {@code RequestMappingHandlerMapping}，但 {@code @RestControllerAdvice} 只会从**主体容器**
  * 收集 —— advice 必须留在这边才能兜住插件里抛出的异常。它认的是 plugin-api 的契约异常类型
- * （{@link NotFoundException} / {@link ConflictException} / {@link BlockLimitException}）：
+ * （{@link NotFoundException} / {@link ConflictException} / {@link CardLimitException}）：
  * 这些类由主体类加载器装载、各插件经委派共享同一个 Class 对象，跨容器 instanceof 成立。
  */
 @RestControllerAdvice
@@ -41,11 +41,11 @@ public class ApiExceptionHandler {
     }
 
     /**
-     * Block-cap violations are a normal user-facing condition, not a server error: 409 with a
+     * Card-cap violations are a normal user-facing condition, not a server error: 409 with a
      * message the page shows verbatim.
      */
-    @ExceptionHandler(BlockLimitException.class)
-    public ResponseEntity<Map<String, Object>> blockLimit(BlockLimitException e) {
+    @ExceptionHandler(CardLimitException.class)
+    public ResponseEntity<Map<String, Object>> cardLimit(CardLimitException e) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("status", HttpStatus.CONFLICT.value());
         m.put("error", "BLOCK_LIMIT");

@@ -19,7 +19,7 @@ import java.util.Set;
  * A note's page: the cards it is made of.
  *
  * <p><b>Model.</b> A note *is* the page. Each card owns a fragment of the note's content
- * ({@code note_blocks.content_md}) plus its position; the note's markdown is the join of its
+ * ({@code cards md content}) plus its position; the note's markdown is the join of its
  * cards in z order. So there is exactly one copy of the content, and a card's text never
  * shifts when a neighbouring card grows — which is what makes "write in the card" safe.
  *
@@ -38,7 +38,7 @@ public class CardService {
     private final TagRepository tagRepository;
 
     /** Cap on cards per note; keeps a page inside the interaction budget it is measured for. */
-    @Value("${thisnode.max-blocks-per-note:100}")
+    @Value("${thisnode.max-cards-per-note:100}")
     private int maxCardsPerNote;
 
     public int maxCardsPerNote() {
@@ -46,8 +46,8 @@ public class CardService {
     }
 
     /** Thrown when a page already holds the maximum number of cards. */
-    public static class BlockLimitException extends com.thisnode.plugin.api.BlockLimitException {
-        public BlockLimitException(int limit) {
+    public static class CardLimitException extends com.thisnode.plugin.api.CardLimitException {
+        public CardLimitException(int limit) {
             super("每篇笔记最多 " + limit + " 张卡片。请新建一篇笔记，或先合并/删除部分卡片。", limit);
         }
     }
@@ -84,7 +84,7 @@ public class CardService {
     private void requireCapacity(String noteId, int adding) {
         int limit = maxCardsPerNote();
         if (cardRepository.count(noteId) + adding > limit) {
-            throw new BlockLimitException(limit);
+            throw new CardLimitException(limit);
         }
     }
 
@@ -117,9 +117,9 @@ public class CardService {
      * 免得把外部编辑器改过的内容覆盖掉。
      */
     public Dtos.CardView writeContent(String cardId, String contentMd, String baseContentMd) {
-        Dtos.CardDto block = requireCard(cardId);
+        Dtos.CardDto card = requireCard(cardId);
         cardRepository.setContent(cardId, contentMd, baseContentMd);
-        NoteMeta note = noteService.require(block.noteId());
+        NoteMeta note = noteService.require(card.noteId());
         syncNoteFromCards(note.id());
         NoteMeta fresh = noteService.require(note.id());
         return new Dtos.CardView(cardRepository.find(cardId),
@@ -187,7 +187,7 @@ public class CardService {
                 null, null, null, null, null));
         String id = cardRepository.create(newNoteId, 0d, 0d, src.w(), src.h(), src.color(), src.status(),
                 src.contentMd() == null ? "" : src.contentMd(), src.title());
-        noteService.log("note-block", id, "duplicate-from",
+        noteService.log("note-card", id, "duplicate-from",
                 Map.of("fromBlock", cardId, "fromNote", src.noteId()));
         return cardRepository.find(id);
     }
@@ -197,11 +197,11 @@ public class CardService {
      * content; otherwise the note's markdown is rebuilt from the remaining cards.
      */
     public void delete(String cardId, boolean deleteContent) {
-        Dtos.CardDto block = requireCard(cardId);
-        NoteMeta note = noteRepository.note(block.noteId());
-        if (cardRepository.count(block.noteId()) <= 1) {
+        Dtos.CardDto card = requireCard(cardId);
+        NoteMeta note = noteRepository.note(card.noteId());
+        if (cardRepository.count(card.noteId()) <= 1) {
             if (deleteContent) {
-                noteService.purge(block.noteId());
+                noteService.purge(card.noteId());
                 return;
             }
             // Keep the page non-empty: clear the last card rather than leaving nothing.
@@ -217,19 +217,19 @@ public class CardService {
             // the user gave them.
             syncNoteFromCards(note.id());
         }
-        noteService.log("note-block", cardId, "delete",
-                Map.of("noteId", block.noteId(), "deleteContent", deleteContent));
+        noteService.log("note-card", cardId, "delete",
+                Map.of("noteId", card.noteId(), "deleteContent", deleteContent));
     }
 
     /** z-order: bring a card to the front or send it back. */
     public Dtos.CardDto zOrder(String cardId, String op) {
-        Dtos.CardDto block = requireCard(cardId);
+        Dtos.CardDto card = requireCard(cardId);
         Integer z = switch (op == null ? "" : op) {
-            case "top" -> cardRepository.nextZ(block.noteId());
-            case "bottom" -> cardRepository.lowestZ(block.noteId());
-            case "up" -> block.z() + 1;
-            case "down" -> block.z() - 1;
-            default -> block.z();
+            case "top" -> cardRepository.nextZ(card.noteId());
+            case "bottom" -> cardRepository.lowestZ(card.noteId());
+            case "up" -> card.z() + 1;
+            case "down" -> card.z() - 1;
+            default -> card.z();
         };
         cardRepository.update(cardId, null, null, null, null, null, z, null, null, null);
         return cardRepository.find(cardId);

@@ -29,8 +29,8 @@ public class SchedulingListener
         if (payload.kind() != CardChangedEvent.Kind.DELETED) {
             return;
         }
-        if (srs.forget(payload.blockId())) {
-            log.info("卡片已删除，排期条目一并清除：{}", payload.blockId());
+        if (srs.forget(payload.cardId())) {
+            log.info("卡片已删除，排期条目一并清除：{}", payload.cardId());
         }
     }
 }

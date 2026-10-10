@@ -77,7 +77,7 @@ public interface PluginRegister extends ExtensionPoint {
      * <p>这是插件初始化/释放自己数据的时机：记忆曲线插件在卡片被开启时建一条「立即到期」的排期，
      * 卡片关闭时保留它（历史不丢）。
      *
-     * @param entityType 实体类型，例如 {@code "block"}
+     * @param entityType 实体类型，例如 {@code "card"}
      * @param entityId   实体 id
      * @param enabled    新状态
      */

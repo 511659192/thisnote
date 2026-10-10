@@ -5,7 +5,7 @@
 
 thisnode:
   # 每篇笔记的卡片上限（硬限制：超过时后端拒绝新增卡片，界面侧提前提示）。
-  max-blocks-per-note: 100
+  max-cards-per-note: 100
   # Root of the human-readable Markdown mirror (F-P-03).
   data-root: ${user.home}/.thisnode
   markdown-root: ${user.home}/.thisnode/notes

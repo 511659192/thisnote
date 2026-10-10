@@ -3,7 +3,7 @@ import { http } from '@thisnode/plugin-api'
 /** 记忆曲线插件自己的 API 与类型 —— 属于插件，不属于通用底座。 */
 
 export interface ScheduleView {
-  blockId: string | null
+  cardId: string | null
   state: 'new' | 'learning' | 'review' | 'relearning'
   ease: number
   intervalDays: number
@@ -15,7 +15,7 @@ export interface ScheduleView {
 }
 
 export interface MemoryCurveCardState {
-  blockId: string
+  cardId: string
   enabled: boolean
   schedule: ScheduleView
   /** 按评分 1..4 预览的下一次复习时间（epoch 毫秒），与真实调度共用同一套计算 */
@@ -32,7 +32,7 @@ export type Grade = 1 | 2 | 3 | 4
  * {@link loadCardContent} 用核心的公开 API 现拼。
  */
 export interface DueCard {
-  blockId: string
+  cardId: string
   dueAt: number
   state: string
   learningStep: number
@@ -51,29 +51,29 @@ export const memoryCurveApi = {
     http.get<MemoryCurveCardState[]>(
       `/api/plugins/memory-curve/cards?ids=${ids.join(',')}`,
     ),
-  review: (blockId: string, grade: Grade) =>
+  review: (cardId: string, grade: Grade) =>
     http.post<{ enabled: boolean; schedule: ScheduleView }>(
-      `/api/plugins/memory-curve/review`, { grade }, { blockId },
+      `/api/plugins/memory-curve/review`, { grade }, { cardId },
     ),
   due: (limit = 50) =>
     http.get<DueCard[]>(
       `/api/plugins/memory-curve/due?limit=${limit}`,
     ),
   /** 删掉一条排期（复习页发现它是孤儿时调用）。 */
-  forget: (blockId: string) =>
-    http.post<{ blockId: string; removed: boolean }>(
-      `/api/plugins/memory-curve/forget`, undefined, { blockId },
+  forget: (cardId: string) =>
+    http.post<{ cardId: string; removed: boolean }>(
+      `/api/plugins/memory-curve/forget`, undefined, { cardId },
     ),
 }
 
 /**
- * 按 blockId 把卡片内容拼出来：列出笔记 → 并发取页面 → 找全就停。
+ * 按 cardId 把卡片内容拼出来：列出笔记 → 并发取页面 → 找全就停。
  *
  * <p>这是「复习插件不依赖笔记插件」的代价所在：首屏最多 N 个请求（N = 笔记数）。
  * 换来的是两个插件之间没有任何契约 —— 笔记插件缺位时复习插件照样能起来（只是拼不出内容）。
  */
-export async function loadCardContent(blockIds: string[]): Promise<Map<string, CardContent>> {
-  const want = new Set(blockIds)
+export async function loadCardContent(cardIds: string[]): Promise<Map<string, CardContent>> {
+  const want = new Set(cardIds)
   const found = new Map<string, CardContent>()
   if (!want.size) return found
   const notes = await http.get<Array<{ id: string; title: string }>>('/api/notes', { limit: 2000 })

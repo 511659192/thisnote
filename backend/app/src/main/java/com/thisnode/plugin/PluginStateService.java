@@ -19,7 +19,7 @@ import java.util.Map;
  *
  * <p>插件自己的数据都在 {@link PluginDataStore}（一个文件）里按 entityType 分区：
  * <ul>
- *   <li>{@code block}/{@code note}/… —— per-entity 开关（卡片插件用，键 {@code enabled}）；</li>
+ *   <li>{@code card}/{@code note}/… —— per-entity 开关（卡片插件用，键 {@code enabled}）；</li>
  *   <li>{@code config} —— 插件配置项（entityId = pluginId，键 = 配置项 key）。</li>
  * </ul>
  *

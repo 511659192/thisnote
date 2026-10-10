@@ -38,20 +38,20 @@ const intervalOf = (card: DueCard, g: Grade) => {
 }
 
 const allSelected = computed(() =>
-  queue.value.length > 0 && queue.value.every((c) => selected.value.has(c.blockId)),
+  queue.value.length > 0 && queue.value.every((c) => selected.value.has(c.cardId)),
 )
 
-function toggleSelect(blockId: string) {
+function toggleSelect(cardId: string) {
   const next = new Set(selected.value)
-  if (next.has(blockId)) next.delete(blockId)
-  else next.add(blockId)
+  if (next.has(cardId)) next.delete(cardId)
+  else next.add(cardId)
   selected.value = next
 }
 
 function toggleSelectAll() {
   selected.value = allSelected.value
     ? new Set()
-    : new Set(queue.value.map((c) => c.blockId))
+    : new Set(queue.value.map((c) => c.cardId))
 }
 
 /** 拼不出内容的排期条数（卡片已被删、排期还在的孤儿）。 */
@@ -62,17 +62,17 @@ async function loadQueue() {
   try {
     const due = await memoryCurveApi.due(50)
     // 正文要自己去核心取：due 只给排期（复习插件不读笔记数据，也就不依赖笔记插件）
-    const content = await loadCardContent(due.map((c) => c.blockId))
+    const content = await loadCardContent(due.map((c) => c.cardId))
     // 核心那边已经查不到卡片的排期是**孤儿**（卡片被删，或库被外部重建过）。
     // 必须跳过它们：渲染成一张空白卡只会让人以为复习坏了。
-    const live = due.filter((c) => content.has(c.blockId))
+    const live = due.filter((c) => content.has(c.cardId))
     orphanCount.value = due.length - live.length
     // 顺手把孤儿清掉：本插件不读笔记数据，只有「界面侧刚在核心那边查过」这个时点才知道卡片没了。
     // 正常删除由主容器的 CardChangedEvent 兜住，这里补上外部重建/绕过 API 留下的那些。
-    for (const gone of due.filter((c) => !content.has(c.blockId))) {
-      void memoryCurveApi.forget(gone.blockId).catch(() => {})
+    for (const gone of due.filter((c) => !content.has(c.cardId))) {
+      void memoryCurveApi.forget(gone.cardId).catch(() => {})
     }
-    queue.value = live.map((c) => ({ ...c, ...content.get(c.blockId) }))
+    queue.value = live.map((c) => ({ ...c, ...content.get(c.cardId) }))
     selected.value = new Set()
   } finally {
     loading.value = false
@@ -91,42 +91,42 @@ async function openPluginSettings() {
 }
 
 /** 评分成功后把它从视图里移除：它已进入自己的时间周期（最快 1 分钟后重现）。 */
-function removeFromView(blockId: string) {
-  queue.value = queue.value.filter((c) => c.blockId !== blockId)
+function removeFromView(cardId: string) {
+  queue.value = queue.value.filter((c) => c.cardId !== cardId)
   const next = new Set(selected.value)
-  next.delete(blockId)
+  next.delete(cardId)
   selected.value = next
   reviewedCount.value++
 }
 
 async function grade(card: DueCard, g: Grade) {
-  if (busyIds.value.has(card.blockId)) return
-  busyIds.value.add(card.blockId)
+  if (busyIds.value.has(card.cardId)) return
+  busyIds.value.add(card.cardId)
   try {
-    await memoryCurveApi.review(card.blockId, g)
-    removeFromView(card.blockId)
+    await memoryCurveApi.review(card.cardId, g)
+    removeFromView(card.cardId)
   } finally {
-    busyIds.value.delete(card.blockId)
+    busyIds.value.delete(card.cardId)
   }
 }
 
 /** 批量评分：逐张独立走 SM-2，各自进入自己的时间周期；失败的卡片留在列表里。 */
 async function gradeSelected(g: Grade) {
-  const cards = queue.value.filter((c) => selected.value.has(c.blockId))
+  const cards = queue.value.filter((c) => selected.value.has(c.cardId))
   if (!cards.length || batchBusy.value) return
   batchBusy.value = true
   let failed = 0
   try {
     for (const card of cards) {
-      busyIds.value.add(card.blockId)
+      busyIds.value.add(card.cardId)
       try {
-        await memoryCurveApi.review(card.blockId, g)
-        removeFromView(card.blockId)
+        await memoryCurveApi.review(card.cardId, g)
+        removeFromView(card.cardId)
       } catch {
         failed++
         notify(`「${(card.cardTitle || card.noteTitle || '卡片').slice(0, 12)}」评分失败`, 'error')
       } finally {
-        busyIds.value.delete(card.blockId)
+        busyIds.value.delete(card.cardId)
       }
     }
   } finally {
@@ -221,19 +221,19 @@ const GRADES: { grade: Grade; label: string }[] = [
       <div class="rv-grid">
         <div
           v-for="(card, i) in queue"
-          :key="card.blockId"
+          :key="card.cardId"
           class="rv-card"
-          :class="{ 'rv-first': i === 0, 'rv-selected': selected.has(card.blockId) }"
+          :class="{ 'rv-first': i === 0, 'rv-selected': selected.has(card.cardId) }"
         >
           <div class="rv-meta small muted">
             <input
               type="checkbox"
               class="rv-check"
-              :checked="selected.has(card.blockId)"
+              :checked="selected.has(card.cardId)"
               aria-label="选中这张卡片"
               @click.stop
               @pointerdown.stop
-              @change="toggleSelect(card.blockId)"
+              @change="toggleSelect(card.cardId)"
             />
             <span class="rv-note-title">{{ card.noteTitle || '' }}</span>
             <span class="rv-state-chip">{{ stateLabel(card.state) }}</span>
@@ -249,7 +249,7 @@ const GRADES: { grade: Grade; label: string }[] = [
               :key="g.grade"
               class="btn rv-grade-btn"
               :class="{ 'rv-good': g.grade === 3 }"
-              :disabled="busyIds.has(card.blockId)"
+              :disabled="busyIds.has(card.cardId)"
               :title="`评分后 ${intervalOf(card, g.grade)} 内再次复习`"
               @click="grade(card, g.grade)"
             >

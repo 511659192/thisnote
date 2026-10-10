@@ -16,7 +16,7 @@ package com.thisnode.plugin.api;
  * （{@code publishEvent(Object)} ↔ {@code ApplicationListener<PayloadApplicationEvent<CardChangedEvent>>}），
  * 不必让事件类继承 {@code ApplicationEvent}。
  */
-public record CardChangedEvent(String blockId, Kind kind) {
+public record CardChangedEvent(String cardId, Kind kind) {
 
     public enum Kind {
         /** 新建了一张卡片。 */

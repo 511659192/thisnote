@@ -198,7 +198,7 @@ function onSurfacePointerMove(e: PointerEvent) {
  * prune the card the user just abandoned.
  */
 function onWindowPointerDown(e: PointerEvent) {
-  const id = page.editingBlockId
+  const id = page.editingCardId
   if (!id) return
   const target = e.target as HTMLElement | null
   if (target && target.closest('.card.editing')) return
@@ -217,7 +217,7 @@ function onBlockPointerDown(p: {
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
-  if (page.editingBlockId && page.editingBlockId !== view.card.id) {
+  if (page.editingCardId && page.editingCardId !== view.card.id) {
     void finishEditing()
   }
 
@@ -348,7 +348,7 @@ async function onPointerUp() {
 // ---------------------------------------------------------------- editing
 
 async function beginEdit(view: CardView) {
-  page.editingBlockId = view.card.id
+  page.editingCardId = view.card.id
   page.select([view.card.id])
 }
 
@@ -381,11 +381,11 @@ function currentEditorText(cardId: string): string | null {
  * the server answer "card not found".
  */
 async function finishEditing(cardId?: string) {
-  const id = cardId ?? page.editingBlockId
+  const id = cardId ?? page.editingCardId
   if (!id) return
   const view = page.cards.find((b) => b.card.id === id)
   if (!view) {
-    page.editingBlockId = null
+    page.editingCardId = null
     return
   }
   const live = currentEditorText(id)
@@ -402,7 +402,7 @@ async function finishEditing(cardId?: string) {
   if (pending) await pending.done
   const text = (pending?.text ?? view.card.contentMd ?? '').trim()
   const title = (view.card.title ?? '').trim()
-  if (page.editingBlockId === id) page.editingBlockId = null
+  if (page.editingCardId === id) page.editingCardId = null
   if (text || title) return
   const removed = await page.removeIfEmpty(id)
   if (removed) {
@@ -467,7 +467,7 @@ async function onDoubleClick(e: MouseEvent) {
 async function onPaste(e: ClipboardEvent) {
   const target = e.target as HTMLElement
   if (target.closest('textarea, input, .cm-editor')) return
-  if (page.editingBlockId) return
+  if (page.editingCardId) return
 
   const data = e.clipboardData
   if (!data) return
@@ -524,7 +524,7 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault()
     void page.removeSelected()
   } else if (e.key === 'Escape') {
-    if (page.editingBlockId) void finishEditing()
+    if (page.editingCardId) void finishEditing()
     else page.clearSelection()
   } else if (e.key === 'F2' || e.key === 'Enter') {
     const single = page.singleSelected
@@ -570,7 +570,7 @@ defineExpose({ size, beginEdit, finishEditing })
         :key="view.card.id"
         :view="view"
         :selected="page.selection.includes(view.card.id)"
-        :editing="page.editingBlockId === view.card.id"
+        :editing="page.editingCardId === view.card.id"
         :focused="page.selection.includes(view.card.id)"
         @pointerdown="onBlockPointerDown"
         @request-edit="

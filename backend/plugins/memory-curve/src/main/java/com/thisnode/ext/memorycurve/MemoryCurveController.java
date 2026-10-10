@@ -30,18 +30,18 @@ public class MemoryCurveController {
     }
 
     @GetMapping("/card")
-    public Map<String, Object> card(@RequestParam String blockId) {
-        return srs.cardState(blockId);
+    public Map<String, Object> card(@RequestParam String cardId) {
+        return srs.cardState(cardId);
     }
 
     /** Grade a card: 1=忘记 2=困难 3=良好 4=简单. */
     @PostMapping("/review")
-    public Map<String, Object> review(@RequestParam String blockId,
+    public Map<String, Object> review(@RequestParam String cardId,
                                       @RequestBody ReviewRequest request) {
         if (request == null || request.grade() == null) {
             throw new IllegalArgumentException("缺少 grade");
         }
-        SrsService.ScheduleView updated = srs.review(blockId, request.grade());
+        SrsService.ScheduleView updated = srs.review(cardId, request.grade());
         return Map.of("enabled", true, "schedule", updated);
     }
 
@@ -59,8 +59,8 @@ public class MemoryCurveController {
      * 正常删除路径由主容器的 {@code CardChangedEvent} 负责，这里是兜底。
      */
     @PostMapping("/forget")
-    public Map<String, Object> forget(@RequestParam String blockId) {
-        return Map.of("blockId", blockId, "removed", srs.forget(blockId));
+    public Map<String, Object> forget(@RequestParam String cardId) {
+        return Map.of("cardId", cardId, "removed", srs.forget(cardId));
     }
 
     public record ReviewRequest(Integer grade) {

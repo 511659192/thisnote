@@ -47,7 +47,7 @@ export const usePageStore = defineStore('notePage', () => {
   const maxBlocks = ref(100)
   const loading = ref(false)
   const savingContent = ref<string | null>(null)
-  const editingBlockId = ref<string | null>(null)
+  const editingCardId = ref<string | null>(null)
   const selection = ref<string[]>([])
   const viewport = ref<Viewport>({ x: 0, y: 0, zoom: 1 })
   const gridVisible = ref(localStorage.getItem('thisnote.page.grid') !== 'off')
@@ -106,7 +106,7 @@ export const usePageStore = defineStore('notePage', () => {
       const loaded = new Set(cards.value.map((b) => b.card.id))
       pendingIds.value = pendingIds.value.filter((x) => !loaded.has(x))
       selection.value = []
-      editingBlockId.value = null
+      editingCardId.value = null
       restoreViewport(page.noteId)
       return page
     } catch (e) {
@@ -372,7 +372,7 @@ export const usePageStore = defineStore('notePage', () => {
       }
     } finally {
       savingContent.value = null
-      editingBlockId.value = null
+      editingCardId.value = null
     }
   }
 
@@ -570,7 +570,7 @@ export const usePageStore = defineStore('notePage', () => {
     maxBlocks,
     loading,
     savingContent,
-    editingBlockId,
+    editingCardId,
     selection,
     selectedBlocks,
     singleSelected,

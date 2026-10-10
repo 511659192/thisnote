@@ -17,55 +17,55 @@ import MemoryCurveTool from './MemoryCurveTool.vue'
  */
 const state = reactive(new Map<string, MemoryCurveCardState>())
 
-function blank(blockId: string): MemoryCurveCardState {
+function blank(cardId: string): MemoryCurveCardState {
   return {
-    blockId,
+    cardId,
     enabled: false,
     schedule: {
-      blockId: null, state: 'new', ease: 2.5, intervalDays: 0,
+      cardId: null, state: 'new', ease: 2.5, intervalDays: 0,
       dueAt: 0, lastReviewedAt: null, reps: 0, lapses: 0, due: false,
     },
   }
 }
 
 export const memoryCurve = {
-  stateOf(blockId: string): MemoryCurveCardState {
-    let s = state.get(blockId)
+  stateOf(cardId: string): MemoryCurveCardState {
+    let s = state.get(cardId)
     if (!s) {
-      s = blank(blockId)
-      state.set(blockId, s)
+      s = blank(cardId)
+      state.set(cardId, s)
     }
     return s
   },
 
-  async loadState(blockIds: string[]): Promise<void> {
-    if (!blockIds.length) return
-    const cards = await memoryCurveApi.cards(blockIds)
+  async loadState(cardIds: string[]): Promise<void> {
+    if (!cardIds.length) return
+    const cards = await memoryCurveApi.cards(cardIds)
     for (const c of cards) {
-      state.set(c.blockId, c)
+      state.set(c.cardId, c)
     }
-    for (const id of blockIds) {
+    for (const id of cardIds) {
       if (!state.has(id)) state.set(id, blank(id))
     }
   },
 
-  async toggle(blockId: string): Promise<void> {
-    const current = this.stateOf(blockId)
+  async toggle(cardId: string): Promise<void> {
+    const current = this.stateOf(cardId)
     const next = !current.enabled
     await import('@thisnode/plugin-api').then((m) =>
-      m.pluginApi.setState('memory-curve', 'block', blockId, next),
+      m.pluginApi.setState('memory-curve', 'card', cardId, next),
     )
-    const updated = this.stateOf(blockId)
+    const updated = this.stateOf(cardId)
     updated.enabled = next
-    if (next && !updated.schedule.blockId) {
+    if (next && !updated.schedule.cardId) {
       // 后端在启用钩子里建了"立即到期"的调度行；本地同步为该形态。
-      updated.schedule = { ...updated.schedule, blockId, state: 'new', due: true, dueAt: Date.now() }
+      updated.schedule = { ...updated.schedule, cardId, state: 'new', due: true, dueAt: Date.now() }
     }
   },
 
-  async review(blockId: string, grade: Grade): Promise<void> {
-    const r = await memoryCurveApi.review(blockId, grade)
-    const updated = this.stateOf(blockId)
+  async review(cardId: string, grade: Grade): Promise<void> {
+    const r = await memoryCurveApi.review(cardId, grade)
+    const updated = this.stateOf(cardId)
     updated.enabled = r.enabled
     updated.schedule = { ...r.schedule, due: r.schedule.dueAt <= Date.now() }
   },
@@ -82,8 +82,8 @@ function register(): void {
     title: '记忆曲线',
     glyph: '🧠',
     loadState: (ids) => memoryCurve.loadState(ids),
-    isEnabled: (blockId) => memoryCurve.stateOf(blockId).enabled,
-    toggle: (blockId) => memoryCurve.toggle(blockId),
+    isEnabled: (cardId) => memoryCurve.stateOf(cardId).enabled,
+    toggle: (cardId) => memoryCurve.toggle(cardId),
     cardComponent: MemoryCurveTool,
   })
 
