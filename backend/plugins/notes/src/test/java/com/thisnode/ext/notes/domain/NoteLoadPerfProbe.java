@@ -39,7 +39,7 @@ class NoteLoadPerfProbe {
             store.findAll();
             long reloadMs = (System.nanoTime() - t1) / 1_000_000;
 
-            String noteId = store.findAll().get(0).id();
+            String noteId = store.findAll().get(0).getId();
             long t2 = System.nanoTime();
             int blocks = store.cards(noteId).size();
             int mdLen = store.noteMarkdown(noteId).length();
@@ -78,8 +78,9 @@ class NoteLoadPerfProbe {
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
                 refs.add(store.paths().relative(md));
             }
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(noteId),
-                    NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default").withCardPaths(refs));
+            NoteMeta meta = NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default");
+            meta.setCardPath(refs);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(noteId), meta);
         }
     }
 

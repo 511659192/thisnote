@@ -91,7 +91,7 @@ public class NotebookRepository {
     private int countNotes(String notebookId) {
         int count = 0;
         for (NoteMeta meta : noteRepository.findAll()) {
-            if (notebookId.equals(meta.notebookId())) {
+            if (notebookId.equals(meta.getNotebookId())) {
                 count++;
             }
         }
@@ -120,16 +120,11 @@ public class NotebookRepository {
     public List<String> nodeIdsOf(String notebookId) {
         List<String> out = new ArrayList<>();
         for (NoteMeta meta : noteRepository.findAll()) {
-            if (notebookId != null && notebookId.equals(meta.notebookId())) {
-                out.add(meta.id());
+            if (notebookId != null && notebookId.equals(meta.getNotebookId())) {
+                out.add(meta.getId());
             }
         }
         return out;
-    }
-
-    public int countNotebooksOf(String nodeId) {
-        NoteMeta meta = noteRepository.getOne(nodeId);
-        return meta != null && meta.notebookId() != null ? 1 : 0;
     }
 
     /**
@@ -140,7 +135,9 @@ public class NotebookRepository {
     public void setExclusiveGroup(String nodeId, String notebookId) {
         NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta != null) {
-            JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(notebookId));
+            meta.setNotebookId(notebookId);
+            meta.touch(System.currentTimeMillis());
+            JsonFileUtils.write(noteRepository.paths().noteMeta(meta.getId()), meta);
         }
     }
 
@@ -226,8 +223,10 @@ public class NotebookRepository {
         Notebook gone = book().find(id);
         String fallbackParent = gone == null ? null : gone.parentId();
         for (NoteMeta meta : noteRepository.findAll()) {
-            if (id.equals(meta.notebookId())) {
-                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(DEFAULT_GROUP_ID));
+            if (id.equals(meta.getNotebookId())) {
+                meta.setNotebookId(DEFAULT_GROUP_ID);
+                meta.touch(System.currentTimeMillis());
+                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.getId()), meta);
             }
         }
         NotebookBook next = book().without(id);
@@ -239,25 +238,6 @@ public class NotebookRepository {
         save(new NotebookBook(next.v(), reparented));
     }
 
-    public void setNodeNotebooks(String nodeId, List<String> notebookIds, boolean exclusive) {
-        NoteMeta meta = noteRepository.getOne(nodeId);
-        if (meta == null) {
-            return;
-        }
-        if (notebookIds == null || notebookIds.isEmpty()) {
-            if (exclusive) {
-                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(DEFAULT_GROUP_ID));
-            }
-            return;
-        }
-        for (String notebookId : notebookIds) {
-            if (notebookId != null && !notebookId.isBlank()) {
-                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(notebookId));
-                return;
-            }
-        }
-    }
-
     /** 单归属下「加入分组」就是「属于这个分组」：没有第二处归属可加。 */
     public void addNodeToNotebook(String nodeId, String notebookId) {
         setExclusiveGroup(nodeId, notebookId);
@@ -265,10 +245,10 @@ public class NotebookRepository {
 
     public List<Dtos.NotebookDto> notebooksOf(String nodeId) {
         NoteMeta meta = noteRepository.getOne(nodeId);
-        if (meta == null || meta.notebookId() == null) {
+        if (meta == null || meta.getNotebookId() == null) {
             return List.of();
         }
-        Notebook notebook = book().find(meta.notebookId());
+        Notebook notebook = book().find(meta.getNotebookId());
         if (notebook == null) {
             return List.of();
         }

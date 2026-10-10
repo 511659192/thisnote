@@ -57,15 +57,15 @@ class NoteFileModelTest {
 
         assertThat(store.findAll()).hasSize(1);
         NoteMeta note = store.findAll().get(0);
-        assertThat(note.title()).isEqualTo("会议记录");
+        assertThat(note.getTitle()).isEqualTo("会议记录");
 
         // 笔记 meta 落在 meta/ 下
-        assertThat(Files.exists(root.resolve("meta").resolve(note.id() + ".json"))).isTrue();
+        assertThat(Files.exists(root.resolve("meta").resolve(note.getId() + ".json"))).isTrue();
 
         // 一张卡：文件原地不动，meta 写进了它的头部注释，不再有 sidecar
-        List<CardMeta> cards = store.cards(note.id());
+        List<CardMeta> cards = store.cards(note.getId());
         assertThat(cards).hasSize(1);
-        assertThat(store.noteIdOf(cards.get(0).id())).isEqualTo(note.id());
+        assertThat(store.noteIdOf(cards.get(0).id())).isEqualTo(note.getId());
         assertThat(store.content(cards.get(0).id())).contains("今天讨论了三件事");
         assertThat(Files.exists(NoteFilePaths.sidecarFor(md))).isFalse();
         assertThat(Files.readString(md, StandardCharsets.UTF_8))
@@ -121,17 +121,18 @@ class NoteFileModelTest {
     @Test
     @DisplayName("正文、几何与插件扩展区都能从磁盘原样读回")
     void roundTripsThroughDisk() {
-        writeNoteMeta(NoteMeta.newNoteMeta("n1", "往返", "note", "grp-default")
-                .withTags(List.of("标签一")));
+        NoteMeta noteMeta = NoteMeta.newNoteMeta("n1", "往返", "note", "grp-default");
+        noteMeta.setTags(List.of("标签一"));
+        writeNoteMeta(noteMeta);
         cardRepository.putCard("n1", new CardMeta(CardMeta.SCHEMA, "b1", "卡片标题",
                 12.5, 340.25, 500, 200, 3, "#ff0000", "doing", true, Map.of(), 10L, 10L),
                 "正文内容");
         store.putExtension("b1", "memory-curve", Map.of("state", "review", "reps", 2));
 
         NoteMeta note = store.getOne("n1");
-        assertThat(note.title()).isEqualTo("往返");
-        assertThat(note.tags()).containsExactly("标签一");
-        assertThat(note.notebookId()).isEqualTo("grp-default");
+        assertThat(note.getTitle()).isEqualTo("往返");
+        assertThat(note.getTags()).containsExactly("标签一");
+        assertThat(note.getNotebookId()).isEqualTo("grp-default");
 
         CardMeta card = store.card("b1");
         assertThat(card.title()).isEqualTo("卡片标题");
@@ -181,7 +182,7 @@ class NoteFileModelTest {
         assertThat(store.allCards()).hasSize(1);
         assertThat(store.content("card-x")).isEqualTo("孤立卡片的内容");
         assertThat(Files.exists(root.resolve("meta")
-                .resolve(store.findAll().get(0).id() + ".json"))).isTrue();
+                .resolve(store.findAll().get(0).getId() + ".json"))).isTrue();
     }
 
     @Test
@@ -200,7 +201,7 @@ class NoteFileModelTest {
         NoteMeta loaded = store.getOne("note-legacy");
 
         assertThat(loaded).isNotNull();
-        assertThat(loaded.cardPath()).hasSize(1);
+        assertThat(loaded.getCardPath()).hasSize(1);
         assertThat(store.noteMarkdown("note-legacy")).isEqualTo("旧格式中的正文");
     }
 
@@ -236,7 +237,7 @@ class NoteFileModelTest {
 
         assertThat(Files.exists(sidecar)).isTrue();
         assertThat(store.findAll()).hasSize(1);
-        assertThat(store.findAll().get(0).cardPath()).containsExactly(store.paths().relative(md));
+        assertThat(store.findAll().get(0).getCardPath()).containsExactly(store.paths().relative(md));
     }
 
     @Test
@@ -255,7 +256,7 @@ class NoteFileModelTest {
     // ------------------------------------------------------------------ helpers
 
     private void writeNoteMeta(NoteMeta note) {
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.id()), note);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.getId()), note);
     }
 
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
@@ -269,9 +270,10 @@ class NoteFileModelTest {
         store.writeCard("测试笔记", card, content, md);
         NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().noteMeta(noteId), NoteMeta.class);
         if (note != null) {
-            List<String> paths = new ArrayList<>(note.cardPath());
+            List<String> paths = new ArrayList<>(note.getCardPath());
             paths.add(Math.max(0, Math.min(slot, paths.size())), store.paths().relative(md));
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.id()), note.withCardPaths(paths));
+            note.setCardPath(paths);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.getId()), note);
         }
     }
 }

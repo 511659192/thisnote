@@ -1,16 +1,13 @@
 package com.thisnode.ext.notes.util;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Markdown helpers: {@code [[wiki link]]} extraction (F-L-01), frontmatter parsing for
- * Obsidian import, and title/filesystem slug rules.
+ * Markdown helpers: wiki-link and inline-tag extraction, title normalization, and filesystem-safe slugs.
  */
 public final class MarkdownUtils {
 
@@ -22,7 +19,6 @@ public final class MarkdownUtils {
     private static final Pattern FENCED_CODE = Pattern.compile("(?s)```.*?```");
     private static final Pattern INLINE_CODE = Pattern.compile("`[^`\\n]*`");
     private static final Pattern IMAGE = Pattern.compile("!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)");
-    private static final Pattern FRONTMATTER = Pattern.compile("^---\\r?\\n(.*?)\\r?\\n---\\r?\\n?", Pattern.DOTALL);
     private static final Pattern TAG_TOKEN = Pattern.compile("(?:^|\\s)#([\\p{L}\\p{N}_/-]{1,64})");
 
     private MarkdownUtils() {
@@ -58,18 +54,6 @@ public final class MarkdownUtils {
             if (!out.contains(link.target())) {
                 out.add(link.target());
             }
-        }
-        return out;
-    }
-
-    public static List<String> images(String contentMd) {
-        List<String> out = new ArrayList<>();
-        if (contentMd == null) {
-            return out;
-        }
-        Matcher m = IMAGE.matcher(contentMd);
-        while (m.find()) {
-            out.add(m.group(2));
         }
         return out;
     }
@@ -124,116 +108,6 @@ public final class MarkdownUtils {
             return text.substring(0, maxChars) + "…";
         }
         return text;
-    }
-
-    /** Parse a leading YAML-style frontmatter block into a flat string map. */
-    public static Map<String, String> frontmatter(String contentMd) {
-        Map<String, String> map = new LinkedHashMap<>();
-        if (contentMd == null) {
-            return map;
-        }
-        Matcher m = FRONTMATTER.matcher(contentMd);
-        if (!m.find()) {
-            return map;
-        }
-        for (String line : m.group(1).split("\\r?\\n")) {
-            int idx = line.indexOf(':');
-            if (idx <= 0) {
-                continue;
-            }
-            String key = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
-            String value = line.substring(idx + 1).trim();
-            if (value.startsWith("[") && value.endsWith("]")) {
-                value = value.substring(1, value.length() - 1);
-            }
-            value = value.replaceAll("^[\"']|[\"']$", "");
-            if (!key.isEmpty()) {
-                map.put(key, value);
-            }
-        }
-        return map;
-    }
-
-    /**
-     * Remove a leading frontmatter block (used when importing, since DB columns own it).
-     *
-     * <p>实现只在核心这一份：契约层曾经也有一份（{@code MarkdownText}），但一直没有第二个
-     * 使用者，就搬回来了 —— 两边各自演化出微妙差异的风险，比"少写一遍"更贵。
-     */
-    public static String stripFrontmatter(String contentMd) {
-        if (contentMd == null) {
-            return "";
-        }
-        String text = contentMd;
-        if (text.startsWith("\uFEFF")) {
-            text = text.substring(1); // 容忍 BOM
-        }
-        if (!text.startsWith("---")) {
-            return text;
-        }
-        int firstLineEnd = text.indexOf('\n');
-        if (firstLineEnd < 0 || !text.substring(0, firstLineEnd).trim().equals("---")) {
-            return text;
-        }
-        int closing = text.indexOf("\n---", firstLineEnd);
-        if (closing < 0) {
-            return text;
-        }
-        int afterClosing = text.indexOf('\n', closing + 1);
-        if (afterClosing < 0) {
-            return "";
-        }
-        return text.substring(afterClosing + 1);
-    }
-
-    /**
-     * 把一篇笔记渲染成"带 frontmatter 的完整 markdown"。
-     *
-     * <p>这是**导出/备份**形态（插件把笔记同步到网盘、导出单篇笔记时用），不是卡片在磁盘上的
-     * 形态：卡片文件只有正文，标签与别名存在笔记 meta 里（见 store 包）。所以这里必须由调用方
-     * 显式传入 tags/aliases，而不是去读数据库。
-     */
-    public static String renderNote(String contentMd, String type, List<String> tags,
-                                    List<String> aliases) {
-        StringBuilder sb = new StringBuilder();
-        String content = stripFrontmatter(contentMd == null ? "" : contentMd);
-        boolean typed = type != null && !"note".equals(type) && !"daily".equals(type);
-        boolean hasTags = tags != null && !tags.isEmpty();
-        boolean hasAliases = aliases != null && !aliases.isEmpty();
-        if (typed || hasTags || hasAliases) {
-            sb.append("---\n");
-            if (typed) {
-                sb.append("type: ").append(type).append('\n');
-            }
-            if (hasTags) {
-                sb.append("tags: [")
-                        .append(String.join(", ", tags.stream().map(t -> "\"" + t + "\"").toList()))
-                        .append("]\n");
-            }
-            if (hasAliases) {
-                sb.append("aliases: [")
-                        .append(String.join(", ", aliases.stream().map(t -> "\"" + t + "\"").toList()))
-                        .append("]\n");
-            }
-            sb.append("---\n\n");
-        }
-        sb.append(content);
-        return sb.toString();
-    }
-
-    /** Split a frontmatter list value ({@code a, b} or {@code [a, b]}) into items. */
-    public static List<String> splitList(String value) {
-        List<String> out = new ArrayList<>();
-        if (value == null || value.isBlank()) {
-            return out;
-        }
-        for (String part : value.split(",")) {
-            String v = part.trim().replaceAll("^[\"']|[\"']$", "");
-            if (!v.isEmpty()) {
-                out.add(v);
-            }
-        }
-        return out;
     }
 
     /** Normalized key for title/alias equality and link resolution. */

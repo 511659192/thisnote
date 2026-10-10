@@ -73,11 +73,6 @@ public class CardRepository {
     }
 
     public String create(String noteId, Double x, Double y, Double w, Double h,
-                         String color, String status, String contentMd) {
-        return create(noteId, x, y, w, h, color, status, contentMd, null);
-    }
-
-    public String create(String noteId, Double x, Double y, Double w, Double h,
                          String color, String status, String contentMd, String title) {
         return create(noteId, x, y, w, h, color, status, contentMd, title, null);
     }
@@ -169,12 +164,6 @@ public class CardRepository {
 
     public void update(String id, String title, Double x, Double y, Double w, Double h, Integer z,
                        String color, String status, Boolean collapsed) {
-        update(id, title, x, y, w, h, z, color, status, collapsed, null);
-    }
-
-    public void update(String id, String title, Double x, Double y, Double w, Double h, Integer z,
-                       String color, String status, Boolean collapsed,
-                       Dtos.CardDto prefetched) {
         CardMeta current = noteRepository.card(id);
         if (current == null) {
             return;
@@ -196,7 +185,7 @@ public class CardRepository {
                 continue;
             }
             update(change.id(), change.title(), change.x(), change.y(), change.w(), change.h(),
-                    change.z(), change.color(), change.status(), change.collapsed(), null);
+                    change.z(), change.color(), change.status(), change.collapsed());
         }
     }
 
@@ -239,12 +228,12 @@ public class CardRepository {
             return null;
         }
         int at = indexOfCard(note, card.id());
-        Path knownFile = at >= 0 ? noteRepository.paths().root().resolve(note.cardPath().get(at)) : null;
+        Path knownFile = at >= 0 ? noteRepository.paths().root().resolve(note.getCardPath().get(at)) : null;
         Path file = knownFile != null ? knownFile
-                : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
+                : resolveContentPath(note.getTitle(), NoteFilePaths.cardSlug(card.title(), contentMd),
                         card.id());
         JsonFileUtils.writeText(file, CardFile.compose(card, contentMd));
-        List<String> paths = new ArrayList<>(note.cardPath());
+        List<String> paths = new ArrayList<>(note.getCardPath());
         String relative = noteFilePaths.relative(file);
         if (at >= 0) {
             paths.set(at, relative);
@@ -253,8 +242,9 @@ public class CardRepository {
         } else {
             paths.add(relative);
         }
-        JsonFileUtils.write(noteRepository.paths().noteMeta(note.id()),
-                note.withCardPaths(paths).touched(System.currentTimeMillis()));
+        note.setCardPath(paths);
+        note.touch(System.currentTimeMillis());
+        JsonFileUtils.write(noteRepository.paths().noteMeta(note.getId()), note);
         return card;
     }
 
@@ -276,10 +266,11 @@ public class CardRepository {
             return;
         }
         noteRepository.deleteCardFiles(owned.file());
-        List<String> paths = new ArrayList<>(owned.note().cardPath());
+        List<String> paths = new ArrayList<>(owned.note().getCardPath());
         paths.remove(noteRepository.paths().relative(owned.file()));
-        JsonFileUtils.write(noteRepository.paths().noteMeta(owned.note().id()),
-                owned.note().withCardPaths(paths).touched(System.currentTimeMillis()));
+        owned.note().setCardPath(paths);
+        owned.note().touch(System.currentTimeMillis());
+        JsonFileUtils.write(noteRepository.paths().noteMeta(owned.note().getId()), owned.note());
     }
 
 
@@ -307,8 +298,8 @@ public class CardRepository {
 
 
     private int indexOfCard(NoteMeta note, String cardId) {
-        for (int i = 0; i < note.cardPath().size(); i++) {
-            Path file = noteRepository.paths().root().resolve(note.cardPath().get(i));
+        for (int i = 0; i < note.getCardPath().size(); i++) {
+            Path file = noteRepository.paths().root().resolve(note.getCardPath().get(i));
             NoteRepository.CardData data = noteRepository.readCard(file);
             if (data != null && data.meta() != null && cardId.equals(data.meta().id())) {
                 return i;

@@ -58,7 +58,7 @@ class NoteListTagsTest {
 
         assertThat(list).hasSize(1);
         // 列表直接返回 meta，标签保持 meta 里的存储顺序（不再有列表侧排序）。
-        assertThat(list.get(0).tags()).containsExactly("设计", "方法论");
+        assertThat(list.get(0).getTags()).containsExactly("设计", "方法论");
     }
 
     @Test
@@ -67,7 +67,7 @@ class NoteListTagsTest {
         String id = newNote("乙", List.of("设计"));
 
         NoteMeta summary = noteService.list(NoteService.Query.defaults()).get(0);
-        assertThat(summary.tags()).containsExactly("设计");
+        assertThat(summary.getTags()).containsExactly("设计");
 
         Dtos.NoteDetail detail = noteService.detail(id);
         assertThat(detail.tags()).containsExactly("设计");

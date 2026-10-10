@@ -40,7 +40,8 @@ class TagRepositoryTest {
 
     private void seedNote(String id, String... tagNames) {
         NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null);
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(id), meta.withTags(List.of(tagNames)));
+        meta.setTags(List.of(tagNames));
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(id), meta);
     }
 
     private TagBook ledger() throws IOException {
@@ -67,7 +68,7 @@ class TagRepositoryTest {
 
         service.addTag("n1", "#新标签");
 
-        assertThat(store.getOne("n1").tags()).containsExactly("新标签");
+        assertThat(store.getOne("n1").getTags()).containsExactly("新标签");
         assertThat(ledger().find("新标签")).isNotNull();
         assertThat(ledger().tags()).hasSize(1);
     }
@@ -80,7 +81,7 @@ class TagRepositoryTest {
 
         service.renameTag("设计", "设计原则");
 
-        assertThat(store.getOne("n1").tags()).containsExactly("设计原则");
+        assertThat(store.getOne("n1").getTags()).containsExactly("设计原则");
         assertThat(ledger().find("设计")).isNull();
         assertThat(ledger().find("设计原则").color()).isEqualTo("#ff0000");
         assertThat(service.tagCatalog()).extracting(Dtos.TagDto::name).containsExactly("设计原则");

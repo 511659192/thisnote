@@ -73,19 +73,19 @@ public class NoteService {
     /** 扫描正文，找出以标题链接引用该笔记的其他笔记。只在改名时按需计算。 */
     private List<String> referencingNodeIds(String noteId) {
         NoteMeta note = noteRepository.getOne(noteId);
-        if (note == null || note.title().isBlank()) {
+        if (note == null || note.getTitle().isBlank()) {
             return List.of();
         }
-        List<String> variants = MarkdownUtils.wikiLinkVariants(note.title());
+        List<String> variants = MarkdownUtils.wikiLinkVariants(note.getTitle());
         List<String> referrers = new ArrayList<>();
         for (NoteMeta other : noteRepository.findAll()) {
-            if (other.id().equals(noteId)) {
+            if (other.getId().equals(noteId)) {
                 continue;
             }
-            String markdown = noteRepository.noteMarkdown(other.id());
+            String markdown = noteRepository.noteMarkdown(other.getId());
             for (String variant : variants) {
                 if (markdown.contains(variant)) {
-                    referrers.add(other.id());
+                    referrers.add(other.getId());
                     break;
                 }
             }
@@ -100,7 +100,7 @@ public class NoteService {
         }
         String content = noteRepository.noteMarkdown(id);
         boolean contentChanged = false;
-        String oldTitle = meta.title();
+        String oldTitle = meta.getTitle();
         boolean renamed = req.title() != null && !req.title().equals(oldTitle);
         // 引用者必须在标题改动**之前**收集：链接图是派生的，标题一改，正文里的 [[旧标题]] 当场
         // 就不再指向本篇，之后再问"谁引用了我"只会得到空集。引用关系从正文现算，所以必须先收集。
@@ -115,7 +115,9 @@ public class NoteService {
             nextContent = req.contentMd();
             contentChanged = true;
         }
-        JsonFileUtils.write(noteRepository.paths().noteMeta(id), meta.withTitle(nextTitle).touched(System.currentTimeMillis()));
+        meta.setTitle(nextTitle);
+        meta.touch(System.currentTimeMillis());
+        JsonFileUtils.write(noteRepository.paths().noteMeta(id), meta);
 
         if (req.tags() != null) {
             setTags(id, req.tags());
@@ -154,7 +156,7 @@ public class NoteService {
         if (meta == null) {
             return List.of();
         }
-        List<String> out = new ArrayList<>(meta.tags());
+        List<String> out = new ArrayList<>(meta.getTags());
         out.sort(String.CASE_INSENSITIVE_ORDER);
         return out;
     }
@@ -248,7 +250,7 @@ public class NoteService {
         String content = noteRepository.noteMarkdown(id);
         List<String> unresolved = unresolvedOf(content);
         List<String> cardIds = noteRepository.cards(id).stream().map(CardMeta::id).toList();
-        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), cardIds, tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
+        return new Dtos.NoteDetail(meta.getId(), meta.getTitle(), content, meta.getType(), cardIds, tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.getCreatedAt(), meta.getUpdatedAt());
     }
 
     /**
@@ -281,18 +283,18 @@ public class NoteService {
         }
         List<NoteMeta> others = new ArrayList<>();
         for (NoteMeta other : noteRepository.findAll()) {
-            if (!other.id().equals(id) && other.title().length() >= 2) {
+            if (!other.getId().equals(id) && other.getTitle().length() >= 2) {
                 others.add(other);
             }
         }
-        others.sort((a, b) -> Long.compare(b.updatedAt(), a.updatedAt()));
+        others.sort((a, b) -> Long.compare(b.getUpdatedAt(), a.getUpdatedAt()));
         int scanned = 0;
         for (NoteMeta other : others) {
             if (scanned++ >= 400) {
                 break;
             }
-            if (lower.contains(other.title().toLowerCase(Locale.ROOT)) && !linkedTitles.contains(MarkdownUtils.normalizeTitle(other.title()))) {
-                out.add(other.title());
+            if (lower.contains(other.getTitle().toLowerCase(Locale.ROOT)) && !linkedTitles.contains(MarkdownUtils.normalizeTitle(other.getTitle()))) {
+                out.add(other.getTitle());
                 if (out.size() >= 8) {
                     break;
                 }
@@ -324,7 +326,7 @@ public class NoteService {
                 matched.add(meta);
             }
         }
-        matched.sort((a, b) -> Long.compare(b.updatedAt(), a.updatedAt()));
+        matched.sort((a, b) -> Long.compare(b.getUpdatedAt(), a.getUpdatedAt()));
 
         int limit = Math.max(1, Math.min(query.limit() <= 0 ? 500 : query.limit(), 2000));
         int offset = Math.max(0, query.offset());
@@ -339,13 +341,13 @@ public class NoteService {
      * 逐篇判断，条件与旧的 WHERE 子句一一对应。
      */
     private boolean matches(NoteMeta meta, Query query) {
-        if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.type())) {
+        if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.getType())) {
             return false;
         }
         if (query.tag() != null && !query.tag().isBlank()) {
             String want = Tag.normalizeName(query.tag());
             boolean has = false;
-            for (String tag : meta.tags()) {
+            for (String tag : meta.getTags()) {
                 if (tag.equalsIgnoreCase(want)) {
                     has = true;
                     break;
@@ -355,14 +357,14 @@ public class NoteService {
                 return false;
             }
         }
-        if (query.notebookId() != null && !query.notebookId().isBlank() && !query.notebookId().equals(meta.notebookId())) {
+        if (query.notebookId() != null && !query.notebookId().isBlank() && !query.notebookId().equals(meta.getNotebookId())) {
             return false;
         }
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
             // 列表内的文字过滤要真正文 —— 按需加载这篇笔记的卡片，比"为了列表把全库读进内存"划算。
-            String body = noteRepository.noteMarkdown(meta.id()).toLowerCase(Locale.ROOT);
-            boolean hit = (meta.title() != null && meta.title().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
+            String body = noteRepository.noteMarkdown(meta.getId()).toLowerCase(Locale.ROOT);
+            boolean hit = (meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
             if (!hit) {
                 return false;
             }

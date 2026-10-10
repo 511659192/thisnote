@@ -61,7 +61,7 @@ class NoteRepositoryTest {
     void contentBecomesACard() {
         String id = newGetOne("会议记录", "# 会议记录\n\n今天讨论了三件事。");
 
-        assertThat(noteRepository.getOne(id).title()).isEqualTo("会议记录");
+        assertThat(noteRepository.getOne(id).getTitle()).isEqualTo("会议记录");
         assertThat(noteRepository.noteMarkdown(id)).isEqualTo("# 会议记录\n\n今天讨论了三件事。");
 
         List<CardMeta> cards = store.cards(id);
@@ -94,7 +94,7 @@ class NoteRepositoryTest {
 
         store.setNodeTags(id, List.of("#设计", "随笔", "设计"));
         assertThat(noteService.tagsOfNames(id)).containsExactly("设计", "随笔");
-        assertThat(store.getOne(id).tags()).containsExactly("设计", "随笔");
+        assertThat(store.getOne(id).getTags()).containsExactly("设计", "随笔");
 
         tagRepository.setColor("设计", "#ff0000");
         assertThat(noteService.tagsOf(id)).anySatisfy(tag -> {
@@ -120,20 +120,19 @@ class NoteRepositoryTest {
         String group = notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(id, group);
 
-        assertThat(store.getOne(id).notebookId()).isEqualTo(group);
+        assertThat(store.getOne(id).getNotebookId()).isEqualTo(group);
         assertThat(notebookRepository.nodeIdsOf(group)).containsExactly(id);
         assertThat(notebookRepository.list("notebook")).singleElement()
                 .satisfies(c -> assertThat(c.count()).isEqualTo(1));
 
         String other = notebookRepository.create("工作", null, "💼", "notebook");
         notebookRepository.setExclusiveGroup(id, other);
-        assertThat(store.getOne(id).notebookId()).isEqualTo(other);
+        assertThat(store.getOne(id).getNotebookId()).isEqualTo(other);
         assertThat(notebookRepository.nodeIdsOf(group)).isEmpty();
-        assertThat(notebookRepository.countNotebooksOf(id)).isEqualTo(1);
 
         // 删分组不能让笔记变成无归属
         notebookRepository.delete(other);
-        assertThat(store.getOne(id).notebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
+        assertThat(store.getOne(id).getNotebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
     }
 
     @Test
@@ -144,12 +143,12 @@ class NoteRepositoryTest {
         assertThat(noteService.list(NoteService.Query.defaults())).hasSize(2);
 
         assertThat(noteService.list(new NoteService.Query(null, null, null, "苹果", 500, 0)))
-                .extracting(s -> s.id()).containsExactly(a);
+                .extracting(s -> s.getId()).containsExactly(a);
         assertThat(noteService.list(new NoteService.Query(null, null, null, "香蕉", 500, 0)))
-                .extracting(s -> s.id()).containsExactly(b);
+                .extracting(s -> s.getId()).containsExactly(b);
 
         store.setNodeTags(a, List.of("水果"));
         assertThat(noteService.list(new NoteService.Query("水果", null, null, null, 500, 0)))
-                .extracting(s -> s.id()).containsExactly(a);
+                .extracting(s -> s.getId()).containsExactly(a);
     }
 }

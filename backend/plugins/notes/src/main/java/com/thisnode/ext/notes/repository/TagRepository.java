@@ -152,8 +152,4 @@ public class TagRepository {
                 : current.without(from).with(existing.renamed(to, now));
         save(next);
     }
-
-    /** 全文索引已换成内存实现：没有独立的标签索引列需要刷新。 */
-    public void rebuildFtsTags() {
-    }
 }

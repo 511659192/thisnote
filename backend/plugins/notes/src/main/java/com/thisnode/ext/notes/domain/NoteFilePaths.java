@@ -74,10 +74,6 @@ public final class NoteFilePaths {
         return contentFile.resolveSibling(base + META_SUFFIX);
     }
 
-    public static boolean isSidecar(Path file) {
-        return file.getFileName().toString().endsWith(META_SUFFIX);
-    }
-
     /** 会被扫描聚合的卡片内容文件：{@code .md}，且不是 sidecar。 */
     public boolean isContentFile(Path file) {
         String name = file.getFileName().toString();

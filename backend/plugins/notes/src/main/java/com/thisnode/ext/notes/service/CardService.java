@@ -56,10 +56,10 @@ public class CardService {
         List<Dtos.TagDto> noteTags = noteService.tagsOf(noteId);
         List<Dtos.CardView> views = new ArrayList<>(rows.size());
         for (Dtos.CardDto b : rows) {
-            views.add(new Dtos.CardView(b, b.contentMd(), note.title(), noteTags));
+            views.add(new Dtos.CardView(b, b.contentMd(), note.getTitle(), noteTags));
         }
-        return new Dtos.CardsDto(note.id(), note.title(), views, noteTags,
-                maxCardsPerNote(), note.updatedAt());
+        return new Dtos.CardsDto(note.getId(), note.getTitle(), views, noteTags,
+                maxCardsPerNote(), note.getUpdatedAt());
     }
 
     // ---------------------------------------------------------------- write
@@ -86,7 +86,7 @@ public class CardService {
         syncNoteFromCards(noteId);
         NoteMeta fresh = noteService.require(noteId);
         Dtos.CardDto stored = cardRepository.find(id);
-        return new Dtos.CardView(stored, stored.contentMd(), fresh.title(),
+        return new Dtos.CardView(stored, stored.contentMd(), fresh.getTitle(),
                 noteService.tagsOf(noteId));
     }
 
@@ -94,10 +94,10 @@ public class CardService {
         Dtos.CardDto card = requireCard(cardId);
         cardRepository.setContent(cardId, contentMd, baseContentMd);
         NoteMeta note = noteService.require(card.noteId());
-        syncNoteFromCards(note.id());
-        NoteMeta fresh = noteService.require(note.id());
+        syncNoteFromCards(note.getId());
+        NoteMeta fresh = noteService.require(note.getId());
         return new Dtos.CardView(cardRepository.find(cardId),
-                contentMd == null ? "" : contentMd, fresh.title(), noteService.tagsOf(note.id()));
+                contentMd == null ? "" : contentMd, fresh.getTitle(), noteService.tagsOf(note.getId()));
     }
 
     private void syncNoteFromCards(String noteId) {
@@ -169,13 +169,13 @@ public class CardService {
             // Keep the page non-empty: clear the last card rather than leaving nothing.
             cardRepository.setContent(cardId, "");
             if (note != null) {
-                syncNoteFromCards(note.id());
+                syncNoteFromCards(note.getId());
             }
             return;
         }
         cardRepository.delete(cardId);
         if (note != null) {
-            syncNoteFromCards(note.id());
+            syncNoteFromCards(note.getId());
         }
     }
 
