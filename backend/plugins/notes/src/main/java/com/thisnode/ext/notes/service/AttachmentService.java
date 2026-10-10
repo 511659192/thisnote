@@ -54,18 +54,6 @@ public class AttachmentService {
         return new Dtos.AttachmentDto(original, "/api/attachments/" + rel, Files.size(target));
     }
 
-    /** Save bytes directly (used by paste-in-editor and import flows). */
-    public Dtos.AttachmentDto storeBytes(String fileName, byte[] bytes) throws IOException {
-        LocalDate today = LocalDate.now();
-        String folder = String.format("%04d/%02d", today.getYear(), today.getMonthValue());
-        Path dir = root().resolve(folder);
-        Files.createDirectories(dir);
-        String unique = Ids.shortId() + "-" + sanitize(fileName);
-        Path target = dir.resolve(unique);
-        Files.write(target, bytes);
-        return new Dtos.AttachmentDto(fileName, "/api/attachments/" + folder + "/" + unique,
-                bytes.length);
-    }
 
     /** Resolve a relative attachment path, refusing traversal outside the store. */
     public Path resolve(String relative) {

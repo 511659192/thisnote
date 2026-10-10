@@ -52,15 +52,15 @@ public class CardController {
                 req == null ? null : req.baseContentMd());
     }
 
-    @PostMapping("/patch")
-    public Map<String, Object> batchUpdate(@RequestBody Dtos.BatchCardPatchRequest req) {
+    @PostMapping("/batch-update")
+    public Map<String, Object> batchUpdate(@RequestBody Dtos.BatchCardUpdateRequest req) {
         cardService.batchUpdate(req);
         return Map.of("ok", true);
     }
 
     @PostMapping("/update")
-    public Dtos.CardDto update(@RequestParam String cardId, @RequestBody Dtos.CardPatch patch) {
-        return cardService.update(cardId, patch);
+    public Dtos.CardDto update(@RequestParam String cardId, @RequestBody Dtos.CardUpdate changes) {
+        return cardService.update(cardId, changes);
     }
 
     @PostMapping("/duplicate")

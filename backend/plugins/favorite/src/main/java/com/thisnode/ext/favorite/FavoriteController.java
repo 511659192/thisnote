@@ -13,7 +13,7 @@ import java.util.Map;
  * 收藏插件自己的端点：{@code /api/plugins/favorite/…}。
  *
  * <p>只有读——「收藏了哪些笔记」的开关本身走底座的通用 per-entity 面
- * （{@code PUT /api/plugins/favorite/states/note/{id}?value=…}），插件不必自己写一遍。
+ * （{@code POST /api/plugins/state/set?pluginId=favorite&entityId=…&value=…}），插件不必自己写一遍。
  *
  * <p>端点只回 id 列表：本插件不读笔记数据（因此不依赖核心插件），标题与预览由调用方拼。
  */

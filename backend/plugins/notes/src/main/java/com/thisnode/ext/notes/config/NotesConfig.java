@@ -1,7 +1,9 @@
 package com.thisnode.ext.notes.config;
 
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 
@@ -42,6 +44,18 @@ public class NotesConfig {
 
     public Path dataRoot() {
         return Paths.get(dataRoot).toAbsolutePath().normalize();
+    }
+
+    /**
+     * 笔记目录的路径规则：卡片 md（{@code cards/}）、笔记 meta（{@code meta/}）、
+     * 台账（{@code ledgers/}）与日志（{@code logs/}）都挂在 {@code thisnode.markdown-root} 下。
+     *
+     * <p>领域层（{@code NoteRepository}/{@code CardRepository}）依赖这个值对象而不是本配置类 ——
+     * 路径规则集中在一处，测试也能拿临时目录自己造一个。
+     */
+    @Bean
+    public NoteFilePaths noteFilePaths() {
+        return new NoteFilePaths(markdownRoot());
     }
 
     @EventListener(ApplicationReadyEvent.class)

@@ -117,7 +117,7 @@ async function commitTitle() {
   if (!nodes.current) return
   const next = titleDraft.value.trim()
   if (!next || next === nodes.current.title) return
-  const detail = await nodes.patchCurrent({ title: next })
+  const detail = await nodes.updateCurrent({ title: next })
   if (detail) {
     page.noteTitle = detail.title
     await page.reload()
@@ -259,7 +259,7 @@ function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
   ]
   if (trashMode()) {
     entries.push({ separator: true })
-    entries.push({ label: '彻底删除', danger: true, action: () => nodes.purge(node.id) })
+    entries.push({ label: '彻底删除', danger: true, action: () => nodes.deleteForever(node.id) })
   }
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
@@ -297,7 +297,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         :current-id="nodes.currentId"
         @open="openNode"
         @context="onNodeContext"
-        @remove="(id: string) => nodes.purge(id)"
+        @remove="(id: string) => nodes.deleteForever(id)"
       />
 
       <template v-if="nodes.current">

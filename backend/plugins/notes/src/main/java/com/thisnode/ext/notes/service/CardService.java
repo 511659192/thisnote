@@ -1,10 +1,10 @@
 package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.CardRepository;
-import com.thisnode.ext.notes.domain.NoteRepository;
-import com.thisnode.ext.notes.domain.TagRepository;
-import com.thisnode.ext.notes.store.NoteMeta;
+import com.thisnode.ext.notes.repository.CardRepository;
+import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.ext.notes.repository.TagRepository;
+import com.thisnode.ext.notes.domain.NoteMeta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -158,22 +158,22 @@ public class CardService {
         return card;
     }
 
-    public Dtos.CardDto update(String cardId, Dtos.CardPatch patch) {
+    public Dtos.CardDto update(String cardId, Dtos.CardUpdate changes) {
         requireCard(cardId);
-        cardRepository.update(cardId, patch.title(), patch.x(), patch.y(), patch.w(), patch.h(),
-                patch.z(), patch.color(), patch.status(), patch.collapsed());
+        cardRepository.update(cardId, changes.title(), changes.x(), changes.y(), changes.w(), changes.h(),
+                changes.z(), changes.color(), changes.status(), changes.collapsed());
         // Resizing a card leaves its neighbours exactly where they are: cards are positioned
         // independently, so there is no column to re-close.
         return cardRepository.find(cardId);
     }
 
     /** Batched geometry write for drag / resize / distribute. */
-    public void batchUpdate(Dtos.BatchCardPatchRequest req) {
-        List<Dtos.CardPatch> patches = req == null || req.cards() == null ? List.of() : req.cards();
-        if (patches.isEmpty()) {
+    public void batchUpdate(Dtos.BatchCardUpdateRequest req) {
+        List<Dtos.CardUpdate> updates = req == null || req.cards() == null ? List.of() : req.cards();
+        if (updates.isEmpty()) {
             return;
         }
-        cardRepository.updateBatch(patches);
+        cardRepository.updateBatch(updates);
     }
 
     /**

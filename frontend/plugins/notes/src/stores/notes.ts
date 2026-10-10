@@ -364,8 +364,8 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  /** Patch the open note (title/tags…) and keep the cached detail in sync. */
-  async function patchCurrent(patch: {
+  /** Update the open note (title/tags…) and keep the cached detail in sync. */
+  async function updateCurrent(changes: {
     title?: string
     tags?: string[]
     status?: string
@@ -375,7 +375,7 @@ export const useNoteStore = defineStore('notes', () => {
     if (!current.value) return null
     const id = current.value.id
     try {
-      const detail = await noteApi.update(id, patch)
+      const detail = await noteApi.update(id, changes)
       current.value = detail
       await Promise.all([loadList(), refreshMeta()])
       return detail
@@ -386,14 +386,14 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   /** Apply a content/title edit locally and schedule a debounced save. */
-  function edit(patch: { contentMd?: string; title?: string }) {
+  function edit(changes: { contentMd?: string; title?: string }) {
     const doc = current.value
     if (!doc) return
-    if (patch.contentMd !== undefined) doc.contentMd = patch.contentMd
-    if (patch.title !== undefined) doc.title = patch.title
+    if (changes.contentMd !== undefined) doc.contentMd = changes.contentMd
+    if (changes.title !== undefined) doc.title = changes.title
 
     const bucket = pending[doc.id] ?? {}
-    Object.assign(bucket, patch)
+    Object.assign(bucket, changes)
     pending[doc.id] = bucket
 
     const existing = timers.get(doc.id)
@@ -472,7 +472,7 @@ export const useNoteStore = defineStore('notes', () => {
     return detail
   }
 
-  async function purge(id: string) {
+  async function deleteForever(id: string) {
     await noteApi.delete(id)
     if (currentId.value === id) current.value = null
     await Promise.all([loadList(), refreshMeta()])
@@ -480,7 +480,7 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
 
-  async function updateMeta(patch: {
+  async function updateMeta(changes: {
     status?: string
     source?: string
     tags?: string[]
@@ -489,7 +489,7 @@ export const useNoteStore = defineStore('notes', () => {
   }) {
     if (!current.value) return
     const id = current.value.id
-    const detail = await noteApi.update(id, patch)
+    const detail = await noteApi.update(id, changes)
     const cursor = (document.activeElement as HTMLElement | null)?.tagName
     current.value = detail
     void cursor
@@ -584,13 +584,13 @@ export const useNoteStore = defineStore('notes', () => {
     openGroup,
     select,
     reloadCurrent,
-    patchCurrent,
+    updateCurrent,
     edit,
     flush,
     flushAll,
     createNode,
     createAndSelect,
-    purge,
+    deleteForever,
     updateMeta,
     addTag,
     removeTag,

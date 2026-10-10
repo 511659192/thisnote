@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { pageApi, type CardPatch } from '@/api/page'
+import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError } from '@/core/http'
 import type { NoteCard, CardView, NotePageData } from '@/api/types'
 import { useUiStore } from './ui'
@@ -203,8 +203,8 @@ export const usePageStore = defineStore('notePage', () => {
 
   // ---------------------------------------------------------------- geometry
 
-  function localMove(patches: CardPatch[]) {
-    for (const p of patches) {
+  function localMove(updates: CardUpdate[]) {
+    for (const p of updates) {
       const view = cards.value.find((b) => b.card.id === p.id)
       if (!view) continue
       if (p.x !== undefined && p.x !== null) view.card.x = p.x
@@ -218,11 +218,11 @@ export const usePageStore = defineStore('notePage', () => {
     }
   }
 
-  async function commit(patches: CardPatch[]) {
-    if (!noteId.value || patches.length === 0) return
-    localMove(patches)
+  async function commit(updates: CardUpdate[]) {
+    if (!noteId.value || updates.length === 0) return
+    localMove(updates)
     try {
-      await pageApi.patchBlocks(patches)
+      await pageApi.updateBlocks(updates)
     } catch (e) {
       ui.toast(`页面保存失败：${(e as Error).message}`, 'error')
       await reload()
@@ -248,15 +248,15 @@ export const usePageStore = defineStore('notePage', () => {
   /** Clamp every card to the current surface width (called when the viewport resizes). */
   function clampWidths(surfaceWidth: number) {
     const max = Math.max(320, Math.min(LIMITS.maxW, surfaceWidth - LIMITS.minVisibleGap))
-    const patches: CardPatch[] = []
+    const updates: CardUpdate[] = []
     for (const v of cards.value) {
       if (v.card.w > max) {
         v.card.w = max
-        patches.push({ id: v.card.id, w: max })
+        updates.push({ id: v.card.id, w: max })
       }
     }
-    if (patches.length && noteId.value) {
-      void pageApi.patchBlocks(patches).catch(() => undefined)
+    if (updates.length && noteId.value) {
+      void pageApi.updateBlocks(updates).catch(() => undefined)
     }
   }
 

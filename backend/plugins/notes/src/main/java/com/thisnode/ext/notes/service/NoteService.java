@@ -2,9 +2,9 @@ package com.thisnode.ext.notes.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.*;
-import com.thisnode.ext.notes.store.CardMeta;
-import com.thisnode.ext.notes.store.NoteMeta;
+import com.thisnode.ext.notes.repository.*;
+import com.thisnode.ext.notes.domain.CardMeta;
+import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.util.Markdown;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +42,7 @@ public class NoteService {
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
         String id = noteRepository.insert(titleOf(title, content), type, req.dailyDate(), req.source(), req.status());
         // 编排：首卡落盘（一篇笔记至少一张卡；正文只有一份，在卡片里）。
-        cardRepository.putCard(id, CardMeta.fresh(Ids.newId(), 0, 0, "", null, null, System.currentTimeMillis()), content);
+        cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, System.currentTimeMillis()), content);
 
         if (req.tags() != null) {
             tagRepository.setNodeTags(id, req.tags());
@@ -159,8 +159,7 @@ public class NoteService {
     public void delete(String id) {
         noteRepository.delete(id);
         linkRepository.deleteOutbound(id);
-        // 审计日志的动作名保持 "purge"：ops.jsonl 里已有历史值，改词会把同一动作劈成两种写法。
-        log("note", id, "purge", Map.of());
+        log("note", id, "delete", Map.of());
     }
 
     // ================================================================= read

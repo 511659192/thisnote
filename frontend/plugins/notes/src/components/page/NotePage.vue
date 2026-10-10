@@ -7,7 +7,7 @@ import NoteCard from './NoteCard.vue'
 import '@/plugins'
 import { activeCardPlugins } from '@/plugins'
 import type { CardView } from '@/api/types'
-import type { CardPatch } from '@/api/page'
+import type { CardUpdate } from '@/api/page'
 
 /**
  * A note's page: a single column of cards that grows downwards.
@@ -329,7 +329,7 @@ async function onPointerUp() {
   drag.mode = 'none'
   marquee.active = false
   if ((mode === 'move' || mode === 'resize') && moved && drag.pending.size) {
-    const patches: CardPatch[] = [...drag.pending.entries()].map(([id, g]) => ({
+    const updates: CardUpdate[] = [...drag.pending.entries()].map(([id, g]) => ({
       id,
       x: g.x,
       y: g.y,
@@ -341,7 +341,7 @@ async function onPointerUp() {
       for (const id of drag.pending.keys()) page.markManualHeight(id)
     }
     drag.pending.clear()
-    await page.commit(patches)
+    await page.commit(updates)
   }
 }
 

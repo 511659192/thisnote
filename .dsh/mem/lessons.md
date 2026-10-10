@@ -91,6 +91,12 @@
   （宿主 5173 + 插件 7111–7115），前端改名靠 vite HMR 生效，未重启。
 - **规则**：重新打包 app jar 前必须先停后端，否则 `spring-boot:repackage` 会因 Windows 文件锁失败
   （`Unable to rename 'thisnode-backend.jar' to 'thisnode-backend.jar.original'`，本轮实际踩到）。
+- `backend/tools/` 现在**只有 `dev_plugins.ps1`**（dev 模式的 `plugins-dev/` 由它建立，
+  `application-dev.yml:9` 明确引用 ⇒ 承重、不能删）。原来的 4 个 `.py` 维护脚本
+  （`vault_test` / `cleanup_empty_blocks` / `cleanup_test_notes` / `reset_demo`）2026-10-10 按用户决定删除
+  —— 它们调的 `/api/notes/{id}/blocks`、`DELETE /api/notes/{id}?hard=true`、`/api/notes/counts`、
+  `/api/maintenance/*`、`POST /api/notes/daily` 在当前后端**全部不存在**（已 grep 核实）。
+  连带的后果：以后清测试垃圾笔记要手工做或重写脚本。
 
 ## 8. 项目阶段：开发版本，不考虑兼容性（用户 2026-10-10 明确）
 
@@ -101,3 +107,17 @@
   不为了"标记断裂"而递增版本号。这一条**推翻我本轮基于兼容性给出的那条建议**
   （当时我建议不改 `PluginDataStore` 的名字，理由正是"契约二进制断裂、而 `plugin.requires` 是下界拦不住旧 jar"）。
   仍然要给影响面清单（谁会被打破、要同步重建/重跑什么）。
+
+## 9. 用户正在 IDE 里改代码时，重打包会把半成品编进 jar（第 1 次）
+
+- **纠正来源**：无（本轮自己造成的后果，事后自查）。
+- **事实依据**：15:58 我跑 `mvn -o -B "-Dmaven.test.skip=true" package` 时，用户正把 `NoteRepository` 的依赖
+  从 `NotesConfig` 换成 `NoteFilePaths`：主代码能编译，但 `NotesConfig` 里没有 `NoteFilePaths` 这个 bean、
+  全仓也没有 `new NoteFilePaths(...)` ⇒ 新 `plugins-dist/notes.jar` 装载后
+  `[SBP] 4 plugins are started, 1 failed` + `No qualifying bean of type ... NoteFilePaths`，notes 全部端点 404
+  （上一个 jar 是好的）。同一次 `mvn package`（带测试）也红：10 个测试文件仍 `Mockito.mock(NotesConfig.class)`
+  并传给要 `NoteFilePaths` 的构造器。
+- **规则**：① 重打包/重启前先看工作区是不是"别人正在改的中途"（`git status` + 最近几分钟被改的文件）；
+  ② 打完包**必须读启动日志确认 `[SBP] N plugins are started, 0 failed`**，不能只看 `BUILD SUCCESS`；
+  ③ 报告里把"我的改动"与"工作区在途状态导致的失败"分开写，别含糊过去；
+  ④ PowerShell 里 `-Dmaven.test.skip=true` 要加引号，否则被拆成 `.test.skip=true` 当成生命周期阶段报错。

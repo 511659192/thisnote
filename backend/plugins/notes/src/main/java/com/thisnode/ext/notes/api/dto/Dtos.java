@@ -1,11 +1,10 @@
 package com.thisnode.ext.notes.api.dto;
 
-import com.thisnode.ext.notes.store.CardRef;
-import com.thisnode.ext.notes.store.InboundRef;
-import com.thisnode.ext.notes.store.LinkRef;
+import com.thisnode.ext.notes.domain.CardRef;
+import com.thisnode.ext.notes.domain.InboundRef;
+import com.thisnode.ext.notes.domain.LinkRef;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * API payloads. Kept as records so the JSON contract is explicit and stable for the
@@ -105,11 +104,11 @@ public final class Dtos {
     public record WriteContentRequest(String contentMd, String baseContentMd) {
     }
 
-    public record CardPatch(String id, String title, Double x, Double y, Double w, Double h,
+    public record CardUpdate(String id, String title, Double x, Double y, Double w, Double h,
                              Integer z, String color, String status, Boolean collapsed) {
     }
 
-    public record BatchCardPatchRequest(List<CardPatch> cards) {
+    public record BatchCardUpdateRequest(List<CardUpdate> cards) {
     }
 
 

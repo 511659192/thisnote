@@ -1,7 +1,7 @@
 import { http } from '@/core/http'
 import type { NoteCard, CardView, NotePageData } from './types'
 
-export interface CardPatch {
+export interface CardUpdate {
   id: string
   title?: string | null
   x?: number | null
@@ -44,11 +44,11 @@ export const pageApi = {
     },
   ) => http.post<CardView>('/api/notes/cards/create', payload, { noteId }),
 
-  patchBlocks: (cards: CardPatch[]) =>
-    http.post<{ ok: boolean }>('/api/notes/cards/patch', { cards }),
+  updateBlocks: (cards: CardUpdate[]) =>
+    http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { cards }),
 
-  patchBlock: (cardId: string, patch: CardPatch) =>
-    http.post<NoteCard>('/api/notes/cards/update', patch, { cardId }),
+  updateBlock: (cardId: string, changes: CardUpdate) =>
+    http.post<NoteCard>('/api/notes/cards/update', changes, { cardId }),
 
   /**
    * Write markdown typed inside a card back into the note.

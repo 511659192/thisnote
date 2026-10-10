@@ -1,10 +1,10 @@
 package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.NoteRepository;
-import com.thisnode.ext.notes.domain.TagRepository;
+import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.ext.notes.repository.TagRepository;
 import com.thisnode.ext.notes.service.NoteService;
-import com.thisnode.ext.notes.store.NoteMeta;
+import com.thisnode.ext.notes.domain.NoteMeta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

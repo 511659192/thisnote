@@ -50,7 +50,7 @@ plugins-dist/memory-curve.jar
 
 | 状态 | 存放 | 为什么 |
 |---|---|---|
-| 「这张卡开了记忆曲线吗」 | 平台 KV（`plugin-data.json`，分层 JSON），经通用状态面读写（entityType = `card`） | 这是**平台级的 per-entity 状态**：平台要据此做批量查询、停用闸门、以及「状态变化时通知插件」；所有插件共用一套，无需各自造轮子 |
+| 「这张卡开了记忆曲线吗」 | 平台 KV（`plugin-data.json`，分层 JSON），经通用状态面读写（键只有 pluginId + 卡片 id，没有 entityType 那一层） | 这是**平台级的 per-entity 状态**：平台要据此做批量查询、停用闸门、以及「状态变化时通知插件」；所有插件共用一套，无需各自造轮子 |
 | 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（Properties 格式 `cardId|字段 = 值`（键就是卡片 id，与 entityType 无关）） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
 `SrsService` 里有一处很讲究的细节：**「是否开启」直接读 `PluginDataRepository`，而不是注入 `PluginStateService`**。原因是后者在状态翻转时会回调插件的 `onEntityStateChanged` —— 插件正是订阅方，形成字段级循环依赖，Spring 装配不出来。直接读 KV（同一份底座数据的插件侧半边）绕开了这个环。
@@ -90,8 +90,9 @@ new ──评分──► learning（学习步 1 分钟 → 10 分钟）──�
 | POST | `/api/plugins/memory-curve/forget?cardId=` | 删一条排期（孤儿清理兜底） |
 
 `MemoryCurveController` 挂在 `@RequestMapping("/api/plugins/memory-curve")` 下 ——
-**插件自有端点的固定命名空间**，平台据此把它与管理面（`/api/plugins/states|config|...`）区分开，
-停用插件时只拦前者（`PluginEndpointGate`）。
+**插件自有端点的固定命名空间**，平台据此把它与管理面
+（`/api/plugins/detail|states|state|entities|health|active|reload`）区分开，
+停用插件时只拦前者（`PluginEndpointHandlerInterceptor`）。
 
 ### 2.5 跨插件协作：`CardChangedEvent`（唯一一处「知道隔壁发生了什么」）
 
