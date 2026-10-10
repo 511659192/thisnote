@@ -35,10 +35,9 @@ class NoteInboundCountTest {
         CardRepository blockRepository = new CardRepository(store);
         TagRepository tagRepository = new TagRepository(store);
         NotebookRepository notebookRepository = new NotebookRepository(store);
-        OpsRepository opsRepository = new OpsRepository(store);
         links = Mockito.mock(LinkRepository.class);
         noteService = new NoteService(noteRepository, tagRepository, links, notebookRepository,
-                blockRepository, opsRepository);
+                blockRepository);
     }
 
     private String newNote(String title, String contentMd) {

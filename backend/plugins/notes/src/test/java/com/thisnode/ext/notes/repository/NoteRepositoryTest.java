@@ -46,10 +46,9 @@ class NoteRepositoryTest {
         blockRepository = new CardRepository(store);
         tagRepository = new TagRepository(store);
         notebookRepository = new NotebookRepository(store);
-        OpsRepository opsRepository = new OpsRepository(store);
         LinkRepository links = Mockito.mock(LinkRepository.class);
         noteService = new NoteService(noteRepository, tagRepository, links, notebookRepository,
-                blockRepository, opsRepository);
+                blockRepository);
     }
 
     private String newGetOne(String title, String contentMd) {

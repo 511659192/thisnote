@@ -39,9 +39,8 @@ class NoteListTagsTest {
         CardRepository blockRepository = new CardRepository(store);
         tagRepository = new TagRepository(store);
         NotebookRepository notebookRepository = new NotebookRepository(store);
-        OpsRepository opsRepository = new OpsRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, Mockito.mock(LinkRepository.class),
-                notebookRepository, blockRepository, opsRepository);
+                notebookRepository, blockRepository);
     }
 
     private String newNote(String title, List<String> tags) {

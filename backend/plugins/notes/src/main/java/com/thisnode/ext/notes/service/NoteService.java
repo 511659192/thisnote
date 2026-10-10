@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.service;
 
-import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
@@ -15,9 +14,8 @@ import java.util.*;
 /**
  * Note aggregate: CRUD, list queries, tags, link re-indexing and [[ ]] resolution.
  *
- * <p>Everything the user writes flows through here so that three invariants hold: links are always
- * a projection of Markdown, the title/alias resolver is never stale, and every write lands in
- * {@code ops}.
+ * <p>Everything the user writes flows through here so that two invariants hold: links are always
+ * a projection of Markdown, and the title/alias resolver is never stale.
  *
  * <p>与数据库时代相比少了一条不变量：不再有"同步镜像"这一步。内容与元数据本来就落在笔记目录里
  * （卡片 md 承载正文、meta 承载归属与几何），文件就是权威，没有第二份需要追平。
@@ -31,7 +29,6 @@ public class NoteService {
     private final LinkRepository linkRepository;
     private final NotebookRepository notebookRepository;
     private final CardRepository cardRepository;
-    private final OpsRepository opsRepository;
 
     // ================================================================= create
 
@@ -60,7 +57,6 @@ public class NoteService {
         resolvePendingLinks(id, title);
         // 列表页缓存（摘要/出链/入链）随首卡落定：原来由组合层 writeCard 顺带刷新。
         noteRepository.refreshCachedView(id);
-        log("note", id, "create", Map.of("title", title));
         return id;
     }
 
@@ -137,7 +133,6 @@ public class NoteService {
             invalidateResolver();
             resolvePendingLinks(id, nextTitle);
         }
-        log("note", id, "update", Map.of("title", nextTitle, "contentChanged", contentChanged));
     }
 
     public List<String> tagsOfNames(String noteId) {
@@ -158,7 +153,6 @@ public class NoteService {
     public void delete(String id) {
         noteRepository.delete(id);
         linkRepository.deleteOutbound(id);
-        log("note", id, "delete", Map.of());
     }
 
     // ================================================================= read
@@ -349,7 +343,6 @@ public class NoteService {
         int healed = noteRepository.resolvePendingLinks(id, normalized);
         if (healed > 0) {
             invalidateResolver();
-            log("note", id, "links-resolved", Map.of("count", healed));
         }
         return healed;
     }
@@ -406,7 +399,6 @@ public class NoteService {
             if (noteRepository.getOne(sourceId) != null) {
                 reindexLinks(sourceId, noteRepository.noteMarkdown(sourceId));
             }
-            log("note", sourceId, "link-renamed", Map.of("from", oldTitle, "to", newTitle));
             updated++;
         }
         return updated;
@@ -432,16 +424,6 @@ public class NoteService {
             }
         }
         return id;
-    }
-
-    // ================================================================= ops log
-
-    public void log(String entityType, String entityId, String action, Map<String, Object> payload) {
-        try {
-            opsRepository.append(entityType, entityId, action, JSON.toJSONString(payload));
-        } catch (Exception e) {
-            // Never fail a user write because the audit row could not be serialized.
-        }
     }
 
 

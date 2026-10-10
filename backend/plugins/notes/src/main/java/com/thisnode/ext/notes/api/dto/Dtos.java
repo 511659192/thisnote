@@ -111,9 +111,4 @@ public final class Dtos {
 
     public record AttachmentDto(String name, String url, long size) {
     }
-
-    // ---------- ops / system ----------
-    public record OpDto(String id, String entityType, String entityId, String action,
-                        String payload, long createdAt) {
-    }
 }

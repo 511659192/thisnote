@@ -187,8 +187,6 @@ public class CardService {
                 null, null));
         String id = cardRepository.create(newNoteId, 0d, 0d, src.w(), src.h(), src.color(), src.status(),
                 src.contentMd() == null ? "" : src.contentMd(), src.title());
-        noteService.log("note-card", id, "duplicate-from",
-                Map.of("fromBlock", cardId, "fromNote", src.noteId()));
         return cardRepository.find(id);
     }
 
@@ -217,8 +215,6 @@ public class CardService {
             // the user gave them.
             syncNoteFromCards(note.id());
         }
-        noteService.log("note-card", cardId, "delete",
-                Map.of("noteId", card.noteId(), "deleteContent", deleteContent));
     }
 
     /** z-order: bring a card to the front or send it back. */

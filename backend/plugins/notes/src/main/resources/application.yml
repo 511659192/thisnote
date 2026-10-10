@@ -14,8 +14,6 @@ thisnode:
   snapshot-retention-days: 7
   # Auto-snapshot a running instance once per day.
   snapshot-auto: true
-  # Poll the Markdown mirror for external edits.
-  note-watch: true
 
 spring:
   # SBP 会传递引入 Flyway；插件不连数据库，留着只是防它去动别的库。

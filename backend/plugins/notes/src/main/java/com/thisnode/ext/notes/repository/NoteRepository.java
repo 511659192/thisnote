@@ -296,7 +296,7 @@ public class NoteRepository {
      */
     public void ensureDirs() {
         try {
-            for (Path dir : new Path[]{noteFilePaths.cardsDir(), noteFilePaths.noteMetaDir(), noteFilePaths.ledgersDir(), noteFilePaths.logsDir()}) {
+            for (Path dir : new Path[]{noteFilePaths.cardsDir(), noteFilePaths.noteMetaDir(), noteFilePaths.ledgersDir()}) {
                 Files.createDirectories(dir);
             }
         } catch (IOException e) {
@@ -345,18 +345,6 @@ public class NoteRepository {
             move(tmp, file);
         } catch (IOException e) {
             throw new UncheckedIOException("写入失败 " + file, e);
-        }
-    }
-
-    /**
-     * 追加一行（操作日志用）：日志丢了不比丢一次写入更严重，所以失败只记日志不抛。
-     */
-    public void appendLine(Path file, String line) {
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, line + System.lineSeparator(), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
-        } catch (IOException e) {
-            log.warn("无法追加 {}（{}）", noteFilePaths.relative(file), e.toString());
         }
     }
 

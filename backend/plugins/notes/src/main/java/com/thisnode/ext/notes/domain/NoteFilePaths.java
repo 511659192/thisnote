@@ -14,8 +14,6 @@ import java.util.Locale;
  *   notes\meta\&lt;noteId&gt;.json                       笔记级元数据（标题 / 标签 / 归属分组）
  *   notes\ledgers\notebooks.json                   分组台账
  *   notes\ledgers\tags.json                        标签台账
- *   notes\ledgers\settings.json                    笔记侧设置
- *   notes\logs\ops.jsonl                           操作日志，一行一条
  * </pre>
  *
  * <p>cards/ 之外都是应用目录；cards 目录里**只有**卡片 md，扫描不需要黑名单。
@@ -45,14 +43,9 @@ public final class NoteFilePaths {
         return root.resolve("meta");
     }
 
-    /** 单文件台账目录：分组 / 标签 / 设置。 */
+    /** 单文件台账目录：分组 / 标签。 */
     public Path ledgersDir() {
         return root.resolve("ledgers");
-    }
-
-    /** 日志目录。 */
-    public Path logsDir() {
-        return root.resolve("logs");
     }
 
     /** 卡片内容目录。 */
@@ -65,10 +58,6 @@ public final class NoteFilePaths {
         return noteMetaDir().resolve(safeSegment(noteId) + ".json");
     }
 
-    public Path settingsFile() {
-        return ledgersDir().resolve("settings.json");
-    }
-
     /** 标签台账：一个文件装全部标签（名称 / 颜色 / 建立与更新时间），见 {@link TagBook}。 */
     public Path tagsFile() {
         return ledgersDir().resolve("tags.json");
@@ -77,10 +66,6 @@ public final class NoteFilePaths {
     /** 分组（笔记本）台账（读与写同一个文件）。 */
     public Path notebooksFile() {
         return ledgersDir().resolve("notebooks.json");
-    }
-
-    public Path opsFile() {
-        return logsDir().resolve("ops.jsonl");
     }
 
     /**

@@ -138,12 +138,4 @@ export interface NoteDetail {
   updatedAt: number
 }
 
-export interface OpEntry {
-  id: string
-  entityType: string
-  entityId?: string | null
-  action: string
-  payload?: string | null
-  createdAt: number
-}
 
