@@ -37,7 +37,8 @@ plugins-dist/memory-curve.jar
 
 - `MemoryCurvePlugin extends ThisnodePlugin`（基类在 `plugin-support`，桥接 PF4J 与 SBP）：
   id/version 一律取自描述符，**不在代码里硬编码**；
-- `kind = PluginKind.CARD` —— 卡片插件：它的工具渲染在卡片工具行里（见 3.3）；
+- 它是**可停用插件**（描述符里 `undeactivatable=false`）：工具渲染在卡片工具行里（见 3.3），
+  可随时停用/重载 —— 分类标签不靠声明，能力由它调用的 `register*` 决定；
 - `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class).importBean(PluginDataStore.class)`：
   插件有**自己的 Spring 子容器**（`MemoryCurveStarter` 是空 `@SpringBootApplication`，只负责扫描本包），
   平台只把 `PluginDataStore`（状态 KV）显式搭桥进来 —— 插件与平台之间只有 `plugin-api` 这层契约；
@@ -196,9 +197,9 @@ NoteCard 渲染卡片时：
 
 | 产物 | 位置 | 说明 |
 |---|---|---|
-| 后端 jar | `backend/plugins-dist/memory-curve.jar` | antrun 在 package 阶段从模块 target 拷入 |
-| 界面资源 | `backend/plugin-assets/memory-curve/` | 由 vite `dist/`（界面侧自己的地盘）拷入；`plugin.js` + `plugin.css` + 动态分片 |
-| 运行期提供 | `GET /plugin-assets/memory-curve/plugin.js` | `PluginAssetController` 从磁盘端出（停用即 404），带 STARTED 闸门 |
+| 后端 jar | `backend/plugins-dist/memory-curve.jar` | Maven 在 package 阶段从模块 target 拷入 |
+| 界面资源 | `frontend/plugin-assets/memory-curve/` | 由 vite `dist/` 经交付脚本送进界面侧交付目录；`plugin.js` + `plugin.css` + 动态分片 |
+| 运行期提供 | `GET /plugin-assets/memory-curve/plugin.js` | **界面侧静态服务**提供（开发期：宿主 dev server 的中间件从 `frontend/plugin-assets/` 端出）；闸门在装载器（停用即不装载） |
 | 开发期 | `frontend/plugins/memory-curve` dev server: **7112** | 端口约定见 `host/src/plugins/devPorts.ts`；没起则自动回退到交付产物 |
 
 > 排期文件是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-curve/scheduling.meta`。
@@ -246,7 +247,7 @@ NoteCard 渲染卡片时：
 
 ## 7. 它用到的 plugin-api 契约清单
 
-后端：`ThisnodePlugin`（基类）· `PluginKind.CARD` · `PluginHealth` · `PluginDataStore`（状态 KV）·
+后端：`ThisnodePlugin`（基类）· `PluginDescriptor` · `PluginHealth` · `PluginDataStore`（状态 KV）·
 `CardChangedEvent`（跨插件事件）· `PluginDataStore.importBean` 搭桥
 
 界面侧：`registerCardPlugin` · `registerNavEntry` · `registerPluginRoute` · `unregisterPlugin` ·

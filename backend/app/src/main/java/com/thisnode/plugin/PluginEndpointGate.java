@@ -1,7 +1,6 @@
 package com.thisnode.plugin;
 
 import com.thisnode.plugin.api.Plugin;
-import com.thisnode.plugin.api.PluginKind;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -50,9 +49,9 @@ public class PluginEndpointGate implements HandlerInterceptor {
             return true;
         }
         Plugin plugin = registry.get(pluginId);
-        // 核心插件永远放行：停用请求在状态服务里已被拒绝（409），这是双保险 —— 即使 pf4j 层
-        // 出现意外状态，笔记领域的端点也不能被闸门误伤。
-        if (plugin.descriptor().kind() == PluginKind.CORE) {
+        // 不可停用的插件（承载主体业务）永远放行：停用请求在状态服务里已被拒绝（409），
+        // 这是双保险 —— 即使 pf4j 层出现意外状态，业务端点也不能被闸门误伤。
+        if (plugin.descriptor().undeactivatable()) {
             return true;
         }
         response.setStatus(HttpServletResponse.SC_CONFLICT);

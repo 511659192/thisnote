@@ -94,17 +94,12 @@ class PluginJarContractTest {
             assertThat(zip.getEntry(pluginClass.replace('.', '/') + ".class"))
                     .as("%s 必须在 jar 里", pluginClass)
                     .isNotNull();
-
-            // 3) 界面产物：产物分离 —— 产物**不在 jar 里**，而是由交付流程拷到
-            //    backend/plugins-dist/assets/<id>/，/plugin-assets 从该磁盘目录端出。
+            // 3) 界面资源不得打进 jar：一律由界面侧自行交付与提供（后端不端出静态资源）
             if (hasAssets) {
-                // jar 里不得有任何 "plugin/<id>/" 前缀的条目：界面资源一律走磁盘交付
-                assertThat(zip.stream().map(ZipEntry::getName).filter((n) -> n.startsWith("plugin/" + pluginId + "/")).count())
-                        .as("界面产物不得再打进插件 jar（产物分离，由 /plugin-assets 从磁盘端出）")
+                assertThat(zip.stream().map(ZipEntry::getName)
+                                .filter((n) -> n.startsWith("plugin/" + pluginId + "/")).count())
+                        .as("界面资源不得打进插件 jar（由界面侧自行交付）")
                         .isZero();
-                Path delivered = Path.of("..", "plugin-assets", pluginId, "plugin.js").toAbsolutePath().normalize();
-                assertThat(delivered).as("界面产物必须已交付到 plugins-dist/assets/<id>/（antrun 拷贝）")
-                        .exists();
             }
         }
     }

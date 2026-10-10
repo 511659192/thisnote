@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes;
 
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginKind;
 import com.thisnode.plugin.support.ThisnodePlugin;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
@@ -18,14 +17,20 @@ import org.pf4j.PluginWrapper;
  * 因此本插件缺位时它们照样能独立启动；复习页与收藏列表要展示的卡片内容，由界面侧用本插件的
  * 公开 API（{@code /api/notes}、{@code /api/notes/{id}/page}）现拼。
  *
- * <p><b>核心插件不允许停用</b>（{@link PluginKind#CORE}）：底座的管理面会直接拒绝
+ * <p><b>本插件不允许停用/在线重载</b>（覆写 {@code undeactivatable()}）：管理面直接拒绝
  * （{@code 409}），否则整个应用的笔记能力会随一次误点整体下线。
  */
 public class NotesPlugin extends ThisnodePlugin {
 
     public NotesPlugin(PluginWrapper wrapper) {
-        super(wrapper, PluginKind.CORE, "笔记核心",
+        super(wrapper, "笔记核心",
                 "笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / 导入导出 —— 主体原有的业务领域，以插件形态交付");
+    }
+
+    /** 承载主体业务领域：不允许停用/在线重载（管理面直接拒绝，端点闸门总是放行）。 */
+    @Override
+    protected boolean undeactivatable() {
+        return true;
     }
 
     @Override

@@ -62,7 +62,7 @@ await win.goto(`${APP}/#/notes/${source.id}`, { waitUntil: 'networkidle' })
 await win.waitForTimeout(2800)
 
 // 卡片预览里应该渲染出 wiki 链接与标签
-const link = win.locator('article.block .md-wikilink', { hasText: TARGET }).first()
+const link = win.locator('article.card .md-wikilink', { hasText: TARGET }).first()
 check('卡片正文渲染出双链', (await link.count()) === 1, `${await link.count()} 个`)
 
 // 点它 → 应该跳到目标笔记
@@ -75,7 +75,7 @@ check('打开的是正确那篇', ((await win.locator('.note-head .title, h2.tit
 // 回到来源笔记，点标签 → 应该按标签筛选
 await win.goto(`${APP}/#/notes/${source.id}`, { waitUntil: 'networkidle' })
 await win.waitForTimeout(2600)
-const tagLink = win.locator('article.block .md-wikilink[data-tag]').first()
+const tagLink = win.locator('article.card .md-wikilink[data-tag]').first()
 check('卡片正文渲染出标签链接', (await tagLink.count()) === 1)
 await tagLink.click()
 await win.waitForTimeout(2000)
@@ -93,7 +93,7 @@ await api('PATCH', `/api/notes/${stubSource.id}/blocks/${stubPage.blocks[0].bloc
 })
 await win.goto(`${APP}/#/notes/${stubSource.id}`, { waitUntil: 'networkidle' })
 await win.waitForTimeout(2600)
-const freshLink = win.locator('article.block .md-wikilink').first()
+const freshLink = win.locator('article.card .md-wikilink').first()
 const freshText = ((await freshLink.innerText().catch(() => '')) ?? '').trim()
 check('卡片渲染出指向不存在笔记的双链', freshText.includes(`尚未存在${RUN}`), freshText || '（读不到）')
 await freshLink.click()
@@ -116,7 +116,7 @@ await api('PATCH', `/api/notes/${extSource.id}/blocks/${extPage.blocks[0].block.
 })
 await win.goto(`${APP}/#/notes/${extSource.id}`, { waitUntil: 'networkidle' })
 await win.waitForTimeout(2600)
-const extLink = win.locator('article.block a[href^="https://"]').first()
+const extLink = win.locator('article.card a[href^="https://"]').first()
 check('卡片渲染出外链', (await extLink.count()) === 1, `${await extLink.count()} 个`)
 check('外链带 target=_blank', (await extLink.getAttribute('target')) === '_blank',
   String(await extLink.getAttribute('target')))

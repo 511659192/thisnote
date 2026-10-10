@@ -1,7 +1,6 @@
 package com.thisnode.ext.search;
 
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginKind;
 import com.thisnode.plugin.support.ThisnodePlugin;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
@@ -19,7 +18,7 @@ public class SearchPlugin extends ThisnodePlugin {
     public static final String PLUGIN_ID = "search";
 
     public SearchPlugin(PluginWrapper wrapper) {
-        super(wrapper, PluginKind.SERVICE, "标题搜索",
+        super(wrapper, "标题搜索",
                 "列表头部按笔记标题即时过滤；纯界面侧实现，关闭即入口消失，无任何数据");
     }
 

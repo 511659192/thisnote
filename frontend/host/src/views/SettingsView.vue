@@ -122,15 +122,9 @@ function healthClass(plugin: PluginInfo): string {
   return `health-${plugin.health.status}`
 }
 
-/** 插件类型的中文标签（与后端 PluginKind 的 id 对应）。 */
-function kindLabel(kind: PluginInfo['kind']): string {
-  switch (kind) {
-    case 'core': return '核心'
-    case 'card': return '卡片'
-    case 'entity': return '实体'
-    case 'service': return '服务'
-    default: return kind
-  }
+/** 只有「不可停用」的插件需要一枚徽标；其余没有分类标签（分类由插槽事实决定，不靠声明）。 */
+function coreLabel(plugin: PluginInfo): string {
+  return plugin.undeactivatable ? '核心' : ''
 }
 
 async function refresh() {
@@ -167,9 +161,7 @@ onMounted(async () => {
 
         <div v-for="plugin in plugins" :key="plugin.id" class="plugin-card">
           <div class="plugin-head">
-            <span class="kind" :class="`kind-${plugin.kind}`">
-              {{ kindLabel(plugin.kind) }}
-            </span>
+            <span v-if="plugin.undeactivatable" class="kind kind-core">{{ coreLabel(plugin) }}</span>
             <b>{{ plugin.title }}</b>
             <span class="small muted mono">v{{ plugin.version }}</span>
             <span class="small" :class="healthClass(plugin)">● {{ plugin.health.message }}</span>
@@ -182,7 +174,7 @@ onMounted(async () => {
             <!-- 重载与停用对核心插件都不可用（后端直接拒绝）：它是全部笔记端点的宿主，
                  重建容器期间路由与索引会短暂缺失。这里直接不渲染这两个按钮。 -->
             <button
-              v-if="plugin.kind !== 'core'"
+              v-if="!plugin.undeactivatable"
               class="btn sm ghost"
               :title="plugin.reloadAvailable
                 ? `按磁盘上的 v${plugin.diskVersion} 重建该插件的容器`
@@ -195,7 +187,7 @@ onMounted(async () => {
               {{ openPlugin === plugin.id ? '收起' : '设置' }}
             </button>
             <button
-              v-if="plugin.kind !== 'core'"
+              v-if="!plugin.undeactivatable"
               class="btn sm"
               :class="{ primary: plugin.active }"
               @click="togglePlugin(plugin)"
@@ -394,19 +386,7 @@ onMounted(async () => {
   font-size: 11px;
   line-height: 17px;
 }
-.kind-card {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
 .kind-core {
-  background: var(--c-surface-2);
-  color: var(--c-text-2, var(--c-text));
-}
-.kind-entity {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.kind-service {
   background: var(--c-surface-2);
   color: var(--c-text-2, var(--c-text));
 }

@@ -1,7 +1,6 @@
 package com.thisnode.ext.memorycurve;
 
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginKind;
 import com.thisnode.plugin.support.ThisnodePlugin;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
@@ -25,7 +24,7 @@ public class MemoryCurvePlugin extends ThisnodePlugin {
     private SchedulingListener listener;
 
     public MemoryCurvePlugin(PluginWrapper wrapper) {
-        super(wrapper, PluginKind.CARD, "记忆曲线",
+        super(wrapper, "记忆曲线",
                 "参考 Anki 的 SM-2 间隔重复：按卡片安排复习，遗忘即回退，间隔随掌握程度增长");
     }
 

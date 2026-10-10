@@ -95,7 +95,7 @@ await page.waitForTimeout(500)
 await page.keyboard.type('CLICK')
 const away = await page.evaluate(() => {
   const s = document.querySelector('.page-surface').getBoundingClientRect()
-  const boxes = [...document.querySelectorAll('article.block')].map((b) => b.getBoundingClientRect())
+  const boxes = [...document.querySelectorAll('article.card')].map((b) => b.getBoundingClientRect())
   const covers = (x, y) => boxes.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
   for (let y = s.y + s.height - 30; y > s.y + 20; y -= 20) {
     for (let x = s.x + 40; x < s.x + s.width - 80; x += 20) {

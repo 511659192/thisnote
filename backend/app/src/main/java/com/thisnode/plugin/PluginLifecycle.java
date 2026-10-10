@@ -63,8 +63,8 @@ public class PluginLifecycle implements SmartInitializingSingleton {
         // 1) 发现
         for (Plugin plugin : plugins) {
             var d = plugin.descriptor();
-            log.info("[插件启动 1/4 发现] {} kind={} v{} apiVersion={}", d.id(), d.kind()
-                    .id(), d.version(), d.apiVersion());
+            log.info("[插件启动 1/4 发现] {} undeactivatable={} v{} apiVersion={}",
+                    d.id(), d.undeactivatable(), d.version(), d.apiVersion());
         }
 
         // 2) 校验契约：注册表在构造时已经硬拦（apiVersion 不匹配 / id 重复会直接拒绝启动），
@@ -91,7 +91,7 @@ public class PluginLifecycle implements SmartInitializingSingleton {
             states.notifyGlobalState(id, active);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", id);
-            row.put("kind", plugin.descriptor().kind().id());
+            row.put("undeactivatable", plugin.descriptor().undeactivatable());
             row.put("version", plugin.descriptor().version());
             row.put("apiVersion", plugin.descriptor().apiVersion());
             row.put("active", active);

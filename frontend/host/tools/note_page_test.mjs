@@ -46,7 +46,7 @@ page.on('console', (m) => {
   }
 })
 
-const blocks = () => page.locator('article.block').count()
+const blocks = () => page.locator('article.card').count()
 const surface = () => page.locator('.page-surface').first()
 
 console.log('\n=== 启动与笔记列表 ===')
@@ -75,7 +75,7 @@ const box = await surface().boundingBox()
 // Pick empty space away from existing cards and away from the panel/zoom chrome.
 const empty = await page.evaluate(() => {
   const s = document.querySelector('.page-surface').getBoundingClientRect()
-  const taken = [...document.querySelectorAll('article.block')].map((el) => {
+  const taken = [...document.querySelectorAll('article.card')].map((el) => {
     const r = el.getBoundingClientRect()
     return { x: r.x, y: r.y, w: r.width, h: r.height }
   })
@@ -94,7 +94,7 @@ if (!empty) {
   await page.mouse.dblclick(empty.x, empty.y)
   await page.waitForTimeout(2500)
   record('双击新增一张卡片', (await blocks()) === before + 1, `${before} → ${await blocks()}`)
-  record('新卡片立即进入编辑态', (await page.locator('article.block textarea.body.edit').count()) > 0)
+  record('新卡片立即进入编辑态', (await page.locator('article.card textarea.body.edit').count()) > 0)
   record('编辑框自动获得焦点',
     await page.evaluate(() => document.activeElement?.classList.contains('body') ?? false))
 }
@@ -103,18 +103,18 @@ console.log('\n=== 在卡片里直接写 ===')
 const marker = `页面上写的-${Date.now()}`
 await page.keyboard.type(marker)
 await page.waitForTimeout(300)
-const typed = await page.locator('article.block textarea.body.edit').inputValue()
+const typed = await page.locator('article.card textarea.body.edit').inputValue()
 record('输入进入卡片', typed.includes(marker), JSON.stringify(typed.slice(0, 50)))
 await page.keyboard.press('Control+Enter')
 await page.waitForTimeout(2500)
-record('保存后退出编辑态', (await page.locator('article.block.editing').count()) === 0)
+record('保存后退出编辑态', (await page.locator('article.card.editing').count()) === 0)
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForTimeout(2500)
 const reopen = page.locator('.note-row', { hasText: '韧性设计原则' }).first()
 if (await reopen.count()) await reopen.click()
 await page.waitForTimeout(2500)
 record('刷新后卡片内容仍在（已写入笔记）',
-  (await page.locator('article.block', { hasText: marker }).count()) > 0)
+  (await page.locator('article.card', { hasText: marker }).count()) > 0)
 
 console.log('\n=== Ctrl+V 粘贴成卡片 ===')
 const pasteText = `粘贴到页面 ${Date.now()}\n\n这段文字应该变成一张卡片。`
@@ -127,13 +127,13 @@ await page.keyboard.press('Control+v')
 await page.waitForTimeout(3000)
 record('Ctrl+V 新增一张卡片', (await blocks()) === beforePaste + 1,
   `${beforePaste} → ${await blocks()}`)
-const pasted = page.locator('article.block', { hasText: '粘贴到页面' })
+const pasted = page.locator('article.card', { hasText: '粘贴到页面' })
 record('粘贴内容出现在卡片上', (await pasted.count()) > 0)
 if (await pasted.count()) {
   // Check placement in page coordinates: a card is positioned in world space and may
   // legitimately fall outside the current viewport, so screen position is not the test.
   const placement = await page.evaluate(() => {
-    const el = [...document.querySelectorAll('article.block')].find((b) =>
+    const el = [...document.querySelectorAll('article.card')].find((b) =>
       b.textContent.includes('粘贴到页面'),
     )
     if (!el) return null
@@ -149,7 +149,7 @@ console.log('\n=== 拖 East 手柄改宽度，拖卡片顶部条移动卡片 ===
 // Card geometry in WORLD coordinates, so comparisons are not affected by viewport panning.
 const cardGeom = () =>
   page.evaluate(() =>
-    [...document.querySelectorAll('article.block')].map((el) => {
+    [...document.querySelectorAll('article.card')].map((el) => {
       const m = /translate3d\(([-\d.]+)px,\s*([-\d.]+)px/.exec(el.style.transform || '')
       return {
         x: m ? Number(m[1]) : null,
@@ -163,7 +163,7 @@ const cardGeom = () =>
 /** Screen point on a card's read view, which is the card's grab area. */
 const headPoint = (index) =>
   page.evaluate((i) => {
-    const b = document.querySelectorAll('article.block')[i]?.querySelector('.body.read')
+    const b = document.querySelectorAll('article.card')[i]?.querySelector('.body.read')
     if (!b) return null
     const r = b.getBoundingClientRect()
     // Mid-height and right of centre: clear of the hidden tool row in the top-right corner.
@@ -185,7 +185,7 @@ const headPoint = (index) =>
 const reachableCardIndex = () =>
   page.evaluate(() => {
     const list = document.querySelector('.note-list')?.getBoundingClientRect()
-    const cards = [...document.querySelectorAll('article.block')]
+    const cards = [...document.querySelectorAll('article.card')]
     const boxes = cards.map((c) => c.getBoundingClientRect())
     const overlaps = (a, b) =>
       a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
@@ -210,7 +210,7 @@ const beforeGeom = await cardGeom()
 // Resize handles only render while a card is selected, so select a card first.
 const pickIdx = await reachableCardIndex()
 const selectPoint = await page.evaluate((i) => {
-  const card = document.querySelectorAll('article.block')[i]
+  const card = document.querySelectorAll('article.card')[i]
   if (!card) return null
   const r = card.getBoundingClientRect()
   for (let y = Math.round(r.top + 6); y < r.bottom - 6; y += 8) {
@@ -224,7 +224,7 @@ const selectPoint = await page.evaluate((i) => {
 if (selectPoint) await page.mouse.click(selectPoint.x, selectPoint.y)
 await page.waitForTimeout(600)
 const firstCard = await page.evaluate((i) => {
-  const el = document.querySelectorAll('article.block')[i]
+  const el = document.querySelectorAll('article.card')[i]
   if (!el) return { handleX: 0, handleY: 0, hasHandle: false, w: 0 }
   const r = el.getBoundingClientRect()
   // Centre of the east resize handle, which straddles the card's right edge.
@@ -293,7 +293,7 @@ const beforeEmpty = await blocks()
 const blankPointNow = () =>
   page.evaluate(() => {
     const s = document.querySelector('.page-surface').getBoundingClientRect()
-    const cards = [...document.querySelectorAll('article.block')].map((b) => b.getBoundingClientRect())
+    const cards = [...document.querySelectorAll('article.card')].map((b) => b.getBoundingClientRect())
     const covers = (x, y) =>
       cards.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
     for (let y = s.y + s.height - 40; y > s.y + 30; y -= 25) {
@@ -313,7 +313,7 @@ if (!emptySurface) {
   await page.waitForTimeout(2000)
   const afterCreate = await blocks()
   record('双击创建了空卡片', afterCreate === beforeEmpty + 1, `${beforeEmpty} → ${afterCreate}`)
-  record('新卡片进入输入状态', (await page.locator('article.block.editing').count()) === 1)
+  record('新卡片进入输入状态', (await page.locator('article.card.editing').count()) === 1)
 
   // The new card may extend past the bottom of the viewport, so aim at a point that is
   // verified blank *after* the card exists, and never at the card itself.

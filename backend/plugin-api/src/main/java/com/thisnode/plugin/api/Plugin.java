@@ -25,7 +25,7 @@ public interface Plugin {
      * <p>v2：删掉自带的 SQL 迁移序列（{@code migrationLocation()}）—— 数据库层已移除，迁移没有
      * 可执行的对象。按 v1 编译的旧 jar 会被注册表跳过并告警，而不是带着一个空转的方法继续跑。
      */
-    int API_VERSION = 2;
+    int API_VERSION = 3;
 
     PluginDescriptor descriptor();
 

@@ -39,7 +39,7 @@ await page.waitForTimeout(2500)
 
 const blockStyle = () =>
   page.evaluate(() => {
-    const el = document.querySelector('article.block')
+    const el = document.querySelector('article.card')
     const dbg = window.__pageDrag ?? null
     const store = window.__pageStore
     return {
@@ -52,7 +52,7 @@ const blockStyle = () =>
 
 console.log('before:', JSON.stringify(await blockStyle()))
 
-const box = await page.locator('article.block').first().boundingBox()
+const box = await page.locator('article.card').first().boundingBox()
 console.log('boundingBox:', JSON.stringify(box))
 
 /**
@@ -62,7 +62,7 @@ console.log('boundingBox:', JSON.stringify(box))
  */
 const grab = await page.evaluate(() => {
   const surface = document.querySelector('.page-surface').getBoundingClientRect()
-  const cards = [...document.querySelectorAll('article.block')]
+  const cards = [...document.querySelectorAll('article.card')]
   const diagnostics = []
   for (const card of cards) {
     const r = card.getBoundingClientRect()
@@ -105,7 +105,7 @@ const direct = await page.evaluate(() => {
   const before = { x: store.blocks[0].block.x, y: store.blocks[0].block.y }
   store.localMove([{ id, x: 1234, y: 321 }])
   const after = { x: store.blocks[0].block.x, y: store.blocks[0].block.y }
-  const domAfter = document.querySelector('article.block').style.transform
+  const domAfter = document.querySelector('article.card').style.transform
   // Is the object the child renders the same object the store mutates?
   const childView = window.__pageChildView?.()
   return {
@@ -160,7 +160,7 @@ for (let i = 1; i <= 6; i++) {
 await page.mouse.up()
 await page.waitForTimeout(2500)
 console.log('after mouseup:', JSON.stringify(await blockStyle()))
-const after = await page.locator('article.block').first().boundingBox()
+const after = await page.locator('article.card').first().boundingBox()
 console.log('final boundingBox:', JSON.stringify(after))
 console.log(
   Math.abs(after.x - box.x) > 30 || Math.abs(after.y - box.y) > 30

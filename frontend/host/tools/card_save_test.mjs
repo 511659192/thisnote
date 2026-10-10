@@ -65,7 +65,7 @@ async function openNote(win, title) {
 const blankPoint = (win) =>
   win.evaluate(() => {
     const s = document.querySelector('.page-surface').getBoundingClientRect()
-    const boxes = [...document.querySelectorAll('article.block')].map((b) => b.getBoundingClientRect())
+    const boxes = [...document.querySelectorAll('article.card')].map((b) => b.getBoundingClientRect())
     for (let y = s.y + 16; y < s.y + s.height - 16; y += 16) {
       for (let x = s.x + 16; x < s.x + s.width - 16; x += 16) {
         if (boxes.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) continue
@@ -113,7 +113,7 @@ try {
       JSON.stringify(page.blocks.map((v) => v.contentMd)))
     check('卡片没有被误删为"空卡片"', page.blocks.length >= 1, `cards=${page.blocks.length}`)
     check('离开后退出编辑态',
-      (await win.evaluate(() => document.querySelectorAll('article.block.editing').length)) === 0)
+      (await win.evaluate(() => document.querySelectorAll('article.card.editing').length)) === 0)
     check('没有 404 / 运行时错误', errors.length === 0, errors.slice(0, 2).join(' | '))
     await win.close()
   }
@@ -123,7 +123,7 @@ try {
   {
     const win = await browser.newPage({ viewport: { width: 1440, height: 900 } })
     await openNote(win, '保存测试B')
-    const card = await win.locator('article.block').first().boundingBox()
+    const card = await win.locator('article.card').first().boundingBox()
     await win.mouse.dblclick(card.x + card.width / 2, card.y + 40)
     await win.waitForTimeout(1000)
     const marker = `改过的内容-${RUN}`
@@ -162,12 +162,12 @@ try {
   {
     const win = await browser.newPage({ viewport: { width: 1440, height: 900 } })
     await openNote(win, '伸展测试D')
-    const card = await win.locator('article.block').first().boundingBox()
+    const card = await win.locator('article.card').first().boundingBox()
     await win.mouse.dblclick(card.x + card.width / 2, card.y + 40)
     await win.waitForTimeout(1000)
     const geom = () =>
       win.evaluate(() => {
-        const el = document.querySelector('article.block')
+        const el = document.querySelector('article.card')
         const r = el.getBoundingClientRect()
         const ta = el.querySelector('textarea.body.edit')
         return { w: Math.round(r.width), h: Math.round(r.height), taW: ta ? Math.round(ta.getBoundingClientRect().width) : null }

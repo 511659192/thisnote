@@ -29,7 +29,6 @@ spring:
       # 这行同时是护栏：Boot 默认资源链不注册，SBP 的 PluginResourceHandlerRegistrationCustomizer
       # 就没有挂载点 —— 那个 resolver 的 PluginManager 在主应用里恒为 null，一旦挂上默认链，
       # 任何走链的路径（含 /api 未命中与 /error）统一 500（实测坑，勿改回 true）。
-      # 插件界面产物与这件事无关：它由 PluginAssetController 走 /plugin-assets 从磁盘端出。
       add-mappings: false
 
 logging:

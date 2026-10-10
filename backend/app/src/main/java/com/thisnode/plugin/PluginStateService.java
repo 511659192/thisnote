@@ -106,9 +106,9 @@ public class PluginStateService {
     public void setActive(String pluginId, boolean active) {
         if (!active) {
             Plugin plugin = registry.get(pluginId);
-            if (plugin != null && plugin.descriptor().kind() == PluginKind.CORE) {
+            if (plugin != null && plugin.descriptor().undeactivatable()) {
                 throw new com.thisnode.plugin.api.ConflictException(
-                        "「" + plugin.descriptor().title() + "」是核心插件，不允许停用");
+                        "「" + plugin.descriptor().title() + "」承载主体业务，不允许停用");
             }
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
@@ -192,11 +192,11 @@ public class PluginStateService {
     public void reload(String pluginId) {
         if (registry.isRegistered(pluginId)) {
             Plugin target = registry.get(pluginId);
-            if (target.descriptor().kind() == PluginKind.CORE) {
-                // 核心插件是全部笔记端点的宿主：重载会重建它的 Spring 子容器，期间路由与索引短暂缺失。
+            if (target.descriptor().undeactivatable()) {
+                // 不可停用的插件是全部业务端点的宿主：重载会重建它的 Spring 子容器，期间路由与索引短暂缺失。
                 // （早先的理由是"兄弟插件共享它导入的门面"，那层共享已经不存在了。）拒绝并提示重启。
                 throw new com.thisnode.plugin.api.ConflictException(
-                        "「" + target.descriptor().title() + "」是核心插件，不支持在线重载（它承载全部笔记端点）；更换 notes 插件后请重启应用生效");
+                        "「" + target.descriptor().title() + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
             }
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
@@ -315,7 +315,7 @@ public class PluginStateService {
         out.put("id", descriptor.id());
         out.put("title", descriptor.title());
         out.put("description", descriptor.description());
-        out.put("kind", descriptor.kind().id());
+        out.put("undeactivatable", descriptor.undeactivatable());
         out.put("version", descriptor.version());
         out.put("apiVersion", descriptor.apiVersion());
         out.put("active", isActive(descriptor.id()));

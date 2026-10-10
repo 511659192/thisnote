@@ -22,7 +22,7 @@ await page.waitForTimeout(2500)
 
 const info = await page.evaluate(() => {
   const s = document.querySelector('.page-surface').getBoundingClientRect()
-  const cards = [...document.querySelectorAll('article.block')].map((el) => {
+  const cards = [...document.querySelectorAll('article.card')].map((el) => {
     const r = el.getBoundingClientRect()
     return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }
   })
@@ -60,10 +60,10 @@ const spot = await page.evaluate(() => {
 })
 console.log('blank spot found:', JSON.stringify(spot))
 if (spot) {
-  const before = await page.locator('article.block').count()
+  const before = await page.locator('article.card').count()
   await page.mouse.dblclick(spot.x, spot.y)
   await page.waitForTimeout(2000)
-  const after = await page.locator('article.block').count()
+  const after = await page.locator('article.card').count()
   console.log(`double-click blank: ${before} -> ${after}`)
 }
 

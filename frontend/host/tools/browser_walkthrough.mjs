@@ -7,7 +7,7 @@
  * browser catches that class of bug.
  *
  * Model note: a note *is* a page of cards (README §「核心模型」). The page editor is no longer
- * CodeMirror — it is `.page-surface` holding `article.block` cards — so this walkthrough asserts
+ * CodeMirror — it is `.page-surface` holding `article.card` cards — so this walkthrough asserts
  * the card page (create / leave / prune), never the removed `.editor-shell` / `.cm-editor`.
  *
  * Usage: node tools/browser_walkthrough.mjs [baseUrl]
@@ -48,7 +48,7 @@ page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.method()} ${r.
 
 const text = () => page.evaluate(() => document.body.innerText)
 const count = (sel) => page.locator(sel).count()
-const cards = () => page.locator('article.block').count()
+const cards = () => page.locator('article.card').count()
 
 /** Count that tolerates a selector which never appears, instead of throwing. */
 const countSoon = async (sel, timeout = 5000) => {
@@ -71,7 +71,7 @@ const blankPointNow = () =>
   page.evaluate(() => {
     const s = document.querySelector('.page-surface')?.getBoundingClientRect()
     if (!s) return null
-    const boxes = [...document.querySelectorAll('article.block')].map((b) => b.getBoundingClientRect())
+    const boxes = [...document.querySelectorAll('article.card')].map((b) => b.getBoundingClientRect())
     const covers = (x, y) =>
       boxes.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
     for (let y = s.y + s.height - 40; y > s.y + 30; y -= 25) {
@@ -96,7 +96,7 @@ await page.locator('.note-row', { hasText: '韧性设计原则' }).first().click
 await page.waitForTimeout(2500)
 record('打开笔记后显示页面头部', (await count('.note-head')) > 0)
 record('页面渲染卡片', (await cards()) > 0, `${await cards()} 张`)
-record('卡片显示笔记内容', (await count('article.block', { hasText: '冗余' })) > 0)
+record('卡片显示笔记内容', (await count('article.card', { hasText: '冗余' })) > 0)
 
 console.log('\n=== 双击建卡 / 离开自动删除空卡片 ===')
 const blank = await blankPointNow()
@@ -108,7 +108,7 @@ if (!blank) {
   await page.waitForTimeout(2500)
   const afterCreate = await cards()
   record('双击空白创建卡片', afterCreate === before + 1, `${before} → ${afterCreate}`)
-  record('新卡片进入输入状态', (await count('article.block.editing')) === 1)
+  record('新卡片进入输入状态', (await count('article.card.editing')) === 1)
 
   const leaveAt = (await blankPointNow()) ?? blank
   await page.mouse.click(leaveAt.x, leaveAt.y)

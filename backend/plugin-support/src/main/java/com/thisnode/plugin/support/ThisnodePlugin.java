@@ -2,7 +2,6 @@ package com.thisnode.plugin.support;
 
 import com.thisnode.plugin.api.Plugin;
 import com.thisnode.plugin.api.PluginDescriptor;
-import com.thisnode.plugin.api.PluginKind;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.pf4j.PluginWrapper;
@@ -15,7 +14,8 @@ import org.pf4j.PluginWrapper;
  *   <li><b>id 与版本来自 PF4J 描述符</b>（{@code plugin.properties}，版本还由 Maven 过滤注入），
  *       插件里不再各写一份常量 —— 以前版本同时存在于 properties、Java 常量、测试断言三处，
  *       迟早出现"jar 里写的版本和实际构建对不上"。</li>
- *   <li>{@link #descriptor()} 只实现一次：插件只需要在构造器里说明自己的 kind/标题/说明。</li>
+ *   <li>{@link #descriptor()} 只实现一次：插件只需要在构造器里说明标题/说明；
+ *       是否「不可停用」由 {@link #undeactivatable()} 覆写（默认 false）。</li>
  *   <li>把 {@link IPluginConfigurer} 透传给 SBP（数据源等共享），保持插件的构造器一行。</li>
  * </ol>
  *
@@ -24,16 +24,22 @@ import org.pf4j.PluginWrapper;
  */
 public abstract class ThisnodePlugin extends SpringBootPlugin implements Plugin {
 
-    private final PluginKind kind;
     private final String title;
     private final String description;
 
-    protected ThisnodePlugin(PluginWrapper wrapper, PluginKind kind, String title, String description,
+    protected ThisnodePlugin(PluginWrapper wrapper, String title, String description,
                              IPluginConfigurer... configurers) {
         super(wrapper, configurers);
-        this.kind = kind;
         this.title = title;
         this.description = description;
+    }
+
+    /**
+     * 是否不可停用/不可在线重载：只有承载主体业务领域的插件（参考 notes）覆写为 {@code true}。
+     * 默认 false —— 可停用、可在线重载。
+     */
+    protected boolean undeactivatable() {
+        return false;
     }
 
     /** 插件 id：PF4J 描述符里的 {@code plugin.id}。 */
@@ -48,6 +54,6 @@ public abstract class ThisnodePlugin extends SpringBootPlugin implements Plugin 
 
     @Override
     public PluginDescriptor descriptor() {
-        return new PluginDescriptor(pluginId(), title, description, kind, pluginVersion(), Plugin.API_VERSION);
+        return new PluginDescriptor(pluginId(), title, description, undeactivatable(), pluginVersion(), Plugin.API_VERSION);
     }
 }

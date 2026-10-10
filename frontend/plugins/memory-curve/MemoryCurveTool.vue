@@ -188,10 +188,10 @@ watch(() => props.blockId, () => { open.value = false })
   opacity: 0;
   transition: opacity 0.12s;
 }
-.block:hover .mc-chip.mc-idle-chip,
-.block.selected .mc-chip.mc-idle-chip,
-.block.focused .mc-chip.mc-idle-chip,
-.block.editing .mc-chip.mc-idle-chip {
+.card:hover .mc-chip.mc-idle-chip,
+.card.selected .mc-chip.mc-idle-chip,
+.card.focused .mc-chip.mc-idle-chip,
+.card.editing .mc-chip.mc-idle-chip {
   opacity: 1;
 }
 /* 已开启：常驻徽标——这就是肉眼可见的差异。到期时用品牌色强调。 */

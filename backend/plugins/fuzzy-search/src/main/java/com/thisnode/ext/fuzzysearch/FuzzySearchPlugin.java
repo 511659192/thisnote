@@ -1,7 +1,6 @@
 package com.thisnode.ext.fuzzysearch;
 
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginKind;
 import com.thisnode.plugin.support.ThisnodePlugin;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
@@ -19,7 +18,7 @@ public class FuzzySearchPlugin extends ThisnodePlugin {
     public static final String PLUGIN_ID = "fuzzy-search";
 
     public FuzzySearchPlugin(PluginWrapper wrapper) {
-        super(wrapper, PluginKind.SERVICE, "模糊搜索",
+        super(wrapper, "模糊搜索",
                 "顶栏跨标题/摘要的模糊查询，下拉结果直达笔记；纯界面侧实现，关闭即入口消失，无任何数据");
     }
 

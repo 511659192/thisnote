@@ -20,7 +20,7 @@ frontend/plugins/*/dist/
 
 # ---------- 外置插件交付物（package 阶段从各模块 target 拷贝而来，不入库） ----------
 backend/plugins-dist/
-backend/plugin-assets/
+frontend/plugin-assets/
 backend/plugins-dev/
 
 # ---------- 历史：outDir 曾少写 backend/ 时误落的产物目录（防再生成） ----------

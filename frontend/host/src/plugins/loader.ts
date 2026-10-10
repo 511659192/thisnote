@@ -23,7 +23,7 @@ import { PLUGIN_DEV_PORTS } from './devPorts'
  * <ul>
  *   <li><b>开发</b>：插件自己 dev server 的源码入口（端口约定见 {@link PLUGIN_DEV_PORTS}；
  *       dev server 没起时自动回退到后端端出的产物，只是没有插件源码级的调试体验）；</li>
- *   <li><b>生产</b>：后端从磁盘插件界面目录端出的 `/plugin-assets/<id>/...`（plugin-assets/，文件路径直通）。</li>
+ *   <li><b>生产</b>：界面侧静态服务提供的 `/plugin-assets/<id>/...`（路径直通，可配基址）。</li>
  * </ul>
  */
 
@@ -98,11 +98,29 @@ function buildHtmlEntry(moduleSrcUrl: string): string {
   return URL.createObjectURL(new Blob([html], { type: 'text/html' }))
 }
 
-/** 生产形态：后端从磁盘插件界面目录端出的产物（相对宿主页同源）。 */
+/**
+ * 界面资源基址：默认**同源**（部署时由界面侧的静态服务在 `/plugin-assets/` 下提供）；
+ * 也可以用 `window.__THISNODE_PLUGIN_ASSETS__` 或 localStorage 的
+ * `thisnode.pluginAssetsBase` 覆盖到别的源（与 apiBase 同一套优先级）。
+ */
+function assetsBase(): string {
+  const injected = (window as unknown as { __THISNODE_PLUGIN_ASSETS__?: string }).__THISNODE_PLUGIN_ASSETS__
+  if (typeof injected === 'string' && injected) return injected.replace(/\/+$/, '')
+  const stored = localStorage.getItem('thisnode.pluginAssetsBase')
+  if (stored) return stored.replace(/\/+$/, '')
+  return ''
+}
+
+/**
+ * 生产形态：由界面侧静态服务提供的插件产物。
+ *
+ * <p>路径形态是刻意保留的：plugin.js 内的 `./chunk-*.js` 相对导入需要目录语义，
+ * query 形态会让相对解析落到页面根。
+ */
 function prodModuleSrcUrl(id: string): string {
-  // 路径形态是刻意保留的：plugin.js 内的 `./chunk-*.js` 相对导入需要目录语义，
-  // query 形态会让相对解析落到页面根（与附件通配同理，属文件路径直通而非资源路由）。
-  return new URL(`/plugin-assets/${id}/plugin.js`, window.location.origin).href
+  const base = assetsBase()
+  const path = `/plugin-assets/${id}/plugin.js`
+  return base ? base + path : new URL(path, window.location.origin).href
 }
 
 /** 开发形态：插件自己 dev server 的源码入口；没起就回退 null。 */
@@ -164,7 +182,8 @@ function provisionNotebook(root: HTMLElement, id: string): HTMLElement {
  * 开发不走这里 —— 样式由插件 dev server 以 JS 注入，跟宿主的 HMR 体系一致。
  */
 async function injectStyles(id: string): Promise<void> {
-  const href = `/plugin-assets/${id}/plugin.css`
+  const base = assetsBase()
+  const href = base ? `${base}/plugin-assets/${id}/plugin.css` : `/plugin-assets/${id}/plugin.css`
   try {
     const res = await fetch(href, { method: 'HEAD' })
     if (!res.ok) return

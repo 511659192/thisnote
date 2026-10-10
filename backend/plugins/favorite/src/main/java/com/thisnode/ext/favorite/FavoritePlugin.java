@@ -2,7 +2,6 @@ package com.thisnode.ext.favorite;
 
 import com.thisnode.plugin.api.PluginDataStore;
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginKind;
 import com.thisnode.plugin.support.ThisnodePlugin;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
@@ -23,7 +22,7 @@ public class FavoritePlugin extends ThisnodePlugin {
     public static final String ENTITY_TYPE_NOTE = "note";
 
     public FavoritePlugin(PluginWrapper wrapper) {
-        super(wrapper, PluginKind.ENTITY, "收藏",
+        super(wrapper, "收藏",
                 "给笔记加 ★ 收藏，并提供一处「收藏」列表；关闭插件即整体下线，数据保留");
     }
 

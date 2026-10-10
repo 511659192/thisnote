@@ -164,11 +164,11 @@ try {
     await win.waitForTimeout(2000)
 
     // Select the card so every affordance is pinned visible at once.
-    await win.locator('article.block').first().click()
+    await win.locator('article.card').first().click()
     await win.waitForTimeout(600)
 
     const overlap = await win.evaluate(() => {
-      const card = document.querySelector('article.block')
+      const card = document.querySelector('article.card')
       const tools = card.querySelector('.card-tools')
       const els = [...(tools?.querySelectorAll('.mode, .collapse, .mc-chip') ?? [])]
       const hits = []
@@ -222,12 +222,12 @@ try {
         const el = document.querySelector(s)
         return el ? Number(getComputedStyle(el).opacity) : null
       }, sel)
-    const shownModes = await toolsOpacity('article.block .modes')
+    const shownModes = await toolsOpacity('article.card .modes')
     // Deselect by pressing blank page, then move the pointer off the card entirely: only then is
     // the idle state actually testable (a selected card keeps its tools pinned).
     const idleSpot = await win.evaluate(() => {
       const s = document.querySelector('.page-surface').getBoundingClientRect()
-      const boxes = [...document.querySelectorAll('article.block')].map((b) => b.getBoundingClientRect())
+      const boxes = [...document.querySelectorAll('article.card')].map((b) => b.getBoundingClientRect())
       for (let y = s.bottom - 20; y > s.y + 20; y -= 20) {
         for (let x = s.x + 20; x < s.right - 20; x += 20) {
           if (boxes.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) continue
@@ -239,16 +239,16 @@ try {
     if (idleSpot) await win.mouse.click(idleSpot.x, idleSpot.y)
     await win.mouse.move(5, 400)
     await win.waitForTimeout(600)
-    const hiddenModes = await toolsOpacity('article.block .modes')
+    const hiddenModes = await toolsOpacity('article.card .modes')
     check('模式/折叠按钮为隐藏式（选中/悬停才出现）',
       shownModes === 1 && hiddenModes === 0,
       `selected=${shownModes} idle=${hiddenModes}`)
-    const idleChip = await toolsOpacity('article.block .mc-chip.mc-idle-chip')
+    const idleChip = await toolsOpacity('article.card .mc-chip.mc-idle-chip')
     check('未开启时 🧠 占位随工具行淡入', idleChip === 0, `idle=${idleChip}`)
 
     const state = () =>
       win.evaluate(() => {
-        const card = document.querySelector('article.block')
+        const card = document.querySelector('article.card')
         const ta = card.querySelector('textarea')
         const md = card.querySelector('.md-preview')
         const r = (el) => (el ? el.getBoundingClientRect() : null)
@@ -265,7 +265,7 @@ try {
         }
       })
     const clickMode = async (glyph) => {
-      await win.locator('article.block .mode', { hasText: glyph }).first().click()
+      await win.locator('article.card .mode', { hasText: glyph }).first().click()
       await win.waitForTimeout(1200)
     }
 
@@ -291,7 +291,7 @@ try {
       s.taBox && s.mdBox ? `ta.right=${Math.round(s.taBox.right)} preview.left=${Math.round(s.mdBox.left)}` : '缺元素')
 
     // Live preview: type in the textarea, the right pane must follow.
-    await win.locator('article.block textarea').first().click()
+    await win.locator('article.card textarea').first().click()
     await win.keyboard.press('Control+a')
     await win.keyboard.type('## 实时预览测试\n\n右边应该跟着变。', { delay: 5 })
     await win.waitForTimeout(6000)
@@ -313,7 +313,7 @@ try {
     const blankPoint = () =>
       win.evaluate(() => {
         const s = document.querySelector('.page-surface').getBoundingClientRect()
-        const boxes = [...document.querySelectorAll('article.block')].map((b) => b.getBoundingClientRect())
+        const boxes = [...document.querySelectorAll('article.card')].map((b) => b.getBoundingClientRect())
         for (let y = s.y + 20; y < s.y + s.height - 20; y += 20) {
           for (let x = s.x + 20; x < s.x + s.width - 20; x += 20) {
             if (boxes.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) continue
@@ -324,7 +324,7 @@ try {
       })
 
     // Just write (no mode button pressed) then leave: must fall back to preview.
-    const cardBox = await win.locator('article.block').first().boundingBox()
+    const cardBox = await win.locator('article.card').first().boundingBox()
     await win.mouse.dblclick(cardBox.x + cardBox.width / 2, cardBox.y + 60)
     await win.waitForTimeout(1200)
     s = await state()
@@ -342,7 +342,7 @@ try {
     await clickMode('◫')
     s = await state()
     check('显式选双列后进入编写', s.hasTextarea && s.active === '◫', `active=${s.active}`)
-    await win.locator('article.block textarea').first().click()
+    await win.locator('article.card textarea').first().click()
     await win.keyboard.type('双列里写的。', { delay: 6 })
     await win.waitForTimeout(400)
     await win.mouse.click(away.x, away.y)
@@ -360,11 +360,11 @@ try {
     await api('POST', `${note.page}/blocks`, { x: 0, y: 700, w: 500, h: 240, contentMd: '# 第二张' })
     await win.reload({ waitUntil: 'networkidle' })
     await win.waitForTimeout(3000)
-    const cards = win.locator('article.block')
+    const cards = win.locator('article.card')
     if ((await cards.count()) >= 2) {
       const modesOf = () =>
         win.evaluate(() =>
-          [...document.querySelectorAll('article.block')].map(
+          [...document.querySelectorAll('article.card')].map(
             (c) => [...c.querySelectorAll('.mode')]
               .find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent.trim() ?? null,
           ),
@@ -372,7 +372,7 @@ try {
       const before = await modesOf()
       await cards.nth(1).click()
       await win.waitForTimeout(800)
-      await win.locator('article.block').nth(1).locator('.mode', { hasText: '≡' }).first().click()
+      await win.locator('article.card').nth(1).locator('.mode', { hasText: '≡' }).first().click()
       await win.waitForTimeout(1500)
       const after = await modesOf()
       check('模式是按卡片独立的（第二张改源码不影响第一张）',
