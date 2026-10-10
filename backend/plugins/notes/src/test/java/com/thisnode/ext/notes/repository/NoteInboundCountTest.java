@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,9 +30,7 @@ class NoteInboundCountTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         NoteRepository noteRepository = store;
         CardRepository blockRepository = new CardRepository(store);
         TagRepository tagRepository = new TagRepository(store);
@@ -45,11 +43,11 @@ class NoteInboundCountTest {
 
     private String newNote(String title, String contentMd) {
         return noteService.create(new Dtos.CreateNodeRequest(
-                title, contentMd, "note", null, null, null, null, null));
+                title, contentMd, "note", null, null));
     }
 
     private NoteMeta metaOf(String title) {
-        for (NoteMeta meta : store.getAll()) {
+        for (NoteMeta meta : store.findAll()) {
             if (meta.title().equals(title)) {
                 return meta;
             }
@@ -72,33 +70,33 @@ class NoteInboundCountTest {
         newNote("乙", "乙的正文");
         newNote("甲", "见 [[乙]]");
 
-        assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
-        assertThat(metaOf("乙").links()).isEmpty();
+        assertThat(metaOf("乙").inLinksCount()).isEqualTo(1);
+        assertThat(metaOf("乙").outLinks()).isEmpty();
         // 入链清单随写落盘：详情页的引用面板直接读它（引用行原文 + 引用者 id）
-        assertThat(metaOf("乙").inbound()).singleElement().satisfies(entry -> {
-            assertThat(entry.fromId()).isEqualTo(metaOf("甲").id());
+        assertThat(metaOf("乙").inLinks()).singleElement().satisfies(entry -> {
+            assertThat(entry.from()).isEqualTo(metaOf("甲").id());
+            assertThat(entry.to()).isEqualTo(metaOf("乙").id());
             assertThat(entry.label()).isEmpty();
-            assertThat(entry.context()).contains("[[乙]]");
         });
 
         NoteMeta jia = summaryOf("甲");
-        assertThat(jia.outboundCount()).isEqualTo(1);
-        assertThat(jia.inboundCount()).isZero();
-        assertThat(summaryOf("乙").inboundCount()).isEqualTo(1);
+        assertThat(jia.outLinksCount()).isEqualTo(1);
+        assertThat(jia.inLinksCount()).isZero();
+        assertThat(summaryOf("乙").inLinksCount()).isEqualTo(1);
     }
 
     @Test
     @DisplayName("先写链接、后建笔记：新建时把待解析的出链补上并计一次入链")
     void linkBeforeTargetExistsIsHealed() {
         newNote("甲", "以后会有 [[未来笔记]]");
-        assertThat(metaOf("甲").unresolvedCount()).isEqualTo(1);
-        assertThat(metaOf("甲").outboundCount()).isEqualTo(1);
+        assertThat(metaOf("甲").unresolvedLinksCount()).isEqualTo(1);
+        assertThat(metaOf("甲").outLinksCount()).isEqualTo(1);
 
         newNote("未来笔记", "刚建的");
 
-        assertThat(metaOf("未来笔记").inboundCount()).isEqualTo(1);
-        assertThat(metaOf("甲").unresolvedCount()).isZero();
-        assertThat(metaOf("甲").links().get(0).to()).isNotNull();
+        assertThat(metaOf("未来笔记").inLinksCount()).isEqualTo(1);
+        assertThat(metaOf("甲").unresolvedLinksCount()).isZero();
+        assertThat(metaOf("甲").outLinks().get(0).to()).isNotNull();
     }
 
     @Test
@@ -106,14 +104,14 @@ class NoteInboundCountTest {
     void removingTheLinkDecrements() {
         String b = newNote("乙", "乙的正文");
         String a = newNote("甲", "见 [[乙]]");
-        assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
+        assertThat(metaOf("乙").inLinksCount()).isEqualTo(1);
 
         noteService.update(a, new Dtos.UpdateNodeRequest(null, "不再引用谁", null, null,
                 null, null, null));
         System.out.println("[DEBUGOUT] 甲.meta=" + store.getOne(a));
         System.out.println("[DEBUGOUT] 乙.meta=" + store.getOne(b));
 
-        assertThat(metaOf("乙").inboundCount()).isZero();
+        assertThat(metaOf("乙").inLinksCount()).isZero();
         assertThat(b).isNotBlank();
     }
 
@@ -122,11 +120,11 @@ class NoteInboundCountTest {
     void deletingTheReferrerDecrements() {
         String b = newNote("乙", "乙的正文");
         String a = newNote("甲", "见 [[乙]]");
-        assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
+        assertThat(metaOf("乙").inLinksCount()).isEqualTo(1);
 
         noteService.delete(a);
 
-        assertThat(metaOf("乙").inboundCount()).isZero();
+        assertThat(metaOf("乙").inLinksCount()).isZero();
         assertThat(store.getOne(b)).isNotNull();
     }
 

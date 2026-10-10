@@ -1,7 +1,5 @@
 package com.thisnode.ext.notes.domain;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -16,7 +14,6 @@ import java.util.Map;
  * <p>{@code ext} 是插件扩展区：按插件 id 分区存放插件自己的卡片级数据（记忆曲线的排期就落在这里），
  * 核心不认识任何具体插件的键。卡片文件被删除时扩展区一起消失，插件的从属数据不会留下孤儿。
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public record CardMeta(
         int v,
         String id,

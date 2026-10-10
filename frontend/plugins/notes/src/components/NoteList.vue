@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { listHeaders_ } from '@thisnode/plugin-api'
 import { useNoteStore } from '@/stores/notes'
 import { useUiStore } from '@/stores/ui'
@@ -19,25 +18,9 @@ const ui = useUiStore()
 const notebookTitle = (id: string) => store.notebooks.find((nb) => nb.id === id)?.title ?? id
 
 /**
- * 空列表要说清「空的是哪个视图」。
- *
- * <p>原先无论当前是回收站还是归档，一律显示「这里还没有笔记」这种不带位置的提示——在回收站里
- * 让人分不清自己在哪。回收站当前没有界面入口（命令面板已移除），这个提示就成了唯一的位置线索，必须准确。
+ * 空列表提示。列表只剩「全部笔记」一个视图，所以文案固定。
  */
-const emptyState = computed(() => {
-  switch (store.filter) {
-    case 'trash':
-      return '回收站是空的'
-    case 'daily':
-      return '还没有每日笔记'
-    case 'template':
-      return '还没有模板'
-    case 'recent':
-      return '最近没有编辑过笔记'
-    default:
-      return '这里还没有笔记'
-  }
-})
+const emptyState = '这里还没有笔记'
 
 function onContext(e: MouseEvent, node: NoteMeta) {
   e.preventDefault()
@@ -101,8 +84,8 @@ function askRemove(node: NoteMeta) {
         <div v-if="n.summary" class="preview">{{ n.summary }}</div>
         <div class="row-3">
           <span class="date small muted">{{ formatDate(n.updatedAt) }}</span>
-          <span v-if="n.inboundCount || n.outboundCount" class="small muted links">
-            ⇄ {{ n.inboundCount }}/{{ n.outboundCount }}
+          <span v-if="n.inLinksCount || n.outLinksCount" class="small muted links">
+            ⇄ {{ n.inLinksCount }}/{{ n.outLinksCount }}
           </span>
           <span v-for="t in n.tags.slice(0, 2)" :key="t" class="chip">#{{ t }}</span>
           <span v-if="n.tags.length > 2" class="small muted">+{{ n.tags.length - 2 }}</span>

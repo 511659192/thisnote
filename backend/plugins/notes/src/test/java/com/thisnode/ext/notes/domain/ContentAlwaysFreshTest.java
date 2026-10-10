@@ -1,13 +1,11 @@
 package com.thisnode.ext.notes.domain;
 
-import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -34,11 +32,9 @@ class ContentAlwaysFreshTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         cardRepository = new CardRepository(store);
-        store.writeNoteMeta(NoteMeta.newNoteMeta(NOTE, "现读测试", "note", null, null, null, null, 1L));
+        store.writeNoteMeta(NoteMeta.newNoteMeta(NOTE, "现读测试", "note", null, 1L));
     }
 
     private void putCard(String id, String body) {

@@ -1,7 +1,5 @@
 package com.thisnode.ext.notes.domain;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,7 +10,6 @@ import java.util.List;
  * meta 的 {@code tags} 里，所以给一篇笔记加标签只改那一个文件；台账只回答「标签自己长什么样」。
  * 标签的身份就是它规范化之后的名字：稳定、可读、跨笔记天然去重。
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public record TagBook(int v, List<Tag> tags) {
 
     public static final int SCHEMA = 1;
@@ -67,7 +64,6 @@ public record TagBook(int v, List<Tag> tags) {
         return new TagBook(v, next);
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Tag(int v, String name, String color, long createdAt, long updatedAt) {
 
         public Tag {

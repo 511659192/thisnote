@@ -38,10 +38,9 @@
       <artifactId>pf4j</artifactId>
     </dependency>
 
-    <!-- Spring Web。**注意别把 Jackson 从它里面排掉**：notes 插件自己的 jar 不带 Jackson，
-         它的文件 meta（MetaJson + 几张卡片/笔记元数据类的 @JsonProperty）是借平台 classpath 上的
-         Jackson 跑的（插件类加载器对非自有类直接委托父加载器）。真要摘，得先把 note meta 也换成
-         fastjson2——那会动到盘上的笔记文件格式，单独做。 -->
+    <!-- Spring Web。Jackson 现在没有任何一方在借了：notes 插件的 meta 已改用 fastjson2（插件经父加载器
+         拿到平台那份 fastjson2），HTTP 的 JSON 也一直是 fastjson2 转换器在处理。这里仍不把 Jackson
+         排掉——它是 starter-web 传递引入的，要摘得另做一轮，确认 Boot 内部没有别的地方在用。 -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>

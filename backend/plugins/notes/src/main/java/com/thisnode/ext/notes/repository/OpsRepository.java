@@ -1,7 +1,8 @@
 package com.thisnode.ext.notes.repository;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.MetaJson;
 import com.thisnode.ext.notes.util.Ids;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +72,8 @@ public class OpsRepository {
     public void append(String entityType, String entityId, String action, String payloadJson) {
         OpLine line = new OpLine(Ids.newId(), deviceId(), entityType, entityId, action,
                 payloadJson, System.currentTimeMillis());
-        noteRepository.appendLine(noteRepository.paths().opsFile(), MetaJson.toJson(line));
+        // jsonl：一行一条，所以这里必须是紧凑 JSON（历史上用 pretty 写过，读的时候按行解析就全废了）。
+        noteRepository.appendLine(noteRepository.paths().opsFile(), JSON.toJSONString(line));
         Integer lines = cachedLines;
         cachedLines = lines == null ? null : lines + 1;
     }
@@ -109,8 +111,8 @@ public class OpsRepository {
 
     private OpLine parse(String json) {
         try {
-            return MetaJson.fromJson(json, OpLine.class);
-        } catch (IOException | RuntimeException e) {
+            return JSON.parseObject(json, OpLine.class);
+        } catch (RuntimeException e) {
             log.debug("操作日志行无法解析，已跳过：{}", e.toString());
             return null;
         }
@@ -137,8 +139,10 @@ public class OpsRepository {
             if (!Files.isRegularFile(file)) {
                 return new LinkedHashMap<>();
             }
-            return new LinkedHashMap<>(MetaJson.stringMap(
-                    Files.readString(file, StandardCharsets.UTF_8)));
+            return new LinkedHashMap<>(JSON.parseObject(
+                    Files.readString(file, StandardCharsets.UTF_8),
+                    new TypeReference<Map<String, String>>() {
+                    }));
         } catch (IOException | RuntimeException e) {
             log.warn("笔记设置无法读取：{}", e.toString());
             return new LinkedHashMap<>();

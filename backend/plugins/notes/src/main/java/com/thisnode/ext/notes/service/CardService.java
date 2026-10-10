@@ -184,7 +184,7 @@ public class CardService {
         Dtos.CardDto src = requireCard(cardId);
         String newNoteId = noteService.create(new Dtos.CreateNodeRequest(
                 null, src.contentMd() == null ? "" : src.contentMd(), "note",
-                null, null, null, null, null));
+                null, null));
         String id = cardRepository.create(newNoteId, 0d, 0d, src.w(), src.h(), src.color(), src.status(),
                 src.contentMd() == null ? "" : src.contentMd(), src.title());
         noteService.log("note-card", id, "duplicate-from",

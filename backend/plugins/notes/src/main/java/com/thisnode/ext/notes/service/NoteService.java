@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
@@ -32,7 +32,6 @@ public class NoteService {
     private final NotebookRepository notebookRepository;
     private final CardRepository cardRepository;
     private final OpsRepository opsRepository;
-    private final ObjectMapper json = new ObjectMapper();
 
     // ================================================================= create
 
@@ -40,7 +39,7 @@ public class NoteService {
         String title = req.title() == null ? "" : req.title().trim();
         String content = req.contentMd() == null ? "" : req.contentMd();
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
-        String id = noteRepository.insert(titleOf(title, content), type, req.dailyDate(), req.source(), req.status());
+        String id = noteRepository.insert(titleOf(title, content), type);
         // 编排：首卡落盘（一篇笔记至少一张卡；正文只有一份，在卡片里）。
         cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, System.currentTimeMillis()), content);
 
@@ -102,7 +101,7 @@ public class NoteService {
             nextContent = req.contentMd();
             contentChanged = true;
         }
-        noteRepository.writeNoteMeta(meta.withTitle(nextTitle).withSourceStatus(req.source(), req.status()).touched(System.currentTimeMillis()));
+        noteRepository.writeNoteMeta(meta.withTitle(nextTitle).touched(System.currentTimeMillis()));
 
         if (req.tags() != null) {
             tagRepository.setNodeTags(id, req.tags());
@@ -175,9 +174,9 @@ public class NoteService {
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
         String content = noteRepository.noteMarkdown(id);
-        // 出/入链是 meta 里写时算好的缓存（LinkRef/InboundRef），PO 直接出，不再服务端拼 DTO。
+        // 出/入链是 meta 里写时算好的缓存（Link），PO 直接出，不再服务端拼 DTO。
         List<String> unresolved = unresolvedOf(content);
-        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.source(), meta.status(), meta.deleted(), meta.dailyDate(), meta.cards(), tagsOfNames(id), notebookRepository.notebooksOf(id), meta.links(), meta.inbound(), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
+        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.cards(), tagsOfNames(id), notebookRepository.notebooksOf(id), meta.outLinks(), meta.inLinks(), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
     }
 
     /**
@@ -209,7 +208,7 @@ public class NoteService {
             linkedTitles.add(Markdown.normalizeTitle(l.target()));
         }
         List<NoteMeta> others = new ArrayList<>();
-        for (NoteMeta other : noteRepository.findAllActive()) {
+        for (NoteMeta other : noteRepository.findAll()) {
             if (!other.id().equals(id) && other.title().length() >= 2) {
                 others.add(other);
             }
@@ -232,10 +231,9 @@ public class NoteService {
 
     // ================================================================= list
 
-    public record Query(String filter, String tag, String notebookId, String type, String text, boolean includeDeleted,
-                        int limit, int offset) {
+    public record Query(String tag, String notebookId, String type, String text, int limit, int offset) {
         public static Query defaults() {
-            return new Query("all", null, null, null, null, false, 500, 0);
+            return new Query(null, null, null, null, 500, 0);
         }
     }
 
@@ -247,11 +245,10 @@ public class NoteService {
      */
     public List<NoteMeta> list(Query q) {
         Query query = q == null ? Query.defaults() : q;
-        String filter = query.filter() == null ? "all" : query.filter();
 
         List<NoteMeta> matched = new ArrayList<>();
-        for (NoteMeta meta : noteRepository.getAll()) {
-            if (matches(meta, query, filter)) {
+        for (NoteMeta meta : noteRepository.findAll()) {
+            if (matches(meta, query)) {
                 matched.add(meta);
             }
         }
@@ -269,24 +266,7 @@ public class NoteService {
     /**
      * 逐篇判断，条件与旧的 WHERE 子句一一对应。
      */
-    private boolean matches(NoteMeta meta, Query query, String filter) {
-        switch (filter) {
-            case "trash" -> {
-                if (!meta.deleted()) {
-                    return false;
-                }
-            }
-            case "daily" -> {
-                if (meta.deleted() || !"daily".equals(meta.type())) {
-                    return false;
-                }
-            }
-            default -> {
-                if (meta.deleted()) {
-                    return false;
-                }
-            }
-        }
+    private boolean matches(NoteMeta meta, Query query) {
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.type())) {
             return false;
         }
@@ -444,7 +424,7 @@ public class NoteService {
         if (existing != null) {
             return existing;
         }
-        String id = create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null, null, null, null));
+        String id = create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null));
         linkRepository.deleteStubByTitle(clean);
         if (fromNodeId != null && !fromNodeId.isBlank()) {
             if (noteRepository.getOne(fromNodeId) != null) {
@@ -458,7 +438,7 @@ public class NoteService {
 
     public void log(String entityType, String entityId, String action, Map<String, Object> payload) {
         try {
-            opsRepository.append(entityType, entityId, action, json.writeValueAsString(payload));
+            opsRepository.append(entityType, entityId, action, JSON.toJSONString(payload));
         } catch (Exception e) {
             // Never fail a user write because the audit row could not be serialized.
         }

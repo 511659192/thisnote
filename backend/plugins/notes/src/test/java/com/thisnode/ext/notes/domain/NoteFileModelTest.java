@@ -1,14 +1,12 @@
 package com.thisnode.ext.notes.domain;
 
-import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.service.StartupMaintenance;
+import com.thisnode.ext.notes.service.StartupMaintenanceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -37,15 +35,13 @@ class NoteFileModelTest {
 
     private NoteRepository store;
     private CardRepository cardRepository;
-    private StartupMaintenance maintenance;
+    private StartupMaintenanceService maintenance;
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         cardRepository = new CardRepository(store);
-        maintenance = new StartupMaintenance(store);
+        maintenance = new StartupMaintenanceService(store);
         maintenance.run();
     }
 
@@ -59,8 +55,8 @@ class NoteFileModelTest {
         // 启动维护：认领未纳管的 md
         maintenance.run();
 
-        assertThat(store.getAll()).hasSize(1);
-        NoteMeta note = store.getAll().get(0);
+        assertThat(store.findAll()).hasSize(1);
+        NoteMeta note = store.findAll().get(0);
         assertThat(note.title()).isEqualTo("会议记录");
 
         // 笔记 meta 落在 meta/ 下
@@ -82,7 +78,7 @@ class NoteFileModelTest {
     @DisplayName("卡片按清单顺序聚合成一篇完整笔记")
     void aggregatesBlocksInZOrder() throws IOException {
         String noteId = "note-1";
-        writeNoteMeta(NoteMeta.newNoteMeta(noteId, "组合笔记", "note", null, null, null, null, 1L));
+        writeNoteMeta(NoteMeta.newNoteMeta(noteId, "组合笔记", "note", null, 1L));
         writeCard("first", "card-b", noteId, 1, "第二段");
         writeCard("second", "card-a", noteId, 0, "第一段");
 
@@ -96,8 +92,8 @@ class NoteFileModelTest {
     void purgeRemovesEveryOwnedFile() {
         String now = "note-now";
         String other = "note-other";
-        store.writeNoteMeta(NoteMeta.newNoteMeta(now, "要删的", "note", null, null, null, null, 1L));
-        store.writeNoteMeta(NoteMeta.newNoteMeta(other, "留下的", "note", null, null, null, null, 1L));
+        store.writeNoteMeta(NoteMeta.newNoteMeta(now, "要删的", "note", null, 1L));
+        store.writeNoteMeta(NoteMeta.newNoteMeta(other, "留下的", "note", null, 1L));
         cardRepository.putCard(now, CardMeta.newCardMeta("b1", 0, 0, "卡片一", null, null, 1L), "内容一");
         cardRepository.putCard(now, CardMeta.newCardMeta("b2", 0, 300, "卡片二", null, null, 2L), "内容二");
         cardRepository.putCard(other, CardMeta.newCardMeta("b3", 0, 0, "别人的卡", null, null, 3L), "别的内容");
@@ -125,7 +121,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("正文、几何与插件扩展区都能从磁盘原样读回")
     void roundTripsThroughDisk() {
-        store.writeNoteMeta(NoteMeta.newNoteMeta("n1", "往返", "note", null, "src", "ok", "grp-default", 10L)
+        store.writeNoteMeta(NoteMeta.newNoteMeta("n1", "往返", "note", "grp-default", 10L)
                 .withTags(List.of("标签一")));
         cardRepository.putCard("n1", new CardMeta(CardMeta.SCHEMA, "b1", "卡片标题",
                 12.5, 340.25, 500, 200, 3, "#ff0000", "doing", true, Map.of(), 10L, 10L),
@@ -156,7 +152,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("两张同名卡片落在两个文件里，不会互相覆盖")
     void disambiguatesSameSlug() {
-        store.writeNoteMeta(NoteMeta.newNoteMeta("n1", "同名测试", "note", null, null, null, null, 1L));
+        store.writeNoteMeta(NoteMeta.newNoteMeta("n1", "同名测试", "note", null, 1L));
         cardRepository.putCard("n1", CardMeta.newCardMeta("bbbbbbbb-1111", 0, 0, "", null, null, 1L), "第一张");
         cardRepository.putCard("n1", CardMeta.newCardMeta("bbbbbbbb-2222", 0, 300, "", null, null, 2L), "第二张");
 
@@ -175,17 +171,17 @@ class NoteFileModelTest {
         Files.deleteIfExists(root.resolve("meta").resolve("note-lost.json"));
 
         assertThat(store.getOne("note-lost")).isNull();
-        assertThat(store.getAll()).isEmpty();
+        assertThat(store.findAll()).isEmpty();
 
         // 对账做的事：发现清单里没有这个文件 → 认领成一篇新笔记
         int applied = store.claimUnmanaged();
 
         assertThat(applied).isEqualTo(1);
-        assertThat(store.getAll()).hasSize(1);
+        assertThat(store.findAll()).hasSize(1);
         assertThat(store.allCards()).hasSize(1);
         assertThat(store.content("card-x")).isEqualTo("孤立卡片的内容");
         assertThat(Files.exists(root.resolve("meta")
-                .resolve(store.getAll().get(0).id() + ".json"))).isTrue();
+                .resolve(store.findAll().get(0).id() + ".json"))).isTrue();
     }
 
     @Test
@@ -203,7 +199,7 @@ class NoteFileModelTest {
         Files.writeString(ledgers.resolve("settings.json"), "{\"device_id\":\"x\"}");
         Files.writeString(noteMetas.resolve("random.json"), "{\"title\":\"手写但没有 id\"}");
 
-        assertThat(store.getAll()).isEmpty();
+        assertThat(store.findAll()).isEmpty();
     }
 
     @Test
@@ -219,9 +215,9 @@ class NoteFileModelTest {
         maintenance.run();
 
         assertThat(Files.exists(sidecar)).isTrue();
-        assertThat(store.getAll()).hasSize(1);
-        assertThat(store.getAll().get(0).cards()).hasSize(1);
-        assertThat(store.getAll().get(0).cards().get(0).id()).isEqualTo("bbbbbbbb-2222");
+        assertThat(store.findAll()).hasSize(1);
+        assertThat(store.findAll().get(0).cards()).hasSize(1);
+        assertThat(store.findAll().get(0).cards().get(0).id()).isEqualTo("bbbbbbbb-2222");
     }
 
     @Test
@@ -234,7 +230,7 @@ class NoteFileModelTest {
         maintenance.run();
 
         assertThat(Files.exists(sidecar)).isTrue();
-        assertThat(store.getAll()).isEmpty();
+        assertThat(store.findAll()).isEmpty();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -254,9 +250,9 @@ class NoteFileModelTest {
         store.writeCard("测试笔记", card, content, md);
         NoteMeta note = store.readMeta(store.paths().noteMeta(noteId), NoteMeta.class);
         if (note != null) {
-            List<CardRef> cards = new ArrayList<>(note.cards());
+            List<Card> cards = new ArrayList<>(note.cards());
             cards.add(Math.max(0, Math.min(slot, cards.size())),
-                    CardRef.of(cardId, store.paths().relative(md)));
+                    Card.of(cardId, store.paths().relative(md)));
             store.writeNoteMeta(note.withCards(cards));
         }
     }

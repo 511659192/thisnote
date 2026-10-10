@@ -1,14 +1,9 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.domain.CardRef;
-import com.thisnode.ext.notes.domain.CardFile;
-import com.thisnode.ext.notes.domain.InboundRef;
-import com.thisnode.ext.notes.domain.LinkRef;
-import com.thisnode.ext.notes.domain.MetaJson;
-import com.thisnode.ext.notes.domain.NoteFilePaths;
-import com.thisnode.ext.notes.domain.NotebookBook;
-import com.thisnode.ext.notes.domain.NoteMeta;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONFactory;
+import com.alibaba.fastjson2.JSONWriter;
+import com.thisnode.ext.notes.domain.*;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.util.Markdown;
 import lombok.RequiredArgsConstructor;
@@ -19,17 +14,8 @@ import org.springframework.stereotype.Repository;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.nio.file.*;
+import java.util.*;
 import java.util.stream.Stream;
 
 /**
@@ -53,14 +39,16 @@ public class NoteRepository {
     /**
      * 建一篇笔记：生成 id 与时间戳，写 v2 meta。正文由调用方编排成首卡（一篇笔记至少一张卡）。
      */
-    public String insert(String title, String type, String dailyDate, String source, String status) {
+    public String insert(String title, String type) {
         String id = Ids.newId();
         long now = System.currentTimeMillis();
-        writeNoteMeta(NoteMeta.newNoteMeta(id, title, type, dailyDate, source, status, null, now));
+        writeNoteMeta(NoteMeta.newNoteMeta(id, title, type, null, now));
         return id;
     }
 
-    /** 硬删除：卡片 md、sidecar 与笔记 meta 一起走（由组合层负责）。 */
+    /**
+     * 硬删除：卡片 md、sidecar 与笔记 meta 一起走（由组合层负责）。
+     */
     public void delete(String id) {
         NoteMeta note = getOne(id);
         if (note == null) {
@@ -68,26 +56,21 @@ public class NoteRepository {
         }
         // 把它对各对端入链缓存的条目摘掉，再删卡片文件与 meta。
         syncInboundEntries(note, List.of(), null);
-        for (CardRef ref : note.cards()) {
+        for (Card ref : note.cards()) {
             deleteCardFiles(cardPath(ref));
         }
         deleteNoteMeta(id);
     }
 
-    /** 未进回收站的全部笔记 meta（只读 meta 文件，不碰卡片）。 */
-    public List<NoteMeta> findAllActive() {
-        List<NoteMeta> out = new ArrayList<>();
-        for (NoteMeta meta : getAll()) {
-            if (!meta.deleted()) {
-                out.add(meta);
-            }
-        }
-        return out;
-    }
-
     // ================================================================ 文件与卡片层（原 NoteStore）
 
-private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
+    private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
+
+    static {
+        // 插件有自己的 classloader：平台侧对 JSONFactory 的全局设置不会传过来，所以这里自己关掉字母序，
+        // 落盘的 meta 按字段声明序书写（与读的人看到的字段结构一致）。
+        JSONFactory.setDefaultWriterAlphabetic(false);
+    }
 
     public NoteFilePaths paths() {
         return noteFilePaths;
@@ -102,7 +85,9 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     public record CardData(CardMeta meta, String content) {
     }
 
-    /** 读一张卡片：注释里的 meta + 正文。懒加载与迁移都走它。 */
+    /**
+     * 读一张卡片：注释里的 meta + 正文。懒加载与迁移都走它。
+     */
     public CardData readCard(Path file) {
         String raw = readText(file);
         if (raw == null) {
@@ -111,24 +96,32 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return new CardData(CardFile.metaOf(raw), CardFile.bodyOf(raw));
     }
 
-    /** 卡片文件在磁盘上的路径（{@code CardRef.file} 是相对路径）。 */
-    public Path cardPath(CardRef ref) {
+    /**
+     * 卡片文件在磁盘上的路径（{@code Card.file} 是相对路径）。
+     */
+    public Path cardPath(Card ref) {
         return ref == null ? null : noteFilePaths.root().resolve(ref.file());
     }
 
-    /** 读一张卡（元数据 + 正文）；ref 为空或文件不在时返回 {@code null}。 */
-    public CardData readCard(CardRef ref) {
+    /**
+     * 读一张卡（元数据 + 正文）；ref 为空或文件不在时返回 {@code null}。
+     */
+    public CardData readCard(Card ref) {
         Path file = cardPath(ref);
         return file == null ? null : readCard(file);
     }
 
-    /** 只取卡片正文（文件不在或读不出来时给空串）。 */
-    public String cardContent(CardRef ref) {
+    /**
+     * 只取卡片正文（文件不在或读不出来时给空串）。
+     */
+    public String cardContent(Card ref) {
         CardData data = readCard(ref);
         return data == null ? "" : data.content();
     }
 
-    /** 一次目录遍历的结果：卡片文件（相对路径 → mtime）。 */
+    /**
+     * 一次目录遍历的结果：卡片文件（相对路径 → mtime）。
+     */
     public record FileListing(Map<String, Long> cards) {
     }
 
@@ -161,28 +154,22 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return new FileListing(cards);
     }
 
-    /** 只取卡片文件清单（变更检测用）。 */
+    /**
+     * 只取卡片文件清单（变更检测用）。
+     */
     public Map<String, Long> listCardFiles() {
         return listFiles().cards();
     }
 
-    /**
-     * 读全部笔记 meta（{@code .notes/meta/<noteId>.json}）。
-     *
-     * <p>meta 目录里只有笔记 meta，不需要台账黑名单；单个坏文件只跳过并记日志：meta 是用户可
-     * 手改的，一个写坏的字符不该让整库打不开。
-     */
-    public List<NoteMeta> getAll() {
-        List<NoteMeta> notes = new ArrayList<>();
+    public List<NoteMeta> findAll() {
         Path metaDir = noteFilePaths.noteMetaDir();
         if (!Files.isDirectory(metaDir)) {
-            return notes;
+            return Collections.emptyList();
         }
-        try (Stream<Path> stream = Files.list(metaDir)) {
-            for (Path file : stream.filter(Files::isRegularFile).toList()) {
-                if (!file.getFileName().toString().endsWith(".json")) {
-                    continue;
-                }
+
+        List<NoteMeta> notes = new ArrayList<>();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(metaDir, "*.json")) {
+            for (Path file : stream) {
                 NoteMeta meta = readMeta(file, NoteMeta.class);
                 if (meta == null) {
                     continue;
@@ -193,13 +180,15 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
                 }
                 notes.add(meta);
             }
-        } catch (IOException e) {
+        } catch (IOException | DirectoryIteratorException e) {
             log.warn("笔记元数据目录无法读取：{}（{}）", noteFilePaths.relative(metaDir), e.toString());
         }
         return notes;
     }
 
-    /** 只读一篇笔记的 meta（文件不在或读不出来给 {@code null}）—— 不会为了它扫全库。 */
+    /**
+     * 只读一篇笔记的 meta（文件不在或读不出来给 {@code null}）—— 不会为了它扫全库。
+     */
     public NoteMeta getOne(String noteId) {
         if (noteId == null || noteId.isBlank()) {
             return null;
@@ -218,10 +207,10 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public Map<String, String> titleIndex() {
         Map<String, String> index = new LinkedHashMap<>();
-        List<NoteMeta> all = getAll();
+        List<NoteMeta> all = findAll();
         // 重名时先到先得。
         for (NoteMeta meta : all) {
-            if (meta.deleted() || meta.title() == null || meta.title().isBlank()) {
+            if (meta.title() == null || meta.title().isBlank()) {
                 continue;
             }
             index.putIfAbsent(Markdown.normalizeTitle(meta.title()), meta.id());
@@ -236,7 +225,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public String noteMarkdown(String noteId) {
         StringBuilder joined = new StringBuilder();
-        for (CardRef ref : cardsOf(noteId)) {
+        for (Card ref : cardsOf(noteId)) {
             String part = cardContent(ref);
             if (part.isBlank()) {
                 continue;
@@ -249,7 +238,9 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return joined.toString();
     }
 
-    /** 解析 {@code [[标题]]}：现建解析表后查一次，查不到给 {@code null}。 */
+    /**
+     * 解析 {@code [[标题]]}：现建解析表后查一次，查不到给 {@code null}。
+     */
     public String resolveTitle(String target) {
         if (target == null || target.isBlank()) {
             return null;
@@ -271,16 +262,16 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * 就改名：文件名只是给人看的，身份在 meta 的 id 里。
      */
     public Path writeCard(String noteTitle, CardMeta card, String contentMd, Path knownFile) {
-        Path file = knownFile != null ? knownFile
-                : resolveContentPath(noteTitle, NoteFilePaths.cardSlug(card.title(), contentMd),
-                        card.id());
+        Path file = knownFile != null ? knownFile : resolveContentPath(noteTitle, NoteFilePaths.cardSlug(card.title(), contentMd), card.id());
         writeText(file, CardFile.compose(card, contentMd));
         return file;
     }
 
     /** 只改元数据（拖动、改宽度、插件扩展区）：重写头部注释，正文原样保留。 */
 
-    /** 删一张卡片：md 为主，顺手清掉旧版本留下的 sidecar（如果还有）。 */
+    /**
+     * 删一张卡片：md 为主，顺手清掉旧版本留下的 sidecar（如果还有）。
+     */
     public void deleteCardFiles(Path contentFile) {
         deleteQuietly(contentFile);
         removeLegacySidecar(contentFile);
@@ -300,13 +291,12 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         deleteQuietly(noteFilePaths.noteMeta(noteId));
     }
 
-    /** 首次使用的目录要建出来，否则扫描与后面的写入都会落空。 */
+    /**
+     * 首次使用的目录要建出来，否则扫描与后面的写入都会落空。
+     */
     public void ensureDirs() {
         try {
-            for (Path dir : new Path[]{
-                    noteFilePaths.cardsDir(), noteFilePaths.noteMetaDir(),
-                    noteFilePaths.ledgersDir(), noteFilePaths.logsDir()
-            }) {
+            for (Path dir : new Path[]{noteFilePaths.cardsDir(), noteFilePaths.noteMetaDir(), noteFilePaths.ledgersDir(), noteFilePaths.logsDir()}) {
                 Files.createDirectories(dir);
             }
         } catch (IOException e) {
@@ -328,8 +318,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         // 笔记名、卡片描述都一样（同名同描述的两张卡）：把随机串逐段加长，直到不撞车。
         String hex = cardId.replace("-", "");
         for (int len = 12; len < hex.length(); len += 4) {
-            Path longer = noteFilePaths.cardsDir().resolve(prefix + "-" + hex.substring(0, len)
-                    + NoteFilePaths.MD_SUFFIX);
+            Path longer = noteFilePaths.cardsDir().resolve(prefix + "-" + hex.substring(0, len) + NoteFilePaths.MD_SUFFIX);
             if (!Files.exists(longer)) {
                 return longer;
             }
@@ -352,33 +341,32 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         try {
             Files.createDirectories(file.getParent());
             Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-            Files.writeString(tmp, text, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE);
+            Files.writeString(tmp, text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             move(tmp, file);
         } catch (IOException e) {
             throw new UncheckedIOException("写入失败 " + file, e);
         }
     }
 
-    /** 追加一行（操作日志用）：日志丢了不比丢一次写入更严重，所以失败只记日志不抛。 */
+    /**
+     * 追加一行（操作日志用）：日志丢了不比丢一次写入更严重，所以失败只记日志不抛。
+     */
     public void appendLine(Path file, String line) {
         try {
             Files.createDirectories(file.getParent());
-            Files.writeString(file, line + System.lineSeparator(), StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
+            Files.writeString(file, line + System.lineSeparator(), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
         } catch (IOException e) {
             log.warn("无法追加 {}（{}）", noteFilePaths.relative(file), e.toString());
         }
     }
 
     public void writeJson(Path file, Object value) {
-        writeText(file, MetaJson.toJson(value));
+        writeText(file, JSON.toJSONString(value, JSONWriter.Feature.PrettyFormat));
     }
 
     public <T> T readMeta(Path file, Class<T> type) {
         try {
-            return MetaJson.fromJson(Files.readString(file, StandardCharsets.UTF_8), type);
+            return JSON.parseObject(Files.readString(file, StandardCharsets.UTF_8), type);
         } catch (IOException | RuntimeException e) {
             if (Files.exists(file)) {
                 log.warn("元数据无法解析，已跳过：{}（{}）", noteFilePaths.relative(file), e.toString());
@@ -405,24 +393,17 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     // ================================================================ 卡片与视图编排（原 NoteCompositionService，纯原语部分）
 
-/** 一张卡片的归属：它属于哪篇笔记、对应清单里的哪一项。 */
-    public record Owned(NoteMeta note, CardRef ref) {
+    /**
+     * 一张卡片的归属：它属于哪篇笔记、对应清单里的哪一项。
+     */
+    public record Owned(NoteMeta note, Card ref) {
     }
+
 
     /**
-     * 建一篇新笔记：先落 meta，再建首卡（"一篇笔记至少一张卡"的不变量在这里落地）。
-     *
-     * <p>笔记仓储只交笔记域的数据，卡片细节由组合层处理。
+     * 一篇笔记的卡片清单（顺序即阅读顺序）；笔记不存在给空清单。
      */
-    public void createNote(NoteMeta meta, String contentMd) {
-        writeNoteMeta(meta);
-        long now = System.currentTimeMillis();
-        writeCard(meta.id(), CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, now),
-                contentMd == null ? "" : contentMd, -1);
-    }
-
-    /** 一篇笔记的卡片清单（顺序即阅读顺序）；笔记不存在给空清单。 */
-    public List<CardRef> cardsOf(String noteId) {
+    public List<Card> cardsOf(String noteId) {
         NoteMeta note = getOne(noteId);
         return note == null ? List.of() : note.cards();
     }
@@ -436,8 +417,8 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         if (cardId == null || cardId.isBlank()) {
             return null;
         }
-        for (NoteMeta note : getAll()) {
-            for (CardRef ref : note.cards()) {
+        for (NoteMeta note : findAll()) {
+            for (Card ref : note.cards()) {
                 if (ref.id().equals(cardId)) {
                     return new Owned(note, ref);
                 }
@@ -446,7 +427,9 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return null;
     }
 
-    /** 一张卡片的正文（找不到归属或文件不在时给空串）。 */
+    /**
+     * 一张卡片的正文（找不到归属或文件不在时给空串）。
+     */
     public String contentOf(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? "" : cardContent(owned.ref());
@@ -469,11 +452,11 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         if (note == null) {
             return null;
         }
-        CardRef existing = refOf(note, card.id());
+        Card existing = refOf(note, card.id());
         Path written = writeCard(note.title(), card, contentMd, cardPath(existing));
-        CardRef ref = CardRef.of(card.id(), paths().relative(written));
+        Card ref = Card.of(card.id(), paths().relative(written));
 
-        List<CardRef> cards = new ArrayList<>(note.cards());
+        List<Card> cards = new ArrayList<>(note.cards());
         int at = indexOf(cards, card.id());
         if (at >= 0) {
             cards.set(at, ref);
@@ -500,18 +483,17 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         }
         String markdown = noteMarkdown(noteId);
         Map<String, String> titles = titleIndex();
-        List<LinkRef> links = new ArrayList<>();
+        List<Link> outLinks = new ArrayList<>();
         int unresolved = 0;
         for (Markdown.WikiLink link : Markdown.wikiLinks(markdown)) {
             String to = titles.get(Markdown.normalizeTitle(link.target()));
             if (to == null) {
                 unresolved++;
             }
-            links.add(LinkRef.of(link.target(), link.label(), to));
+            outLinks.add(Link.outbound(meta.id(), to, link.label(), link.target()));
         }
-        syncInboundEntries(meta, links, markdown);
-        NoteMeta next = meta.withCachedView(Markdown.plainPreview(markdown, 160), links,
-                links.size(), unresolved);
+        syncInboundEntries(meta, outLinks, markdown);
+        NoteMeta next = meta.withCachedView(Markdown.plainPreview(markdown, 160), outLinks, outLinks.size(), unresolved);
         if (!next.equals(meta)) {
             writeNoteMeta(next);
         }
@@ -519,17 +501,17 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     /**
      * 把「source 引用了谁」落到各对端 meta 的入链缓存：受影响的每个对端，先摘掉 source 的旧条目，
-     * 再按新出链逐条补上（条目数即入链数，{@code withInbound} 负责两者一致）。
+     * 再按新出链逐条补上（条目数即入链数，{@code withInLinks} 负责两者一致）。
      */
-    private void syncInboundEntries(NoteMeta source, List<LinkRef> newLinks, String sourceMarkdown) {
+    private void syncInboundEntries(NoteMeta source, List<Link> newOutLinks, String sourceMarkdown) {
         Set<String> affected = new LinkedHashSet<>();
-        for (LinkRef link : source.links()) {
-            if (link.to() != null) {
+        for (Link link : source.outLinks()) {
+            if (!link.unresolved()) {
                 affected.add(link.to());
             }
         }
-        for (LinkRef link : newLinks) {
-            if (link.to() != null) {
+        for (Link link : newOutLinks) {
+            if (!link.unresolved()) {
                 affected.add(link.to());
             }
         }
@@ -538,39 +520,23 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
             if (target == null) {
                 continue;
             }
-            List<InboundRef> entries = new ArrayList<>();
-            for (InboundRef entry : target.inbound()) {
-                if (!source.id().equals(entry.fromId())) {
-                    entries.add(entry);
+            List<Link> inLinks = new ArrayList<>();
+            for (Link entry : target.inLinks()) {
+                if (!source.id().equals(entry.from())) {
+                    inLinks.add(entry);
                 }
             }
-            for (LinkRef link : newLinks) {
+            for (Link link : newOutLinks) {
                 if (targetId.equals(link.to())) {
-                    entries.add(new InboundRef(source.id(), link.label(),
-                            contextFor(sourceMarkdown, link.label()), source.updatedAt()));
+                    inLinks.add(Link.inbound(source.id(), targetId, link.label()));
                 }
             }
-            writeNoteMeta(target.withInbound(entries));
+            writeNoteMeta(target.withInLinks(inLinks));
         }
     }
 
-    /** 引用所在的那行 markdown，截到 200 字符；找不到就退回正文开头的纯文本预览。 */
-    private static String contextFor(String content, String label) {
-        if (content == null) {
-            return "";
-        }
-        String needle = label != null && !label.isBlank() ? "[[" + label : "[[";
-        for (String line : content.split("\\r?\\n")) {
-            if (line.contains(needle) || (label != null && line.contains(label))) {
-                String trimmed = line.trim();
-                return trimmed.length() > 200 ? trimmed.substring(0, 200) + "…" : trimmed;
-            }
-        }
-        return Markdown.plainPreview(content, 120);
-    }
-
-    private static CardRef refOf(NoteMeta note, String cardId) {
-        for (CardRef ref : note.cards()) {
+    private static Card refOf(NoteMeta note, String cardId) {
+        for (Card ref : note.cards()) {
             if (ref.id().equals(cardId)) {
                 return ref;
             }
@@ -578,7 +544,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return null;
     }
 
-    private static int indexOf(List<CardRef> cards, String cardId) {
+    private static int indexOf(List<Card> cards, String cardId) {
         for (int i = 0; i < cards.size(); i++) {
             if (cards.get(i).id().equals(cardId)) {
                 return i;
@@ -587,7 +553,9 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return -1;
     }
 
-    /** 只改元数据（重写头部注释，正文原样保留）。 */
+    /**
+     * 只改元数据（重写头部注释，正文原样保留）。
+     */
     public void writeCardMeta(CardMeta card, Path contentFile) {
         String current = readText(contentFile);
         if (current == null) {
@@ -597,12 +565,14 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         writeText(contentFile, CardFile.compose(card, CardFile.bodyOf(current)));
     }
 
-    /** 只改元数据（拖动 / 缩放 / 收起 / 插件扩展区）：重写头部注释，正文原样保留。 */
+    /**
+     * 只改元数据（拖动 / 缩放 / 收起 / 插件扩展区）：重写头部注释，正文原样保留。
+     */
     public CardMeta writeCardMeta(String cardId, CardMeta card) {
         if (card == null) {
             return null;
         }
-        CardRef ref = refOfId(cardId);
+        Card ref = refOfId(cardId);
         if (ref == null) {
             return null;
         }
@@ -624,7 +594,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * <p>写正文的唯一落点（导入 Markdown、脚本改正文都走这里）。
      */
     public void replaceNoteContent(String noteId, String contentMd) {
-        List<CardRef> cards = cardsOf(noteId);
+        List<Card> cards = cardsOf(noteId);
         String body = contentMd == null ? "" : contentMd;
         if (cards.isEmpty()) {
             long now = System.currentTimeMillis();
@@ -640,15 +610,19 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         }
     }
 
-    /** 一篇笔记的卡片数。 */
+    /**
+     * 一篇笔记的卡片数。
+     */
     public int cardCount(String noteId) {
         return cardsOf(noteId).size();
     }
 
-    /** 全部笔记的卡片数（noteId → 张数）。 */
+    /**
+     * 全部笔记的卡片数（noteId → 张数）。
+     */
     public Map<String, Integer> cardCounts() {
         Map<String, Integer> out = new LinkedHashMap<>();
-        for (NoteMeta note : getAll()) {
+        for (NoteMeta note : findAll()) {
             out.put(note.id(), note.cards().size());
         }
         return out;
@@ -664,14 +638,13 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
             return 0;
         }
         int healed = 0;
-        for (NoteMeta note : getAll()) {
-            if (note.id().equals(targetNoteId) || note.links().isEmpty()) {
+        for (NoteMeta note : findAll()) {
+            if (note.id().equals(targetNoteId) || note.outLinks().isEmpty()) {
                 continue;
             }
             boolean pending = false;
-            for (LinkRef link : note.links()) {
-                if (link.to() == null
-                        && normalizedTargets.contains(Markdown.normalizeTitle(link.target()))) {
+            for (Link link : note.outLinks()) {
+                if (link.unresolved() && normalizedTargets.contains(Markdown.normalizeTitle(link.raw()))) {
                     pending = true;
                     break;
                 }
@@ -684,51 +657,57 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return healed;
     }
 
-    /** 维护用：按正文重算**所有**笔记的列表页缓存。 */
+    /**
+     * 维护用：按正文重算**所有**笔记的列表页缓存。
+     */
     public int refreshAllCachedViews() {
         int done = 0;
-        for (NoteMeta note : getAll()) {
+        for (NoteMeta note : findAll()) {
             refreshCachedView(note.id());
             done++;
         }
         return done;
     }
 
-    /** 按各篇 meta 里缓存的出链**全量重建**入链缓存（读引用者正文算 context；修复/升级用）。 */
+    /**
+     * 按各篇 meta 里缓存的出链**全量重建**入链缓存（读引用者正文算 context；修复/升级用）。
+     */
     public int recalibrateInbound() {
-        List<NoteMeta> all = getAll();
-        Map<String, List<InboundRef>> entries = new LinkedHashMap<>();
+        List<NoteMeta> all = findAll();
+        Map<String, List<Link>> entries = new LinkedHashMap<>();
         for (NoteMeta note : all) {
-            if (note.links().isEmpty()) {
+            if (note.outLinks().isEmpty()) {
                 continue;
             }
             String markdown = noteMarkdown(note.id());
-            for (LinkRef link : note.links()) {
-                if (link.to() != null) {
-                    entries.computeIfAbsent(link.to(), k -> new ArrayList<>())
-                            .add(new InboundRef(note.id(), link.label(),
-                                    contextFor(markdown, link.label()), note.updatedAt()));
+            for (Link link : note.outLinks()) {
+                if (!link.unresolved()) {
+                    entries.computeIfAbsent(link.to(), k -> new ArrayList<>()).add(Link.inbound(note.id(), link.to(), link.label()));
                 }
             }
         }
         int fixed = 0;
         for (NoteMeta note : all) {
-            List<InboundRef> want = entries.getOrDefault(note.id(), List.of());
-            if (!note.inbound().equals(want)) {
-                writeNoteMeta(note.withInbound(want));
+            List<Link> want = entries.getOrDefault(note.id(), List.of());
+            if (!note.inLinks().equals(want)) {
+                writeNoteMeta(note.withInLinks(want));
                 fixed++;
             }
         }
         return fixed;
     }
 
-    /** cardId → 清单项。 */
-    private CardRef refOfId(String cardId) {
+    /**
+     * cardId → 清单项。
+     */
+    private Card refOfId(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? null : owned.ref();
     }
 
-    /** 一张卡片的元数据（找不到给 {@code null}）。 */
+    /**
+     * 一张卡片的元数据（找不到给 {@code null}）。
+     */
     public CardMeta card(String cardId) {
         Owned owned = ownerOf(cardId);
         if (owned == null) {
@@ -738,10 +717,12 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return data == null ? null : data.meta();
     }
 
-    /** 一篇笔记的全部卡片元数据，按清单顺序。 */
+    /**
+     * 一篇笔记的全部卡片元数据，按清单顺序。
+     */
     public List<CardMeta> cards(String noteId) {
         List<CardMeta> out = new ArrayList<>();
-        for (CardRef ref : cardsOf(noteId)) {
+        for (Card ref : cardsOf(noteId)) {
             CardData data = readCard(ref);
             if (data != null && data.meta() != null) {
                 out.add(data.meta());
@@ -750,11 +731,13 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return out;
     }
 
-    /** 全部卡片元数据（维护/导出用；会读所有卡片文件）。 */
+    /**
+     * 全部卡片元数据（维护/导出用；会读所有卡片文件）。
+     */
     public List<CardMeta> allCards() {
         List<CardMeta> out = new ArrayList<>();
-        for (NoteMeta note : getAll()) {
-            for (CardRef ref : note.cards()) {
+        for (NoteMeta note : findAll()) {
+            for (Card ref : note.cards()) {
                 CardData data = readCard(ref);
                 if (data != null && data.meta() != null) {
                     out.add(data.meta());
@@ -764,19 +747,25 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return out;
     }
 
-    /** 卡片文件在磁盘上的路径（找不到给 {@code null}）。 */
+    /**
+     * 卡片文件在磁盘上的路径（找不到给 {@code null}）。
+     */
     public Path fileOf(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? null : cardPath(owned.ref());
     }
 
-    /** 列表页摘要：直接取 meta 里写好的缓存，不读卡片。 */
+    /**
+     * 列表页摘要：直接取 meta 里写好的缓存，不读卡片。
+     */
     public String summary(String noteId) {
         NoteMeta note = getOne(noteId);
         return note == null ? "" : note.summary();
     }
 
-    /** 读卡片上的插件扩展区（没有就给空 map）。 */
+    /**
+     * 读卡片上的插件扩展区（没有就给空 map）。
+     */
     public Map<String, Object> extension(String cardId, String pluginId) {
         CardMeta card = card(cardId);
         if (card == null) {
@@ -791,7 +780,9 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return Map.of();
     }
 
-    /** 写卡片上的插件扩展区。 */
+    /**
+     * 写卡片上的插件扩展区。
+     */
     public CardMeta putExtension(String cardId, String pluginId, Map<String, Object> value) {
         CardMeta card = card(cardId);
         if (card == null) {
@@ -802,13 +793,17 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     // ---- 与拆分前同名的方法（语义一致）：让调用方迁移只改注入类型，减少本批改动面 ----
 
-    /** 这张卡属于哪篇笔记（找不到给 {@code null}）。 */
+    /**
+     * 这张卡属于哪篇笔记（找不到给 {@code null}）。
+     */
     public String noteIdOf(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? null : owned.note().id();
     }
 
-    /** 卡片正文；与 {@link #contentOf(String)} 同义。 */
+    /**
+     * 卡片正文；与 {@link #contentOf(String)} 同义。
+     */
     public String content(String cardId) {
         return contentOf(cardId);
     }
@@ -836,10 +831,10 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public int dropMissingCards() {
         int dropped = 0;
-        for (NoteMeta note : getAll()) {
-            List<CardRef> kept = new ArrayList<>();
+        for (NoteMeta note : findAll()) {
+            List<Card> kept = new ArrayList<>();
             boolean changed = false;
-            for (CardRef ref : note.cards()) {
+            for (Card ref : note.cards()) {
                 if (java.nio.file.Files.isRegularFile(cardPath(ref))) {
                     kept.add(ref);
                 } else {
@@ -863,8 +858,8 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public int claimUnmanaged() {
         java.util.Set<String> known = new java.util.HashSet<>();
-        for (NoteMeta note : getAll()) {
-            for (CardRef ref : note.cards()) {
+        for (NoteMeta note : findAll()) {
+            for (Card ref : note.cards()) {
                 known.add(ref.file());
             }
         }
@@ -879,30 +874,30 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         return claimed;
     }
 
-    /** 把一个游离的 md 认领成单卡笔记：补上卡片注释、建笔记 meta、算好列表页缓存。 */
+    /**
+     * 把一个游离的 md 认领成单卡笔记：补上卡片注释、建笔记 meta、算好列表页缓存。
+     */
     private void claim(String relative) {
         Path file = paths().root().resolve(relative);
         CardData data = noteStoreRead(file);
         long now = System.currentTimeMillis();
         String content = data == null ? "" : data.content();
-        CardMeta card = data != null && data.meta() != null
-                ? data.meta()
-                : CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, now);
-        CardRef ref = CardRef.of(card.id(), relative);
+        CardMeta card = data != null && data.meta() != null ? data.meta() : CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, now);
+        Card ref = Card.of(card.id(), relative);
         String title = titleFromContent(content, file);
         // 认领的笔记也必须归属一个分组：直接落默认分组（不变量在创建点收口）。
-        writeNoteMeta(NoteMeta.newNoteMeta(Ids.newId(), title, "note", null, null, null,
-                NotebookBook.DEFAULT_GROUP_ID, now)
-                .withCards(List.of(ref)));
+        writeNoteMeta(NoteMeta.newNoteMeta(Ids.newId(), title, "note", NotebookBook.DEFAULT_GROUP_ID, now).withCards(List.of(ref)));
         writeCardMeta(card, cardPath(ref));
         refreshCachedView(noteIdOf(card.id()));
     }
 
     private CardData noteStoreRead(Path file) {
-        return readCard(new CardRef("", paths().relative(file)));
+        return readCard(new Card("", paths().relative(file)));
     }
 
-    /** 标题兜底：正文首个标题 → 文件名（去掉 .md 与尾部随机串）→ "无标题笔记"。 */
+    /**
+     * 标题兜底：正文首个标题 → 文件名（去掉 .md 与尾部随机串）→ "无标题笔记"。
+     */
     private static String titleFromContent(String content, Path file) {
         String heading = Markdown.firstHeading(content);
         if (heading != null && !heading.isBlank()) {

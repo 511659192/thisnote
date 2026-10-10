@@ -74,7 +74,7 @@ export interface NotePageData {
   updatedAt: number
 }
 
-export interface CardRef {
+export interface Card {
   /** 卡片 id：稳定身份（文件名变了也不变），按需取内容时用它。 */
   id: string
   /** 卡片文件相对保险库根目录的路径；顺序即阅读顺序。 */
@@ -89,40 +89,36 @@ export interface NoteMeta {
   id: string
   title: string
   type: NoteType
-  dailyDate?: string | null
-  source?: string | null
-  status?: string | null
-  deleted: boolean
-  deletedAt?: number | null
   /** 标签名。颜色与计数只在独立的 `GET /api/tags` 目录里，列表接口不背。 */
   tags: string[]
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
   /** 本篇的卡片清单（顺序即阅读顺序）。 */
-  cards: CardRef[]
+  cards: Card[]
   /** 列表页摘要：正文的纯文本前缀。 */
   summary: string
-  /** 出链清单（写时算好）：target 原文 + label 显示文字 + to 解析到的笔记 id。 */
-  links: LinkRef[]
-  outboundCount: number
-  inboundCount: number
-  unresolvedCount: number
+  /** 出链清单（写时算好）：raw 原文 + label 显示文字 + to 解析到的笔记 id。 */
+  outLinks: Link[]
+  /** 入链清单（对端写入时落过来）：from 是来源笔记。 */
+  inLinks: Link[]
+  outLinksCount: number
+  inLinksCount: number
+  unresolvedLinksCount: number
   createdAt: number
   updatedAt: number
 }
 
-export interface LinkRef {
-  target: string
-  label?: string | null
+/**
+ * 一条链接（出链/入链共用同一个形状），方向由 `from → to` 表达。
+ *
+ * `to` 为空表示正文里写了 `[[...]]` 但目标还没建（此时靠 `raw` 显示原文并"点击新建"）；
+ * `raw` 只有出链有。
+ */
+export interface Link {
+  from?: string | null
   to?: string | null
-}
-
-/** meta 缓存的入链（PO 直出）：标题按 `fromId` 在笔记列表里现查。 */
-export interface InboundRef {
-  fromId: string
   label?: string | null
-  context?: string | null
-  updatedAt: number
+  raw?: string | null
 }
 
 export interface NoteDetail {
@@ -130,16 +126,12 @@ export interface NoteDetail {
   title: string
   contentMd: string
   type: NoteType
-  source?: string | null
-  status?: string | null
-  deleted: boolean
-  dailyDate?: string | null
-  /** 卡片清单（只有身份）：页面级数据按需取，见 {@link CardRef}。 */
-  cards: CardRef[]
   tags: string[]
+  /** 卡片清单（只有身份）：页面级数据按需取，见 {@link Card}。 */
+  cards: Card[]
   notebooks: Notebook[]
-  outbound: LinkRef[]
-  backlinks: InboundRef[]
+  outbound: Link[]
+  backlinks: Link[]
   unresolved: string[]
   unlinkedMentions: string[]
   createdAt: number
@@ -155,10 +147,3 @@ export interface OpEntry {
   createdAt: number
 }
 
-/** 笔记目录的同步事件（外部改动被发现时产生），见后端的 NoteSyncService。 */
-/** List filter used by the sidebar (F-N-03). */
-export type ListFilter =
-  | 'all'
-  | 'daily'
-  | 'template'
-  | 'trash'

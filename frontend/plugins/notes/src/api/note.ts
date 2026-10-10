@@ -1,8 +1,7 @@
 import { http } from '@/core/http'
-import type { NoteDetail, NoteMeta, ListFilter } from './types'
+import type { NoteDetail, NoteMeta } from './types'
 
 export interface NoteQuery {
-  filter?: ListFilter
   tag?: string
   notebookId?: string
   type?: string
@@ -19,10 +18,7 @@ export const noteApi = {
     title?: string
     contentMd?: string
     type?: string
-    dailyDate?: string
     tags?: string[]
-    source?: string
-    status?: string
       notebookId?: string
   }) => http.post<NoteDetail>('/api/notes', payload),
 

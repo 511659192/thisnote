@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.domain;
 
-import java.io.IOException;
+import com.alibaba.fastjson2.JSON;
 
 /**
  * 卡片文件的格式：一行 meta 注释 + 正文。
@@ -31,7 +31,7 @@ public final class CardFile {
 
     /** 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。 */
     public static String compose(CardMeta meta, String contentMd) {
-        String json = MetaJson.toCompactJson(meta)
+        String json = JSON.toJSONString(meta)
                 .replace("\r", " ")
                 .replace("\n", " ");
         return META_PREFIX + json + META_SUFFIX + "\n" + (contentMd == null ? "" : contentMd);
@@ -48,8 +48,8 @@ public final class CardFile {
                 .substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length())
                 .strip();
         try {
-            return MetaJson.fromJson(json, CardMeta.class);
-        } catch (IOException | RuntimeException e) {
+            return JSON.parseObject(json, CardMeta.class);
+        } catch (RuntimeException e) {
             return null;
         }
     }
@@ -64,11 +64,6 @@ public final class CardFile {
             return fileContent;
         }
         return newline < 0 ? "" : fileContent.substring(newline + 1);
-    }
-
-    /** 文件是否带 thisnode 的 meta 注释。 */
-    public static boolean hasMeta(String fileContent) {
-        return firstLineOf(fileContent).startsWith(META_PREFIX);
     }
 
     private static String firstLineOf(String fileContent) {

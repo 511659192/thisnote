@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,9 +34,7 @@ class NoteListTagsTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        NoteRepository store = new NoteRepository(config);
+        NoteRepository store = new NoteRepository(new NoteFilePaths(root));
         NoteRepository noteRepository = store;
         CardRepository blockRepository = new CardRepository(store);
         tagRepository = new TagRepository(store);
@@ -47,7 +45,7 @@ class NoteListTagsTest {
     }
 
     private String newNote(String title, List<String> tags) {
-        return noteService.create(new Dtos.CreateNodeRequest(title, "", "note", null, tags, null, null, null));
+        return noteService.create(new Dtos.CreateNodeRequest(title, "", "note", tags, null));
     }
 
     @Test

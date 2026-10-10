@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.CardFile;
 import com.thisnode.ext.notes.domain.NoteMeta;
@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -38,9 +37,7 @@ class NoteCardConflictTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         cardRepository = new CardRepository(store);
         repository = new CardRepository(store);
     }
@@ -48,7 +45,7 @@ class NoteCardConflictTest {
     /** 建一篇笔记 + 一张卡，返回卡片 id（正文 = 原始内容）。 */
     private String seedCard() {
         String noteId = "note-1";
-        store.writeNoteMeta(NoteMeta.newNoteMeta(noteId, "笔记", "note", null, null, null, null, 1L));
+        store.writeNoteMeta(NoteMeta.newNoteMeta(noteId, "笔记", "note", null, 1L));
         cardRepository.putCard(noteId, CardMeta.newCardMeta("card-1", 0, 0, "", null, null, 1L), "原始内容");
         return "card-1";
     }

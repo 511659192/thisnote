@@ -1,9 +1,5 @@
 package com.thisnode.ext.notes.domain;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,18 +9,16 @@ import java.util.List;
  * <p>分组只有个位到十位数量级，不值得一份文件一个。**笔记的归属不在这里**——它在各自笔记 meta 的
  * {@code notebookId} 里，所以移动一篇笔记只改那一个文件，不会牵动全库台账。
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public record NotebookBook(int v,
-                           @JsonProperty("notebooks") List<Notebook> notebooks) {
+                           List<Notebook> notebooks) {
 
     public static final int SCHEMA = 1;
     public static final String DEFAULT_GROUP_ID = "grp-default";
     public static final String DEFAULT_GROUP_TITLE = "收集箱";
     public static final String TYPE_NOTEBOOK = "notebook";
 
-    /** {@code @JsonCreator(PROPERTIES)}：显式声明这个 canonical 构造器就是 JSON 的属性绑定入口。 */
-    @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public NotebookBook(int v, @JsonProperty("notebooks") List<Notebook> notebooks) {
+    /** 规范构造器：归一化缺省/非法值（{@code v} 补成当前 SCHEMA、清单不可变）。 */
+    public NotebookBook(int v, List<Notebook> notebooks) {
         this.v = v <= 0 ? SCHEMA : v;
         this.notebooks = notebooks == null ? List.of() : List.copyOf(notebooks);
     }
@@ -81,7 +75,6 @@ public record NotebookBook(int v,
         return new NotebookBook(v, next);
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Notebook(int v, String id, String type, String title, String parentId,
                             String icon, int sortOrder, long createdAt, long updatedAt) {
 

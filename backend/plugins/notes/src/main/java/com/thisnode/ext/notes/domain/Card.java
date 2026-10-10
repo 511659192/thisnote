@@ -1,7 +1,5 @@
 package com.thisnode.ext.notes.domain;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 /**
  * 笔记清单里的一张卡片：{@code id} + 文件路径。
  *
@@ -12,10 +10,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param id   卡片 id（稳定身份；文件名变了不影响它）
  * @param file 卡片文件相对笔记目录根目录的路径；顺序由它在清单里的位置决定
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public record CardRef(String id, String file) {
+public record Card(String id, String file) {
 
-    public static CardRef of(String id, String file) {
-        return new CardRef(id, file);
+    public static Card of(String id, String file) {
+        return new Card(id, file);
     }
 }

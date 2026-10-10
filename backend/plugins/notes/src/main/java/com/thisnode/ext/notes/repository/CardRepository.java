@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardFile;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.domain.CardRef;
+import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
@@ -268,29 +268,29 @@ public class CardRepository {
         if (note == null) {
             return null;
         }
-        CardRef existing = refOf(note, card.id());
+        Card existing = refOf(note, card.id());
         Path knownFile = existing == null ? null : noteRepository.cardPath(existing);
         Path file = knownFile != null ? knownFile
                 : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
                         card.id());
         noteRepository.writeText(file, CardFile.compose(card, contentMd));
-        CardRef ref = CardRef.of(card.id(), noteFilePaths.relative(file));
+        Card ref = Card.of(card.id(), noteFilePaths.relative(file));
 
-        List<CardRef> cardRefs = new ArrayList<>(note.cards());
-        int at = indexOf(cardRefs, card.id());
+        List<Card> cards = new ArrayList<>(note.cards());
+        int at = indexOf(cards, card.id());
         if (at >= 0) {
-            cardRefs.set(at, ref);
-        } else if (slot >= 0 && slot < cardRefs.size()) {
-            cardRefs.add(slot, ref);
+            cards.set(at, ref);
+        } else if (slot >= 0 && slot < cards.size()) {
+            cards.add(slot, ref);
         } else {
-            cardRefs.add(ref);
+            cards.add(ref);
         }
-        noteRepository.writeNoteMeta(note.withCards(cardRefs).touched(System.currentTimeMillis()));
+        noteRepository.writeNoteMeta(note.withCards(cards).touched(System.currentTimeMillis()));
         noteRepository.refreshCachedView(noteId);
         return card;
     }
 
-    /** 只改卡片元数据；与 {@link #writeCardMeta(CardMeta, CardRef)} 同义。 */
+    /** 只改卡片元数据；与 {@link #writeCardMeta(CardMeta, Card)} 同义。 */
     public void putCardMeta(CardMeta card) {
         if (card == null) {
             return;
@@ -309,9 +309,9 @@ public class CardRepository {
             return;
         }
         noteRepository.deleteCardFiles(noteRepository.cardPath(owned.ref()));
-        List<CardRef> cardRefs = new ArrayList<>(owned.note().cards());
-        cardRefs.removeIf(ref -> ref.id().equals(cardId));
-        noteRepository.writeNoteMeta(owned.note().withCards(cardRefs).touched(System.currentTimeMillis()));
+        List<Card> cards = new ArrayList<>(owned.note().cards());
+        cards.removeIf(ref -> ref.id().equals(cardId));
+        noteRepository.writeNoteMeta(owned.note().withCards(cards).touched(System.currentTimeMillis()));
         noteRepository.refreshCachedView(owned.note().id());
     }
 
@@ -338,8 +338,8 @@ public class CardRepository {
         return noteFilePaths.cardsDir().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
     }
 
-    private static CardRef refOf(NoteMeta note, String cardId) {
-        for (CardRef ref : note.cards()) {
+    private static Card refOf(NoteMeta note, String cardId) {
+        for (Card ref : note.cards()) {
             if (ref.id().equals(cardId)) {
                 return ref;
             }
@@ -347,9 +347,9 @@ public class CardRepository {
         return null;
     }
 
-    private static int indexOf(List<CardRef> cardRefs, String cardId) {
-        for (int i = 0; i < cardRefs.size(); i++) {
-            if (cardRefs.get(i).id().equals(cardId)) {
+    private static int indexOf(List<Card> cards, String cardId) {
+        for (int i = 0; i < cards.size(); i++) {
+            if (cards.get(i).id().equals(cardId)) {
                 return i;
             }
         }

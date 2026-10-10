@@ -1,13 +1,12 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.util.Ids;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.nio.file.Path;
 
@@ -28,9 +27,7 @@ class NotebookRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         notebooks = new NotebookRepository(store);
     }
 
@@ -76,7 +73,7 @@ class NotebookRepositoryTest {
         String sub = notebooks.create("子分组", parent, null, "notebook");
         assertThat(notebooks.find(sub).parentId()).isEqualTo(parent);
 
-        String noteId = store.insert("带归属的笔记", "note", null, null, null);
+        String noteId = store.insert("带归属的笔记", "note");
         new CardRepository(store).putCard(noteId, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null,
                 System.currentTimeMillis()), "");
         notebooks.addNodeToNotebook(noteId, parent);

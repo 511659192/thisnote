@@ -3,13 +3,12 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.util.Ids;
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -38,9 +37,7 @@ class NoteLinkSearchTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         cardRepository = new CardRepository(store);
 
         nodes = store;
@@ -54,7 +51,7 @@ class NoteLinkSearchTest {
     }
 
     private String newNote(String title, String contentMd) {
-        String id = nodes.insert(title, "note", null, null, null);
+        String id = nodes.insert(title, "note");
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
         cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null,
                 Instant.now().toEpochMilli()), contentMd);
@@ -75,8 +72,8 @@ class NoteLinkSearchTest {
 
         assertThat(links.inbound(target)).hasSize(1);
         // 引用面板的数据源是对端 meta 里的入链缓存（不再有 backlinks 查询）
-        assertThat(nodes.getOne(target).inbound()).singleElement()
-                .satisfies(entry -> assertThat(entry.fromId()).isEqualTo(source));
+        assertThat(nodes.getOne(target).inLinks()).singleElement()
+                .satisfies(entry -> assertThat(entry.from()).isEqualTo(source));
         assertThat(links.total()).isEqualTo(2);
         assertThat(links.stubExists("还没有的笔记")).isTrue();
         assertThat(links.listStubs()).extracting(m -> m.get("title"))
@@ -90,7 +87,7 @@ class NoteLinkSearchTest {
         assertThat(links.outbound(source).get(0).toNodeId()).isNull();
 
         String target = service.create(new Dtos.CreateNodeRequest(
-                "以后才写的", "", "note", null, null, null, null, null));
+                "以后才写的", "", "note", null, null));
 
         assertThat(links.outbound(source).get(0).toNodeId()).isEqualTo(target);
         assertThat(links.stubExists("以后才写的")).isFalse();

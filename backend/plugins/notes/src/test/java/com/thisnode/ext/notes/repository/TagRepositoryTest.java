@@ -1,14 +1,13 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.TagBook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -31,14 +30,12 @@ class TagRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         tags = new TagRepository(store);
     }
 
     private void seedNote(String id, String... tagNames) {
-        NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null, null, null, null, 1L);
+        NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null, 1L);
         store.writeNoteMeta(meta.withTags(List.of(tagNames)));
     }
 

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { tagApi, notebookApi } from '@/api'
-import type { ListFilter, NoteDetail, NoteMeta, Notebook, Tag } from '@/api/types'
+import type { NoteDetail, NoteMeta, Notebook, Tag } from '@/api/types'
 import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter } from '@thisnode/plugin-api'
 import { useUiStore } from './ui'
 
@@ -26,7 +26,6 @@ export const useNoteStore = defineStore('notes', () => {
   const tags = ref<Tag[]>([])
   const notebooks = ref<Notebook[]>([])
 
-  const filter = ref<ListFilter>('all')
   const activeTag = ref<string | null>(null)
   const activeNotebookId = ref<string | null>(null)
   const listQuery = ref('')
@@ -50,21 +49,13 @@ export const useNoteStore = defineStore('notes', () => {
     if (activeNotebookId.value) {
       return notebooks.value.find((n) => n.id === activeNotebookId.value)?.title ?? '笔记本'
     }
-    return (
-      {
-        all: '全部笔记',
-        daily: '每日笔记',
-        template: '模板',
-        trash: '回收站',
-      } as Record<ListFilter, string>
-    )[filter.value]
+    return '全部笔记'
   })
 
   async function loadList() {
     loadingList.value = true
     try {
       nodes.value = await noteApi.list({
-        filter: filter.value,
         tag: activeTag.value ?? undefined,
         notebookId: activeNotebookId.value ?? undefined,
         text: listQuery.value || undefined,
@@ -151,8 +142,8 @@ export const useNoteStore = defineStore('notes', () => {
     await Promise.all([loadList(), refreshMeta()])
   }
 
-  function setFilter(next: ListFilter) {
-    filter.value = next
+  /** 回到「全部笔记」：清掉标签/分组限定，重新拉列表。 */
+  function showAll() {
     activeTag.value = null
     activeNotebookId.value = null
     void loadList()
@@ -161,7 +152,6 @@ export const useNoteStore = defineStore('notes', () => {
   function setTag(tag: string | null) {
     activeTag.value = tag
     if (tag) {
-      filter.value = 'all'
       activeNotebookId.value = null
     }
     void loadList()
@@ -170,7 +160,6 @@ export const useNoteStore = defineStore('notes', () => {
   function setNotebook(id: string | null) {
     activeNotebookId.value = id
     if (id) {
-      filter.value = 'all'
       activeTag.value = null
     }
     void loadList()
@@ -368,8 +357,6 @@ export const useNoteStore = defineStore('notes', () => {
   async function updateCurrent(changes: {
     title?: string
     tags?: string[]
-    status?: string
-    source?: string
     notebookId?: string
   }): Promise<NoteDetail | null> {
     if (!current.value) return null
@@ -481,8 +468,6 @@ export const useNoteStore = defineStore('notes', () => {
 
 
   async function updateMeta(changes: {
-    status?: string
-    source?: string
     tags?: string[]
     notebookId?: string
     clearNotebook?: boolean
@@ -552,7 +537,6 @@ export const useNoteStore = defineStore('notes', () => {
     savedAt,
     tags,
     notebooks,
-    filter,
     activeTag,
     activeNotebookId,
     listQuery,
@@ -562,7 +546,7 @@ export const useNoteStore = defineStore('notes', () => {
     loadList,
     refreshMeta,
     refreshAll,
-    setFilter,
+    showAll,
     setTag,
     setNotebook,
     setListQuery,

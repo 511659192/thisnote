@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.domain.LinkRef;
+import com.thisnode.ext.notes.domain.Link;
 import com.thisnode.ext.notes.util.Markdown;
 import org.springframework.stereotype.Repository;
 
@@ -52,27 +52,24 @@ public class LinkRepository {
         Set<String> stubs = new LinkedHashSet<>();
         Map<String, String> display = new LinkedHashMap<>();
         int total = 0;
-        for (NoteMeta meta : noteRepository.getAll()) {
-            if (meta.deleted()) {
-                continue;
-            }
+        for (NoteMeta meta : noteRepository.findAll()) {
             List<LinkRow> rows = new ArrayList<>();
             Set<String> seen = new HashSet<>();
             int seq = 0;
-            for (LinkRef link : meta.links()) {
-                String key = Markdown.normalizeTitle(link.target()) + "|" + link.label();
+            for (Link link : meta.outLinks()) {
+                String key = Markdown.normalizeTitle(link.raw()) + "|" + link.label();
                 if (!seen.add(key)) {
                     continue;
                 }
                 LinkRow row = new LinkRow(meta.id() + "#" + (seq++), meta.id(), link.to(),
-                        link.target(), link.label(), "wiki", meta.updatedAt());
+                        link.raw(), link.label(), "wiki", meta.updatedAt());
                 rows.add(row);
                 total++;
-                if (link.to() == null) {
-                    String norm = Markdown.normalizeTitle(link.target());
+                if (link.unresolved()) {
+                    String norm = Markdown.normalizeTitle(link.raw());
                     if (!norm.isEmpty()) {
                         stubs.add(norm);
-                        display.putIfAbsent(norm, link.target());
+                        display.putIfAbsent(norm, link.raw());
                     }
                 } else {
                     inbound.computeIfAbsent(link.to(), k -> new ArrayList<>()).add(row);

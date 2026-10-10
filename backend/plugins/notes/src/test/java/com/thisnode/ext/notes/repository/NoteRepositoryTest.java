@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.CardFile;
@@ -39,9 +39,7 @@ class NoteRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        NotesConfig config = Mockito.mock(NotesConfig.class);
-        Mockito.when(config.markdownRoot()).thenReturn(root);
-        store = new NoteRepository(config);
+        store = new NoteRepository(new NoteFilePaths(root));
         cardRepository = new CardRepository(store);
 
         noteRepository = store;
@@ -55,7 +53,7 @@ class NoteRepositoryTest {
     }
 
     private String newGetOne(String title, String contentMd) {
-        String id = noteRepository.insert(title, "note", null, null, null);
+        String id = noteRepository.insert(title, "note");
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
         cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null,
                 System.currentTimeMillis()), contentMd);
@@ -76,8 +74,8 @@ class NoteRepositoryTest {
     }
 
     @Test
-    @DisplayName("软删除只改标记、卡片文件还在；硬删除把文件一起清掉")
-    void trashKeepsFilesAndPurgeRemovesThem() throws IOException {
+    @DisplayName("硬删除把卡片文件与 meta 一起清掉")
+    void deleteRemovesEveryFile() throws IOException {
         String id = newGetOne("要删的笔记", "内容还在");
         String cardId = store.cards(id).get(0).id();
         Path card = store.fileOf(cardId);
@@ -86,14 +84,6 @@ class NoteRepositoryTest {
                 .startsWith(CardFile.META_PREFIX)
                 .contains(cardId);
 
-        store.writeNoteMeta(store.getOne(id).withDeleted(true));
-        assertThat(store.getOne(id).deleted()).isTrue();
-        assertThat(Files.exists(card)).isTrue();
-
-        store.writeNoteMeta(store.getOne(id).withDeleted(false));
-        assertThat(store.getOne(id).deleted()).isFalse();
-
-        store.writeNoteMeta(store.getOne(id).withDeleted(true));
         noteRepository.delete(id);
         assertThat(Files.exists(card)).isFalse();
         assertThat(noteRepository.getOne(id)).isNull();
@@ -151,26 +141,19 @@ class NoteRepositoryTest {
     }
 
     @Test
-    @DisplayName("列表过滤（回收站 / 标签 / 全文）在内存过滤上等价于旧的 SQL 条件")
+    @DisplayName("列表过滤（标签 / 全文）在内存过滤上等价于旧的 SQL 条件")
     void listFiltersMatchTheOldSql() {
         String a = newGetOne("苹果笔记", "关于苹果的正文");
         String b = newGetOne("香蕉笔记", "关于香蕉的正文");
         assertThat(noteService.list(NoteService.Query.defaults())).hasSize(2);
 
-        assertThat(noteService.list(new NoteService.Query("all", null, null, null, "苹果",
-                false, 500, 0)))
+        assertThat(noteService.list(new NoteService.Query(null, null, null, "苹果", 500, 0)))
                 .extracting(s -> s.id()).containsExactly(a);
-        assertThat(noteService.list(new NoteService.Query("all", null, null, null, "香蕉",
-                false, 500, 0)))
+        assertThat(noteService.list(new NoteService.Query(null, null, null, "香蕉", 500, 0)))
                 .extracting(s -> s.id()).containsExactly(b);
 
         tagRepository.setNodeTags(a, List.of("水果"));
-        assertThat(noteService.list(new NoteService.Query("all", "水果", null, null, null,
-                false, 500, 0)))
+        assertThat(noteService.list(new NoteService.Query("水果", null, null, null, 500, 0)))
                 .extracting(s -> s.id()).containsExactly(a);
-
-        store.writeNoteMeta(store.getOne(b).withDeleted(true));
-        assertThat(noteService.list(new NoteService.Query("trash", null, null, null, null,
-                false, 500, 0))).extracting(s -> s.id()).containsExactly(b);
     }
 }

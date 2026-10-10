@@ -15,7 +15,7 @@ import {
   type NoteListFilter,
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
-import type { ListFilter, Notebook } from '@/api/types'
+import type { Notebook } from '@/api/types'
 
 /**
  * 笔记域的侧栏主面板：新建、视图筛选、分组树、插件筛选、插件入口与标签。
@@ -79,11 +79,7 @@ function onVisibility() {
   if (document.visibilityState === 'visible') void refreshPlugins()
 }
 
-const filters = computed<{ key: ListFilter; label: string; icon: string }[]>(() => [
-  { key: 'all', label: '全部笔记', icon: '▤' },
-])
-
-/** 插件提供的列表筛选（例如「收藏」）：和核心筛选同级，只是给同一份列表加一个条件。 */
+/** 插件提供的列表筛选（例如「收藏」）：和核心的「全部笔记」同级，只是给同一份列表加一个条件。 */
 /** 侧栏只渲染可见筛选：hidden 的筛选（如搜索框）由插件自己的 UI 激活，不占侧栏行。 */
 const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters().filter((f) => !f.hidden))
 
@@ -92,9 +88,9 @@ function openPluginFilter(filter: NoteListFilter) {
   void router.push('/notes')
 }
 
-function openFilter(key: ListFilter) {
+function openAll() {
   clearActiveListFilter()
-  nodes.setFilter(key)
+  nodes.showAll()
   void router.push('/notes')
 }
 
@@ -251,35 +247,27 @@ watch(
     </div>
     <nav class="section scroll">
       <div class="group-title">笔记</div>
-      <template v-for="f in filters" :key="f.key">
-        <button
-          class="nav-item"
-          :class="{ active: !isPluginPage && nodes.filter === f.key && !nodes.activeTag && !nodes.activeNotebookId }"
-          @click="openFilter(f.key)"
-        >
-          <!-- 「全部笔记」的图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
-          <span
-            v-if="f.key === 'all'"
-            class="ico-swap"
-            title="新建分组"
-            @click.stop="promptNewGroup(null)"
-          >
-            <span class="ico base">{{ f.icon }}</span>
-            <span class="ico add">＋</span>
-          </span>
-          <span v-else class="ico">{{ f.icon }}</span>
-          <span class="label">{{ f.label }}</span>
-          <!-- 「全部笔记」是分组树的根：分组就是它的下一层；鼠标移上去图标变＋＝新建分组 -->
-          <span
-            v-if="f.key === 'all'"
-            class="caret root-caret"
-            :title="nodes.groupsShown ? '收起分组' : '展开分组'"
-            @click.stop="nodes.groupsShown = !nodes.groupsShown"
-          >{{ nodes.groupsShown ? '▾' : '▸' }}</span>
-        </button>
+      <button
+        class="nav-item"
+        :class="{ active: !isPluginPage && !nodes.activeTag && !nodes.activeNotebookId }"
+        @click="openAll()"
+      >
+        <!-- 图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
+        <span class="ico-swap" title="新建分组" @click.stop="promptNewGroup(null)">
+          <span class="ico base">▤</span>
+          <span class="ico add">＋</span>
+        </span>
+        <span class="label">全部笔记</span>
+        <!-- 「全部笔记」是分组树的根：分组就是它的下一层 -->
+        <span
+          class="caret root-caret"
+          :title="nodes.groupsShown ? '收起分组' : '展开分组'"
+          @click.stop="nodes.groupsShown = !nodes.groupsShown"
+        >{{ nodes.groupsShown ? '▾' : '▸' }}</span>
+      </button>
 
         <!-- 分组树：挂在「全部笔记」下面，可无限嵌套（后端 notebooks.parent_id 本来就是这个意思） -->
-        <template v-if="f.key === 'all' && nodes.groupsShown">
+        <template v-if="nodes.groupsShown">
           <button
             v-for="row in nodes.visibleGroups"
             :key="row.group.id"
@@ -313,7 +301,6 @@ watch(
           </button>
         </template>
 
-      </template>
       <!-- 插件提供的筛选（例如「收藏」）：与核心筛选同组同级，因为它就是同一份列表的一个条件 -->
       <button
         v-for="pf in pluginFilters"

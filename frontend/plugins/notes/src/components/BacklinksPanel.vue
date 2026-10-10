@@ -15,7 +15,7 @@ const tab = ref<'backlinks' | 'outbound' | 'info'>('backlinks')
 
 const mentions = computed(() => props.doc.unlinkedMentions ?? [])
 
-/** 入链是 PO 直出（只有 fromId）：标题从笔记列表现查，查不到退回 id。 */
+/** 入链是 PO 直出（只有对端 id）：标题从笔记列表现查，查不到退回 id。 */
 const noteTitle = (id: string) => nodes.nodes.find((n) => n.id === id)?.title ?? id
 
 const created = computed(() => new Date(props.doc.createdAt).toLocaleString())
@@ -39,12 +39,11 @@ const updated = computed(() => formatRelative(props.doc.updatedAt))
         <div v-if="!doc.backlinks.length" class="small muted pad">还没有笔记引用它。</div>
         <button
           v-for="b in doc.backlinks"
-          :key="b.fromId + (b.label ?? '')"
+          :key="(b.from ?? '') + (b.label ?? '')"
           class="backlink"
-          @click="emit('open', b.fromId)"
+          @click="emit('open', b.from ?? '')"
         >
-          <span class="bl-title">{{ noteTitle(b.fromId) }}</span>
-          <span v-if="b.context" class="bl-context small muted">{{ b.context }}</span>
+          <span class="bl-title">{{ noteTitle(b.from ?? '') }}</span>
         </button>
       </template>
 
@@ -52,12 +51,12 @@ const updated = computed(() => formatRelative(props.doc.updatedAt))
         <div v-if="!doc.outbound.length" class="small muted pad">
           没有出链。正文里输入 <code>[[</code> 可链接其他笔记。
         </div>
-        <div v-for="l in doc.outbound" :key="(l.label ?? '') + l.target" class="outbound">
+        <div v-for="l in doc.outbound" :key="(l.label ?? '') + l.raw" class="outbound">
           <button v-if="l.to" class="link-btn" @click="emit('open', l.to)">
-            [[{{ l.label || l.target }}]]
+            [[{{ l.label || l.raw }}]]
           </button>
-          <button v-else class="link-btn unresolved" @click="emit('create', l.target)">
-            [[{{ l.target }}]] <span class="small">未创建，点击新建</span>
+          <button v-else class="link-btn unresolved" @click="emit('create', l.raw ?? '')">
+            [[{{ l.raw }}]] <span class="small">未创建，点击新建</span>
           </button>
         </div>
       </template>
@@ -70,10 +69,6 @@ const updated = computed(() => formatRelative(props.doc.updatedAt))
           <dd>{{ created }}</dd>
           <dt>更新</dt>
           <dd>{{ updated }}</dd>
-          <dt v-if="doc.source">来源</dt>
-          <dd v-if="doc.source">{{ doc.source }}</dd>
-          <dt>状态</dt>
-          <dd>{{ doc.status || '—' }}</dd>
           <dt>笔记本</dt>
           <dd>{{ doc.notebooks.map((c) => c.title).join('、') || '—' }}</dd>
         </dl>
@@ -149,13 +144,6 @@ const updated = computed(() => formatRelative(props.doc.updatedAt))
 .bl-title {
   font-size: 13px;
   font-weight: 500;
-}
-.bl-context {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 .outbound {
   padding: 3px 0;

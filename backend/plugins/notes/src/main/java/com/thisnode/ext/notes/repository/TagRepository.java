@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
+import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.MetaJson;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.TagBook;
 import org.slf4j.Logger;
@@ -70,7 +70,7 @@ public class TagRepository {
             if (raw.isBlank()) {
                 return TagBook.empty();
             }
-            return MetaJson.fromJson(raw, TagBook.class);
+            return JSON.parseObject(raw, TagBook.class);
         } catch (IOException | RuntimeException e) {
             log.warn("标签台账无法读取：{}（{}）", noteRepository.paths().relative(file), e.toString());
             return TagBook.empty();
@@ -86,7 +86,7 @@ public class TagRepository {
     private TagBook withNoteTags(TagBook source) {
         TagBook merged = source;
         long now = System.currentTimeMillis();
-        for (NoteMeta meta : noteRepository.getAll()) {
+        for (NoteMeta meta : noteRepository.findAll()) {
             for (String name : meta.tags()) {
                 if (merged.find(name) == null) {
                     merged = merged.with(TagBook.Tag.fresh(name, null, now));
@@ -213,10 +213,7 @@ public class TagRepository {
      */
     public List<Dtos.TagDto> listWithCounts() {
         Map<String, Integer> counts = new HashMap<>();
-        for (NoteMeta meta : noteRepository.getAll()) {
-            if (meta.deleted()) {
-                continue;
-            }
+        for (NoteMeta meta : noteRepository.findAll()) {
             for (String tag : meta.tags()) {
                 counts.merge(tag.toLowerCase(Locale.ROOT), 1, Integer::sum);
             }
@@ -240,7 +237,7 @@ public class TagRepository {
         if (from.isEmpty() || to.isEmpty() || from.equalsIgnoreCase(to)) {
             return;
         }
-        for (NoteMeta meta : noteRepository.getAll()) {
+        for (NoteMeta meta : noteRepository.findAll()) {
             List<String> next = new ArrayList<>();
             boolean changed = false;
             for (String tag : meta.tags()) {

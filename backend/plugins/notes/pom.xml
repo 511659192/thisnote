@@ -35,6 +35,13 @@
       <artifactId>plugin-api</artifactId>
     </dependency>
 
+    <!-- JSON：meta / 台账 / 操作日志的读写。fastjson2 是平台的统一 JSON 库（版本在父 pom 锁），
+         插件运行期由父加载器拿到平台那一份；此前是借 starter-web 传递来的 Jackson，已全部换掉。 -->
+    <dependency>
+      <groupId>com.alibaba.fastjson2</groupId>
+      <artifactId>fastjson2</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.laxture</groupId>
       <artifactId>sbp-core</artifactId>

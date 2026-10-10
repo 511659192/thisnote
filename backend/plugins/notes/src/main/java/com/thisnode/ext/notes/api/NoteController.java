@@ -27,7 +27,6 @@ public class NoteController {
 
     @GetMapping
     public List<NoteMeta> list(
-            @RequestParam(defaultValue = "all") String filter,
             @RequestParam(required = false) String tag,
             @RequestParam(required = false) String notebookId,
             @RequestParam(required = false) String type,
@@ -35,8 +34,7 @@ public class NoteController {
 
             @RequestParam(defaultValue = "500") int limit,
             @RequestParam(defaultValue = "0") int offset) {
-        return noteService.list(new NoteService.Query(filter, tag, notebookId, type, text,
-                false, limit, offset));
+        return noteService.list(new NoteService.Query(tag, notebookId, type, text, limit, offset));
     }
 
     @PostMapping("/create")

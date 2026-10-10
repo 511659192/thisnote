@@ -121,3 +121,15 @@
   ② 打完包**必须读启动日志确认 `[SBP] N plugins are started, 0 failed`**，不能只看 `BUILD SUCCESS`；
   ③ 报告里把"我的改动"与"工作区在途状态导致的失败"分开写，别含糊过去；
   ④ PowerShell 里 `-Dmaven.test.skip=true` 要加引号，否则被拆成 `.test.skip=true` 当成生命周期阶段报错。
+
+## 10. 别把工作区的断口默认说成"用户在改"（第 1 次）
+
+- **纠正来源**：我连续几轮把 notes 测试源码编不过（`NotesConfig` → `NoteFilePaths`）报告成"你在途的重构，我没插手"；
+  用户回：「你来执行 我没有改」。
+- **事实依据**：那 10 个测试文件确实只是**遗留断口**（`NoteRepository` 构造器要 `NoteFilePaths`，测试还 `mock(NotesConfig.class)`），
+  按 `new NoteFilePaths(root)` 改完 + 顺手删掉随之无用的 7 个 `import org.mockito.Mockito;`，`mvn -o -B test` 立刻
+  `Tests run: 38 ... BUILD SUCCESS`（宿主 5 个也绿）。
+- **规则**：发现工作区编不过时，**先问一句"这是你在改吗"再决定要不要动手**，不要直接归因给用户；
+  报告里也只写事实（哪一行、什么错误），不写"这是你的在途改动"这类归因。
+  另外：`pwsh` 里 `mvn … 2>&1 | Select-String …` 有时会把 stderr 当成 NativeCommandError，让整条命令以 exit=1 结束，
+  即使 `BUILD SUCCESS` —— 判断成败请看输出里的 `BUILD SUCCESS/FAILURE` 与 `Tests run`，或显式读 `$LASTEXITCODE`。

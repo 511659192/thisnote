@@ -1,8 +1,7 @@
 package com.thisnode.ext.notes.api.dto;
 
-import com.thisnode.ext.notes.domain.CardRef;
-import com.thisnode.ext.notes.domain.InboundRef;
-import com.thisnode.ext.notes.domain.LinkRef;
+import com.thisnode.ext.notes.domain.Card;
+import com.thisnode.ext.notes.domain.Link;
 
 import java.util.List;
 
@@ -29,23 +28,21 @@ public final class Dtos {
 
     // ---------- nodes ----------
     public record NoteDetail(
-            String id, String title, String contentMd, String type, String source, String status,
-            boolean deleted, String dailyDate,
+            String id, String title, String contentMd, String type,
             /**
              * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
              * 界面侧拿这份清单去 {@code GET /api/notes/cards?ids=}。
              */
-            List<CardRef> cards,
+            List<Card> cards,
             List<String> tags, List<NotebookDto> notebooks,
             /** 出链/入链直接输出 meta 里写时算好的缓存（PO 直出），没有服务端拼装的第二层。 */
-            List<LinkRef> outbound, List<InboundRef> backlinks,
+            List<Link> outbound, List<Link> backlinks,
             List<String> unresolved, List<String> unlinkedMentions,
             long createdAt, long updatedAt) {
     }
 
-    public record CreateNodeRequest(String title, String contentMd, String type, String dailyDate,
-                                    List<String> tags, String source,
-                                    String status, String notebookId) {
+    public record CreateNodeRequest(String title, String contentMd, String type,
+                                    List<String> tags, String notebookId) {
     }
 
     public record UpdateNodeRequest(String title, String contentMd, String source, String status,

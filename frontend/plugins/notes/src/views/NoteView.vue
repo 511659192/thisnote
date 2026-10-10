@@ -51,8 +51,6 @@ const modKey = computed(() => primaryLabel())
 /** `nodes.current` is already the full detail payload, so the panel can take it as-is. */
 const docForPanel = computed(() => nodes.current)
 
-const trashMode = () => nodes.filter === 'trash'
-
 function openNode(id: string) {
   void router.push(`/notes/${id}`)
 }
@@ -257,10 +255,6 @@ function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
     { label: '打开', action: () => openNode(node.id) },
     { label: '移到分组…', action: () => openGroupPicker(node.id) },
   ]
-  if (trashMode()) {
-    entries.push({ separator: true })
-    entries.push({ label: '彻底删除', danger: true, action: () => nodes.deleteForever(node.id) })
-  }
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
 
@@ -330,7 +324,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                   :key="tool.pluginId"
                   :note-id="nodes.current.id"
                 />
-              <span v-if="nodes.current.dailyDate" class="chip accent">{{ nodes.current.dailyDate }}</span>
             </div>
 
             <div class="head-meta">
