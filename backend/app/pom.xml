@@ -55,6 +55,11 @@
       <groupId>com.alibaba.fastjson2</groupId>
       <artifactId>fastjson2-extension-spring6</artifactId>
     </dependency>
+    <!-- notes 插件由父加载器提供共享的 Hutool 工具类。 -->
+    <dependency>
+      <groupId>cn.hutool</groupId>
+      <artifactId>hutool-core</artifactId>
+    </dependency>
     <!-- AOP：Spring 代理的基础（@Transactional / @Async 之类注解生效的前提）。 -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

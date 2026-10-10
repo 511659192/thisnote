@@ -6,7 +6,8 @@ import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.CardRef;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
+import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.plugin.api.ConflictException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -103,7 +104,7 @@ public class CardRepository {
                           String color, String status, String contentMd, String title,
                           Integer slot) {
         long now = System.currentTimeMillis();
-        String id = Ids.newId();
+        String id = IdUtil.randomUUID();
         // 几何默认值住在 CardMeta 里，所以手写的注释与这里写出来的会被同一套规则归一化。
         CardMeta card = new CardMeta(CardMeta.SCHEMA, id,
                 title == null ? "" : title,
@@ -243,7 +244,7 @@ public class CardRepository {
         Path file = knownFile != null ? knownFile
                 : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
                         card.id());
-        noteRepository.writeText(file, CardFile.compose(card, contentMd));
+        JsonFileUtils.writeText(file, CardFile.compose(card, contentMd));
         CardRef ref = new CardRef(card.id(), noteFilePaths.relative(file));
 
         List<CardRef> cards = new ArrayList<>(note.cardRefs());
@@ -255,7 +256,8 @@ public class CardRepository {
         } else {
             cards.add(ref);
         }
-        noteRepository.writeNoteMeta(note.withCards(cards).touched(System.currentTimeMillis()));
+        JsonFileUtils.write(noteRepository.paths().noteMeta(note.id()),
+                note.withCards(cards).touched(System.currentTimeMillis()));
         return card;
     }
 
@@ -279,7 +281,8 @@ public class CardRepository {
         noteRepository.deleteCardFiles(noteRepository.cardPath(owned.ref()));
         List<CardRef> cards = new ArrayList<>(owned.note().cardRefs());
         cards.removeIf(ref -> ref.id().equals(cardId));
-        noteRepository.writeNoteMeta(owned.note().withCards(cards).touched(System.currentTimeMillis()));
+        JsonFileUtils.write(noteRepository.paths().noteMeta(owned.note().id()),
+                owned.note().withCards(cards).touched(System.currentTimeMillis()));
     }
 
 

@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,7 +12,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -52,7 +51,7 @@ class NoteLinkSearchTest {
     private String newNote(String title, String contentMd) {
         String id = nodes.insert(title, "note");
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
-        cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null,
+        cardRepository.putCard(id, CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null,
                 Instant.now().toEpochMilli()), contentMd);
         return id;
     }

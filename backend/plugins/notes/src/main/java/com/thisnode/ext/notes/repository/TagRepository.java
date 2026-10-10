@@ -4,7 +4,6 @@ import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.domain.TagBook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
-import com.thisnode.ext.notes.util.Tags;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +19,7 @@ import java.util.List;
  * <p>**归属不在这里** —— 一篇笔记有哪些标签写在它自己的 meta 里，那一半归 {@code NoteRepository}。
  * 两个仓储因此互不依赖：需要把两边合起来的视图（清单 + 计数）由 {@code NoteService} 编排。
  *
- * <p>标签的身份就是它规范化之后的名字（规则见 {@link Tags}）。
+ * <p>标签的身份就是它规范化之后的名字（规则见 {@link Tag#normalizeName(String)}）。
  */
 @Repository
 @RequiredArgsConstructor
@@ -70,7 +69,7 @@ public class TagRepository {
 
     /** 「建标签」：名字规范化并登记进台账（已经有的什么都不做）。 */
     public String ensure(String rawName) {
-        String name = Tags.normalize(rawName);
+        String name = Tag.normalizeName(rawName);
         if (name.isEmpty()) {
             return null;
         }
@@ -98,7 +97,7 @@ public class TagRepository {
         TagBook next = current;
         long now = System.currentTimeMillis();
         for (String raw : names) {
-            String name = Tags.normalize(raw);
+            String name = Tag.normalizeName(raw);
             if (!name.isEmpty() && next.find(name) == null) {
                 next = next.with(Tag.fresh(name, null, now));
             }
@@ -117,14 +116,14 @@ public class TagRepository {
 
     /** 某个标签的颜色；没登记过给 {@code null}。 */
     public String colorOf(String name) {
-        Tag tag = book().find(Tags.normalize(name));
+        Tag tag = book().find(Tag.normalizeName(name));
         return tag == null ? null : tag.color();
     }
 
     // ------------------------------------------------------------------ 颜色 / 改名
 
     public void setColor(String id, String color) {
-        String name = Tags.normalize(id);
+        String name = Tag.normalizeName(id);
         if (name.isEmpty()) {
             return;
         }
@@ -140,8 +139,8 @@ public class TagRepository {
 
     /** 改名（台账这一侧）：条目改名、保留颜色与建立时间；笔记 meta 那一半由服务层编排。 */
     public void rename(String id, String newName) {
-        String from = Tags.normalize(id);
-        String to = Tags.normalize(newName);
+        String from = Tag.normalizeName(id);
+        String to = Tag.normalizeName(newName);
         if (from.isEmpty() || to.isEmpty() || from.equalsIgnoreCase(to)) {
             return;
         }

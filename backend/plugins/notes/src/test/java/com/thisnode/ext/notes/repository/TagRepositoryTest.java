@@ -40,12 +40,12 @@ class TagRepositoryTest {
     }
 
     private void seedNote(String id, String... tagNames) {
-        NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null, 1L);
-        store.writeNoteMeta(meta.withTags(List.of(tagNames)));
+        NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(id), meta.withTags(List.of(tagNames)));
     }
 
     private TagBook ledger() throws IOException {
-        return store.readMeta(store.paths().tagsFile(), TagBook.class);
+        return com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().tagsFile(), TagBook.class);
     }
 
     @Test

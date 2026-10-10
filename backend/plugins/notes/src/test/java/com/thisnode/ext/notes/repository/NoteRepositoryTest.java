@@ -4,7 +4,7 @@ import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.CardFile;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -54,7 +54,7 @@ class NoteRepositoryTest {
     private String newGetOne(String title, String contentMd) {
         String id = noteRepository.insert(title, "note");
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
-        cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null,
+        cardRepository.putCard(id, CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null,
                 System.currentTimeMillis()), contentMd);
         return id;
     }

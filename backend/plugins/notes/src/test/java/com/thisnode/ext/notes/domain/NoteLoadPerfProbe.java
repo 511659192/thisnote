@@ -78,8 +78,8 @@ class NoteLoadPerfProbe {
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
                 refs.add(new CardRef(blockId, root.relativize(md).toString().replace('\\', '/')));
             }
-            store.writeNoteMeta(NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note",
-                    "grp-default", now).withCards(refs));
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(noteId),
+                    NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default").withCards(refs));
         }
     }
 

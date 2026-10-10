@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -45,7 +45,7 @@ public class AttachmentService {
         Path dir = root().resolve(folder);
         Files.createDirectories(dir);
 
-        String unique = Ids.shortId() + "-" + safe;
+        String unique = IdUtil.fastSimpleUUID().substring(0, 8) + "-" + safe;
         Path target = dir.resolve(unique);
         try (InputStream in = file.getInputStream()) {
             Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);

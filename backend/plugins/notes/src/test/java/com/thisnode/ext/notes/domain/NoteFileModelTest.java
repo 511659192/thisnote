@@ -78,7 +78,7 @@ class NoteFileModelTest {
     @DisplayName("卡片按清单顺序聚合成一篇完整笔记")
     void aggregatesBlocksInZOrder() throws IOException {
         String noteId = "note-1";
-        writeNoteMeta(NoteMeta.newNoteMeta(noteId, "组合笔记", "note", null, 1L));
+        writeNoteMeta(NoteMeta.newNoteMeta(noteId, "组合笔记", "note", null));
         writeCard("first", "card-b", noteId, 1, "第二段");
         writeCard("second", "card-a", noteId, 0, "第一段");
 
@@ -92,8 +92,8 @@ class NoteFileModelTest {
     void purgeRemovesEveryOwnedFile() {
         String now = "note-now";
         String other = "note-other";
-        store.writeNoteMeta(NoteMeta.newNoteMeta(now, "要删的", "note", null, 1L));
-        store.writeNoteMeta(NoteMeta.newNoteMeta(other, "留下的", "note", null, 1L));
+        writeNoteMeta(NoteMeta.newNoteMeta(now, "要删的", "note", null));
+        writeNoteMeta(NoteMeta.newNoteMeta(other, "留下的", "note", null));
         cardRepository.putCard(now, CardMeta.newCardMeta("b1", 0, 0, "卡片一", null, null, 1L), "内容一");
         cardRepository.putCard(now, CardMeta.newCardMeta("b2", 0, 300, "卡片二", null, null, 2L), "内容二");
         cardRepository.putCard(other, CardMeta.newCardMeta("b3", 0, 0, "别人的卡", null, null, 3L), "别的内容");
@@ -121,7 +121,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("正文、几何与插件扩展区都能从磁盘原样读回")
     void roundTripsThroughDisk() {
-        store.writeNoteMeta(NoteMeta.newNoteMeta("n1", "往返", "note", "grp-default", 10L)
+        writeNoteMeta(NoteMeta.newNoteMeta("n1", "往返", "note", "grp-default")
                 .withTags(List.of("标签一")));
         cardRepository.putCard("n1", new CardMeta(CardMeta.SCHEMA, "b1", "卡片标题",
                 12.5, 340.25, 500, 200, 3, "#ff0000", "doing", true, Map.of(), 10L, 10L),
@@ -152,7 +152,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("两张同名卡片落在两个文件里，不会互相覆盖")
     void disambiguatesSameSlug() {
-        store.writeNoteMeta(NoteMeta.newNoteMeta("n1", "同名测试", "note", null, 1L));
+        writeNoteMeta(NoteMeta.newNoteMeta("n1", "同名测试", "note", null));
         cardRepository.putCard("n1", CardMeta.newCardMeta("bbbbbbbb-1111", 0, 0, "", null, null, 1L), "第一张");
         cardRepository.putCard("n1", CardMeta.newCardMeta("bbbbbbbb-2222", 0, 300, "", null, null, 2L), "第二张");
 
@@ -257,7 +257,7 @@ class NoteFileModelTest {
     // ------------------------------------------------------------------ helpers
 
     private void writeNoteMeta(NoteMeta note) {
-        store.writeNoteMeta(note);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.id()), note);
     }
 
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
@@ -269,12 +269,12 @@ class NoteFileModelTest {
                 0, slot * 300.0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, slot,
                 null, null, false, Map.of(), 1L, 1L);
         store.writeCard("测试笔记", card, content, md);
-        NoteMeta note = store.readMeta(store.paths().noteMeta(noteId), NoteMeta.class);
+        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().noteMeta(noteId), NoteMeta.class);
         if (note != null) {
             List<CardRef> cards = new ArrayList<>(note.cardRefs());
             cards.add(Math.max(0, Math.min(slot, cards.size())),
                     new CardRef(cardId, store.paths().relative(md)));
-            store.writeNoteMeta(note.withCards(cards));
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.id()), note.withCards(cards));
         }
     }
 }

@@ -4,10 +4,14 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
+import com.thisnode.ext.notes.util.JsonFileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -25,6 +29,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class NotebookRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(NotebookRepository.class);
+
     /** 默认分组：没有指定归属的笔记都落这里。 */
     public static final String DEFAULT_GROUP_ID = NotebookBook.DEFAULT_GROUP_ID;
     public static final String DEFAULT_GROUP_TITLE = NotebookBook.DEFAULT_GROUP_TITLE;
@@ -40,7 +46,13 @@ public class NotebookRepository {
         }
         synchronized (this) {
             if (book == null) {
-                NotebookBook loaded = noteRepository.readMeta(noteRepository.paths().notebooksFile(), NotebookBook.class);
+                NotebookBook loaded;
+                try {
+                    loaded = JsonFileUtils.read(noteRepository.paths().notebooksFile(), NotebookBook.class);
+                } catch (IOException | RuntimeException e) {
+                    log.warn("分组台账无法读取，按空台账处理：{}", e.toString());
+                    loaded = null;
+                }
                 book = loaded == null ? NotebookBook.empty() : loaded;
             }
             return book;
@@ -48,7 +60,7 @@ public class NotebookRepository {
     }
 
     private void save(NotebookBook next) {
-        noteRepository.writeJson(noteRepository.paths().notebooksFile(), next);
+        JsonFileUtils.write(noteRepository.paths().notebooksFile(), next);
         book = next;
     }
 
@@ -128,7 +140,7 @@ public class NotebookRepository {
     public void setExclusiveGroup(String nodeId, String notebookId) {
         NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta != null) {
-            noteRepository.writeNoteMeta(meta.withNotebook(notebookId));
+            JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(notebookId));
         }
     }
 
@@ -143,7 +155,7 @@ public class NotebookRepository {
 
     public String create(String title, String parentId, String icon, String type) {
         String parent = requireParent(parentId);
-        String id = Ids.newId();
+        String id = IdUtil.randomUUID();
         long now = System.currentTimeMillis();
         int max = 0;
         for (Notebook notebook : book().notebooks()) {
@@ -215,7 +227,7 @@ public class NotebookRepository {
         String fallbackParent = gone == null ? null : gone.parentId();
         for (NoteMeta meta : noteRepository.findAll()) {
             if (id.equals(meta.notebookId())) {
-                noteRepository.writeNoteMeta(meta.withNotebook(DEFAULT_GROUP_ID));
+                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(DEFAULT_GROUP_ID));
             }
         }
         NotebookBook next = book().without(id);
@@ -234,13 +246,13 @@ public class NotebookRepository {
         }
         if (notebookIds == null || notebookIds.isEmpty()) {
             if (exclusive) {
-                noteRepository.writeNoteMeta(meta.withNotebook(DEFAULT_GROUP_ID));
+                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(DEFAULT_GROUP_ID));
             }
             return;
         }
         for (String notebookId : notebookIds) {
             if (notebookId != null && !notebookId.isBlank()) {
-                noteRepository.writeNoteMeta(meta.withNotebook(notebookId));
+                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.id()), meta.withNotebook(notebookId));
                 return;
             }
         }

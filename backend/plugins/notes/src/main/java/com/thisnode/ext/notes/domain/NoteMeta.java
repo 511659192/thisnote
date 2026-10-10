@@ -32,7 +32,8 @@ public record NoteMeta(
         cardRefs = cardRefs == null ? List.of() : List.copyOf(cardRefs);
     }
 
-    public static NoteMeta newNoteMeta(String id, String title, String type, String notebookId, long now) {
+    public static NoteMeta newNoteMeta(String id, String title, String type, String notebookId) {
+        long now = System.currentTimeMillis();
         return new NoteMeta(SCHEMA, id, title, type, List.of(), notebookId, List.of(), now, now);
     }
 

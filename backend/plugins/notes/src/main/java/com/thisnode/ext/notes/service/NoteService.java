@@ -5,9 +5,9 @@ import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.Tag;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
+import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.ext.notes.util.MarkdownUtils;
-import com.thisnode.ext.notes.util.Tags;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -40,7 +40,7 @@ public class NoteService {
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
         String id = noteRepository.insert(titleOf(title, content), type);
         // 编排：首卡落盘（一篇笔记至少一张卡；正文只有一份，在卡片里）。
-        cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, System.currentTimeMillis()), content);
+        cardRepository.putCard(id, CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis()), content);
 
         if (req.tags() != null) {
             setTags(id, req.tags());
@@ -94,7 +94,7 @@ public class NoteService {
             nextContent = req.contentMd();
             contentChanged = true;
         }
-        noteRepository.writeNoteMeta(meta.withTitle(nextTitle).touched(System.currentTimeMillis()));
+        JsonFileUtils.write(noteRepository.paths().noteMeta(id), meta.withTitle(nextTitle).touched(System.currentTimeMillis()));
 
         if (req.tags() != null) {
             setTags(id, req.tags());
@@ -194,8 +194,8 @@ public class NoteService {
 
     /** 改名：笔记 meta 与台账两边一起改（各管自己那一半）。 */
     public void renameTag(String from, String to) {
-        String src = Tags.normalize(from);
-        String dst = Tags.normalize(to);
+        String src = Tag.normalizeName(from);
+        String dst = Tag.normalizeName(to);
         if (src.isEmpty() || dst.isEmpty() || src.equalsIgnoreCase(dst)) {
             return;
         }
@@ -321,7 +321,7 @@ public class NoteService {
             return false;
         }
         if (query.tag() != null && !query.tag().isBlank()) {
-            String want = Tags.normalize(query.tag());
+            String want = Tag.normalizeName(query.tag());
             boolean has = false;
             for (String tag : meta.tags()) {
                 if (tag.equalsIgnoreCase(want)) {

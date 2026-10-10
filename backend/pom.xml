@@ -38,6 +38,7 @@
     <sbp.version>3.5.27</sbp.version>
     <lombok.version>1.18.40</lombok.version>
     <fastjson2.version>2.0.61</fastjson2.version>
+    <hutool.version>5.8.40</hutool.version>
   </properties>
 
   <dependencyManagement>
@@ -79,6 +80,11 @@
         <groupId>com.alibaba.fastjson2</groupId>
         <artifactId>fastjson2-extension-spring6</artifactId>
         <version>${fastjson2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>cn.hutool</groupId>
+        <artifactId>hutool-core</artifactId>
+        <version>${hutool.version}</version>
       </dependency>
 
       <!-- SBP（Spring Boot Plugin Framework）：版本只在这里写一次。 -->

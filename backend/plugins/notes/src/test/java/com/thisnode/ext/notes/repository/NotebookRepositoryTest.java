@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.util.Ids;
+import cn.hutool.core.util.IdUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -74,7 +74,7 @@ class NotebookRepositoryTest {
         assertThat(notebooks.find(sub).parentId()).isEqualTo(parent);
 
         String noteId = store.insert("带归属的笔记", "note");
-        new CardRepository(store).putCard(noteId, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null,
+        new CardRepository(store).putCard(noteId, CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null,
                 System.currentTimeMillis()), "");
         notebooks.addNodeToNotebook(noteId, parent);
 
