@@ -145,7 +145,7 @@ public class CardService {
         String next = joined.toString();
         String current = noteRepository.noteMarkdown(noteId);
         if (!next.equals(current)) {
-            noteService.patch(noteId, new Dtos.UpdateNodeRequest(
+            noteService.update(noteId, new Dtos.UpdateNodeRequest(
                     null, next, null, null, null, null, null));
         }
     }
@@ -198,10 +198,10 @@ public class CardService {
      */
     public void delete(String cardId, boolean deleteContent) {
         Dtos.CardDto card = requireCard(cardId);
-        NoteMeta note = noteRepository.note(card.noteId());
+        NoteMeta note = noteRepository.getOne(card.noteId());
         if (cardRepository.count(card.noteId()) <= 1) {
             if (deleteContent) {
-                noteService.purge(card.noteId());
+                noteService.delete(card.noteId());
                 return;
             }
             // Keep the page non-empty: clear the last card rather than leaving nothing.

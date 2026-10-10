@@ -39,10 +39,10 @@ class NoteLoadPerfProbe {
             long loadMs = (System.nanoTime() - t0) / 1_000_000;
 
             long t1 = System.nanoTime();
-            store.scanNotes();
+            store.getAll();
             long reloadMs = (System.nanoTime() - t1) / 1_000_000;
 
-            String noteId = store.scanNotes().get(0).id();
+            String noteId = store.getAll().get(0).id();
             long t2 = System.nanoTime();
             int blocks = store.cards(noteId).size();
             int mdLen = store.noteMarkdown(noteId).length();
@@ -56,7 +56,7 @@ class NoteLoadPerfProbe {
             System.gc();
             long heapMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
 
-            System.out.println("PERF cards=" + all + " notes=" + store.scanNotes().size()
+            System.out.println("PERF cards=" + all + " notes=" + store.getAll().size()
                     + " | load=" + loadMs + "ms reload=" + reloadMs + "ms"
                     + " pageQuery=" + pageMs + "ms (blocks=" + blocks + ", mdLen=" + mdLen + ")"
                     + " allBlocks=" + scanMs + "ms heap~" + heapMb + "MB");

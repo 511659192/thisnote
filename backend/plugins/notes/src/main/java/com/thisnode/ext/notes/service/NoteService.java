@@ -78,8 +78,8 @@ public class NoteService {
 
     // ================================================================= update
 
-    public void patch(String id, Dtos.UpdateNodeRequest req) {
-        NoteMeta meta = noteRepository.note(id);
+    public void update(String id, Dtos.UpdateNodeRequest req) {
+        NoteMeta meta = noteRepository.getOne(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
@@ -142,7 +142,7 @@ public class NoteService {
     }
 
     public List<String> tagsOfNames(String noteId) {
-        NoteMeta meta = noteRepository.note(noteId);
+        NoteMeta meta = noteRepository.getOne(noteId);
         if (meta == null) {
             return List.of();
         }
@@ -156,16 +156,17 @@ public class NoteService {
     /**
      * 硬删除：卡片 md、sidecar 与笔记 meta 一起消失（仓库层 removeNote）。
      */
-    public void purge(String id) {
-        noteRepository.deleteHard(id);
+    public void delete(String id) {
+        noteRepository.delete(id);
         linkRepository.deleteOutbound(id);
+        // 审计日志的动作名保持 "purge"：ops.jsonl 里已有历史值，改词会把同一动作劈成两种写法。
         log("note", id, "purge", Map.of());
     }
 
     // ================================================================= read
 
     public NoteMeta require(String id) {
-        NoteMeta meta = noteRepository.note(id);
+        NoteMeta meta = noteRepository.getOne(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
@@ -250,7 +251,7 @@ public class NoteService {
         String filter = query.filter() == null ? "all" : query.filter();
 
         List<NoteMeta> matched = new ArrayList<>();
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (matches(meta, query, filter)) {
                 matched.add(meta);
             }
@@ -423,7 +424,7 @@ public class NoteService {
             if (!changed) {
                 continue;
             }
-            if (noteRepository.note(sourceId) != null) {
+            if (noteRepository.getOne(sourceId) != null) {
                 reindexLinks(sourceId, noteRepository.noteMarkdown(sourceId));
             }
             log("note", sourceId, "link-renamed", Map.of("from", oldTitle, "to", newTitle));
@@ -447,7 +448,7 @@ public class NoteService {
         String id = create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null, null, null, null));
         linkRepository.deleteStubByTitle(clean);
         if (fromNodeId != null && !fromNodeId.isBlank()) {
-            if (noteRepository.note(fromNodeId) != null) {
+            if (noteRepository.getOne(fromNodeId) != null) {
                 reindexLinks(fromNodeId, noteRepository.noteMarkdown(fromNodeId));
             }
         }

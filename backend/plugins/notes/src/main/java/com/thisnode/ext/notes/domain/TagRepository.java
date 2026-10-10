@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.MetaJson;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.store.TagBook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +86,7 @@ public class TagRepository {
     private TagBook withNoteTags(TagBook source) {
         TagBook merged = source;
         long now = System.currentTimeMillis();
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             for (String name : meta.tags()) {
                 if (merged.find(name) == null) {
                     merged = merged.with(TagBook.Tag.fresh(name, null, now));
@@ -150,7 +149,7 @@ public class TagRepository {
 
     /** Replace all tags of a node. */
     public void setNodeTags(String nodeId, List<String> names) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta == null) {
             return;
         }
@@ -160,7 +159,7 @@ public class TagRepository {
     }
 
     public void addNodeTag(String nodeId, String name) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         String clean = normalize(name);
         if (meta == null || clean.isEmpty()) {
             return;
@@ -174,7 +173,7 @@ public class TagRepository {
     }
 
     public void removeNodeTag(String nodeId, String name) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         String clean = normalize(name);
         if (meta == null || clean.isEmpty()) {
             return;
@@ -191,7 +190,7 @@ public class TagRepository {
     // ------------------------------------------------------------------ 查询
 
     public List<Dtos.TagDto> tagsOf(String nodeId) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         return meta == null ? List.of() : toDtos(meta.tags(), book());
     }
 
@@ -202,7 +201,7 @@ public class TagRepository {
             return map;
         }
         for (String id : nodeIds) {
-            NoteMeta meta = noteRepository.note(id);
+            NoteMeta meta = noteRepository.getOne(id);
             map.put(id, meta == null ? List.of() : sorted(meta.tags()));
         }
         return map;
@@ -214,7 +213,7 @@ public class TagRepository {
      */
     public List<Dtos.TagDto> listWithCounts() {
         Map<String, Integer> counts = new HashMap<>();
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (meta.deleted()) {
                 continue;
             }
@@ -241,7 +240,7 @@ public class TagRepository {
         if (from.isEmpty() || to.isEmpty() || from.equalsIgnoreCase(to)) {
             return;
         }
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             List<String> next = new ArrayList<>();
             boolean changed = false;
             for (String tag : meta.tags()) {

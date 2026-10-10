@@ -1,9 +1,7 @@
 package com.thisnode.ext.notes.domain;
 
-import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.NoteMeta;
 import com.thisnode.ext.notes.store.LinkRef;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.util.Markdown;
 import org.springframework.stereotype.Repository;
 
@@ -54,7 +52,7 @@ public class LinkRepository {
         Set<String> stubs = new LinkedHashSet<>();
         Map<String, String> display = new LinkedHashMap<>();
         int total = 0;
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (meta.deleted()) {
                 continue;
             }

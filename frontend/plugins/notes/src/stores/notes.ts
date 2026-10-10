@@ -375,7 +375,7 @@ export const useNoteStore = defineStore('notes', () => {
     if (!current.value) return null
     const id = current.value.id
     try {
-      const detail = await noteApi.patch(id, patch)
+      const detail = await noteApi.update(id, patch)
       current.value = detail
       await Promise.all([loadList(), refreshMeta()])
       return detail
@@ -416,7 +416,7 @@ export const useNoteStore = defineStore('notes', () => {
     }
     saving.value = true
     try {
-      const detail = await noteApi.patch(id, bucket)
+      const detail = await noteApi.update(id, bucket)
       if (current.value?.id === id) {
         // Keep local cursor/selection state authoritative: only merge server fields.
         current.value.updatedAt = detail.updatedAt
@@ -473,7 +473,7 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   async function purge(id: string) {
-    await noteApi.purge(id)
+    await noteApi.delete(id)
     if (currentId.value === id) current.value = null
     await Promise.all([loadList(), refreshMeta()])
     ui.toast('已彻底删除', 'success')
@@ -489,7 +489,7 @@ export const useNoteStore = defineStore('notes', () => {
   }) {
     if (!current.value) return
     const id = current.value.id
-    const detail = await noteApi.patch(id, patch)
+    const detail = await noteApi.update(id, patch)
     const cursor = (document.activeElement as HTMLElement | null)?.tagName
     current.value = detail
     void cursor

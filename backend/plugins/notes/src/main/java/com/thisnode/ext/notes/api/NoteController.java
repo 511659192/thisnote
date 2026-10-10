@@ -49,26 +49,19 @@ public class NoteController {
         return noteService.detail(id);
     }
 
-    /**
-     * 改笔记级字段（标题 / 标签 / 来源…）。
-     *
-     * <p><b>正文不在这里改</b>：带 {@code contentMd} 的整篇改写会把全文写进第一张卡、同时清空
-     * 其余卡片的正文（{@code NoteRepository#replaceNoteContent}），是一次静默的数据丢失。正文一律走
-     * 卡片端点 {@code POST /api/notes/{noteId}/cards/{cardId}/content}（那边带冲突保护）。
-     */
-    @PostMapping("/patch")
-    public Dtos.NoteDetail patch(@RequestParam String id, @RequestBody Dtos.UpdateNodeRequest req) {
+    @PostMapping("/update")
+    public Dtos.NoteDetail update(@RequestParam String id, @RequestBody Dtos.UpdateNodeRequest req) {
         if (req != null && req.contentMd() != null) {
             throw new IllegalArgumentException(
                     "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/{noteId}/cards/{cardId}/content）");
         }
-        noteService.patch(id, req);
+        noteService.update(id, req);
         return noteService.detail(id);
     }
 
     @PostMapping("/delete")
-    public Map<String, Object> purge(@RequestParam String id) {
-        noteService.purge(id);
+    public Map<String, Object> delete(@RequestParam String id) {
+        noteService.delete(id);
         return Map.of("ok", true);
     }
 

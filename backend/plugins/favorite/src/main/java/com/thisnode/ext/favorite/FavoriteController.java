@@ -1,12 +1,11 @@
 package com.thisnode.ext.favorite;
 
-import com.thisnode.plugin.api.PluginDataStore;
+import com.thisnode.plugin.api.PluginDataRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,10 +21,10 @@ import java.util.Map;
 @RequestMapping("/api/plugins/" + FavoritePlugin.PLUGIN_ID)
 public class FavoriteController {
 
-    private final PluginDataStore store;
+    private final PluginDataRepository pluginDataStore;
 
-    public FavoriteController(PluginDataStore store) {
-        this.store = store;
+    public FavoriteController(PluginDataRepository pluginDataStore) {
+        this.pluginDataStore = pluginDataStore;
     }
 
     /**
@@ -37,7 +36,7 @@ public class FavoriteController {
     @GetMapping("/notes")
     public List<Map<String, Object>> notes() {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (String id : store.enabledEntityIds(FavoritePlugin.PLUGIN_ID)) {
+        for (String id : pluginDataStore.enabledEntityIds(FavoritePlugin.PLUGIN_ID)) {
             out.add(Map.of("id", id));
         }
         return out;

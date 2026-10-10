@@ -58,8 +58,8 @@ class NoteFileModelTest {
         // 启动维护：认领未纳管的 md
         maintenance.run();
 
-        assertThat(store.scanNotes()).hasSize(1);
-        NoteMeta note = store.scanNotes().get(0);
+        assertThat(store.getAll()).hasSize(1);
+        NoteMeta note = store.getAll().get(0);
         assertThat(note.title()).isEqualTo("会议记录");
 
         // 笔记 meta 落在 meta/ 下
@@ -106,17 +106,17 @@ class NoteFileModelTest {
         Path b3 = store.fileOf("b3");
         assertThat(List.of(b1, b2, b3)).allSatisfy(p -> assertThat(Files.exists(p)).isTrue());
 
-        store.deleteHard(now);
+        store.delete(now);
 
         assertThat(Files.exists(b1)).isFalse();
         assertThat(Files.exists(b2)).isFalse();
         assertThat(Files.exists(root.resolve("meta").resolve(now + ".json"))).isFalse();
 
-        assertThat(store.note(now)).isNull();
+        assertThat(store.getOne(now)).isNull();
         assertThat(store.cards(now)).isEmpty();
         assertThat(store.card("b1")).isNull();
 
-        assertThat(store.note(other)).isNotNull();
+        assertThat(store.getOne(other)).isNotNull();
         assertThat(Files.exists(b3)).isTrue();
         assertThat(store.noteMarkdown(other)).isEqualTo("别的内容");
     }
@@ -131,7 +131,7 @@ class NoteFileModelTest {
                 "正文内容");
         store.putExtension("b1", "memory-curve", Map.of("state", "review", "reps", 2));
 
-        NoteMeta note = store.note("n1");
+        NoteMeta note = store.getOne("n1");
         assertThat(note.title()).isEqualTo("往返");
         assertThat(note.tags()).containsExactly("标签一");
         assertThat(note.notebookId()).isEqualTo("grp-default");
@@ -173,18 +173,18 @@ class NoteFileModelTest {
         writeCard("only", "card-x", "note-lost", 0, "孤立卡片的内容");
         Files.deleteIfExists(root.resolve("meta").resolve("note-lost.json"));
 
-        assertThat(store.note("note-lost")).isNull();
-        assertThat(store.scanNotes()).isEmpty();
+        assertThat(store.getOne("note-lost")).isNull();
+        assertThat(store.getAll()).isEmpty();
 
         // 对账做的事：发现清单里没有这个文件 → 认领成一篇新笔记
         int applied = store.claimUnmanaged();
 
         assertThat(applied).isEqualTo(1);
-        assertThat(store.scanNotes()).hasSize(1);
+        assertThat(store.getAll()).hasSize(1);
         assertThat(store.allCards()).hasSize(1);
         assertThat(store.content("card-x")).isEqualTo("孤立卡片的内容");
         assertThat(Files.exists(root.resolve("meta")
-                .resolve(store.scanNotes().get(0).id() + ".json"))).isTrue();
+                .resolve(store.getAll().get(0).id() + ".json"))).isTrue();
     }
 
     @Test
@@ -202,7 +202,7 @@ class NoteFileModelTest {
         Files.writeString(ledgers.resolve("settings.json"), "{\"device_id\":\"x\"}");
         Files.writeString(noteMetas.resolve("random.json"), "{\"title\":\"手写但没有 id\"}");
 
-        assertThat(store.scanNotes()).isEmpty();
+        assertThat(store.getAll()).isEmpty();
     }
 
     @Test
@@ -218,9 +218,9 @@ class NoteFileModelTest {
         maintenance.run();
 
         assertThat(Files.exists(sidecar)).isTrue();
-        assertThat(store.scanNotes()).hasSize(1);
-        assertThat(store.scanNotes().get(0).cards()).hasSize(1);
-        assertThat(store.scanNotes().get(0).cards().get(0).id()).isEqualTo("bbbbbbbb-2222");
+        assertThat(store.getAll()).hasSize(1);
+        assertThat(store.getAll().get(0).cards()).hasSize(1);
+        assertThat(store.getAll().get(0).cards().get(0).id()).isEqualTo("bbbbbbbb-2222");
     }
 
     @Test
@@ -233,7 +233,7 @@ class NoteFileModelTest {
         maintenance.run();
 
         assertThat(Files.exists(sidecar)).isTrue();
-        assertThat(store.scanNotes()).isEmpty();
+        assertThat(store.getAll()).isEmpty();
     }
 
     // ------------------------------------------------------------------ helpers

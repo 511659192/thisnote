@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.store.NotebookBook;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.util.Ids;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -78,7 +77,7 @@ public class NotebookRepository {
 
     private int countNotes(String notebookId) {
         int count = 0;
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (!meta.deleted() && notebookId.equals(meta.notebookId())) {
                 count++;
             }
@@ -107,7 +106,7 @@ public class NotebookRepository {
 
     public List<String> nodeIdsOf(String notebookId) {
         List<String> out = new ArrayList<>();
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (notebookId != null && notebookId.equals(meta.notebookId())) {
                 out.add(meta.id());
             }
@@ -116,7 +115,7 @@ public class NotebookRepository {
     }
 
     public int countNotebooksOf(String nodeId) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         return meta != null && meta.notebookId() != null ? 1 : 0;
     }
 
@@ -126,7 +125,7 @@ public class NotebookRepository {
      * <p>界面上的「移到分组」就是它：归属是唯一的，不是累加。
      */
     public void setExclusiveGroup(String nodeId, String notebookId) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta != null) {
             noteRepository.writeNoteMeta(meta.withNotebook(notebookId));
         }
@@ -213,7 +212,7 @@ public class NotebookRepository {
         ensureDefaultGroup();
         NotebookBook.Notebook gone = book().find(id);
         String fallbackParent = gone == null ? null : gone.parentId();
-        for (NoteMeta meta : noteRepository.scanNotes()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (id.equals(meta.notebookId())) {
                 noteRepository.writeNoteMeta(meta.withNotebook(DEFAULT_GROUP_ID));
             }
@@ -228,7 +227,7 @@ public class NotebookRepository {
     }
 
     public void setNodeNotebooks(String nodeId, List<String> notebookIds, boolean exclusive) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta == null) {
             return;
         }
@@ -252,7 +251,7 @@ public class NotebookRepository {
     }
 
     public List<Dtos.NotebookDto> notebooksOf(String nodeId) {
-        NoteMeta meta = noteRepository.note(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta == null || meta.notebookId() == null) {
             return List.of();
         }

@@ -22,7 +22,7 @@ public interface PluginRegister extends ExtensionPoint {
      * 版本（支持 semver 范围，例如 {@code >=3.0.0}），平台拿这个常量交给 PF4J 的
      * {@code VersionManager} 校验 —— 版本机制完全走框架，没有自定义的 apiVersion 字段。
      *
-     * <p>改契约（新增/改语义的方法、动 {@link PluginDataStore} 的文件格式）时递增它。
+     * <p>改契约（新增/改语义的方法、动 {@link PluginDataRepository} 的文件格式）时递增它。
      */
     String CONTRACT_VERSION = "4.0.0";
 
@@ -66,7 +66,7 @@ public interface PluginRegister extends ExtensionPoint {
      * <p>这是插件初始化/释放自己数据的时机：记忆曲线插件在卡片被开启时建一条「立即到期」的排期，
      * 卡片关闭时保留它（历史不丢）。
      *
-     * <p>没有 entityType 参数：平台不解释实体是什么（见 {@link PluginDataStore}），
+     * <p>没有 entityType 参数：平台不解释实体是什么（见 {@link PluginDataRepository}），
      * 每个插件只有一类实体，id 自己就说明了一切。
      *
      * @param entityId 实体 id

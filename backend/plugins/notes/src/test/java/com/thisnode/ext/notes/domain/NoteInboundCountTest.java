@@ -4,16 +4,12 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,7 +49,7 @@ class NoteInboundCountTest {
     }
 
     private NoteMeta metaOf(String title) {
-        for (NoteMeta meta : store.scanNotes()) {
+        for (NoteMeta meta : store.getAll()) {
             if (meta.title().equals(title)) {
                 return meta;
             }
@@ -112,10 +108,10 @@ class NoteInboundCountTest {
         String a = newNote("甲", "见 [[乙]]");
         assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
 
-        noteService.patch(a, new Dtos.UpdateNodeRequest(null, "不再引用谁", null, null,
+        noteService.update(a, new Dtos.UpdateNodeRequest(null, "不再引用谁", null, null,
                 null, null, null));
-        System.out.println("[DEBUGOUT] 甲.meta=" + store.note(a));
-        System.out.println("[DEBUGOUT] 乙.meta=" + store.note(b));
+        System.out.println("[DEBUGOUT] 甲.meta=" + store.getOne(a));
+        System.out.println("[DEBUGOUT] 乙.meta=" + store.getOne(b));
 
         assertThat(metaOf("乙").inboundCount()).isZero();
         assertThat(b).isNotBlank();
@@ -128,10 +124,10 @@ class NoteInboundCountTest {
         String a = newNote("甲", "见 [[乙]]");
         assertThat(metaOf("乙").inboundCount()).isEqualTo(1);
 
-        noteService.purge(a);
+        noteService.delete(a);
 
         assertThat(metaOf("乙").inboundCount()).isZero();
-        assertThat(store.note(b)).isNotNull();
+        assertThat(store.getOne(b)).isNotNull();
     }
 
     @Test

@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.domain;
 
-import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.store.CardRef;
 import com.thisnode.ext.notes.store.CardFile;
@@ -12,9 +11,9 @@ import com.thisnode.ext.notes.store.NotebookBook;
 import com.thisnode.ext.notes.store.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.util.Markdown;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
@@ -30,7 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -47,13 +45,10 @@ import java.util.stream.Stream;
  * 正文与卡片两份内容不一致。
  */
 @Repository
+@RequiredArgsConstructor
 public class NoteRepository {
 
     private final NoteFilePaths noteFilePaths;
-
-    public NoteRepository(NotesConfig config) {
-        this.noteFilePaths = new NoteFilePaths(config.markdownRoot());
-    }
 
     /**
      * 建一篇笔记：生成 id 与时间戳，写 v2 meta。正文由调用方编排成首卡（一篇笔记至少一张卡）。
@@ -65,17 +60,9 @@ public class NoteRepository {
         return id;
     }
 
-    public void touch(String id) {
-        NoteMeta current = note(id);
-        if (current != null) {
-            writeNoteMeta(current.touched(System.currentTimeMillis()));
-        }
-    }
-
-
     /** 硬删除：卡片 md、sidecar 与笔记 meta 一起走（由组合层负责）。 */
-    public void deleteHard(String id) {
-        NoteMeta note = note(id);
+    public void delete(String id) {
+        NoteMeta note = getOne(id);
         if (note == null) {
             return;
         }
@@ -87,27 +74,10 @@ public class NoteRepository {
         deleteNoteMeta(id);
     }
 
-    public void deleteHardAll(List<String> ids) {
-        if (ids == null) {
-            return;
-        }
-        for (String id : ids) {
-            deleteHard(id);
-        }
-    }
-
-    public long countAll() {
-        return scanNotes().size();
-    }
-
-    public long countActive() {
-        return scanNotes().stream().filter(meta -> !meta.deleted()).count();
-    }
-
     /** 未进回收站的全部笔记 meta（只读 meta 文件，不碰卡片）。 */
     public List<NoteMeta> findAllActive() {
         List<NoteMeta> out = new ArrayList<>();
-        for (NoteMeta meta : scanNotes()) {
+        for (NoteMeta meta : getAll()) {
             if (!meta.deleted()) {
                 out.add(meta);
             }
@@ -202,7 +172,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * <p>meta 目录里只有笔记 meta，不需要台账黑名单；单个坏文件只跳过并记日志：meta 是用户可
      * 手改的，一个写坏的字符不该让整库打不开。
      */
-    public List<NoteMeta> scanNotes() {
+    public List<NoteMeta> getAll() {
         List<NoteMeta> notes = new ArrayList<>();
         Path metaDir = noteFilePaths.noteMetaDir();
         if (!Files.isDirectory(metaDir)) {
@@ -230,7 +200,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     }
 
     /** 只读一篇笔记的 meta（文件不在或读不出来给 {@code null}）—— 不会为了它扫全库。 */
-    public NoteMeta note(String noteId) {
+    public NoteMeta getOne(String noteId) {
         if (noteId == null || noteId.isBlank()) {
             return null;
         }
@@ -248,7 +218,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public Map<String, String> titleIndex() {
         Map<String, String> index = new LinkedHashMap<>();
-        List<NoteMeta> all = scanNotes();
+        List<NoteMeta> all = getAll();
         // 重名时先到先得。
         for (NoteMeta meta : all) {
             if (meta.deleted() || meta.title() == null || meta.title().isBlank()) {
@@ -453,7 +423,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     /** 一篇笔记的卡片清单（顺序即阅读顺序）；笔记不存在给空清单。 */
     public List<CardRef> cardsOf(String noteId) {
-        NoteMeta note = note(noteId);
+        NoteMeta note = getOne(noteId);
         return note == null ? List.of() : note.cards();
     }
 
@@ -466,7 +436,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
         if (cardId == null || cardId.isBlank()) {
             return null;
         }
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             for (CardRef ref : note.cards()) {
                 if (ref.id().equals(cardId)) {
                     return new Owned(note, ref);
@@ -495,7 +465,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * 不必改动其他卡片。写入后顺带刷新这篇笔记的列表页缓存。
      */
     public CardMeta writeCard(String noteId, CardMeta card, String contentMd, int slot) {
-        NoteMeta note = note(noteId);
+        NoteMeta note = getOne(noteId);
         if (note == null) {
             return null;
         }
@@ -524,7 +494,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      * <p>标题解析表一次现建、整批复用（不是缓存：这个方法返回即丢）。
      */
     public void refreshCachedView(String noteId) {
-        NoteMeta meta = note(noteId);
+        NoteMeta meta = getOne(noteId);
         if (meta == null) {
             return;
         }
@@ -564,7 +534,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
             }
         }
         for (String targetId : affected) {
-            NoteMeta target = note(targetId);
+            NoteMeta target = getOne(targetId);
             if (target == null) {
                 continue;
             }
@@ -678,7 +648,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     /** 全部笔记的卡片数（noteId → 张数）。 */
     public Map<String, Integer> cardCounts() {
         Map<String, Integer> out = new LinkedHashMap<>();
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             out.put(note.id(), note.cards().size());
         }
         return out;
@@ -694,7 +664,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
             return 0;
         }
         int healed = 0;
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             if (note.id().equals(targetNoteId) || note.links().isEmpty()) {
                 continue;
             }
@@ -717,7 +687,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     /** 维护用：按正文重算**所有**笔记的列表页缓存。 */
     public int refreshAllCachedViews() {
         int done = 0;
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             refreshCachedView(note.id());
             done++;
         }
@@ -726,7 +696,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     /** 按各篇 meta 里缓存的出链**全量重建**入链缓存（读引用者正文算 context；修复/升级用）。 */
     public int recalibrateInbound() {
-        List<NoteMeta> all = scanNotes();
+        List<NoteMeta> all = getAll();
         Map<String, List<InboundRef>> entries = new LinkedHashMap<>();
         for (NoteMeta note : all) {
             if (note.links().isEmpty()) {
@@ -783,7 +753,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
     /** 全部卡片元数据（维护/导出用；会读所有卡片文件）。 */
     public List<CardMeta> allCards() {
         List<CardMeta> out = new ArrayList<>();
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             for (CardRef ref : note.cards()) {
                 CardData data = readCard(ref);
                 if (data != null && data.meta() != null) {
@@ -802,7 +772,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
 
     /** 列表页摘要：直接取 meta 里写好的缓存，不读卡片。 */
     public String summary(String noteId) {
-        NoteMeta note = note(noteId);
+        NoteMeta note = getOne(noteId);
         return note == null ? "" : note.summary();
     }
 
@@ -866,7 +836,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public int dropMissingCards() {
         int dropped = 0;
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             List<CardRef> kept = new ArrayList<>();
             boolean changed = false;
             for (CardRef ref : note.cards()) {
@@ -893,7 +863,7 @@ private static final Logger log = LoggerFactory.getLogger(NoteRepository.class);
      */
     public int claimUnmanaged() {
         java.util.Set<String> known = new java.util.HashSet<>();
-        for (NoteMeta note : scanNotes()) {
+        for (NoteMeta note : getAll()) {
             for (CardRef ref : note.cards()) {
                 known.add(ref.file());
             }

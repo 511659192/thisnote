@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@link com.thisnode.plugin.api.PluginDataStore} 的实现：**一个 JSON 文件**
+ * {@link com.thisnode.plugin.api.PluginDataRepository} 的实现：**一个 JSON 文件**
  * （默认 {@code <data-root>/plugin-data.json}）。
  *
  * <p>文件形状就是那个 Map：{@code pluginId → entityId → true}，两级，键顺序稳定，
@@ -38,12 +38,12 @@ import java.util.Map;
  *
  * <p>实现放在平台侧（不是契约模块）：契约不该引 JSON 库；平台本来就有它。
  *
- * <p><b>同名留意：</b>本类与契约接口 {@code com.thisnode.plugin.api.PluginDataStore} 同名不同包。
+ * <p><b>同名留意：</b>本类与契约接口 {@code com.thisnode.plugin.api.PluginDataRepository} 同名不同包。
  * 平台内部的注入点用本类（包内简单名就指它），插件侧用契约接口；本类实现接口，两者都能收到同一个 bean。
  */
-public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore {
+public class PluginDataRepository implements com.thisnode.plugin.api.PluginDataRepository {
 
-    private static final Logger log = LoggerFactory.getLogger(PluginDataStore.class);
+    private static final Logger log = LoggerFactory.getLogger(PluginDataRepository.class);
 
     /**
      * 文件本身的类型：{@code pluginId → 实体 id → 开关}。
@@ -58,21 +58,18 @@ public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore 
 
     private final Path file;
 
-    /** 读-改-写必须串行（文件是唯一权威，没有缓存可兜底）。 */
+    /**
+     * 读-改-写必须串行（文件是唯一权威，没有缓存可兜底）。
+     */
     private final Object lock = new Object();
 
-    public PluginDataStore(Path file) {
+    public PluginDataRepository(Path file) {
         this.file = file.toAbsolutePath().normalize();
     }
 
-    // ------------------------------------------------------------------ 形状
-
-    /** 某插件的实体表；没有就是空表（只看不建）。 */
-    private static Map<String, Boolean> entities(Map<String, Map<String, Boolean>> data, String pluginId) {
-        return data.getOrDefault(pluginId, Map.of());
-    }
-
-    /** 写路径取某插件的实体表：没有就建。 */
+    /**
+     * 写路径取某插件的实体表：没有就建。
+     */
     private static Map<String, Boolean> openEntities(Map<String, Map<String, Boolean>> data, String pluginId) {
         return data.computeIfAbsent(pluginId, k -> new LinkedHashMap<>());
     }
@@ -123,20 +120,19 @@ public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore 
         }
     }
 
-    /** 落盘：pretty JSON + 临时文件原子替换（人类可读、不会被读到半截）。 */
+    /**
+     * 落盘：pretty JSON + 临时文件原子替换（人类可读、不会被读到半截）。
+     */
     private void write(Map<String, Map<String, Boolean>> data) {
         try {
             Files.createDirectories(file.getParent());
             Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-            byte[] bytes = JSON.toJSONString(data, JSONWriter.Feature.PrettyFormat)
-                    .getBytes(StandardCharsets.UTF_8);
-            try (var out = Files.newOutputStream(tmp, StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+            byte[] bytes = JSON.toJSONString(data, JSONWriter.Feature.PrettyFormat).getBytes(StandardCharsets.UTF_8);
+            try (var out = Files.newOutputStream(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
                 out.write(bytes);
             }
             try {
-                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             } catch (java.nio.file.AtomicMoveNotSupportedException e) {
                 Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -145,12 +141,12 @@ public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore 
         }
     }
 
-    // ------------------------------------------------------------ PluginDataStore
+    // ------------------------------------------------------------ PluginDataRepository
 
     @Override
     public boolean isEnabled(String pluginId, String entityId) {
         synchronized (lock) {
-            return Boolean.TRUE.equals(entities(read(), pluginId).get(entityId));
+            return Boolean.TRUE.equals(read().getOrDefault(pluginId, Map.of()).get(entityId));
         }
     }
 
@@ -159,9 +155,7 @@ public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore 
         synchronized (lock) {
             Map<String, Map<String, Boolean>> data = read();
             // put 回旧值：null 表示原来没有这个键（状态真变了），否则不必写盘。
-            boolean changed = enabled
-                    ? openEntities(data, pluginId).put(entityId, Boolean.TRUE) == null
-                    : drop(data, pluginId, entityId);
+            boolean changed = enabled ? openEntities(data, pluginId).put(entityId, Boolean.TRUE) == null : drop(data, pluginId, entityId);
             if (changed) {
                 write(data);
             }
@@ -176,7 +170,7 @@ public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore 
             out.put(id, false);
         }
         synchronized (lock) {
-            Map<String, Boolean> recorded = entities(read(), pluginId);
+            Map<String, Boolean> recorded = read().getOrDefault(pluginId, Map.of());
             for (String id : ids) {
                 if (Boolean.TRUE.equals(recorded.get(id))) {
                     out.put(id, true);
@@ -190,7 +184,7 @@ public class PluginDataStore implements com.thisnode.plugin.api.PluginDataStore 
     public List<String> enabledEntityIds(String pluginId) {
         synchronized (lock) {
             List<String> out = new ArrayList<>();
-            for (Map.Entry<String, Boolean> entry : entities(read(), pluginId).entrySet()) {
+            for (Map.Entry<String, Boolean> entry : read().getOrDefault(pluginId, Map.of()).entrySet()) {
                 if (Boolean.TRUE.equals(entry.getValue())) {
                     out.add(entry.getKey());
                 }

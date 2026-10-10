@@ -17,7 +17,7 @@ import java.util.Map;
  * <p>URL 约定：<b>非 RESTful</b> —— 只有 GET（读）与 POST（写 + 动作路径），没有任何路径
  * 变量，标识一律走 {@code @RequestParam}（插件 id 用 {@code pluginId}）。
  * 插件自己的业务端点放在 {@code /api/plugins/<id>/...} 静态命名空间下
- * —— {@link PluginEndpointGate} 靠注册表与这份白名单区分「管理面」与「插件自有端点」，
+ * —— {@link PluginEndpointHandlerInterceptor} 靠注册表与这份白名单区分「管理面」与「插件自有端点」，
  * 停用插件时只拦后者。
  */
 @RestController

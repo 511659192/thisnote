@@ -17,14 +17,14 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 而不是这里冒充一个状态错误。
  */
 @Component
-public class PluginEndpointGate implements HandlerInterceptor {
+public class PluginEndpointHandlerInterceptor implements HandlerInterceptor {
 
     private static final String PREFIX = "/api/plugins/";
 
     private final PluginRegistry registry;
     private final PluginStateService states;
 
-    public PluginEndpointGate(PluginRegistry registry, PluginStateService states) {
+    public PluginEndpointHandlerInterceptor(PluginRegistry registry, PluginStateService states) {
         this.registry = registry;
         this.states = states;
     }

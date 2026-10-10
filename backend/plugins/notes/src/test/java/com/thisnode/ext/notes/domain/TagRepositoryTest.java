@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.store.NoteMeta;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import com.thisnode.ext.notes.store.TagBook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,8 +11,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -69,7 +66,7 @@ class TagRepositoryTest {
 
         tags.addNodeTag("n1", "#新标签");
 
-        assertThat(store.note("n1").tags()).containsExactly("新标签");
+        assertThat(store.getOne("n1").tags()).containsExactly("新标签");
         assertThat(ledger().find("新标签")).isNotNull();
         assertThat(ledger().tags()).hasSize(1);
     }
@@ -82,7 +79,7 @@ class TagRepositoryTest {
 
         tags.rename("设计", "设计原则");
 
-        assertThat(store.note("n1").tags()).containsExactly("设计原则");
+        assertThat(store.getOne("n1").tags()).containsExactly("设计原则");
         assertThat(ledger().find("设计")).isNull();
         assertThat(ledger().find("设计原则").color()).isEqualTo("#ff0000");
         assertThat(tags.listWithCounts()).extracting(Dtos.TagDto::name).containsExactly("设计原则");

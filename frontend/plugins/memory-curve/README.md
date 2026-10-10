@@ -38,9 +38,9 @@ plugins-dist/memory-curve.jar
 - `MemoryCurvePlugin extends SpringBootPlugin`（PF4J/SBP 的插件基类）；身份/版本在 `plugin.properties`，代码里不出现：
 - 它是**可停用插件**（描述符里 `undeactivatable=false`）：工具渲染在卡片工具行里（见 3.3），
   可随时停用/重载 —— 分类标签不靠声明，能力由它调用的 `register*` 决定；
-- `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class).importBean(PluginDataStore.class)`：
+- `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class).importBean(PluginDataRepository.class)`：
   插件有**自己的 Spring 子容器**（`MemoryCurveStarter` 是空 `@SpringBootApplication`，只负责扫描本包），
-  平台只把 `PluginDataStore`（状态 KV）显式搭桥进来 —— 插件与平台之间只有 `plugin-api` 这层契约；
+  平台只把 `PluginDataRepository`（状态 KV）显式搭桥进来 —— 插件与平台之间只有 `plugin-api` 这层契约；
 - 依赖面刻意保持最小：`plugin-api` / `sbp-core` / spring-context / spring-web / slf4j /
   spring-boot-autoconfigure。**没有数据库、没有 MyBatis、没有核心插件的任何依赖。**
 
@@ -53,7 +53,7 @@ plugins-dist/memory-curve.jar
 | 「这张卡开了记忆曲线吗」 | 平台 KV（`plugin-data.json`，分层 JSON），经通用状态面读写（entityType = `card`） | 这是**平台级的 per-entity 状态**：平台要据此做批量查询、停用闸门、以及「状态变化时通知插件」；所有插件共用一套，无需各自造轮子 |
 | 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（Properties 格式 `cardId|字段 = 值`（键就是卡片 id，与 entityType 无关）） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
-`SrsService` 里有一处很讲究的细节：**「是否开启」直接读 `PluginDataStore`，而不是注入 `PluginStateService`**。原因是后者在状态翻转时会回调插件的 `onEntityStateChanged` —— 插件正是订阅方，形成字段级循环依赖，Spring 装配不出来。直接读 KV（同一份底座数据的插件侧半边）绕开了这个环。
+`SrsService` 里有一处很讲究的细节：**「是否开启」直接读 `PluginDataRepository`，而不是注入 `PluginStateService`**。原因是后者在状态翻转时会回调插件的 `onEntityStateChanged` —— 插件正是订阅方，形成字段级循环依赖，Spring 装配不出来。直接读 KV（同一份底座数据的插件侧半边）绕开了这个环。
 
 ### 2.3 调度算法：为「笔记」调过的 SM-2
 
@@ -251,8 +251,8 @@ NoteCard 渲染卡片时：
 ## 7. 它用到的 plugin-api 契约清单
 
 后端（唯一的 PF4J 扩展点，见 `plugin-api`）：`PluginRegister`（显示名/说明/健康/状态回调都在它一个接口上）·
-`PluginDataStore`（状态 KV）·
-`CardChangedEvent`（跨插件事件）· `PluginDataStore.importBean` 搭桥
+`PluginDataRepository`（状态 KV）·
+`CardChangedEvent`（跨插件事件）· `PluginDataRepository.importBean` 搭桥
 
 界面侧：`registerCardPlugin` · `registerNavEntry` · `registerPluginRoute` · `unregisterPlugin` ·
 `pluginApi.setState` · `host()`（`notify` / `MarkdownView`）· `http` · `isPluginActive` · `refreshPluginAvailability`

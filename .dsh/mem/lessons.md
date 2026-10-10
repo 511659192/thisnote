@@ -23,3 +23,81 @@
   - 单点行为验证（不新增项目文件）：临时目录写一个单文件源码，用
     `java -cp "backend/app/target/classes;backend/plugin-api/target/classes;<fastjson2 jar>;<slf4j-api jar>" <file>.java` 直接跑。
 - **规则**：改后端优先用上面的编译命令拿硬证据；要验证运行时行为就写临时目录里的一次性程序，别为了验证往项目里塞文件。
+
+## 3. 启动应用的标准姿势（2026-10-10 本机实测）
+
+- **纠正来源**：用户要求「启动应用」。
+- **事实依据**：
+  - 打包：`cd backend && mvn -o -B -DskipTests package` → 产出 `backend/app/target/thisnode-backend.jar`，
+    并由各插件模块的 `maven-antrun-plugin` 把插件 jar 拷进 `backend/plugins-dist/`（那目录 gitignore，是交付物）。
+  - 启动（默认模式：插件从 `plugins-dist/*.jar` 装载，5 个全上）：**工作目录必须是 `backend/`**
+    （`sbp.plugins-root: plugins-dist` 是相对路径），命令 `"$env:JAVA_HOME\bin\java.exe" -jar app/target/thisnode-backend.jar`
+    → 监听 `127.0.0.1:45917`（`application.yml` 的 `server.address`）。
+  - dev 模式（插件从 `target/classes` 装载，可热重载）另需 `pwsh backend\tools\dev_plugins.ps1`，
+    且只覆盖 notes / favorite / memory-curve 三个插件（search、fuzzy-search 不在其中）——本次未实测。
+  - 前端一整套（6 个 vite）用 `cd frontend && pnpm dev` 起，它执行 `pnpm -r --parallel run dev`：
+    **host 5173 + 插件微应用 7111 favorite / 7112 memory-curve / 7113 notes / 7114 search / 7115 fuzzy-search**
+    （端口表见 `frontend/host/src/plugins/devPorts.ts`）。
+  - vite 只绑 `::1`：`127.0.0.1:5173` 连不上，要用 `localhost` / `[::1]`；宿主 `/api` 代理到 45917。
+    插件 dev server 没起时宿主自动回退到 `frontend/plugin-assets/<id>/`（宿主 vite 中间件端出）。
+  - 运行中的服务是**独立于会话存活**的（实测 12:16 起的 6 个 vite 活到 15:00 仍在），
+    所以重启前务必先枚举端口，别以为上一轮的进程已经没了。
+  - 端到端验证：`GET /api/plugins/states?pluginId=<id>&ids=a,b`（参数名是 **ids**，不是 entityIds）、
+    `/api/plugins/entities`、`/api/plugins/state`；UI 侧可用 `node --input-type=module -e` 在 `frontend/host/`
+    下跑 playwright（裸 import 按 cwd 解析），无头打开 `http://localhost:5173` 数 `.note-row` 与 console 错误。
+- **规则**：启动后端一律 `cd backend` + `"$env:JAVA_HOME\bin\java.exe" -jar app/target/thisnode-backend.jar`；
+  动手前先确认 `backend/app/target/thisnode-backend.jar` 存在（`mvn clean` 会删掉它，`.run.log` 里那条
+  `Unable to access jarfile` 就是这么来的）。
+
+## 4. 下「某服务没在跑」这种结论前，先把端口范围枚举干净（第 1 次）
+
+- **纠正来源**：我向用户报告「插件微应用的 dev server 没起，界面走 `plugin-assets` 回退」——**结论错误**。
+- **事实依据**（2026-10-10 核验）：当时我只 `netstat` 过滤了 `45917|5173|5174|5175`，漏掉了插件真正用的
+  `7111–7115`；实际 12:16 起的 6 个 vite（host 5173 + 5 个插件 7111–7115）全都在跑，
+  浏览器实测的请求来源端口就是 `5173,7111,7112,7113,7114,7115`，没有一个走回退产物。
+- **规则**：判断"某个服务/端口在不在跑"时，用 `netstat -ano | Select-String "LISTENING"` 按**端口正则整段扫**
+  （本项目要覆盖 `45917|51[7-9][0-9]|711[0-9]`），并把 PID 映射回命令行核对归属；
+  不要只探自己记得的那两个端口就下结论。杀掉别人（用户/上一轮会话）留下的进程前，也先核对命令行属于本项目。
+
+## 5. 这个工程用户会同时用 IDE 改：报「file changed」就重读，别按记忆重放
+
+- **纠正来源**：本轮编辑 `ThisnodeConfig.java` 被拒（`file changed since it was read`）。
+- **事实依据**：用户同时在 IDE 里把 `PluginEndpointGate` 改名成 `PluginEndpointHandlerInterceptor`
+  （文件时间戳 15:16:17；我先前读到的 `PluginEndpointGate` 已不存在，`PluginController`/`ThisnodeConfig` 都换了名）。
+- **规则**：多文件改名这类批量操作要**逐个文件先读再改**；遇到 file changed / not found 就重读该文件、
+  确认它是否也被用户改过，不要按记忆重放替换；**也不去顺手修用户改名留下的旧引用**（在报告里提，不代改）。
+
+## 6. 写「某改动带来 X 效果」前必须实测，并先确认测量方法本身可信（第 1 次）
+
+- **纠正来源**：我一度要把「health 移到宿主后 Tomcat 一起来就能答、比插件就绪早约 2s」当既成事实写进报告；
+  实测发现我的脚本有两处问题——PowerShell 是 **5.1**（没有 `-SkipHttpErrorCheck`），而且我把循环**起点**时间戳
+  当成了响应时刻，前两次测量都没测到真值。
+- **事实依据**：最终用**应用日志**判定 —— PID 84172：`Tomcat started` 15:34:46.144、
+  **首个请求（GET /api/health）15:34:46.442 → 200**、`[SBP] 5 plugins are started` 15:34:48.057
+  ⇒ 宿主比插件就绪**早 1.6s** 就能应答。
+- **规则**：① 结论要挂在能被定位的证据上，优先用**被测进程自己的日志时间戳**，而不是调用方脚本的计时；
+  ② 脚本报出异常值（如 5ms 就 200）先怀疑脚本；③ 判 HTTP 状态要从 `$_.Exception.Response.StatusCode` 取，
+  且 `Invoke-WebRequest` 非 2xx 会抛异常，"ERR" 分不清是连接失败还是 404。
+
+## 7. 当前接口 / 命名事实（2026-10-10 这轮改完，后续按此为准）
+
+- 探活：`GET /api/health` 由**宿主**提供 —— `backend/app/src/main/java/com/thisnode/api/HealthController.java`
+  （notes 的 `SystemController` 已删；响应字段与路径跟原来一致）。
+- notes 写接口：`POST /api/notes/update`（原 `/patch`）、`POST /api/notes/delete`（原方法名 `purge`，URL 未变）。
+  审计日志的动作名仍是 `"purge"`（ops.jsonl 里已有历史值，故意不改）。
+- 契约类型：`com.thisnode.plugin.api.PluginDataRepository`（接口）+ `com.thisnode.plugin.PluginDataRepository`（实现），
+  原 `PluginDataStore`；`PluginRegister.CONTRACT_VERSION` 仍为 `4.0.0`（本轮明确选择不升）。
+- 运行中实例（截至本轮）：后端 = 后台作业 `pwsh-691` / java PID 84172；前端 = 15:00 起的 `pnpm dev`
+  （宿主 5173 + 插件 7111–7115），前端改名靠 vite HMR 生效，未重启。
+- **规则**：重新打包 app jar 前必须先停后端，否则 `spring-boot:repackage` 会因 Windows 文件锁失败
+  （`Unable to rename 'thisnode-backend.jar' to 'thisnode-backend.jar.original'`，本轮实际踩到）。
+
+## 8. 项目阶段：开发版本，不考虑兼容性（用户 2026-10-10 明确）
+
+- **纠正来源**：用户要求把「现在是开发版本、不考虑兼容性」记进项目本地 `AGENTS.md`。
+- **事实依据**：已新建项目根 `D:\projects\thisnote\AGENTS.md`（此前根目录只有 `.gitignore`，没有这个文件）。
+- **规则**：改 HTTP 接口路径与语义、`plugin-api` 契约类型/方法名、落盘格式（`plugin-data.json` / `ops.jsonl`）、
+  前端动作名、本仓一次性脚本时，**不再以"向后兼容"为由保留旧形态**：不写兼容层/重载别名、不写数据迁移脚本、
+  不为了"标记断裂"而递增版本号。这一条**推翻我本轮基于兼容性给出的那条建议**
+  （当时我建议不改 `PluginDataStore` 的名字，理由正是"契约二进制断裂、而 `plugin.requires` 是下界拦不住旧 jar"）。
+  仍然要给影响面清单（谁会被打破、要同步重建/重跑什么）。

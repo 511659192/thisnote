@@ -287,7 +287,7 @@ public class CardRepository {
 
     /** 写一张卡片，插进清单第 {@code slot} 位（{@code slot < 0} 表示追加）。 */
     public CardMeta putCard(String noteId, CardMeta card, String contentMd, int slot) {
-        NoteMeta note = noteRepository.note(noteId);
+        NoteMeta note = noteRepository.getOne(noteId);
         if (note == null) {
             return null;
         }

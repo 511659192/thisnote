@@ -4,8 +4,8 @@ import com.alibaba.fastjson2.JSONFactory;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.support.config.FastJsonConfig;
 import com.alibaba.fastjson2.support.spring6.http.converter.FastJsonHttpMessageConverter;
-import com.thisnode.plugin.PluginDataStore;
-import com.thisnode.plugin.PluginEndpointGate;
+import com.thisnode.plugin.PluginDataRepository;
+import com.thisnode.plugin.PluginEndpointHandlerInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,21 +39,21 @@ public class ThisnodeConfig {
      * 改了下次请求即生效。
      * 文件路径默认与保险库同级（{@code ~/.thisnode/}）：它不是笔记数据，不该混进保险库目录。
      *
-     * <p>实现（{@link PluginDataStore}）放在平台侧：契约模块保持零实现依赖。
+     * <p>实现（{@link PluginDataRepository}）放在平台侧：契约模块保持零实现依赖。
      *
      * <p>Bean 的类型写成实现类而不是契约接口：平台内部（如 {com.thisnode.plugin.PluginStateService}）
      * 注入的是这个文件存储本身，而插件拿到的仍是契约接口（实例可赋值给两者）。
      * 两者同名不同包（{@code com.thisnode.plugin} / {@code …plugin.api}），写 import 时别选错。
      */
     @Bean
-    public PluginDataStore pluginDataStore(
+    public PluginDataRepository pluginDataRepository(
             @Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        return new PluginDataStore(
+        return new PluginDataRepository(
                 Paths.get(dataRoot, "plugin-data.json"));
     }
 
     @Bean
-    public WebMvcConfigurer corsConfigurer(PluginEndpointGate pluginGate) {
+    public WebMvcConfigurer corsConfigurer(PluginEndpointHandlerInterceptor pluginGate) {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {

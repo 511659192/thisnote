@@ -1,6 +1,6 @@
 package com.thisnode.ext.memorycurve;
 
-import com.thisnode.plugin.api.PluginDataStore;
+import com.thisnode.plugin.api.PluginDataRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,11 +66,11 @@ public class SrsService {
      * 核心插件缺位时它照样能独立启动。代价是卡片被删后条目会残留（没有通知机制能感知），
      * 所以 due 列表把它们原样返回，由界面侧跳过（卡片内容由界面侧自己取）。
      */
-    private final PluginDataStore store;
+    private final PluginDataRepository store;
     private final Path file;
     private Map<String, CardSchedule> schedules;
 
-    public SrsService(PluginDataStore store,
+    public SrsService(PluginDataRepository store,
                       @org.springframework.beans.factory.annotation.Value(
                               "${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
         this.store = store;

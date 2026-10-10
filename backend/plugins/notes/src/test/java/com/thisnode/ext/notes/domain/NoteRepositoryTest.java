@@ -4,10 +4,7 @@ import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.store.CardFile;
-import com.thisnode.ext.notes.store.NoteFilePaths;
 import com.thisnode.ext.notes.util.Ids;
-import com.thisnode.ext.notes.domain.CardRepository;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -57,7 +54,7 @@ class NoteRepositoryTest {
                 blockRepository, opsRepository);
     }
 
-    private String newNote(String title, String contentMd) {
+    private String newGetOne(String title, String contentMd) {
         String id = noteRepository.insert(title, "note", null, null, null);
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
         cardRepository.putCard(id, CardMeta.fresh(Ids.newId(), 0, 0, "", null, null,
@@ -68,9 +65,9 @@ class NoteRepositoryTest {
     @Test
     @DisplayName("新建笔记时正文落成一张卡片，读回来是卡片拼接的结果")
     void contentBecomesACard() {
-        String id = newNote("会议记录", "# 会议记录\n\n今天讨论了三件事。");
+        String id = newGetOne("会议记录", "# 会议记录\n\n今天讨论了三件事。");
 
-        assertThat(noteRepository.note(id).title()).isEqualTo("会议记录");
+        assertThat(noteRepository.getOne(id).title()).isEqualTo("会议记录");
         assertThat(noteRepository.noteMarkdown(id)).isEqualTo("# 会议记录\n\n今天讨论了三件事。");
 
         List<CardMeta> cards = store.cards(id);
@@ -81,7 +78,7 @@ class NoteRepositoryTest {
     @Test
     @DisplayName("软删除只改标记、卡片文件还在；硬删除把文件一起清掉")
     void trashKeepsFilesAndPurgeRemovesThem() throws IOException {
-        String id = newNote("要删的笔记", "内容还在");
+        String id = newGetOne("要删的笔记", "内容还在");
         String cardId = store.cards(id).get(0).id();
         Path card = store.fileOf(cardId);
         assertThat(Files.exists(card)).isTrue();
@@ -89,29 +86,29 @@ class NoteRepositoryTest {
                 .startsWith(CardFile.META_PREFIX)
                 .contains(cardId);
 
-        store.writeNoteMeta(store.note(id).withDeleted(true));
-        assertThat(store.note(id).deleted()).isTrue();
+        store.writeNoteMeta(store.getOne(id).withDeleted(true));
+        assertThat(store.getOne(id).deleted()).isTrue();
         assertThat(Files.exists(card)).isTrue();
 
-        store.writeNoteMeta(store.note(id).withDeleted(false));
-        assertThat(store.note(id).deleted()).isFalse();
+        store.writeNoteMeta(store.getOne(id).withDeleted(false));
+        assertThat(store.getOne(id).deleted()).isFalse();
 
-        store.writeNoteMeta(store.note(id).withDeleted(true));
-        noteRepository.deleteHard(id);
+        store.writeNoteMeta(store.getOne(id).withDeleted(true));
+        noteRepository.delete(id);
         assertThat(Files.exists(card)).isFalse();
-        assertThat(noteRepository.note(id)).isNull();
+        assertThat(noteRepository.getOne(id)).isNull();
         assertThat(store.cards(id)).isEmpty();
         assertThat(Files.exists(root.resolve("meta").resolve(id + ".json"))).isFalse();
     }
 
     @Test
     @DisplayName("标签写在笔记 meta 里，标签 id 就是它的名字")
-    void tagsLiveInNoteMeta() {
-        String id = newNote("带标签的笔记", "正文");
+    void tagsLiveInGetOneMeta() {
+        String id = newGetOne("带标签的笔记", "正文");
 
         tagRepository.setNodeTags(id, List.of("#设计", "随笔", "设计"));
         assertThat(noteService.tagsOfNames(id)).containsExactly("设计", "随笔");
-        assertThat(store.note(id).tags()).containsExactly("设计", "随笔");
+        assertThat(store.getOne(id).tags()).containsExactly("设计", "随笔");
 
         tagRepository.setColor("设计", "#ff0000");
         assertThat(tagRepository.tagsOf(id)).anySatisfy(tag -> {
@@ -132,32 +129,32 @@ class NoteRepositoryTest {
 
     @Test
     @DisplayName("归属分组写在笔记 meta 上，移动笔记只改那一个文件")
-    void notebookAssignmentIsStoredOnTheNote() {
-        String id = newNote("要归组的笔记", "正文");
+    void notebookAssignmentIsStoredOnTheGetOne() {
+        String id = newGetOne("要归组的笔记", "正文");
         String group = notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(id, group);
 
-        assertThat(store.note(id).notebookId()).isEqualTo(group);
+        assertThat(store.getOne(id).notebookId()).isEqualTo(group);
         assertThat(notebookRepository.nodeIdsOf(group)).containsExactly(id);
         assertThat(notebookRepository.list("notebook")).singleElement()
                 .satisfies(c -> assertThat(c.count()).isEqualTo(1));
 
         String other = notebookRepository.create("工作", null, "💼", "notebook");
         notebookRepository.setExclusiveGroup(id, other);
-        assertThat(store.note(id).notebookId()).isEqualTo(other);
+        assertThat(store.getOne(id).notebookId()).isEqualTo(other);
         assertThat(notebookRepository.nodeIdsOf(group)).isEmpty();
         assertThat(notebookRepository.countNotebooksOf(id)).isEqualTo(1);
 
         // 删分组不能让笔记变成无归属
         notebookRepository.delete(other);
-        assertThat(store.note(id).notebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
+        assertThat(store.getOne(id).notebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
     }
 
     @Test
     @DisplayName("列表过滤（回收站 / 标签 / 全文）在内存过滤上等价于旧的 SQL 条件")
     void listFiltersMatchTheOldSql() {
-        String a = newNote("苹果笔记", "关于苹果的正文");
-        String b = newNote("香蕉笔记", "关于香蕉的正文");
+        String a = newGetOne("苹果笔记", "关于苹果的正文");
+        String b = newGetOne("香蕉笔记", "关于香蕉的正文");
         assertThat(noteService.list(NoteService.Query.defaults())).hasSize(2);
 
         assertThat(noteService.list(new NoteService.Query("all", null, null, null, "苹果",
@@ -172,7 +169,7 @@ class NoteRepositoryTest {
                 false, 500, 0)))
                 .extracting(s -> s.id()).containsExactly(a);
 
-        store.writeNoteMeta(store.note(b).withDeleted(true));
+        store.writeNoteMeta(store.getOne(b).withDeleted(true));
         assertThat(noteService.list(new NoteService.Query("trash", null, null, null, null,
                 false, 500, 0))).extracting(s -> s.id()).containsExactly(b);
     }

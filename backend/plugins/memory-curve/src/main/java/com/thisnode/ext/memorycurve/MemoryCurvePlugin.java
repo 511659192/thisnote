@@ -38,7 +38,7 @@ public class MemoryCurvePlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, MemoryCurveStarter.class)
-                .importBean(com.thisnode.plugin.api.PluginDataStore.class);
+                .importBean(com.thisnode.plugin.api.PluginDataRepository.class);
     }
 
     /**

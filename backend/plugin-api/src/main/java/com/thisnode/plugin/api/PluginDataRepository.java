@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * <p>实例由主应用创建；插件经 SBP 的 {@code importBean} 拿到主容器的那个实现。
  */
-public interface PluginDataStore {
+public interface PluginDataRepository {
 
     /** 单个实体开着吗。 */
     boolean isEnabled(String pluginId, String entityId);

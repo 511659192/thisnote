@@ -5,8 +5,6 @@ import com.thisnode.ext.notes.store.CardMeta;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.service.NoteService;
-import com.thisnode.ext.notes.domain.CardRepository;
-import com.thisnode.ext.notes.domain.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -77,7 +75,7 @@ class NoteLinkSearchTest {
 
         assertThat(links.inbound(target)).hasSize(1);
         // 引用面板的数据源是对端 meta 里的入链缓存（不再有 backlinks 查询）
-        assertThat(nodes.note(target).inbound()).singleElement()
+        assertThat(nodes.getOne(target).inbound()).singleElement()
                 .satisfies(entry -> assertThat(entry.fromId()).isEqualTo(source));
         assertThat(links.total()).isEqualTo(2);
         assertThat(links.stubExists("还没有的笔记")).isTrue();
@@ -104,7 +102,7 @@ class NoteLinkSearchTest {
         String target = newNote("旧标题", "目标正文");
         String source = newNote("来源", "引用 [[旧标题]] 的正文");
 
-        service.patch(target, new Dtos.UpdateNodeRequest(
+        service.update(target, new Dtos.UpdateNodeRequest(
                 "新标题", null, null, null, null, null, null));
 
         assertThat(store.noteMarkdown(source)).contains("[[新标题]]");

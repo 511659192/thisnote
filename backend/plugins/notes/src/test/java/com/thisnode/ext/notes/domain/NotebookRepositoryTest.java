@@ -86,6 +86,6 @@ class NotebookRepositoryTest {
         // 被删的分组消失；子分组不连坐，上提到顶层；笔记回默认分组
         assertThat(notebooks.find(parent)).isNull();
         assertThat(notebooks.find(sub).parentId()).isNull();
-        assertThat(store.note(noteId).notebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
+        assertThat(store.getOne(noteId).notebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
     }
 }

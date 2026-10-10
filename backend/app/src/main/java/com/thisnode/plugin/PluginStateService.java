@@ -17,7 +17,7 @@ import java.util.Map;
  * 由 PF4J 的插件状态（以及它自己的停用名单 {@code plugins/disabled.txt}）决定。
  * 这里只做转发与通知，不再另存一份标记 —— 两份真相源迟早会打架。
  *
- * <p>插件自己的数据都在 {@link PluginDataStore}（一个文件）：只有两级，「某插件记着哪些实体开着」。
+ * <p>插件自己的数据都在 {@link PluginDataRepository}（一个文件）：只有两级，「某插件记着哪些实体开着」。
  * 平台不解释实体是什么，也没有配置项这一层（早先的 {@code config} 分区已删——没有插件用过）。
  *
  * <p>状态翻转一律在这里通知插件，而不是在 REST 层：任何调用方（控制器、测试、将来的服务）都得到
@@ -28,11 +28,11 @@ public class PluginStateService {
 
     private static final Logger log = LoggerFactory.getLogger(PluginStateService.class);
 
-    private final PluginDataStore store;
+    private final PluginDataRepository store;
     private final PluginRegistry registry;
 
     private final org.springframework.beans.factory.ObjectProvider<org.pf4j.PluginManager> pluginManager;
-    public PluginStateService(PluginDataStore store, PluginRegistry registry,
+    public PluginStateService(PluginDataRepository store, PluginRegistry registry,
                               org.springframework.beans.factory.ObjectProvider<org.pf4j.PluginManager> pluginManager) {
         this.pluginManager = pluginManager;
         this.store = store;

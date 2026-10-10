@@ -26,7 +26,7 @@ export const noteApi = {
       notebookId?: string
   }) => http.post<NoteDetail>('/api/notes', payload),
 
-  patch: (
+  update: (
     id: string,
     payload: {
       title?: string
@@ -37,9 +37,9 @@ export const noteApi = {
       notebookId?: string
       clearNotebook?: boolean
     },
-  ) => http.post<NoteDetail>('/api/notes/patch', payload, { id }),
+  ) => http.post<NoteDetail>('/api/notes/update', payload, { id }),
 
-  purge: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
+  delete: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
 
   addTag: (id: string, name: string) =>
     http.post<NoteDetail['tags']>('/api/notes/tags/add', undefined, { id, name }),

@@ -1,6 +1,6 @@
 package com.thisnode.ext.favorite;
 
-import com.thisnode.plugin.api.PluginDataStore;
+import com.thisnode.plugin.api.PluginDataRepository;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -12,7 +12,7 @@ import org.pf4j.PluginWrapper;
  * <p>形态：{@code plugins/favorite.jar}，由 PF4J/SBP 用自己的 ClassLoader 装载、在自己的
  * Spring 子容器里运行，控制器再由 SBP 挂进主 MVC —— 所以外部路径仍是 {@code /api/plugins/favorite/**}。
  *
- * <p>它只依赖 plugin-api：没有自己的表，状态落在底座的 {@code PluginDataStore}（一个文件）。
+ * <p>它只依赖 plugin-api：没有自己的表，状态落在底座的 {@code PluginDataRepository}（一个文件）。
  * id 与版本来自 {@code plugin.properties}，不在这里硬编码。
  */
 public class FavoritePlugin extends SpringBootPlugin {
@@ -29,7 +29,7 @@ public class FavoritePlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, FavoriteStarter.class)
-                .importBean(PluginDataStore.class);
+                .importBean(PluginDataRepository.class);
     }
 
 }
