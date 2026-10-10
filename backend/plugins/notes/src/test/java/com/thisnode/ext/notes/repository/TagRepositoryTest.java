@@ -35,8 +35,7 @@ class TagRepositoryTest {
         store = new NoteRepository(new NoteFilePaths(root));
         tags = new TagRepository(store.paths());
         // 标签的归属在 meta（NoteRepository）、属性在台账（TagRepository）：跨两边的操作由服务编排。
-        service = new NoteService(store, tags, new LinkRepository(store),
-                new NotebookRepository(store), new CardRepository(store));
+        service = new NoteService(store, tags, new NotebookRepository(store), new CardRepository(store));
     }
 
     private void seedNote(String id, String... tagNames) {

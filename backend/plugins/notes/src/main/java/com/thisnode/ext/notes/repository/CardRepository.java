@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardFile;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.domain.CardRef;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import cn.hutool.core.util.IdUtil;
@@ -239,25 +238,23 @@ public class CardRepository {
         if (note == null) {
             return null;
         }
-        CardRef existing = refOf(note, card.id());
-        Path knownFile = existing == null ? null : noteRepository.cardPath(existing);
+        int at = indexOfCard(note, card.id());
+        Path knownFile = at >= 0 ? noteRepository.paths().root().resolve(note.cardPath().get(at)) : null;
         Path file = knownFile != null ? knownFile
                 : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
                         card.id());
         JsonFileUtils.writeText(file, CardFile.compose(card, contentMd));
-        CardRef ref = new CardRef(card.id(), noteFilePaths.relative(file));
-
-        List<CardRef> cards = new ArrayList<>(note.cardRefs());
-        int at = indexOf(cards, card.id());
+        List<String> paths = new ArrayList<>(note.cardPath());
+        String relative = noteFilePaths.relative(file);
         if (at >= 0) {
-            cards.set(at, ref);
-        } else if (slot >= 0 && slot < cards.size()) {
-            cards.add(slot, ref);
+            paths.set(at, relative);
+        } else if (slot >= 0 && slot < paths.size()) {
+            paths.add(slot, relative);
         } else {
-            cards.add(ref);
+            paths.add(relative);
         }
         JsonFileUtils.write(noteRepository.paths().noteMeta(note.id()),
-                note.withCards(cards).touched(System.currentTimeMillis()));
+                note.withCardPaths(paths).touched(System.currentTimeMillis()));
         return card;
     }
 
@@ -269,7 +266,7 @@ public class CardRepository {
         if (owned == null) {
             return;
         }
-        noteRepository.writeCardMeta(card, noteRepository.cardPath(owned.ref()));
+        noteRepository.writeCardMeta(card, owned.file());
     }
 
     /** 删一张卡片：先摘出笔记清单，再删文件。 */
@@ -278,11 +275,11 @@ public class CardRepository {
         if (owned == null) {
             return;
         }
-        noteRepository.deleteCardFiles(noteRepository.cardPath(owned.ref()));
-        List<CardRef> cards = new ArrayList<>(owned.note().cardRefs());
-        cards.removeIf(ref -> ref.id().equals(cardId));
+        noteRepository.deleteCardFiles(owned.file());
+        List<String> paths = new ArrayList<>(owned.note().cardPath());
+        paths.remove(noteRepository.paths().relative(owned.file()));
         JsonFileUtils.write(noteRepository.paths().noteMeta(owned.note().id()),
-                owned.note().withCards(cards).touched(System.currentTimeMillis()));
+                owned.note().withCardPaths(paths).touched(System.currentTimeMillis()));
     }
 
 
@@ -308,18 +305,12 @@ public class CardRepository {
         return noteFilePaths.cardsDir().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
     }
 
-    private static CardRef refOf(NoteMeta note, String cardId) {
-        for (CardRef ref : note.cardRefs()) {
-            if (ref.id().equals(cardId)) {
-                return ref;
-            }
-        }
-        return null;
-    }
 
-    private static int indexOf(List<CardRef> cards, String cardId) {
-        for (int i = 0; i < cards.size(); i++) {
-            if (cards.get(i).id().equals(cardId)) {
+    private int indexOfCard(NoteMeta note, String cardId) {
+        for (int i = 0; i < note.cardPath().size(); i++) {
+            Path file = noteRepository.paths().root().resolve(note.cardPath().get(i));
+            NoteRepository.CardData data = noteRepository.readCard(file);
+            if (data != null && data.meta() != null && cardId.equals(data.meta().id())) {
                 return i;
             }
         }

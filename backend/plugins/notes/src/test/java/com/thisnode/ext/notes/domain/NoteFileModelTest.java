@@ -185,23 +185,22 @@ class NoteFileModelTest {
     }
 
     @Test
-    @DisplayName("新版 meta 的 cardRefs 字段可加载，明细正文可查询")
-    void readsLegacyCardsFieldFromNoteMeta() throws IOException {
+    @DisplayName("meta 存卡片文件路径，仍能通过 CardMeta.id 管理卡片")
+    void readsCardPathsFromNoteMeta() throws IOException {
         Path card = store.writeCard("旧笔记", CardMeta.newCardMeta("card-legacy", 0, 0, "", null, null, 1L),
                 "旧格式中的正文", null);
         Path metaDir = root.resolve("meta");
         Files.createDirectories(metaDir);
         String legacyMeta = com.alibaba.fastjson2.JSON.toJSONString(Map.of(
                 "v", 2, "id", "note-legacy", "title", "旧笔记", "type", "note",
-                "cardRefs", List.of(Map.of("id", "card-legacy",
-                        "file", root.relativize(card).toString().replace(java.io.File.separatorChar, '/'))),
+                "cardPath", List.of(store.paths().relative(card)),
                 "createdAt", 1, "updatedAt", 1));
         Files.writeString(metaDir.resolve("note-legacy.json"), legacyMeta, StandardCharsets.UTF_8);
 
         NoteMeta loaded = store.getOne("note-legacy");
 
         assertThat(loaded).isNotNull();
-        assertThat(loaded.cardRefs()).hasSize(1);
+        assertThat(loaded.cardPath()).hasSize(1);
         assertThat(store.noteMarkdown("note-legacy")).isEqualTo("旧格式中的正文");
     }
 
@@ -237,8 +236,7 @@ class NoteFileModelTest {
 
         assertThat(Files.exists(sidecar)).isTrue();
         assertThat(store.findAll()).hasSize(1);
-        assertThat(store.findAll().get(0).cardRefs()).hasSize(1);
-        assertThat(store.findAll().get(0).cardRefs().get(0).id()).isEqualTo("bbbbbbbb-2222");
+        assertThat(store.findAll().get(0).cardPath()).containsExactly(store.paths().relative(md));
     }
 
     @Test
@@ -271,10 +269,9 @@ class NoteFileModelTest {
         store.writeCard("测试笔记", card, content, md);
         NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().noteMeta(noteId), NoteMeta.class);
         if (note != null) {
-            List<CardRef> cards = new ArrayList<>(note.cardRefs());
-            cards.add(Math.max(0, Math.min(slot, cards.size())),
-                    new CardRef(cardId, store.paths().relative(md)));
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.id()), note.withCards(cards));
+            List<String> paths = new ArrayList<>(note.cardPath());
+            paths.add(Math.max(0, Math.min(slot, paths.size())), store.paths().relative(md));
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.id()), note.withCardPaths(paths));
         }
     }
 }

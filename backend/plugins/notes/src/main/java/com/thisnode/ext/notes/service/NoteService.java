@@ -28,7 +28,6 @@ public class NoteService {
 
     private final NoteRepository noteRepository;
     private final TagRepository tagRepository;
-    private final LinkRepository linkRepository;
     private final NotebookRepository notebookRepository;
     private final CardRepository cardRepository;
 
@@ -71,6 +70,29 @@ public class NoteService {
 
     // ================================================================= update
 
+    /** 扫描正文，找出以标题链接引用该笔记的其他笔记。只在改名时按需计算。 */
+    private List<String> referencingNodeIds(String noteId) {
+        NoteMeta note = noteRepository.getOne(noteId);
+        if (note == null || note.title().isBlank()) {
+            return List.of();
+        }
+        List<String> variants = MarkdownUtils.wikiLinkVariants(note.title());
+        List<String> referrers = new ArrayList<>();
+        for (NoteMeta other : noteRepository.findAll()) {
+            if (other.id().equals(noteId)) {
+                continue;
+            }
+            String markdown = noteRepository.noteMarkdown(other.id());
+            for (String variant : variants) {
+                if (markdown.contains(variant)) {
+                    referrers.add(other.id());
+                    break;
+                }
+            }
+        }
+        return referrers;
+    }
+
     public void update(String id, Dtos.UpdateNodeRequest req) {
         NoteMeta meta = noteRepository.getOne(id);
         if (meta == null) {
@@ -81,9 +103,8 @@ public class NoteService {
         String oldTitle = meta.title();
         boolean renamed = req.title() != null && !req.title().equals(oldTitle);
         // 引用者必须在标题改动**之前**收集：链接图是派生的，标题一改，正文里的 [[旧标题]] 当场
-        // 就不再指向本篇，之后再问"谁引用了我"只会得到空集。（数据库时代 linkRepository.to_node_id 是
-        // 存下来的，改名不会让它变，所以那时先改名后收集也成立 —— 派生模型下不成立。）
-        List<String> referrers = renamed ? linkRepository.referencingNodeIds(id) : List.of();
+        // 就不再指向本篇，之后再问"谁引用了我"只会得到空集。引用关系从正文现算，所以必须先收集。
+        List<String> referrers = renamed ? referencingNodeIds(id) : List.of();
         String nextTitle = oldTitle;
         if (renamed) {
             nextTitle = titleOf(req.title(), content);
@@ -226,7 +247,8 @@ public class NoteService {
         NoteMeta meta = require(id);
         String content = noteRepository.noteMarkdown(id);
         List<String> unresolved = unresolvedOf(content);
-        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.cardRefs(), tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
+        List<String> cardIds = noteRepository.cards(id).stream().map(CardMeta::id).toList();
+        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), cardIds, tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
     }
 
     /**

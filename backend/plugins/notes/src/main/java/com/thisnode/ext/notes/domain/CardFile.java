@@ -29,24 +29,24 @@ public final class CardFile {
     private CardFile() {
     }
 
-    /** 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。 */
-    public static String compose(CardMeta meta, String contentMd) {
-        String json = JSON.toJSONString(meta)
-                .replace("\r", " ")
-                .replace("\n", " ");
+    /**
+     * 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。
+     */
+    public static String compose(CardMeta meta,
+                                 String contentMd) {
+        String json = JSON.toJSONString(meta).replace("\r", " ").replace("\n", " ");
         return META_PREFIX + json + META_SUFFIX + "\n" + (contentMd == null ? "" : contentMd);
     }
 
-    /** 取头部注释里的 meta；没有注释、或注释坏了返回 {@code null}（调用方按"无元数据"处理）。 */
+    /**
+     * 取头部注释里的 meta；没有注释、或注释坏了返回 {@code null}（调用方按"无元数据"处理）。
+     */
     public static CardMeta metaOf(String fileContent) {
         String firstLine = firstLineOf(fileContent);
-        if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX)
-                || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
+        if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX) || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
             return null;
         }
-        String json = firstLine
-                .substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length())
-                .strip();
+        String json = firstLine.substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length()).strip();
         try {
             return JSON.parseObject(json, CardMeta.class);
         } catch (RuntimeException e) {
@@ -54,7 +54,9 @@ public final class CardFile {
         }
     }
 
-    /** 正文 = 文件内容去掉头部注释行（没有注释就是原样）。 */
+    /**
+     * 正文 = 文件内容去掉头部注释行（没有注释就是原样）。
+     */
     public static String bodyOf(String fileContent) {
         if (fileContent == null) {
             return "";

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -39,8 +38,7 @@ class NoteListTagsTest {
         CardRepository blockRepository = new CardRepository(store);
         tagRepository = new TagRepository(store.paths());
         NotebookRepository notebookRepository = new NotebookRepository(store);
-        noteService = new NoteService(noteRepository, tagRepository, Mockito.mock(LinkRepository.class),
-                notebookRepository, blockRepository);
+        noteService = new NoteService(noteRepository, tagRepository, notebookRepository, blockRepository);
     }
 
     private String newNote(String title, List<String> tags) {

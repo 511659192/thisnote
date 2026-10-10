@@ -68,7 +68,7 @@ class NoteLoadPerfProbe {
         String tag = root.getFileName().toString();
         for (int n = 0; n < notes; n++) {
             String noteId = "note-" + tag + "-" + n;
-            java.util.List<CardRef> refs = new java.util.ArrayList<>();
+            java.util.List<String> refs = new java.util.ArrayList<>();
             for (int c = 0; c < CARDS_PER_NOTE; c++) {
                 String blockId = java.util.UUID.randomUUID().toString();
                 String slug = "卡片-" + n + "-" + c;
@@ -76,10 +76,10 @@ class NoteLoadPerfProbe {
                 Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
-                refs.add(new CardRef(blockId, root.relativize(md).toString().replace('\\', '/')));
+                refs.add(store.paths().relative(md));
             }
             com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(noteId),
-                    NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default").withCards(refs));
+                    NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default").withCardPaths(refs));
         }
     }
 

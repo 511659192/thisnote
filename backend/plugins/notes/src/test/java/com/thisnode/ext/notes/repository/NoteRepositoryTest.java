@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -46,9 +45,7 @@ class NoteRepositoryTest {
         blockRepository = new CardRepository(store);
         tagRepository = new TagRepository(store.paths());
         notebookRepository = new NotebookRepository(store);
-        LinkRepository links = Mockito.mock(LinkRepository.class);
-        noteService = new NoteService(noteRepository, tagRepository, links, notebookRepository,
-                blockRepository);
+        noteService = new NoteService(noteRepository, tagRepository, notebookRepository, blockRepository);
     }
 
     private String newGetOne(String title, String contentMd) {

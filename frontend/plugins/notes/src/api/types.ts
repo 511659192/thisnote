@@ -74,12 +74,7 @@ export interface NotePageData {
   updatedAt: number
 }
 
-export interface Card {
-  /** 卡片 id：稳定身份（文件名变了也不变），按需取内容时用它。 */
-  id: string
-  /** 卡片文件相对保险库根目录的路径；顺序即阅读顺序。 */
-  file: string
-}
+export type CardId = string
 
 /**
  * 一篇笔记的 meta（后端原样返回的列表行）：没有正文体，摘要与计数是后端写入时算好的缓存。
@@ -93,8 +88,8 @@ export interface NoteMeta {
   tags: string[]
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
-  /** 本篇的卡片清单（顺序即阅读顺序）。 */
-  cards: Card[]
+  /** 本篇卡片文件相对笔记根目录的路径清单（顺序即阅读顺序）。 */
+  cardPath: string[]
   createdAt: number
   updatedAt: number
 }
@@ -105,8 +100,8 @@ export interface NoteDetail {
   contentMd: string
   type: NoteType
   tags: string[]
-  /** 卡片清单（只有身份）：页面级数据按需取，见 {@link Card}。 */
-  cards: Card[]
+  /** 有序卡片 ID 清单；页面级数据按需取。 */
+  cards: CardId[]
   notebooks: Notebook[]
   unresolved: string[]
   unlinkedMentions: string[]

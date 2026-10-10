@@ -30,7 +30,6 @@ class NoteLinkSearchTest {
     private NoteRepository store;
     private CardRepository cardRepository;
     private TagRepository tags;
-    private LinkRepository links;
     private NoteService service;
 
     @BeforeEach
@@ -43,8 +42,7 @@ class NoteLinkSearchTest {
         CardRepository blocks = new CardRepository(store);
         tags = new TagRepository(store.paths());
         NotebookRepository notebooks = new NotebookRepository(store);
-        links = new LinkRepository(store);
-        service = new NoteService(nodes, tags, links, notebooks, blocks);
+        service = new NoteService(nodes, tags, notebooks, blocks);
 
     }
 
@@ -63,8 +61,7 @@ class NoteLinkSearchTest {
         String source = newNote("来源笔记", "见 [[目标笔记]] 与 [[还没有的笔记]]");
 
         assertThat(service.detail(source).unresolved()).containsExactly("还没有的笔记");
-        assertThat(links.referencingNodeIds(target)).containsExactly(source);
-        assertThat(links.referencingNodeIds(source)).isEmpty();
+        assertThat(service.detail(target).unresolved()).isEmpty();
     }
 
     @Test
@@ -77,7 +74,7 @@ class NoteLinkSearchTest {
                 "以后才写的", "", "note", null, null));
 
         assertThat(service.detail(source).unresolved()).isEmpty();
-        assertThat(links.referencingNodeIds(target)).contains(source);
+        assertThat(service.detail(target).unresolved()).isEmpty();
     }
 
     @Test
@@ -91,7 +88,6 @@ class NoteLinkSearchTest {
 
         assertThat(store.noteMarkdown(source)).contains("[[新标题]]");
         assertThat(store.noteMarkdown(source)).doesNotContain("[[旧标题]]");
-        assertThat(links.referencingNodeIds(target)).containsExactly(source);
     }
 
 }

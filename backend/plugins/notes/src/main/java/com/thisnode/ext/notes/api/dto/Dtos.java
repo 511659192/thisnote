@@ -1,7 +1,5 @@
 package com.thisnode.ext.notes.api.dto;
 
-import com.thisnode.ext.notes.domain.CardRef;
-
 import java.util.List;
 
 /**
@@ -29,10 +27,10 @@ public final class Dtos {
     public record NoteDetail(
             String id, String title, String contentMd, String type,
             /**
-             * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
-             * 界面侧拿这份清单去 {@code GET /api/notes/cardRefs?ids=}。
+             * 卡片 ID 清单：页面级数据（坐标、正文）按需取，
+             * 界面侧用这些 ID 请求 {@code GET /api/notes/cards?noteId=}。
              */
-            List<CardRef> cards,
+            List<String> cards,
             List<String> tags, List<NotebookDto> notebooks,
             List<String> unresolved, List<String> unlinkedMentions,
             long createdAt, long updatedAt) {

@@ -65,7 +65,7 @@ async function applyRoute() {
   await nodes.select(id)
   if (nodes.current) {
     // 卡片清单来自笔记详情（只有身份），几何与正文由 page.load 按视口分批取。
-    await page.load(id, (nodes.current.cards ?? []).map((c) => c.id))
+    await page.load(id, nodes.current.cards ?? [])
     titleDraft.value = nodes.current.title
   }
 }
