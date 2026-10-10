@@ -35,8 +35,7 @@ plugins-dist/memory-curve.jar
   └── 类 + 空 Spring 容器入口
 ```
 
-- `MemoryCurvePlugin extends SpringBootPlugin implements Plugin`（SBP 的插件基类 + 契约接口）：
-  id/version 由 `descriptor()` 从 PF4J 描述符取，**不在代码里硬编码**；
+- `MemoryCurvePlugin extends SpringBootPlugin`（PF4J/SBP 的插件基类）；身份/版本在 `plugin.properties`，代码里不出现：
 - 它是**可停用插件**（描述符里 `undeactivatable=false`）：工具渲染在卡片工具行里（见 3.3），
   可随时停用/重载 —— 分类标签不靠声明，能力由它调用的 `register*` 决定；
 - `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class).importBean(PluginDataStore.class)`：
@@ -247,7 +246,8 @@ NoteCard 渲染卡片时：
 
 ## 7. 它用到的 plugin-api 契约清单
 
-后端：`Plugin`（契约接口）· `PluginDescriptor` · `PluginHealth` · `PluginDataStore`（状态 KV）·
+后端（唯一的 PF4J 扩展点，见 `plugin-api`）：`PluginRegister`（显示名/说明/健康/状态回调都在它一个接口上）·
+`PluginDataStore`（状态 KV）·
 `CardChangedEvent`（跨插件事件）· `PluginDataStore.importBean` 搭桥
 
 界面侧：`registerCardPlugin` · `registerNavEntry` · `registerPluginRoute` · `unregisterPlugin` ·

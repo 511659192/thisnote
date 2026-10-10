@@ -1,9 +1,7 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.Plugin;
 import com.thisnode.plugin.api.PluginConfigField;
 import com.thisnode.plugin.api.PluginDataStore;
-import com.thisnode.plugin.api.PluginDescriptor;
 import com.thisnode.plugin.api.PluginHealth;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,12 +42,13 @@ public class PluginController {
     /** 全部插件的管理视图：描述 + 全局启停 + 健康 + 配置 schema。 */
     @GetMapping
     public List<Map<String, Object>> plugins() {
-        return registry.all().stream().map(states::describe).toList();
+        return registry.ids().stream().map(states::describe).toList();
     }
 
     @GetMapping("/detail")
     public Map<String, Object> plugin(@RequestParam String pluginId) {
-        return states.describe(registry.get(pluginId));
+        registry.get(pluginId); // 未知 id → 404（与旧行为一致）
+        return states.describe(pluginId);
     }
 
     /** 全局启停。停用后该插件的自有端点会被拦下（管理面仍可访问，否则没法再打开）。 */
@@ -57,7 +56,7 @@ public class PluginController {
     public Map<String, Object> setActive(@RequestParam String pluginId,
                                          @RequestParam boolean value) {
         states.setActive(pluginId, value);
-        return states.describe(registry.get(pluginId));
+        return states.describe(pluginId);
     }
 
     /**
@@ -72,12 +71,13 @@ public class PluginController {
     public Map<String, Object> reload(@RequestParam String pluginId) {
         registry.get(pluginId);
         states.reload(pluginId);
-        return states.describe(registry.get(pluginId));
+        return states.describe(pluginId);
     }
 
     @GetMapping("/config")
     public List<Map<String, Object>> config(@RequestParam String pluginId) {
-        return states.configView(registry.get(pluginId));
+        registry.get(pluginId);
+        return states.configView(pluginId);
     }
 
     /**
@@ -89,8 +89,8 @@ public class PluginController {
     @PostMapping("/config/update")
     public Map<String, Object> updateConfig(@RequestParam String pluginId,
                                             @RequestBody Map<String, String> values) {
-        Plugin plugin = registry.get(pluginId);
-        for (PluginConfigField field : plugin.configSchema()) {
+        registry.get(pluginId);
+        for (PluginConfigField field : registry.configSchema(pluginId)) {
             if (!values.containsKey(field.key())) {
                 continue;
             }
@@ -101,13 +101,14 @@ public class PluginController {
             }
             states.setConfigValue(pluginId, field.key(), blank ? null : value);
         }
-        states.notifyConfigChanged(plugin);
-        return states.describe(plugin);
+        states.notifyConfigChanged(pluginId);
+        return states.describe(pluginId);
     }
 
     @GetMapping("/health")
     public PluginHealth health(@RequestParam String pluginId) {
-        return states.healthOf(registry.get(pluginId));
+        registry.get(pluginId);
+        return states.healthOf(pluginId);
     }
 
     // ------------------------------------------------------------------ per-entity 状态

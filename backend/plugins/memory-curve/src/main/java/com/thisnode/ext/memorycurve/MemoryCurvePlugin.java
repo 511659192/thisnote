@@ -1,8 +1,5 @@
 package com.thisnode.ext.memorycurve;
 
-import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.Plugin;
-import com.thisnode.plugin.api.PluginDescriptor;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -18,7 +15,7 @@ import org.pf4j.PluginWrapper;
  *
  * <p>id 与版本来自 {@code plugin.properties}（由 {@code descriptor()} 从 PF4J 描述符取），不在这里硬编码。
  */
-public class MemoryCurvePlugin extends SpringBootPlugin implements Plugin {
+public class MemoryCurvePlugin extends SpringBootPlugin {
 
     /** 端点前缀与数据分区用的 id；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "memory-curve";
@@ -30,15 +27,6 @@ public class MemoryCurvePlugin extends SpringBootPlugin implements Plugin {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的
         // configurer（要共享的东西走 SpringBootstrap.importBean），所以传空数组。
         super(wrapper, new IPluginConfigurer[0]);
-    }
-
-    /** 显示名与一句话说明；id 与版本一律来自 {@code plugin.properties}，不在这里硬编码。 */
-    @Override
-    public PluginDescriptor descriptor() {
-        var d = getWrapper().getDescriptor();
-        return PluginDescriptor.of(d.getPluginId(), "记忆曲线",
-                "参考 Anki 的 SM-2 间隔重复：按卡片安排复习，遗忘即回退，间隔随掌握程度增长",
-                d.getVersion());
     }
 
     /**
@@ -59,13 +47,6 @@ public class MemoryCurvePlugin extends SpringBootPlugin implements Plugin {
      */
     private SrsService srs() {
         return getApplicationContext().getBean(SrsService.class);
-    }
-
-    @Override
-    public void onEntityStateChanged(String entityType, String entityId, boolean enabled) {
-        if (SrsService.ENTITY_TYPE_BLOCK.equals(entityType) && enabled) {
-            srs().createIfAbsent(entityId);
-        }
     }
 
     /**
@@ -100,8 +81,4 @@ public class MemoryCurvePlugin extends SpringBootPlugin implements Plugin {
         super.stop();
     }
 
-    @Override
-    public PluginHealth health() {
-        return PluginHealth.ok("开启记忆曲线的卡片会按间隔出现在复习页");
-    }
 }

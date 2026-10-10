@@ -1,7 +1,8 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.Plugin;
 import com.thisnode.plugin.api.PluginHealth;
+import com.thisnode.plugin.api.PluginRegister;
+import org.pf4j.PluginWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -58,31 +59,26 @@ public class PluginLifecycle implements SmartInitializingSingleton {
      * 按固定顺序跑完五个阶段，返回启动报告（重复调用是幂等的：迁移本身按版本记账）。
      */
     public synchronized Map<String, Object> run() {
-        List<Plugin> plugins = registry.all();
+        List<PluginWrapper> plugins = registry.all();
 
         // 1) 发现
-        for (Plugin plugin : plugins) {
-            var d = plugin.descriptor();
-            log.info("[插件启动 1/4 发现] {} undeactivatable={} v{} apiVersion={}",
-                    d.id(), d.undeactivatable(), d.version(), d.apiVersion());
+        for (PluginWrapper wrapper : plugins) {
+            var d = wrapper.getDescriptor();
+            log.info("[插件启动 1/4 发现] {} undeactivatable={} v{} requires={}",
+                    d.getPluginId(), registry.undeactivatable(d.getPluginId()),
+                    d.getVersion(), d.getRequires());
         }
 
-        // 2) 校验契约：注册表在构造时已经硬拦（apiVersion 不匹配 / id 重复会直接拒绝启动），
-        //    这里作为显式阶段再确认一次，并留下"这一批插件是兼容的"这条日志。
-        for (Plugin plugin : plugins) {
-            int declared = plugin.descriptor().apiVersion();
-            if (declared != Plugin.API_VERSION) {
-                throw new IllegalStateException("插件 " + plugin.descriptor()
-                        .id() + " 声明 apiVersion=" + declared + "，本核心支持 " + Plugin.API_VERSION);
-            }
-        }
-        log.info("[插件启动 2/4 校验契约] {} 个插件全部兼容 apiVersion={}", plugins.size(), Plugin.API_VERSION);
+        // 2) 校验契约：注册表装载时已按 plugin.requires 用 PF4J 的 VersionManager 过滤，
+        //    这里作为显式阶段留下"这一批插件都满足契约"的日志。
+        log.info("[插件启动 2/4 校验契约] {} 个插件全部满足 plugin.requires（本核心契约版本 {}）",
+                plugins.size(), PluginRegister.CONTRACT_VERSION);
 
         // 3) 激活：把当前启停状态告知插件 —— 以前只有"翻转时"才通知，插件无从知道自己在启动时是开是关
         List<Map<String, Object>> described = new ArrayList<>();
         int activeCount = 0;
-        for (Plugin plugin : plugins) {
-            String id = plugin.descriptor().id();
+        for (PluginWrapper wrapper : plugins) {
+            String id = wrapper.getDescriptor().getPluginId();
             boolean active = states.isActive(id);
             if (active) {
                 activeCount++;
@@ -91,9 +87,9 @@ public class PluginLifecycle implements SmartInitializingSingleton {
             states.notifyGlobalState(id, active);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", id);
-            row.put("undeactivatable", plugin.descriptor().undeactivatable());
-            row.put("version", plugin.descriptor().version());
-            row.put("apiVersion", plugin.descriptor().apiVersion());
+            row.put("undeactivatable", registry.undeactivatable(id));
+            row.put("version", wrapper.getDescriptor().getVersion());
+            row.put("requires", wrapper.getDescriptor().getRequires());
             row.put("active", active);
             described.add(row);
         }
@@ -101,7 +97,7 @@ public class PluginLifecycle implements SmartInitializingSingleton {
 
         // 4) 健康检查：只报告，不让某个插件把整个应用拦在启动之外
         for (int i = 0; i < plugins.size(); i++) {
-            PluginHealth health = states.healthOf(plugins.get(i));
+            PluginHealth health = states.healthOf((String) described.get(i).get("id"));
             described.get(i).put("health", health.status());
             described.get(i).put("healthMessage", health.message());
             if (!"ok".equals(health.status())) {

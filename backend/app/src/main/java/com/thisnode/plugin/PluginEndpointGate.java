@@ -1,6 +1,5 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.Plugin;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -48,17 +47,15 @@ public class PluginEndpointGate implements HandlerInterceptor {
         if (states.isActive(pluginId)) {
             return true;
         }
-        Plugin plugin = registry.get(pluginId);
         // 不可停用的插件（承载主体业务）永远放行：停用请求在状态服务里已被拒绝（409），
         // 这是双保险 —— 即使 pf4j 层出现意外状态，业务端点也不能被闸门误伤。
-        if (plugin.descriptor().undeactivatable()) {
+        if (registry.undeactivatable(pluginId)) {
             return true;
         }
         response.setStatus(HttpServletResponse.SC_CONFLICT);
         response.setContentType("application/json;charset=UTF-8");
         response.getWriter().write("""
-                {"status":409,"error":"Conflict","message":"插件「%s」已停用，请先在设置 → 插件里启用"}""".formatted(plugin.descriptor()
-                .title()
+                {"status":409,"error":"Conflict","message":"插件「%s」已停用，请先在设置 → 插件里启用"}""".formatted(registry.title(pluginId)
                 .replace("\"", "'")));
         return false;
     }

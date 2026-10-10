@@ -69,7 +69,7 @@ public class PluginStateService {
     public void setEnabled(String pluginId, String entityType, String entityId, boolean enabled) {
         store.setEnabled(pluginId, entityType, entityId, enabled);
         // Fired after the persist, so the hook's own reads observe the new state.
-        registry.get(pluginId).onEntityStateChanged(entityType, entityId, enabled);
+        registry.entityStateChanged(pluginId, entityType, entityId, enabled);
     }
 
     // ------------------------------------------------------------------ 全局启停
@@ -104,12 +104,9 @@ public class PluginStateService {
      *         这里是最后一道闸。
      */
     public void setActive(String pluginId, boolean active) {
-        if (!active) {
-            Plugin plugin = registry.get(pluginId);
-            if (plugin != null && plugin.descriptor().undeactivatable()) {
-                throw new com.thisnode.plugin.api.ConflictException(
-                        "「" + plugin.descriptor().title() + "」承载主体业务，不允许停用");
-            }
+        if (!active && registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
+            throw new com.thisnode.plugin.api.ConflictException(
+                    "「" + registry.title(pluginId) + "」承载主体业务，不允许停用");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
         if (manager != null && manager.getPlugin(pluginId) != null) {
@@ -158,11 +155,10 @@ public class PluginStateService {
      * <p>敏感项只回 {@code hasValue}，<b>永不回传内容</b>——SecretKey 这类东西存进来就不该再出得去；
      * 提交时留空表示「不改动」。
      */
-    public List<Map<String, Object>> configView(Plugin plugin) {
-        String pluginId = plugin.descriptor().id();
+    public List<Map<String, Object>> configView(String pluginId) {
         Map<String, String> stored = configValues(pluginId);
         List<Map<String, Object>> out = new ArrayList<>();
-        for (PluginConfigField field : plugin.configSchema()) {
+        for (PluginConfigField field : registry.configSchema(pluginId)) {
             String value = stored.get(field.key());
             boolean hasValue = value != null && !value.isBlank();
             Map<String, Object> item = new LinkedHashMap<>();
@@ -190,14 +186,11 @@ public class PluginStateService {
      * 自己在服务。
      */
     public void reload(String pluginId) {
-        if (registry.isRegistered(pluginId)) {
-            Plugin target = registry.get(pluginId);
-            if (target.descriptor().undeactivatable()) {
-                // 不可停用的插件是全部业务端点的宿主：重载会重建它的 Spring 子容器，期间路由与索引短暂缺失。
-                // （早先的理由是"兄弟插件共享它导入的门面"，那层共享已经不存在了。）拒绝并提示重启。
-                throw new com.thisnode.plugin.api.ConflictException(
-                        "「" + target.descriptor().title() + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
-            }
+        if (registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
+            // 不可停用的插件是全部业务端点的宿主：重载会重建它的 Spring 子容器，期间路由与索引短暂缺失。
+            // （早先的理由是"兄弟插件共享它导入的门面"，那层共享已经不存在了。）拒绝并提示重启。
+            throw new com.thisnode.plugin.api.ConflictException(
+                    "「" + registry.title(pluginId) + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
         if (manager instanceof org.laxture.sbp.SpringBootPluginManager sbp) {
@@ -253,13 +246,12 @@ public class PluginStateService {
      * 一起打挂，调用方连"它现在是停用的"都读不到。所以：没在服务的插件给静态结论，
      * 真抛异常也降级成 unknown；管理面永远读得出来。
      */
-    public PluginHealth healthOf(Plugin plugin) {
-        String pluginId = plugin.descriptor().id();
+    public PluginHealth healthOf(String pluginId) {
         if (isExternal(pluginId) && !isActive(pluginId)) {
             return PluginHealth.unknown("插件已停用，容器未运行");
         }
         try {
-            return plugin.health();
+            return registry.health(pluginId);
         } catch (RuntimeException e) {
             log.warn("插件 {} 的健康检查抛异常：{}", pluginId, e.toString());
             return PluginHealth.unknown("健康检查失败：" + e.getMessage());
@@ -277,7 +269,7 @@ public class PluginStateService {
             return;
         }
         try {
-            registry.get(pluginId).onGlobalStateChanged(active);
+            registry.globalStateChanged(pluginId, active);
         } catch (RuntimeException e) {
             log.warn("通知插件 {} 全局状态={} 失败：{}", pluginId, active, e.toString());
         }
@@ -287,13 +279,12 @@ public class PluginStateService {
      * 配置变更后的通知，同样是尽力而为：停用的外置插件容器已关，跳过即可
      * （值已经落盘，插件下次启动会读到）。
      */
-    public void notifyConfigChanged(Plugin plugin) {
-        String pluginId = plugin.descriptor().id();
+    public void notifyConfigChanged(String pluginId) {
         if (isExternal(pluginId) && !isActive(pluginId)) {
             return;
         }
         try {
-            plugin.onConfigChanged();
+            registry.configChanged(pluginId);
         } catch (RuntimeException e) {
             log.warn("通知插件 {} 配置已变更失败：{}", pluginId, e.toString());
         }
@@ -309,23 +300,22 @@ public class PluginStateService {
     /**
      * 管理页要的所有东西：描述 + 全局启停 + 健康 + 配置视图 + 磁盘版本。
      */
-    public Map<String, Object> describe(Plugin plugin) {
-        PluginDescriptor descriptor = plugin.descriptor();
+    public Map<String, Object> describe(String pluginId) {
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("id", descriptor.id());
-        out.put("title", descriptor.title());
-        out.put("description", descriptor.description());
-        out.put("undeactivatable", descriptor.undeactivatable());
-        out.put("version", descriptor.version());
-        out.put("apiVersion", descriptor.apiVersion());
-        out.put("active", isActive(descriptor.id()));
-        PluginHealth health = healthOf(plugin);
+        org.pf4j.PluginDescriptor descriptor = registry.descriptor(pluginId);
+        out.put("id", pluginId);
+        out.put("title", registry.title(pluginId));
+        out.put("description", registry.description(pluginId));
+        out.put("undeactivatable", registry.undeactivatable(pluginId));
+        out.put("version", descriptor.getVersion());
+        out.put("active", isActive(pluginId));
+        PluginHealth health = healthOf(pluginId);
         out.put("health", Map.of("status", health.status(), "message", health.message()));
-        out.put("configSchema", configView(plugin));
+        out.put("configSchema", configView(pluginId));
         // 磁盘上那个 jar 的版本：与 version（正在跑的实例）不同就说明"换了 jar，还没重载"。
-        String diskVersion = diskVersion(descriptor.id());
+        String diskVersion = diskVersion(pluginId);
         out.put("diskVersion", diskVersion);
-        out.put("reloadAvailable", diskVersion != null && !diskVersion.equals(descriptor.version()));
+        out.put("reloadAvailable", diskVersion != null && !diskVersion.equals(descriptor.getVersion()));
         return out;
     }
 }
