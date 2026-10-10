@@ -37,7 +37,7 @@ class NoteListTagsTest {
         NoteRepository store = new NoteRepository(new NoteFilePaths(root));
         NoteRepository noteRepository = store;
         CardRepository blockRepository = new CardRepository(store);
-        tagRepository = new TagRepository(store);
+        tagRepository = new TagRepository(store.paths());
         NotebookRepository notebookRepository = new NotebookRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, Mockito.mock(LinkRepository.class),
                 notebookRepository, blockRepository);
@@ -81,7 +81,7 @@ class NoteListTagsTest {
         newNote("丙", List.of("设计"));
         tagRepository.setColor("设计", "#ff0000");
 
-        List<Dtos.TagDto> catalog = tagRepository.listWithCounts();
+        List<Dtos.TagDto> catalog = noteService.tagCatalog();
 
         assertThat(catalog).hasSize(1);
         assertThat(catalog.get(0).name()).isEqualTo("设计");

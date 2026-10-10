@@ -13,16 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
 
-/**
- * A note's cards: their geometry, their text, and the whole-card operations on them.
- *
- * <p>归属（{@code noteId}）只在整页读取与新建时需要；单卡操作由卡片 id 反查归属，路由一律
- * 动作路径，不再嵌笔记 id。
- *
- * <p><b>为什么读要带 {@code ids}：</b>卡片清单由列表接口给出（{@code /api/notes} 的
- * {@code cards}，只有身份），坐标与正文留在卡片文件里，属于页面级数据。打开笔记时按视口
- * 分批用 {@code ids} 取——不带参数则整页返回。这样列表页不必背几何，长页面也不必一次拉全。
- */
+
 @RestController
 @RequestMapping("/api/notes/cards")
 @RequiredArgsConstructor

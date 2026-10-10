@@ -48,7 +48,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("没有 meta 的 md 被认领成一篇单卡笔记，并生成两份 meta")
     void claimsMdWithoutMeta() throws IOException {
-        Path md = root.resolve("cards").resolve("我的第一篇笔记.md");
+        Path md = root.resolve("cardRefs").resolve("我的第一篇笔记.md");
         Files.createDirectories(md.getParent());
         Files.writeString(md, "# 会议记录\n\n今天讨论了三件事。", StandardCharsets.UTF_8);
 
@@ -216,8 +216,8 @@ class NoteFileModelTest {
 
         assertThat(Files.exists(sidecar)).isTrue();
         assertThat(store.findAll()).hasSize(1);
-        assertThat(store.findAll().get(0).cards()).hasSize(1);
-        assertThat(store.findAll().get(0).cards().get(0).id()).isEqualTo("bbbbbbbb-2222");
+        assertThat(store.findAll().get(0).cardRefs()).hasSize(1);
+        assertThat(store.findAll().get(0).cardRefs().get(0).id()).isEqualTo("bbbbbbbb-2222");
     }
 
     @Test
@@ -242,7 +242,7 @@ class NoteFileModelTest {
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
     private void writeCard(String slug, String cardId, String noteId, int slot, String content)
             throws IOException {
-        Path md = root.resolve("cards").resolve(slug + "-" + NoteFilePaths.shortId(cardId) + ".md");
+        Path md = root.resolve("cardRefs").resolve(slug + "-" + NoteFilePaths.shortId(cardId) + ".md");
         Files.createDirectories(md.getParent());
         CardMeta card = new CardMeta(CardMeta.SCHEMA, cardId, "",
                 0, slot * 300.0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, slot,
@@ -250,9 +250,9 @@ class NoteFileModelTest {
         store.writeCard("测试笔记", card, content, md);
         NoteMeta note = store.readMeta(store.paths().noteMeta(noteId), NoteMeta.class);
         if (note != null) {
-            List<Card> cards = new ArrayList<>(note.cards());
+            List<CardRef> cards = new ArrayList<>(note.cardRefs());
             cards.add(Math.max(0, Math.min(slot, cards.size())),
-                    new Card(cardId, store.paths().relative(md)));
+                    new CardRef(cardId, store.paths().relative(md)));
             store.writeNoteMeta(note.withCards(cards));
         }
     }

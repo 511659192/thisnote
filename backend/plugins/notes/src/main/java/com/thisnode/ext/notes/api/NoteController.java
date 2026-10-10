@@ -2,7 +2,6 @@ package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.repository.TagRepository;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +22,6 @@ public class NoteController {
 
     private final NoteService noteService;
     private final NoteRepository noteRepository;
-    private final TagRepository tagRepository;
 
     @GetMapping
     public List<NoteMeta> list(
@@ -51,7 +49,7 @@ public class NoteController {
     public Dtos.NoteDetail update(@RequestParam String id, @RequestBody Dtos.UpdateNodeRequest req) {
         if (req != null && req.contentMd() != null) {
             throw new IllegalArgumentException(
-                    "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/{noteId}/cards/{cardId}/content）");
+                    "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/{noteId}/cardRefs/{cardId}/content）");
         }
         noteService.update(id, req);
         return noteService.detail(id);
@@ -68,15 +66,13 @@ public class NoteController {
     @PostMapping("/tags/add")
     public List<Dtos.TagDto> addTag(@RequestParam String id, @RequestParam String name) {
         noteService.require(id);
-        tagRepository.addNodeTag(id, name);
-        return tagRepository.tagsOf(id);
+        return noteService.addTag(id, name);
     }
 
     @PostMapping("/tags/remove")
     public List<Dtos.TagDto> removeTag(@RequestParam String id, @RequestParam String name) {
         noteService.require(id);
-        tagRepository.removeNodeTag(id, name);
-        return tagRepository.tagsOf(id);
+        return noteService.removeTag(id, name);
     }
 
 

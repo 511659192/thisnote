@@ -53,7 +53,7 @@ class NoteLoadPerfProbe {
             System.gc();
             long heapMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
 
-            System.out.println("PERF cards=" + all + " notes=" + store.findAll().size()
+            System.out.println("PERF cardRefs=" + all + " notes=" + store.findAll().size()
                     + " | load=" + loadMs + "ms reload=" + reloadMs + "ms"
                     + " pageQuery=" + pageMs + "ms (blocks=" + blocks + ", mdLen=" + mdLen + ")"
                     + " allBlocks=" + scanMs + "ms heap~" + heapMb + "MB");
@@ -68,7 +68,7 @@ class NoteLoadPerfProbe {
         String tag = root.getFileName().toString();
         for (int n = 0; n < notes; n++) {
             String noteId = "note-" + tag + "-" + n;
-            java.util.List<Card> refs = new java.util.ArrayList<>();
+            java.util.List<CardRef> refs = new java.util.ArrayList<>();
             for (int c = 0; c < CARDS_PER_NOTE; c++) {
                 String blockId = java.util.UUID.randomUUID().toString();
                 String slug = "卡片-" + n + "-" + c;
@@ -76,7 +76,7 @@ class NoteLoadPerfProbe {
                 Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
-                refs.add(new Card(blockId, root.relativize(md).toString().replace('\\', '/')));
+                refs.add(new CardRef(blockId, root.relativize(md).toString().replace('\\', '/')));
             }
             store.writeNoteMeta(NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note",
                     "grp-default", now).withCards(refs));

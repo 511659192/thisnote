@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardFile;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.domain.Card;
+import com.thisnode.ext.notes.domain.CardRef;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
@@ -34,7 +34,6 @@ public class CardRepository {
     public static final int DEFAULT_H = 260;
     public static final int MIN_W = 240;
     public static final int MIN_H = 88;
-    /** Vertical gap between consecutive cards in the page flow. */
     public static final int FLOW_GAP = 16;
 
     /** Left edge of the page column. */
@@ -56,10 +55,6 @@ public class CardRepository {
                 card.createdAt(), card.updatedAt());
     }
 
-    /**
-     * Cards of a note in z order, exactly as they are stored. The order comes from the sidecar's
-     * {@code z}; cards are never re-flowed, because that would move a card the user positioned.
-     */
     public List<Dtos.CardDto> cards(String noteId) {
         List<Dtos.CardDto> out = new ArrayList<>();
         for (CardMeta card : noteRepository.cards(noteId)) {
@@ -87,15 +82,7 @@ public class CardRepository {
         return create(noteId, x, y, w, h, color, status, contentMd, title, null);
     }
 
-    /**
-     * Place a new card at the caller's point, in the page order that point implies.
-     *
-     * <p>z is the reading order of the note (the note's markdown is its cards joined in z order),
-     * so a card dropped between two others must also sit between them in z. The slot is chosen by
-     * vertical centre — the new card goes after every card whose centre is above its own — and the
-     * cards below shift down one slot. y itself is kept verbatim: placing a card never moves a
-     * neighbour.
-     */
+
     public String createAt(String noteId, double x, double y, Double w, Double h,
                            String color, String status, String contentMd, String title) {
         double cardH = h == null ? DEFAULT_H : Math.max(MIN_H, h);
@@ -129,13 +116,6 @@ public class CardRepository {
         return id;
     }
 
-    /**
-     * 保存卡片正文，并先做冲突保护：{@code baseContentMd} 是客户端编辑时所依据的正文。
-     *
-     * <p>比对的是**磁盘**（{@link #contentOnDisk(String)}）而不是索引缓存 —— 外部编辑之后、
-     * 下一次对账之前缓存里还是旧内容。{@code null} 表示调用方不带基线（内部改写与旧客户端），
-     * 保持原有行为。
-     */
     public void setContent(String cardId, String contentMd, String baseContentMd) {
         rejectIfChangedOnDisk(cardId, baseContentMd);
         setContent(cardId, contentMd);
@@ -175,7 +155,7 @@ public class CardRepository {
     /**
      * Where a card goes when the caller supplies no point at all.
      *
-     * <p>Only a fallback: the importer and the demo seeder use it for cards that have no clicked
+     * <p>Only a fallback: the importer and the demo seeder use it for cardRefs that have no clicked
      * position. Cards that do have a point are placed there verbatim.
      */
     public double[] nextFlowPosition(String noteId) {
@@ -186,16 +166,6 @@ public class CardRepository {
         return new double[]{FLOW_X, bottom <= 0 ? 0 : bottom + FLOW_GAP};
     }
 
-    /**
-     * Apply a geometry/appearance patch, leaving out any field the caller did not supply.
-     *
-     * <p>{@code prefetched} exists for signature compatibility with the database version, where it
-     * saved a read per card in batched moves; the index already holds every card, so it is unused.
-     */
-    public void update(String id, Double x, Double y, Double w, Double h, Integer z,
-                       String color, String status, Boolean collapsed) {
-        update(id, null, x, y, w, h, z, color, status, collapsed, null);
-    }
 
     public void update(String id, String title, Double x, Double y, Double w, Double h, Integer z,
                        String color, String status, Boolean collapsed) {
@@ -268,15 +238,15 @@ public class CardRepository {
         if (note == null) {
             return null;
         }
-        Card existing = refOf(note, card.id());
+        CardRef existing = refOf(note, card.id());
         Path knownFile = existing == null ? null : noteRepository.cardPath(existing);
         Path file = knownFile != null ? knownFile
                 : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
                         card.id());
         noteRepository.writeText(file, CardFile.compose(card, contentMd));
-        Card ref = new Card(card.id(), noteFilePaths.relative(file));
+        CardRef ref = new CardRef(card.id(), noteFilePaths.relative(file));
 
-        List<Card> cards = new ArrayList<>(note.cards());
+        List<CardRef> cards = new ArrayList<>(note.cardRefs());
         int at = indexOf(cards, card.id());
         if (at >= 0) {
             cards.set(at, ref);
@@ -289,7 +259,6 @@ public class CardRepository {
         return card;
     }
 
-    /** 只改卡片元数据；与 {@link #writeCardMeta(CardMeta, Card)} 同义。 */
     public void putCardMeta(CardMeta card) {
         if (card == null) {
             return;
@@ -308,7 +277,7 @@ public class CardRepository {
             return;
         }
         noteRepository.deleteCardFiles(noteRepository.cardPath(owned.ref()));
-        List<Card> cards = new ArrayList<>(owned.note().cards());
+        List<CardRef> cards = new ArrayList<>(owned.note().cardRefs());
         cards.removeIf(ref -> ref.id().equals(cardId));
         noteRepository.writeNoteMeta(owned.note().withCards(cards).touched(System.currentTimeMillis()));
     }
@@ -336,8 +305,8 @@ public class CardRepository {
         return noteFilePaths.cardsDir().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
     }
 
-    private static Card refOf(NoteMeta note, String cardId) {
-        for (Card ref : note.cards()) {
+    private static CardRef refOf(NoteMeta note, String cardId) {
+        for (CardRef ref : note.cardRefs()) {
             if (ref.id().equals(cardId)) {
                 return ref;
             }
@@ -345,7 +314,7 @@ public class CardRepository {
         return null;
     }
 
-    private static int indexOf(List<Card> cards, String cardId) {
+    private static int indexOf(List<CardRef> cards, String cardId) {
         for (int i = 0; i < cards.size(); i++) {
             if (cards.get(i).id().equals(cardId)) {
                 return i;

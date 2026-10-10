@@ -47,7 +47,7 @@ public class NotesConfig {
     }
 
     /**
-     * 笔记目录的路径规则：卡片 md（{@code cards/}）、笔记 meta（{@code meta/}）、
+     * 笔记目录的路径规则：卡片 md（{@code cardRefs/}）、笔记 meta（{@code meta/}）、
      * 台账（{@code ledgers/}）与日志（{@code logs/}）都挂在 {@code thisnode.markdown-root} 下。
      *
      * <p>领域层（{@code NoteRepository}/{@code CardRepository}）依赖这个值对象而不是本配置类 ——

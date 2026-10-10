@@ -2,6 +2,7 @@ package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.TagRepository;
+import com.thisnode.ext.notes.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,11 +19,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TagController {
 
+    private final NoteService noteService;
     private final TagRepository tagRepository;
 
     @GetMapping
     public List<Dtos.TagDto> list() {
-        return tagRepository.listWithCounts();
+        return noteService.tagCatalog();
     }
 
     @PostMapping("/update")
@@ -30,7 +32,7 @@ public class TagController {
         if (body.containsKey("color") && !body.containsKey("name")) {
             tagRepository.setColor(id, body.get("color"));
         } else {
-            tagRepository.rename(id, body.getOrDefault("name", ""));
+            noteService.renameTag(id, body.getOrDefault("name", ""));
             if (body.get("color") != null) {
                 tagRepository.setColor(id, body.get("color"));
             }

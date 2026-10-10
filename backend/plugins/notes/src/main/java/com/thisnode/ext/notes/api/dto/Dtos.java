@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.api.dto;
 
-import com.thisnode.ext.notes.domain.Card;
+import com.thisnode.ext.notes.domain.CardRef;
 
 import java.util.List;
 
@@ -30,9 +30,9 @@ public final class Dtos {
             String id, String title, String contentMd, String type,
             /**
              * 卡片清单（只有身份）：页面级数据（坐标、正文）按需取，
-             * 界面侧拿这份清单去 {@code GET /api/notes/cards?ids=}。
+             * 界面侧拿这份清单去 {@code GET /api/notes/cardRefs?ids=}。
              */
-            List<Card> cards,
+            List<CardRef> cards,
             List<String> tags, List<NotebookDto> notebooks,
             List<String> unresolved, List<String> unlinkedMentions,
             long createdAt, long updatedAt) {
@@ -47,35 +47,13 @@ public final class Dtos {
                                     Boolean clearNotebook) {
     }
 
-    // ---------- note page cards ----------
-    //
-    // A note's page is made of cards. A card holds a fragment of *that note's* markdown
-    // plus its position on the page. There is no board/container entity: the note is the
-    // container, which is why these records carry noteId rather than boardId.
-
-    /**
-     * A card on a note's page.
-     *
-     * <p>{@code contentMd} is this card's own fragment of the note. The note's markdown is the
-     * concatenation of its cards in order, so there is one copy of the content and a card's
-     * text never shifts when a neighbouring card grows.
-     *
-     * <p>{@code title} is an optional label the *user* gives the card. It is not part of the
-     * note's content and stays empty unless the user names the card; when empty the UI shows
-     * no title bar at all.
-     */
     public record CardDto(String id, String noteId, String title,
                                double x, double y, double w, double h, int z,
                                String color, String status, boolean collapsed,
                                String contentMd, long createdAt, long updatedAt) {
     }
 
-    /**
-     * A card together with the note-level context it renders with.
-     *
-     * <p>A card's own text and title live on the card itself (one copy), so this view only
-     * adds the note context the card needs for rendering.
-     */
+
     public record CardView(CardDto card, String contentMd, String noteTitle,
                                 List<TagDto> tags) {
     }
@@ -89,12 +67,6 @@ public final class Dtos {
                                      String contentMd, String title, String color) {
     }
 
-    /**
-     * 卡片正文保存：新正文 + 客户端**编辑时所依据**的正文。
-     *
-     * <p>后者是外部改动检测的基线（{@code null} = 不带基线，旧客户端保持原行为）：磁盘上已经不是
-     * 那一份就返回 409，而不是把外部编辑器写的字覆盖掉。
-     */
     public record WriteContentRequest(String contentMd, String baseContentMd) {
     }
 

@@ -4,6 +4,7 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.TagBook;
+import com.thisnode.ext.notes.service.NoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,11 +28,15 @@ class TagRepositoryTest {
 
     private NoteRepository store;
     private TagRepository tags;
+    private NoteService service;
 
     @BeforeEach
     void setUp() {
         store = new NoteRepository(new NoteFilePaths(root));
-        tags = new TagRepository(store);
+        tags = new TagRepository(store.paths());
+        // 标签的归属在 meta（NoteRepository）、属性在台账（TagRepository）：跨两边的操作由服务编排。
+        service = new NoteService(store, tags, new LinkRepository(store),
+                new NotebookRepository(store), new CardRepository(store));
     }
 
     private void seedNote(String id, String... tagNames) {
@@ -50,7 +55,7 @@ class TagRepositoryTest {
 
         tags.setColor("方法论", "#3b82f6");
 
-        List<Dtos.TagDto> one = tags.tagsOf("n1");
+        List<Dtos.TagDto> one = service.tagsOf("n1");
         assertThat(one).hasSize(1);
         assertThat(one.get(0).color()).isEqualTo("#3b82f6");
         assertThat(ledger().find("方法论").color()).isEqualTo("#3b82f6");
@@ -61,7 +66,7 @@ class TagRepositoryTest {
     void registersTagsOnWrite() throws IOException {
         seedNote("n1");
 
-        tags.addNodeTag("n1", "#新标签");
+        service.addTag("n1", "#新标签");
 
         assertThat(store.getOne("n1").tags()).containsExactly("新标签");
         assertThat(ledger().find("新标签")).isNotNull();
@@ -74,12 +79,12 @@ class TagRepositoryTest {
         seedNote("n1", "设计");
         tags.setColor("设计", "#ff0000");
 
-        tags.rename("设计", "设计原则");
+        service.renameTag("设计", "设计原则");
 
         assertThat(store.getOne("n1").tags()).containsExactly("设计原则");
         assertThat(ledger().find("设计")).isNull();
         assertThat(ledger().find("设计原则").color()).isEqualTo("#ff0000");
-        assertThat(tags.listWithCounts()).extracting(Dtos.TagDto::name).containsExactly("设计原则");
+        assertThat(service.tagCatalog()).extracting(Dtos.TagDto::name).containsExactly("设计原则");
     }
 
     @Test
@@ -89,10 +94,10 @@ class TagRepositoryTest {
 
         tags.ensure("还没人用");
 
-        assertThat(tags.listWithCounts())
+        assertThat(service.tagCatalog())
                 .extracting(Dtos.TagDto::name)
                 .containsExactly("笔记里的", "还没人用");
-        assertThat(tags.listWithCounts())
+        assertThat(service.tagCatalog())
                 .extracting(Dtos.TagDto::count)
                 .containsExactly(1, 0);
     }

@@ -5,26 +5,10 @@ import com.thisnode.ext.notes.util.Markdown;
 import java.nio.file.Path;
 import java.util.Locale;
 
-/**
- * 笔记目录的命名规则与路径解析。
- *
- * <p>布局（{@code <root>} = {@code thisnode.markdown-root}），按域分目录：
- * <pre>
- *   notes\cards\&lt;笔记名&gt;-&lt;卡片描述&gt;-&lt;随机串&gt;.md   一张卡片一个 md，纯正文（不带 frontmatter）
- *   notes\meta\&lt;noteId&gt;.json                       笔记级元数据（标题 / 标签 / 归属分组）
- *   notes\ledgers\notebooks.json                   分组台账
- *   notes\ledgers\tags.json                        标签台账
- * </pre>
- *
- * <p>cards/ 之外都是应用目录；cards 目录里**只有**卡片 md，扫描不需要黑名单。
- *
- * <p>文件名分两段：人读的 slug 与机器认的 cardId 前 8 位。slug 让文件在资源管理器里像笔记，
- * 短 id 让两张同名卡片不互相覆盖。**身份由 meta 里的完整 id 决定**，改名不改变身份。
- */
 public final class NoteFilePaths {
 
     /** 卡片内容目录。 */
-    public static final String CARDS_DIR = "cards";
+    public static final String CARDS_DIR = "cardRefs";
     public static final String MD_SUFFIX = ".md";
     public static final String META_SUFFIX = ".meta.json";
 
@@ -68,13 +52,6 @@ public final class NoteFilePaths {
         return ledgersDir().resolve("notebooks.json");
     }
 
-    /**
-     * 一张卡片的内容文件：{@code <笔记名>-<卡片描述>-<随机串>.md}，收在 cards/ 目录下。
-     *
-     * <p>三段各有用处：笔记名让人一眼看出这张卡属于哪篇，卡片描述说明它是什么，随机串保证同名
-     * 同描述的两张卡不会互相覆盖。**身份在 meta 的 id 里，文件名只是给人看的** —— 所以标题变了
-     * 不会去改文件名（那会让 Obsidian / Git 看到一次无意义的增删）。
-     */
     public Path cardFilePath(String noteSlug, String cardSlug, String cardId) {
         return cardsDir().resolve(cardFilePrefix(noteSlug, cardSlug) + "-" + shortId(cardId) + MD_SUFFIX);
     }

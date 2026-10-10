@@ -44,7 +44,7 @@ class NoteRepositoryTest {
 
         noteRepository = store;
         blockRepository = new CardRepository(store);
-        tagRepository = new TagRepository(store);
+        tagRepository = new TagRepository(store.paths());
         notebookRepository = new NotebookRepository(store);
         LinkRepository links = Mockito.mock(LinkRepository.class);
         noteService = new NoteService(noteRepository, tagRepository, links, notebookRepository,
@@ -95,24 +95,24 @@ class NoteRepositoryTest {
     void tagsLiveInGetOneMeta() {
         String id = newGetOne("带标签的笔记", "正文");
 
-        tagRepository.setNodeTags(id, List.of("#设计", "随笔", "设计"));
+        store.setNodeTags(id, List.of("#设计", "随笔", "设计"));
         assertThat(noteService.tagsOfNames(id)).containsExactly("设计", "随笔");
         assertThat(store.getOne(id).tags()).containsExactly("设计", "随笔");
 
         tagRepository.setColor("设计", "#ff0000");
-        assertThat(tagRepository.tagsOf(id)).anySatisfy(tag -> {
+        assertThat(noteService.tagsOf(id)).anySatisfy(tag -> {
             assertThat(tag.name()).isEqualTo("设计");
             assertThat(tag.color()).isEqualTo("#ff0000");
             assertThat(tag.id()).isEqualTo("设计");
         });
-        assertThat(tagRepository.listWithCounts()).hasSize(2).anySatisfy(tag -> {
+        assertThat(noteService.tagCatalog()).hasSize(2).anySatisfy(tag -> {
             assertThat(tag.name()).isEqualTo("设计");
             assertThat(tag.count()).isEqualTo(1);
         });
 
         assertThat(noteService.resolveTitle("带标签的笔记")).isEqualTo(id);
 
-        tagRepository.removeNodeTag(id, "设计");
+        store.removeNodeTag(id, "设计");
         assertThat(noteService.tagsOfNames(id)).containsExactly("随笔");
     }
 
@@ -151,7 +151,7 @@ class NoteRepositoryTest {
         assertThat(noteService.list(new NoteService.Query(null, null, null, "香蕉", 500, 0)))
                 .extracting(s -> s.id()).containsExactly(b);
 
-        tagRepository.setNodeTags(a, List.of("水果"));
+        store.setNodeTags(a, List.of("水果"));
         assertThat(noteService.list(new NoteService.Query("水果", null, null, null, 500, 0)))
                 .extracting(s -> s.id()).containsExactly(a);
     }

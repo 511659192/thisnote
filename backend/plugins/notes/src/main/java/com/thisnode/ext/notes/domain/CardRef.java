@@ -10,5 +10,5 @@ package com.thisnode.ext.notes.domain;
  * @param id   卡片 id（稳定身份；文件名变了不影响它）
  * @param file 卡片文件相对笔记目录根目录的路径；顺序由它在清单里的位置决定
  */
-public record Card(String id, String file) {
+public record CardRef(String id, String file) {
 }

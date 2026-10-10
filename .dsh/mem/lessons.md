@@ -133,3 +133,25 @@
   报告里也只写事实（哪一行、什么错误），不写"这是你的在途改动"这类归因。
   另外：`pwsh` 里 `mvn … 2>&1 | Select-String …` 有时会把 stderr 当成 NativeCommandError，让整条命令以 exit=1 结束，
   即使 `BUILD SUCCESS` —— 判断成败请看输出里的 `BUILD SUCCESS/FAILURE` 与 `Tests run`，或显式读 `$LASTEXITCODE`。
+
+## 11. Vue 模板**属性值内**的注释不能含直引号（我自己造的回归，第 1 次）
+
+- **纠正来源**：无（我造成、由真实页面验证抓到）。
+- **事实依据**：`NoteView.vue` 的 `@create-note="…"` 属性值里，我写注释 `// resolveStub 在后端就是"有就返回、没有就建"…`，
+  其中的直引号 `"` 把属性提前闭合 → `frontend/.dev.log`：
+  `[vite] Internal server error: Error parsing JavaScript expression: Unexpected token (4:37)  File: .../NoteView.vue:367:27`；
+  `GET http://[::1]:7113/src/views/NoteView.vue` 返回 **500**、notes 微应用挂载失败、页面 **0 行笔记**。
+  改成「有就返回、没有就建」（全角括号）后该模块 **200**，页面恢复 6 行、0 console error。
+- **规则**：改 Vue 模板属性内的表达式/注释时，**禁用直引号与反引号**（用「」或去掉）；
+  改完必须 ①直接请求该模块确认 200（`http://[::1]:7113/src/...`）②跑真实页面检查（行数 > 0 且 0 console error）。
+  **后端/构建绿灯 ≠ 前端没问题**：模板编译错误只在请求该模块时才暴露。
+
+## 12. 从数组里取"某一项"前，先确认拿到的是单项还是数组（第 2 次栽在"读数"上）
+
+- **纠正来源**：无（自查）。
+- **事实依据**：核标签计数时写 `$base = (Get-Tags | Where-Object { $_.name -eq '设计' })`，脚本打印 `count=13` ——
+  13 其实是**整个标签数组的长度**（那一次 `GET /api/tags` 共 13 条），不是 `设计` 的计数。
+  dump 原始 JSON 得 `{"id":"设计","name":"设计","count":1}`，与 `/api/notes` 现算的次数完全一致 ⇒ 产品逻辑正确，是我读数错。
+  同一轮另一处错：用 `Post-Json` 调了 `GET /api/notes/detail`，拿到 405（脚本继续跑、打印空值），差点当成"改名没生效"。
+- **规则**：拿接口值做判断时 **dump 原始 JSON**（不要经过 `-f` / 字符串拼接 / `$x.count`），或 `| Select-Object -First 1` 明确取单项；
+  调接口前核对 **HTTP 方法**；结论落笔前用第二个独立来源（如从 `/api/notes` 现算）交叉核对。

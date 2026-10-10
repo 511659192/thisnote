@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.service;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.repository.TagRepository;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,29 +14,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * A note's page: the cards it is made of.
- *
- * <p><b>Model.</b> A note *is* the page. Each card owns a fragment of the note's content
- * ({@code cards md content}) plus its position; the note's markdown is the join of its
- * cards in z order. So there is exactly one copy of the content, and a card's text never
- * shifts when a neighbouring card grows — which is what makes "write in the card" safe.
- *
- * <p>Card content is authoritative. The note's markdown is a derived projection, kept in sync
- * on every write so search, links, the Markdown mirror and export all keep working unchanged.
- */
+
 @Service
 @RequiredArgsConstructor
 public class CardService {
-
-    public static final String DEFAULT_COLOR = "#3b82f6";
-
     private final CardRepository cardRepository;
     private final NoteRepository noteRepository;
     private final NoteService noteService;
-    private final TagRepository tagRepository;
 
-    /** Cap on cards per note; keeps a page inside the interaction budget it is measured for. */
     @Value("${thisnode.max-cards-per-note:100}")
     private int maxCardsPerNote;
 
@@ -45,7 +29,6 @@ public class CardService {
         return Math.max(1, maxCardsPerNote);
     }
 
-    /** Thrown when a page already holds the maximum number of cards. */
     public static class CardLimitException extends com.thisnode.plugin.api.CardLimitException {
         public CardLimitException(int limit) {
             super("每篇笔记最多 " + limit + " 张卡片。请新建一篇笔记，或先合并/删除部分卡片。", limit);
@@ -70,7 +53,7 @@ public class CardService {
         if (wanted != null) {
             rows = rows.stream().filter(b -> wanted.contains(b.id())).toList();
         }
-        List<Dtos.TagDto> noteTags = tagRepository.tagsOf(noteId);
+        List<Dtos.TagDto> noteTags = noteService.tagsOf(noteId);
         List<Dtos.CardView> views = new ArrayList<>(rows.size());
         for (Dtos.CardDto b : rows) {
             views.add(new Dtos.CardView(b, b.contentMd(), note.title(), noteTags));
@@ -94,9 +77,6 @@ public class CardService {
         requireCapacity(noteId, 1);
         String content = req == null || req.contentMd() == null ? "" : req.contentMd();
         String title = req == null || req.title() == null ? "" : req.title().trim();
-        // The caller's point is honoured: a double-click places the card where the user aimed.
-        // Callers that have no point to give (the Markdown importer, the demo seeder's fallback)
-        // still get appended below the column, so a card is never dropped on top of another.
         double[] flow = cardRepository.nextFlowPosition(noteId);
         double x = req != null && req.x() != null ? Math.max(0, req.x()) : flow[0];
         double y = req != null && req.y() != null ? Math.max(0, req.y()) : flow[1];
@@ -107,15 +87,9 @@ public class CardService {
         NoteMeta fresh = noteService.require(noteId);
         Dtos.CardDto stored = cardRepository.find(id);
         return new Dtos.CardView(stored, stored.contentMd(), fresh.title(),
-                tagRepository.tagsOf(noteId));
+                noteService.tagsOf(noteId));
     }
 
-    /**
-     * Write markdown typed inside a card. The card owns this text; the note follows.
-     *
-     * <p>{@code baseContentMd} 是客户端编辑时所依据的正文：磁盘上已经不是那一份就拒写（409），
-     * 免得把外部编辑器改过的内容覆盖掉。
-     */
     public Dtos.CardView writeContent(String cardId, String contentMd, String baseContentMd) {
         Dtos.CardDto card = requireCard(cardId);
         cardRepository.setContent(cardId, contentMd, baseContentMd);
@@ -123,13 +97,9 @@ public class CardService {
         syncNoteFromCards(note.id());
         NoteMeta fresh = noteService.require(note.id());
         return new Dtos.CardView(cardRepository.find(cardId),
-                contentMd == null ? "" : contentMd, fresh.title(), tagRepository.tagsOf(note.id()));
+                contentMd == null ? "" : contentMd, fresh.title(), noteService.tagsOf(note.id()));
     }
 
-    /**
-     * Rebuild the note's markdown from its cards (z order), so search, links, the Markdown
-     * mirror and JSON export all see the text that was typed into the cards.
-     */
     private void syncNoteFromCards(String noteId) {
         List<String> parts = cardRepository.contentsInOrder(noteId);
         StringBuilder joined = new StringBuilder();
@@ -162,8 +132,6 @@ public class CardService {
         requireCard(cardId);
         cardRepository.update(cardId, changes.title(), changes.x(), changes.y(), changes.w(), changes.h(),
                 changes.z(), changes.color(), changes.status(), changes.collapsed());
-        // Resizing a card leaves its neighbours exactly where they are: cards are positioned
-        // independently, so there is no column to re-close.
         return cardRepository.find(cardId);
     }
 
@@ -190,10 +158,6 @@ public class CardService {
         return cardRepository.find(id);
     }
 
-    /**
-     * Delete a card. {@code deleteContent} also removes the note when the card was its only
-     * content; otherwise the note's markdown is rebuilt from the remaining cards.
-     */
     public void delete(String cardId, boolean deleteContent) {
         Dtos.CardDto card = requireCard(cardId);
         NoteMeta note = noteRepository.getOne(card.noteId());
@@ -211,8 +175,6 @@ public class CardService {
         }
         cardRepository.delete(cardId);
         if (note != null) {
-            // The gap the card leaves behind stays open: the remaining cards keep the positions
-            // the user gave them.
             syncNoteFromCards(note.id());
         }
     }

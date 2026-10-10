@@ -4,8 +4,10 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.util.Ids;
 import com.thisnode.ext.notes.util.Markdown;
+import com.thisnode.ext.notes.util.Tags;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -41,12 +43,12 @@ public class NoteService {
         cardRepository.putCard(id, CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, System.currentTimeMillis()), content);
 
         if (req.tags() != null) {
-            tagRepository.setNodeTags(id, req.tags());
+            setTags(id, req.tags());
         } else {
             // Inline #tags in the body are picked up automatically.
             List<String> inline = Markdown.inlineTags(content);
             if (!inline.isEmpty()) {
-                tagRepository.setNodeTags(id, inline);
+                setTags(id, inline);
             }
         }
         // 笔记必须归属一个分组：界面侧在某个分组里新建时会带上当前分组，没带就落默认分组。
@@ -95,7 +97,7 @@ public class NoteService {
         noteRepository.writeNoteMeta(meta.withTitle(nextTitle).touched(System.currentTimeMillis()));
 
         if (req.tags() != null) {
-            tagRepository.setNodeTags(id, req.tags());
+            setTags(id, req.tags());
         } else if (contentChanged) {
             List<String> inline = Markdown.inlineTags(nextContent);
             if (!inline.isEmpty()) {
@@ -105,7 +107,7 @@ public class NoteService {
                         merged.add(t);
                     }
                 }
-                tagRepository.setNodeTags(id, merged);
+                setTags(id, merged);
             }
         }
         if (Boolean.TRUE.equals(req.clearNotebook())) {
@@ -136,6 +138,71 @@ public class NoteService {
         return out;
     }
 
+    // ================================================================= tags（归属在 meta，台账在 TagRepository）
+
+    /** 写标签归属：改笔记 meta，并把名字登记进标签台账（两个仓储各管自己的文件）。 */
+    private void setTags(String noteId, List<String> names) {
+        noteRepository.setNodeTags(noteId, names);
+        tagRepository.registerAll(names);
+    }
+
+    /** 一篇笔记的标签（名字 + 台账里的颜色）。 */
+    public List<Dtos.TagDto> tagsOf(String noteId) {
+        List<Dtos.TagDto> out = new ArrayList<>();
+        for (String name : noteRepository.tagNames(noteId)) {
+            out.add(new Dtos.TagDto(name, name, tagRepository.colorOf(name), null));
+        }
+        return out;
+    }
+
+    /** 加一个标签，返回这篇笔记最新的标签。 */
+    public List<Dtos.TagDto> addTag(String noteId, String name) {
+        noteRepository.addNodeTag(noteId, name);
+        tagRepository.registerAll(List.of(name));
+        return tagsOf(noteId);
+    }
+
+    public List<Dtos.TagDto> removeTag(String noteId, String name) {
+        noteRepository.removeNodeTag(noteId, name);
+        return tagsOf(noteId);
+    }
+
+    /** 标签清单（侧栏标签云）：台账里的都在（含计数 0 的），外加只在笔记里出现过的；计数现算。 */
+    public List<Dtos.TagDto> tagCatalog() {
+        List<String> all = noteRepository.allNoteTags();
+        Map<String, Integer> counts = new HashMap<>();
+        for (String tag : all) {
+            counts.merge(tag.toLowerCase(Locale.ROOT), 1, Integer::sum);
+        }
+        Set<String> known = new HashSet<>();
+        List<Dtos.TagDto> out = new ArrayList<>();
+        for (Tag tag : tagRepository.tags()) {
+            String key = tag.name().toLowerCase(Locale.ROOT);
+            known.add(key);
+            out.add(new Dtos.TagDto(tag.name(), tag.name(), tag.color(), counts.getOrDefault(key, 0)));
+        }
+        for (String name : all) {
+            String key = name.toLowerCase(Locale.ROOT);
+            if (known.add(key)) {
+                out.add(new Dtos.TagDto(name, name, null, counts.getOrDefault(key, 0)));
+            }
+        }
+        out.sort(Comparator.comparingInt(Dtos.TagDto::count).reversed()
+                .thenComparing(Dtos.TagDto::name, String.CASE_INSENSITIVE_ORDER));
+        return out;
+    }
+
+    /** 改名：笔记 meta 与台账两边一起改（各管自己那一半）。 */
+    public void renameTag(String from, String to) {
+        String src = Tags.normalize(from);
+        String dst = Tags.normalize(to);
+        if (src.isEmpty() || dst.isEmpty() || src.equalsIgnoreCase(dst)) {
+            return;
+        }
+        noteRepository.renameTagInMetas(src, dst);
+        tagRepository.rename(src, dst);
+    }
+
     // ================================================================= delete
 
     /**
@@ -159,7 +226,7 @@ public class NoteService {
         NoteMeta meta = require(id);
         String content = noteRepository.noteMarkdown(id);
         List<String> unresolved = unresolvedOf(content);
-        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.cards(), tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
+        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.cardRefs(), tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
     }
 
     /**
@@ -254,7 +321,7 @@ public class NoteService {
             return false;
         }
         if (query.tag() != null && !query.tag().isBlank()) {
-            String want = TagRepository.normalize(query.tag());
+            String want = Tags.normalize(query.tag());
             boolean has = false;
             for (String tag : meta.tags()) {
                 if (tag.equalsIgnoreCase(want)) {
