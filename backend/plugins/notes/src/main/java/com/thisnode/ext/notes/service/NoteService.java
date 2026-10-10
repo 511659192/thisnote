@@ -53,10 +53,6 @@ public class NoteService {
         // 不变量在后端收口，客户端（含脚本、导入）不可能造出无归属的笔记。
         String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(id, groupId);
-        reindexLinks(id, content);
-        resolvePendingLinks(id, title);
-        // 列表页缓存（摘要/出链/入链）随首卡落定：原来由组合层 writeCard 顺带刷新。
-        noteRepository.refreshCachedView(id);
         return id;
     }
 
@@ -89,7 +85,6 @@ public class NoteService {
         String nextTitle = oldTitle;
         if (renamed) {
             nextTitle = titleOf(req.title(), content);
-            linkRepository.renameStub(oldTitle, nextTitle);
             contentChanged = true;
         }
         String nextContent = content;
@@ -120,18 +115,14 @@ public class NoteService {
             notebookRepository.setExclusiveGroup(id, req.notebookId());
         }
         if (contentChanged) {
-            // 编排：整篇正文替换（写回首卡）→ 重算链接 → 刷新列表页缓存。
+            // 整篇正文替换（写回首卡）。
             noteRepository.replaceNoteContent(id, nextContent);
-            reindexLinks(id, nextContent);
-            noteRepository.refreshCachedView(id);
         }
         if (renamed) {
             // Follow the rename through the note directory (like Obsidian) instead of leaving every
             // inbound [[old title]] dangling.
             renameLinksTo(oldTitle, nextTitle, referrers);
-            linkRepository.unresolveByTitle(oldTitle);
             invalidateResolver();
-            resolvePendingLinks(id, nextTitle);
         }
     }
 
@@ -152,7 +143,6 @@ public class NoteService {
      */
     public void delete(String id) {
         noteRepository.delete(id);
-        linkRepository.deleteOutbound(id);
     }
 
     // ================================================================= read
@@ -168,9 +158,8 @@ public class NoteService {
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
         String content = noteRepository.noteMarkdown(id);
-        // 出/入链是 meta 里写时算好的缓存（Link），PO 直接出，不再服务端拼 DTO。
         List<String> unresolved = unresolvedOf(content);
-        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.cards(), tagsOfNames(id), notebookRepository.notebooksOf(id), meta.outLinks(), meta.inLinks(), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
+        return new Dtos.NoteDetail(meta.id(), meta.title(), content, meta.type(), meta.cards(), tagsOfNames(id), notebookRepository.notebooksOf(id), unresolved, unlinkedMentions(id, content), meta.createdAt(), meta.updatedAt());
     }
 
     /**
@@ -305,48 +294,6 @@ public class NoteService {
 
     // ================================================================= links
 
-    /**
-     * Re-parse the body and rewrite this node's outbound links + stubs.
-     */
-    public int reindexLinks(String id, String contentMd) {
-        List<Markdown.WikiLink> parsed = Markdown.wikiLinks(contentMd);
-        int count = linkRepository.replaceOutbound(id, parsed, this::resolveTitle);
-        for (Markdown.WikiLink link : parsed) {
-            if (resolveTitle(link.target()) == null) {
-                linkRepository.ensureStub(link.target());
-            } else {
-                linkRepository.deleteStubByTitle(link.target());
-            }
-        }
-        invalidateResolver();
-        return count;
-    }
-
-    /**
-     * Heal unresolved links that now point at this node (or one of its aliases).
-     *
-     * <p>Supports the natural note-taking order: write {@code [[某概念]]} first, create the
-     * note later. Without this pass the link would stay unresolved even though the target
-     * exists.
-     */
-    public int resolvePendingLinks(String id, String title) {
-        List<String> keys = new ArrayList<>();
-        keys.add(title);
-        Set<String> normalized = new HashSet<>();
-        for (String key : keys) {
-            if (key != null && !key.isBlank()) {
-                normalized.add(Markdown.normalizeTitle(key));
-                linkRepository.deleteStubByTitle(key);
-            }
-        }
-        // 只动 meta 里缓存的出链：把指向本文的出链补上解析结果，并给本文 +1 入链。
-        int healed = noteRepository.resolvePendingLinks(id, normalized);
-        if (healed > 0) {
-            invalidateResolver();
-        }
-        return healed;
-    }
-
     // ---------------- title resolution ----------------
 
     /**
@@ -373,7 +320,7 @@ public class NoteService {
         if (oldTitle == null || newTitle == null || oldTitle.equals(newTitle)) {
             return 0;
         }
-        List<String> variants = List.of("[[" + oldTitle + "]]", "[[ " + oldTitle + " ]]", "[[" + oldTitle + "|");
+        List<String> variants = Markdown.wikiLinkVariants(oldTitle);
         List<String> replacements = List.of("[[" + newTitle + "]]", "[[ " + newTitle + " ]]", "[[ " + newTitle + "|");
         List<String> sourceIds = sourceIdsIn == null ? List.of() : sourceIdsIn;
         int updated = 0;
@@ -396,18 +343,15 @@ public class NoteService {
             if (!changed) {
                 continue;
             }
-            if (noteRepository.getOne(sourceId) != null) {
-                reindexLinks(sourceId, noteRepository.noteMarkdown(sourceId));
-            }
             updated++;
         }
         return updated;
     }
 
     /**
-     * Create the missing note behind an unresolved link and link it up.
+     * Create the missing note behind an unresolved link (标题已存在就直接返回它)。
      */
-    public String createFromStub(String title, String fromNodeId) {
+    public String createFromStub(String title) {
         String clean = title == null ? "" : title.trim();
         if (clean.isEmpty()) {
             throw new IllegalArgumentException("标题不能为空");
@@ -416,22 +360,7 @@ public class NoteService {
         if (existing != null) {
             return existing;
         }
-        String id = create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null));
-        linkRepository.deleteStubByTitle(clean);
-        if (fromNodeId != null && !fromNodeId.isBlank()) {
-            if (noteRepository.getOne(fromNodeId) != null) {
-                reindexLinks(fromNodeId, noteRepository.noteMarkdown(fromNodeId));
-            }
-        }
-        return id;
-    }
-
-
-    /**
-     * Unresolved {@code [[ ]]} targets currently awaiting a note (stub list).
-     */
-    public List<Map<String, String>> stubs() {
-        return linkRepository.listStubs();
+        return create(new Dtos.CreateNodeRequest(clean, "# " + clean + "\n\n", "note", null, null));
     }
 
     public static class NotFoundException extends com.thisnode.plugin.api.NotFoundException {

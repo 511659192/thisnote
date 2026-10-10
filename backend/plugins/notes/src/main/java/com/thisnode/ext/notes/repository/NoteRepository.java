@@ -54,8 +54,7 @@ public class NoteRepository {
         if (note == null) {
             return;
         }
-        // 把它对各对端入链缓存的条目摘掉，再删卡片文件与 meta。
-        syncInboundEntries(note, List.of(), null);
+        // 卡片文件与 meta 一起走。
         for (Card ref : note.cards()) {
             deleteCardFiles(cardPath(ref));
         }
@@ -442,7 +441,7 @@ public class NoteRepository {
         }
         Card existing = refOf(note, card.id());
         Path written = writeCard(note.title(), card, contentMd, cardPath(existing));
-        Card ref = Card.of(card.id(), paths().relative(written));
+        Card ref = new Card(card.id(), paths().relative(written));
 
         List<Card> cards = new ArrayList<>(note.cards());
         int at = indexOf(cards, card.id());
@@ -454,73 +453,7 @@ public class NoteRepository {
             cards.add(ref);
         }
         writeNoteMeta(note.withCards(cards).touched(System.currentTimeMillis()));
-        refreshCachedView(noteId);
         return card;
-    }
-
-    /**
-     * 刷新一篇笔记 meta 里的列表页缓存：摘要 + 出链清单/计数 + 未解析数，并把「本篇引用了谁」
-     * 差集同步到各对端 meta 的入链缓存（详情页的引用面板读的就是那份）。
-     *
-     * <p>标题解析表一次现建、整批复用（不是缓存：这个方法返回即丢）。
-     */
-    public void refreshCachedView(String noteId) {
-        NoteMeta meta = getOne(noteId);
-        if (meta == null) {
-            return;
-        }
-        String markdown = noteMarkdown(noteId);
-        Map<String, String> titles = titleIndex();
-        List<Link> outLinks = new ArrayList<>();
-        int unresolved = 0;
-        for (Markdown.WikiLink link : Markdown.wikiLinks(markdown)) {
-            String to = titles.get(Markdown.normalizeTitle(link.target()));
-            if (to == null) {
-                unresolved++;
-            }
-            outLinks.add(Link.outbound(meta.id(), to, link.label(), link.target()));
-        }
-        syncInboundEntries(meta, outLinks, markdown);
-        NoteMeta next = meta.withCachedView(Markdown.plainPreview(markdown, 160), outLinks, outLinks.size(), unresolved);
-        if (!next.equals(meta)) {
-            writeNoteMeta(next);
-        }
-    }
-
-    /**
-     * 把「source 引用了谁」落到各对端 meta 的入链缓存：受影响的每个对端，先摘掉 source 的旧条目，
-     * 再按新出链逐条补上（条目数即入链数，{@code withInLinks} 负责两者一致）。
-     */
-    private void syncInboundEntries(NoteMeta source, List<Link> newOutLinks, String sourceMarkdown) {
-        Set<String> affected = new LinkedHashSet<>();
-        for (Link link : source.outLinks()) {
-            if (!link.unresolved()) {
-                affected.add(link.to());
-            }
-        }
-        for (Link link : newOutLinks) {
-            if (!link.unresolved()) {
-                affected.add(link.to());
-            }
-        }
-        for (String targetId : affected) {
-            NoteMeta target = getOne(targetId);
-            if (target == null) {
-                continue;
-            }
-            List<Link> inLinks = new ArrayList<>();
-            for (Link entry : target.inLinks()) {
-                if (!source.id().equals(entry.from())) {
-                    inLinks.add(entry);
-                }
-            }
-            for (Link link : newOutLinks) {
-                if (targetId.equals(link.to())) {
-                    inLinks.add(Link.inbound(source.id(), targetId, link.label()));
-                }
-            }
-            writeNoteMeta(target.withInLinks(inLinks));
-        }
     }
 
     private static Card refOf(NoteMeta note, String cardId) {
@@ -617,75 +550,6 @@ public class NoteRepository {
     }
 
     /**
-     * 「先写链接、后建笔记」：把各篇里 {@code to == null} 且目标匹配本文标题/别名的出链补上解析结果。
-     *
-     * @return 被重算的笔记数
-     */
-    public int resolvePendingLinks(String targetNoteId, java.util.Set<String> normalizedTargets) {
-        if (normalizedTargets == null || normalizedTargets.isEmpty()) {
-            return 0;
-        }
-        int healed = 0;
-        for (NoteMeta note : findAll()) {
-            if (note.id().equals(targetNoteId) || note.outLinks().isEmpty()) {
-                continue;
-            }
-            boolean pending = false;
-            for (Link link : note.outLinks()) {
-                if (link.unresolved() && normalizedTargets.contains(Markdown.normalizeTitle(link.raw()))) {
-                    pending = true;
-                    break;
-                }
-            }
-            if (pending) {
-                refreshCachedView(note.id());
-                healed++;
-            }
-        }
-        return healed;
-    }
-
-    /**
-     * 维护用：按正文重算**所有**笔记的列表页缓存。
-     */
-    public int refreshAllCachedViews() {
-        int done = 0;
-        for (NoteMeta note : findAll()) {
-            refreshCachedView(note.id());
-            done++;
-        }
-        return done;
-    }
-
-    /**
-     * 按各篇 meta 里缓存的出链**全量重建**入链缓存（读引用者正文算 context；修复/升级用）。
-     */
-    public int recalibrateInbound() {
-        List<NoteMeta> all = findAll();
-        Map<String, List<Link>> entries = new LinkedHashMap<>();
-        for (NoteMeta note : all) {
-            if (note.outLinks().isEmpty()) {
-                continue;
-            }
-            String markdown = noteMarkdown(note.id());
-            for (Link link : note.outLinks()) {
-                if (!link.unresolved()) {
-                    entries.computeIfAbsent(link.to(), k -> new ArrayList<>()).add(Link.inbound(note.id(), link.to(), link.label()));
-                }
-            }
-        }
-        int fixed = 0;
-        for (NoteMeta note : all) {
-            List<Link> want = entries.getOrDefault(note.id(), List.of());
-            if (!note.inLinks().equals(want)) {
-                writeNoteMeta(note.withInLinks(want));
-                fixed++;
-            }
-        }
-        return fixed;
-    }
-
-    /**
      * cardId → 清单项。
      */
     private Card refOfId(String cardId) {
@@ -741,14 +605,6 @@ public class NoteRepository {
     public Path fileOf(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? null : cardPath(owned.ref());
-    }
-
-    /**
-     * 列表页摘要：直接取 meta 里写好的缓存，不读卡片。
-     */
-    public String summary(String noteId) {
-        NoteMeta note = getOne(noteId);
-        return note == null ? "" : note.summary();
     }
 
     /**
@@ -871,12 +727,11 @@ public class NoteRepository {
         long now = System.currentTimeMillis();
         String content = data == null ? "" : data.content();
         CardMeta card = data != null && data.meta() != null ? data.meta() : CardMeta.newCardMeta(Ids.newId(), 0, 0, "", null, null, now);
-        Card ref = Card.of(card.id(), relative);
+        Card ref = new Card(card.id(), relative);
         String title = titleFromContent(content, file);
         // 认领的笔记也必须归属一个分组：直接落默认分组（不变量在创建点收口）。
         writeNoteMeta(NoteMeta.newNoteMeta(Ids.newId(), title, "note", NotebookBook.DEFAULT_GROUP_ID, now).withCards(List.of(ref)));
         writeCardMeta(card, cardPath(ref));
-        refreshCachedView(noteIdOf(card.id()));
     }
 
     private CardData noteStoreRead(Path file) {

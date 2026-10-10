@@ -407,8 +407,6 @@ export const useNoteStore = defineStore('notes', () => {
       if (current.value?.id === id) {
         // Keep local cursor/selection state authoritative: only merge server fields.
         current.value.updatedAt = detail.updatedAt
-        current.value.backlinks = detail.backlinks
-        current.value.outbound = detail.outbound
         current.value.unresolved = detail.unresolved
         current.value.unlinkedMentions = detail.unlinkedMentions
         current.value.tags = detail.tags
@@ -499,8 +497,7 @@ export const useNoteStore = defineStore('notes', () => {
 
 
   async function resolveStub(title: string) {
-    const from = currentId.value ?? undefined
-    const detail = await noteApi.resolveStub(title, from)
+    const detail = await noteApi.resolveStub(title)
     await Promise.all([loadList(), refreshMeta()])
     return detail
   }

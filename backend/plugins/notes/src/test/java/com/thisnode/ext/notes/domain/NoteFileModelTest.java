@@ -252,7 +252,7 @@ class NoteFileModelTest {
         if (note != null) {
             List<Card> cards = new ArrayList<>(note.cards());
             cards.add(Math.max(0, Math.min(slot, cards.size())),
-                    Card.of(cardId, store.paths().relative(md)));
+                    new Card(cardId, store.paths().relative(md)));
             store.writeNoteMeta(note.withCards(cards));
         }
     }

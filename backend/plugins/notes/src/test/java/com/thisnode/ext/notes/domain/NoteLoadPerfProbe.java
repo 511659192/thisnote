@@ -76,7 +76,7 @@ class NoteLoadPerfProbe {
                 Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
-                refs.add(Card.of(blockId, root.relativize(md).toString().replace('\\', '/')));
+                refs.add(new Card(blockId, root.relativize(md).toString().replace('\\', '/')));
             }
             store.writeNoteMeta(NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note",
                     "grp-default", now).withCards(refs));

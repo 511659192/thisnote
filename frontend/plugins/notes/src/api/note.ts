@@ -41,6 +41,6 @@ export const noteApi = {
     http.post<NoteDetail['tags']>('/api/notes/tags/add', undefined, { id, name }),
   removeTag: (id: string, name: string) =>
     http.post<NoteDetail['tags']>('/api/notes/tags/remove', undefined, { id, name }),
-  resolveStub: (title: string, fromNodeId?: string) =>
-    http.post<NoteDetail>('/api/notes/resolve-stub', { title, fromNodeId }),
+  resolveStub: (title: string) =>
+    http.post<NoteDetail>('/api/notes/resolve-stub', { title }),
 }

@@ -274,7 +274,7 @@ public class CardRepository {
                 : resolveContentPath(note.title(), NoteFilePaths.cardSlug(card.title(), contentMd),
                         card.id());
         noteRepository.writeText(file, CardFile.compose(card, contentMd));
-        Card ref = Card.of(card.id(), noteFilePaths.relative(file));
+        Card ref = new Card(card.id(), noteFilePaths.relative(file));
 
         List<Card> cards = new ArrayList<>(note.cards());
         int at = indexOf(cards, card.id());
@@ -286,7 +286,6 @@ public class CardRepository {
             cards.add(ref);
         }
         noteRepository.writeNoteMeta(note.withCards(cards).touched(System.currentTimeMillis()));
-        noteRepository.refreshCachedView(noteId);
         return card;
     }
 
@@ -302,7 +301,7 @@ public class CardRepository {
         noteRepository.writeCardMeta(card, noteRepository.cardPath(owned.ref()));
     }
 
-    /** 删一张卡片：先摘出笔记清单，再删文件，最后刷新这篇笔记的列表页缓存。 */
+    /** 删一张卡片：先摘出笔记清单，再删文件。 */
     public void removeCard(String cardId) {
         NoteRepository.Owned owned = noteRepository.ownerOf(cardId);
         if (owned == null) {
@@ -312,7 +311,6 @@ public class CardRepository {
         List<Card> cards = new ArrayList<>(owned.note().cards());
         cards.removeIf(ref -> ref.id().equals(cardId));
         noteRepository.writeNoteMeta(owned.note().withCards(cards).touched(System.currentTimeMillis()));
-        noteRepository.refreshCachedView(owned.note().id());
     }
 
 

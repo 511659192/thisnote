@@ -9,7 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
-import BacklinksPanel from '@/components/BacklinksPanel.vue'
+import NoteInfoPanel from '@/components/NoteInfoPanel.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import GroupPicker from '@/components/GroupPicker.vue'
 import { primaryLabel } from '@/core/utils'
@@ -366,9 +366,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             @open-note="openNode"
             @create-note="
               async (title: string) => {
-                // 指向已有占位：解析它；指向从未存在过的标题：当场新建一篇。
-                // resolveStub 只认已经存在的占位（例如正文里先写了 [[X]] 生成的 stub），
-                // 所以它给不出结果时要自己建，否则点下去毫无反应。
+                // 标题已被占用：直接打开那一篇；还没人用过这个名字：当场新建一篇。
+                // resolveStub 在后端就是「有就返回、没有就建」，给不出结果时才需要自己兜底。
                 try {
                   const d = await nodes.resolveStub(title)
                   if (d) {
@@ -393,10 +392,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <span class="small muted">双击空白处新建卡片 · Ctrl+V 粘贴 · 拖动卡片摆放 · 双击卡片输入</span>
           </div>
         </div>
-        <BacklinksPanel
+        <NoteInfoPanel
           v-if="ui.rightPanelOpen && docForPanel"
           :doc="docForPanel"
-          @open="openNode"
           @create="
             async (title: string) => {
               const d = await nodes.resolveStub(title)

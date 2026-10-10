@@ -11,8 +11,4 @@ package com.thisnode.ext.notes.domain;
  * @param file 卡片文件相对笔记目录根目录的路径；顺序由它在清单里的位置决定
  */
 public record Card(String id, String file) {
-
-    public static Card of(String id, String file) {
-        return new Card(id, file);
-    }
 }

@@ -237,6 +237,14 @@ public final class Markdown {
     }
 
     /** Normalized key for title/alias equality and link resolution. */
+    /**
+     * {@code [[标题]]} 的几种写法（含 {@code [[ 标题 ]]} 与 {@code [[标题|别名]} 前缀）：改名替换与
+     * "谁引用了这篇"的扫描共用同一组形式，避免两处各写一套而漏掉某种写法。
+     */
+    public static List<String> wikiLinkVariants(String title) {
+        return List.of("[[" + title + "]]", "[[ " + title + " ]]", "[[" + title + "|");
+    }
+
     public static String normalizeTitle(String title) {
         if (title == null) {
             return "";

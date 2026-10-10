@@ -3,6 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.domain.TagBook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +90,7 @@ public class TagRepository {
         for (NoteMeta meta : noteRepository.findAll()) {
             for (String name : meta.tags()) {
                 if (merged.find(name) == null) {
-                    merged = merged.with(TagBook.Tag.fresh(name, null, now));
+                    merged = merged.with(Tag.fresh(name, null, now));
                 }
             }
         }
@@ -116,7 +117,7 @@ public class TagRepository {
         if (current.find(name) != null) {
             return;
         }
-        save(current.with(TagBook.Tag.fresh(name, null, System.currentTimeMillis())));
+        save(current.with(Tag.fresh(name, null, System.currentTimeMillis())));
     }
 
     private void registerAll(List<String> names) {
@@ -125,7 +126,7 @@ public class TagRepository {
         long now = System.currentTimeMillis();
         for (String name : names) {
             if (next.find(name) == null) {
-                next = next.with(TagBook.Tag.fresh(name, null, now));
+                next = next.with(Tag.fresh(name, null, now));
             }
         }
         if (next != current) {
@@ -219,7 +220,7 @@ public class TagRepository {
             }
         }
         List<Dtos.TagDto> out = new ArrayList<>();
-        for (TagBook.Tag tag : withNoteTags(book()).tags()) {
+        for (Tag tag : withNoteTags(book()).tags()) {
             int count = counts.getOrDefault(tag.name().toLowerCase(Locale.ROOT), 0);
             out.add(new Dtos.TagDto(tag.name(), tag.name(), tag.color(), count));
         }
@@ -254,9 +255,9 @@ public class TagRepository {
         }
         long now = System.currentTimeMillis();
         TagBook current = book();
-        TagBook.Tag existing = current.find(from);
+        Tag existing = current.find(from);
         TagBook next = existing == null
-                ? current.with(TagBook.Tag.fresh(to, null, now))
+                ? current.with(Tag.fresh(to, null, now))
                 : current.without(from).with(existing.renamed(to, now));
         save(next);
     }
@@ -269,9 +270,9 @@ public class TagRepository {
         String value = color == null || color.isBlank() ? null : color;
         long now = System.currentTimeMillis();
         TagBook current = book();
-        TagBook.Tag existing = current.find(name);
-        TagBook.Tag nextTag = existing == null
-                ? TagBook.Tag.fresh(name, value, now)
+        Tag existing = current.find(name);
+        Tag nextTag = existing == null
+                ? Tag.fresh(name, value, now)
                 : existing.withColor(value, now);
         save(current.with(nextTag));
     }
@@ -286,7 +287,7 @@ public class TagRepository {
     private List<Dtos.TagDto> toDtos(List<String> names, TagBook current) {
         List<Dtos.TagDto> out = new ArrayList<>();
         for (String name : sorted(names)) {
-            TagBook.Tag tag = current.find(name);
+            Tag tag = current.find(name);
             out.add(new Dtos.TagDto(name, name, tag == null ? null : tag.color(), null));
         }
         return out;

@@ -81,12 +81,8 @@ function askRemove(node: NoteMeta) {
         <div v-if="n.notebookId" class="row-2 groups">
           <span class="chip group-chip" title="所属分组">▣ {{ notebookTitle(n.notebookId) }}</span>
         </div>
-        <div v-if="n.summary" class="preview">{{ n.summary }}</div>
         <div class="row-3">
           <span class="date small muted">{{ formatDate(n.updatedAt) }}</span>
-          <span v-if="n.inLinksCount || n.outLinksCount" class="small muted links">
-            ⇄ {{ n.inLinksCount }}/{{ n.outLinksCount }}
-          </span>
           <span v-for="t in n.tags.slice(0, 2)" :key="t" class="chip">#{{ t }}</span>
           <span v-if="n.tags.length > 2" class="small muted">+{{ n.tags.length - 2 }}</span>
         </div>
@@ -204,25 +200,11 @@ function askRemove(node: NoteMeta) {
 .fav {
   color: var(--warning);
 }
-.preview {
-  font-size: 12px;
-  color: var(--c-text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.5;
-}
 .row-3 {
   display: flex;
   align-items: center;
   gap: 5px;
   margin-top: 1px;
   flex-wrap: wrap;
-}
-.links {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
 }
 </style>

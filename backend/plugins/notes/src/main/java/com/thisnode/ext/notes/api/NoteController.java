@@ -84,7 +84,7 @@ public class NoteController {
 
     @PostMapping("/resolve-stub")
     public Dtos.NoteDetail resolveStub(@RequestBody Map<String, String> body) {
-        String id = noteService.createFromStub(body.get("title"), body.get("fromNodeId"));
+        String id = noteService.createFromStub(body.get("title"));
         return noteService.detail(id);
     }
 }

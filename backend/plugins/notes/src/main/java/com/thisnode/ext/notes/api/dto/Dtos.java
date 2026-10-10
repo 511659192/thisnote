@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes.api.dto;
 
 import com.thisnode.ext.notes.domain.Card;
-import com.thisnode.ext.notes.domain.Link;
 
 import java.util.List;
 
@@ -35,8 +34,6 @@ public final class Dtos {
              */
             List<Card> cards,
             List<String> tags, List<NotebookDto> notebooks,
-            /** 出链/入链直接输出 meta 里写时算好的缓存（PO 直出），没有服务端拼装的第二层。 */
-            List<Link> outbound, List<Link> backlinks,
             List<String> unresolved, List<String> unlinkedMentions,
             long createdAt, long updatedAt) {
     }

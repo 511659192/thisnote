@@ -1,6 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.util.Ids;
@@ -54,24 +55,24 @@ public class NotebookRepository {
     // -------------------------------------------------------------------- 读
 
     public List<Dtos.NotebookDto> list(String type) {
-        String want = type == null || type.isBlank() ? NotebookBook.TYPE_NOTEBOOK : type;
-        List<NotebookBook.Notebook> matched = new ArrayList<>();
-        for (NotebookBook.Notebook notebook : book().notebooks()) {
+        String want = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
+        List<Notebook> matched = new ArrayList<>();
+        for (Notebook notebook : book().notebooks()) {
             if (notebook.type().equals(want)) {
                 matched.add(notebook);
             }
         }
-        matched.sort(Comparator.comparingInt(NotebookBook.Notebook::sortOrder)
-                .thenComparing(NotebookBook.Notebook::title, String.CASE_INSENSITIVE_ORDER));
+        matched.sort(Comparator.comparingInt(Notebook::sortOrder)
+                .thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER));
         List<Dtos.NotebookDto> out = new ArrayList<>(matched.size());
-        for (NotebookBook.Notebook notebook : matched) {
+        for (Notebook notebook : matched) {
             out.add(dto(notebook, countNotes(notebook.id())));
         }
         return out;
     }
 
     public Dtos.NotebookDto find(String id) {
-        NotebookBook.Notebook notebook = book().find(id);
+        Notebook notebook = book().find(id);
         return notebook == null ? null : dto(notebook, countNotes(id));
     }
 
@@ -85,7 +86,7 @@ public class NotebookRepository {
         return count;
     }
 
-    private static Dtos.NotebookDto dto(NotebookBook.Notebook notebook, Integer count) {
+    private static Dtos.NotebookDto dto(Notebook notebook, Integer count) {
         return new Dtos.NotebookDto(notebook.id(), notebook.type(), notebook.title(),
                 notebook.parentId(), notebook.icon(), notebook.sortOrder(), count,
                 notebook.createdAt(), notebook.updatedAt());
@@ -99,8 +100,8 @@ public class NotebookRepository {
             return DEFAULT_GROUP_ID;
         }
         long now = System.currentTimeMillis();
-        save(current.with(NotebookBook.Notebook.fresh(DEFAULT_GROUP_ID,
-                NotebookBook.TYPE_NOTEBOOK, DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
+        save(current.with(Notebook.fresh(DEFAULT_GROUP_ID,
+                Notebook.TYPE_NOTEBOOK, DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
         return DEFAULT_GROUP_ID;
     }
 
@@ -135,8 +136,8 @@ public class NotebookRepository {
 
     public String ensureByTitle(String title, String type) {
         String clean = title == null || title.isBlank() ? "未分类" : title.trim();
-        String wantType = type == null || type.isBlank() ? NotebookBook.TYPE_NOTEBOOK : type;
-        NotebookBook.Notebook existing = book().findByTitle(wantType, clean);
+        String wantType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
+        Notebook existing = book().findByTitle(wantType, clean);
         return existing != null ? existing.id() : create(clean, null, null, wantType);
     }
 
@@ -145,11 +146,11 @@ public class NotebookRepository {
         String id = Ids.newId();
         long now = System.currentTimeMillis();
         int max = 0;
-        for (NotebookBook.Notebook notebook : book().notebooks()) {
+        for (Notebook notebook : book().notebooks()) {
             max = Math.max(max, notebook.sortOrder());
         }
-        save(book().with(NotebookBook.Notebook.fresh(id,
-                type == null || type.isBlank() ? NotebookBook.TYPE_NOTEBOOK : type,
+        save(book().with(Notebook.fresh(id,
+                type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
                 title == null || title.isBlank() ? "新建笔记本" : title.trim(),
                 parent, icon, max + 1, now)));
         return id;
@@ -161,7 +162,7 @@ public class NotebookRepository {
      */
     public Dtos.NotebookDto update(String id, String title, String parentId, String icon,
                                    Integer sortOrder) {
-        NotebookBook.Notebook current = book().find(id);
+        Notebook current = book().find(id);
         if (current == null) {
             throw new IllegalArgumentException("分组不存在：" + id);
         }
@@ -171,7 +172,7 @@ public class NotebookRepository {
         }
         String parent = requireParent(parentId);
         assertNoCycle(id, parent);
-        save(book().with(new NotebookBook.Notebook(current.v(), id, current.type(),
+        save(book().with(new Notebook(current.v(), id, current.type(),
                 title == null || title.isBlank() ? current.title() : title.trim(),
                 parent,
                 icon == null ? current.icon() : icon,
@@ -199,7 +200,7 @@ public class NotebookRepository {
             if (cursor.equals(id)) {
                 throw new IllegalArgumentException("不能把分组移到它自己或它的子分组下面");
             }
-            NotebookBook.Notebook next = book().find(cursor);
+            Notebook next = book().find(cursor);
             cursor = next == null ? null : next.parentId();
         }
     }
@@ -210,7 +211,7 @@ public class NotebookRepository {
             return;
         }
         ensureDefaultGroup();
-        NotebookBook.Notebook gone = book().find(id);
+        Notebook gone = book().find(id);
         String fallbackParent = gone == null ? null : gone.parentId();
         for (NoteMeta meta : noteRepository.findAll()) {
             if (id.equals(meta.notebookId())) {
@@ -218,8 +219,8 @@ public class NotebookRepository {
             }
         }
         NotebookBook next = book().without(id);
-        List<NotebookBook.Notebook> reparented = new ArrayList<>();
-        for (NotebookBook.Notebook notebook : next.notebooks()) {
+        List<Notebook> reparented = new ArrayList<>();
+        for (Notebook notebook : next.notebooks()) {
             reparented.add(id.equals(notebook.parentId())
                     ? notebook.withParent(fallbackParent) : notebook);
         }
@@ -255,7 +256,7 @@ public class NotebookRepository {
         if (meta == null || meta.notebookId() == null) {
             return List.of();
         }
-        NotebookBook.Notebook notebook = book().find(meta.notebookId());
+        Notebook notebook = book().find(meta.notebookId());
         if (notebook == null) {
             return List.of();
         }

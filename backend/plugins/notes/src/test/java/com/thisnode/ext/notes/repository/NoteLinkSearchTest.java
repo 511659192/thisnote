@@ -58,38 +58,27 @@ class NoteLinkSearchTest {
     }
 
     @Test
-    @DisplayName("链接完全从卡片正文投影：解析的、未解析的都在图上")
+    @DisplayName("链接完全从卡片正文投影：谁引用了我、哪些还没解析，都是现算的")
     void linksAreDerivedFromCardContent() {
         String target = newNote("目标笔记", "目标正文");
         String source = newNote("来源笔记", "见 [[目标笔记]] 与 [[还没有的笔记]]");
 
-        List<LinkRepository.LinkRow> out = links.outbound(source);
-        assertThat(out).hasSize(2);
-        assertThat(out.get(0).toNodeId()).isEqualTo(target);
-        assertThat(out.get(1).toNodeId()).isNull();
-        assertThat(out.get(1).toTitle()).isEqualTo("还没有的笔记");
-
-        assertThat(links.inbound(target)).hasSize(1);
-        // 引用面板的数据源是对端 meta 里的入链缓存（不再有 backlinks 查询）
-        assertThat(nodes.getOne(target).inLinks()).singleElement()
-                .satisfies(entry -> assertThat(entry.from()).isEqualTo(source));
-        assertThat(links.total()).isEqualTo(2);
-        assertThat(links.stubExists("还没有的笔记")).isTrue();
-        assertThat(links.listStubs()).extracting(m -> m.get("title"))
-                .containsExactly("还没有的笔记");
+        assertThat(service.detail(source).unresolved()).containsExactly("还没有的笔记");
+        assertThat(links.referencingNodeIds(target)).containsExactly(source);
+        assertThat(links.referencingNodeIds(source)).isEmpty();
     }
 
     @Test
     @DisplayName("后建的目标笔记让悬空链接自动解析，不需要任何修复调用")
     void creatingTheTargetResolvesTheLink() {
         String source = newNote("来源", "关于 [[以后才写的]] 的想法");
-        assertThat(links.outbound(source).get(0).toNodeId()).isNull();
+        assertThat(service.detail(source).unresolved()).containsExactly("以后才写的");
 
         String target = service.create(new Dtos.CreateNodeRequest(
                 "以后才写的", "", "note", null, null));
 
-        assertThat(links.outbound(source).get(0).toNodeId()).isEqualTo(target);
-        assertThat(links.stubExists("以后才写的")).isFalse();
+        assertThat(service.detail(source).unresolved()).isEmpty();
+        assertThat(links.referencingNodeIds(target)).contains(source);
     }
 
     @Test
@@ -103,7 +92,7 @@ class NoteLinkSearchTest {
 
         assertThat(store.noteMarkdown(source)).contains("[[新标题]]");
         assertThat(store.noteMarkdown(source)).doesNotContain("[[旧标题]]");
-        assertThat(links.outbound(source).get(0).toNodeId()).isEqualTo(target);
+        assertThat(links.referencingNodeIds(target)).containsExactly(source);
     }
 
 }

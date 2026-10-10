@@ -63,24 +63,4 @@ public record TagBook(int v, List<Tag> tags) {
         }
         return new TagBook(v, next);
     }
-
-    public record Tag(int v, String name, String color, long createdAt, long updatedAt) {
-
-        public Tag {
-            v = v <= 0 ? SCHEMA : v;
-            name = name == null ? "" : name;
-        }
-
-        public static Tag fresh(String name, String color, long now) {
-            return new Tag(SCHEMA, name, color, now, now);
-        }
-
-        public Tag withColor(String ncolor, long now) {
-            return new Tag(v, name, ncolor, createdAt, now);
-        }
-
-        public Tag renamed(String nname, long now) {
-            return new Tag(v, nname, color, createdAt, now);
-        }
-    }
 }

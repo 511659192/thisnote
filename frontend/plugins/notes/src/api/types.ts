@@ -95,30 +95,8 @@ export interface NoteMeta {
   notebookId?: string | null
   /** 本篇的卡片清单（顺序即阅读顺序）。 */
   cards: Card[]
-  /** 列表页摘要：正文的纯文本前缀。 */
-  summary: string
-  /** 出链清单（写时算好）：raw 原文 + label 显示文字 + to 解析到的笔记 id。 */
-  outLinks: Link[]
-  /** 入链清单（对端写入时落过来）：from 是来源笔记。 */
-  inLinks: Link[]
-  outLinksCount: number
-  inLinksCount: number
-  unresolvedLinksCount: number
   createdAt: number
   updatedAt: number
-}
-
-/**
- * 一条链接（出链/入链共用同一个形状），方向由 `from → to` 表达。
- *
- * `to` 为空表示正文里写了 `[[...]]` 但目标还没建（此时靠 `raw` 显示原文并"点击新建"）；
- * `raw` 只有出链有。
- */
-export interface Link {
-  from?: string | null
-  to?: string | null
-  label?: string | null
-  raw?: string | null
 }
 
 export interface NoteDetail {
@@ -130,8 +108,6 @@ export interface NoteDetail {
   /** 卡片清单（只有身份）：页面级数据按需取，见 {@link Card}。 */
   cards: Card[]
   notebooks: Notebook[]
-  outbound: Link[]
-  backlinks: Link[]
   unresolved: string[]
   unlinkedMentions: string[]
   createdAt: number
