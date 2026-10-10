@@ -1,7 +1,10 @@
 package com.thisnode.ext.memorycurve;
 
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.support.ThisnodePlugin;
+import com.thisnode.plugin.api.Plugin;
+import com.thisnode.plugin.api.PluginDescriptor;
+import org.laxture.sbp.SpringBootPlugin;
+import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
 
@@ -13,9 +16,9 @@ import org.pf4j.PluginWrapper;
  * 核心插件缺位时它照样能独立启动。开启某张卡片会立刻建一条到期记录，于是马上可复习；
  * 停用保留记录，历史不丢。
  *
- * <p>id 与版本来自 {@code plugin.properties}（{@link ThisnodePlugin} 负责取），不在这里硬编码。
+ * <p>id 与版本来自 {@code plugin.properties}（由 {@code descriptor()} 从 PF4J 描述符取），不在这里硬编码。
  */
-public class MemoryCurvePlugin extends ThisnodePlugin {
+public class MemoryCurvePlugin extends SpringBootPlugin implements Plugin {
 
     /** 端点前缀与数据分区用的 id；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "memory-curve";
@@ -24,8 +27,18 @@ public class MemoryCurvePlugin extends ThisnodePlugin {
     private SchedulingListener listener;
 
     public MemoryCurvePlugin(PluginWrapper wrapper) {
-        super(wrapper, "记忆曲线",
-                "参考 Anki 的 SM-2 间隔重复：按卡片安排复习，遗忘即回退，间隔随掌握程度增长");
+        // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的
+        // configurer（要共享的东西走 SpringBootstrap.importBean），所以传空数组。
+        super(wrapper, new IPluginConfigurer[0]);
+    }
+
+    /** 显示名与一句话说明；id 与版本一律来自 {@code plugin.properties}，不在这里硬编码。 */
+    @Override
+    public PluginDescriptor descriptor() {
+        var d = getWrapper().getDescriptor();
+        return PluginDescriptor.of(d.getPluginId(), "记忆曲线",
+                "参考 Anki 的 SM-2 间隔重复：按卡片安排复习，遗忘即回退，间隔随掌握程度增长",
+                d.getVersion());
     }
 
     /**

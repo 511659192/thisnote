@@ -24,10 +24,6 @@
       <groupId>com.thisnode</groupId>
       <artifactId>plugin-api</artifactId>
     </dependency>
-    <dependency>
-      <groupId>com.thisnode</groupId>
-      <artifactId>plugin-support</artifactId>
-    </dependency>
 
     <dependency>
       <groupId>org.laxture</groupId>

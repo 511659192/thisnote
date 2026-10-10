@@ -35,14 +35,14 @@ plugins-dist/memory-curve.jar
   └── 类 + 空 Spring 容器入口
 ```
 
-- `MemoryCurvePlugin extends ThisnodePlugin`（基类在 `plugin-support`，桥接 PF4J 与 SBP）：
-  id/version 一律取自描述符，**不在代码里硬编码**；
+- `MemoryCurvePlugin extends SpringBootPlugin implements Plugin`（SBP 的插件基类 + 契约接口）：
+  id/version 由 `descriptor()` 从 PF4J 描述符取，**不在代码里硬编码**；
 - 它是**可停用插件**（描述符里 `undeactivatable=false`）：工具渲染在卡片工具行里（见 3.3），
   可随时停用/重载 —— 分类标签不靠声明，能力由它调用的 `register*` 决定；
 - `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class).importBean(PluginDataStore.class)`：
   插件有**自己的 Spring 子容器**（`MemoryCurveStarter` 是空 `@SpringBootApplication`，只负责扫描本包），
   平台只把 `PluginDataStore`（状态 KV）显式搭桥进来 —— 插件与平台之间只有 `plugin-api` 这层契约；
-- 依赖面刻意保持最小：`plugin-api` / `plugin-support` / `sbp-core` / spring-context / spring-web / slf4j /
+- 依赖面刻意保持最小：`plugin-api` / `sbp-core` / spring-context / spring-web / slf4j /
   spring-boot-autoconfigure。**没有数据库、没有 MyBatis、没有核心插件的任何依赖。**
 
 ### 2.2 状态为什么分两处存
@@ -247,7 +247,7 @@ NoteCard 渲染卡片时：
 
 ## 7. 它用到的 plugin-api 契约清单
 
-后端：`ThisnodePlugin`（基类）· `PluginDescriptor` · `PluginHealth` · `PluginDataStore`（状态 KV）·
+后端：`Plugin`（契约接口）· `PluginDescriptor` · `PluginHealth` · `PluginDataStore`（状态 KV）·
 `CardChangedEvent`（跨插件事件）· `PluginDataStore.importBean` 搭桥
 
 界面侧：`registerCardPlugin` · `registerNavEntry` · `registerPluginRoute` · `unregisterPlugin` ·

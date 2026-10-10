@@ -20,15 +20,10 @@
          它们是 plugins/ 目录里各自独立的 jar，由 PF4J/SBP 在运行期装载 —— 核心编译期看不见它们，
          所以换/加/删一个插件都不需要重新打包应用。见 docs/PLUGIN_PLATFORM.md。
 
-         plugin-support 必须由应用带着走：插件的 jar 里不含它，运行期从应用的类加载器取
          （与 sbp-core 同样的共享方式）。 -->
     <dependency>
       <groupId>com.thisnode</groupId>
       <artifactId>plugin-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.thisnode</groupId>
-      <artifactId>plugin-support</artifactId>
     </dependency>
 
     <!-- SBP（Spring Boot Plugin Framework）：把单体变成可热装卸的模块化应用。

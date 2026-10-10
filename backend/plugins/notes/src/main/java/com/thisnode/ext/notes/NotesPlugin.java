@@ -1,7 +1,10 @@
 package com.thisnode.ext.notes;
 
 import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.support.ThisnodePlugin;
+import com.thisnode.plugin.api.Plugin;
+import com.thisnode.plugin.api.PluginDescriptor;
+import org.laxture.sbp.SpringBootPlugin;
+import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
 
@@ -20,17 +23,22 @@ import org.pf4j.PluginWrapper;
  * <p><b>本插件不允许停用/在线重载</b>（覆写 {@code undeactivatable()}）：管理面直接拒绝
  * （{@code 409}），否则整个应用的笔记能力会随一次误点整体下线。
  */
-public class NotesPlugin extends ThisnodePlugin {
+public class NotesPlugin extends SpringBootPlugin implements Plugin {
 
     public NotesPlugin(PluginWrapper wrapper) {
-        super(wrapper, "笔记核心",
-                "笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / 导入导出 —— 主体原有的业务领域，以插件形态交付");
+        // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的
+        // configurer（要共享的东西走 SpringBootstrap.importBean），所以传空数组。
+        super(wrapper, new IPluginConfigurer[0]);
     }
 
-    /** 承载主体业务领域：不允许停用/在线重载（管理面直接拒绝，端点闸门总是放行）。 */
+    /** 显示名与一句话说明；id 与版本一律来自 {@code plugin.properties}，不在这里硬编码。 */
     @Override
-    protected boolean undeactivatable() {
-        return true;
+    public PluginDescriptor descriptor() {
+        var d = getWrapper().getDescriptor();
+        // core(…) = 不允许停用/在线重载：承载主体业务领域，误点会让整块能力下线
+        return PluginDescriptor.core(d.getPluginId(), "笔记核心",
+                "笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / 导入导出 —— 主体原有的业务领域，以插件形态交付",
+                d.getVersion());
     }
 
     @Override

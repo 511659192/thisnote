@@ -37,8 +37,7 @@ public class FavoriteController {
     @GetMapping("/notes")
     public List<Map<String, Object>> notes() {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (String id : store.enabledEntityIds(FavoritePlugin.PLUGIN_ID,
-                FavoritePlugin.ENTITY_TYPE_NOTE)) {
+        for (String id : store.enabledEntityIds(FavoritePlugin.PLUGIN_ID, FavoritePlugin.ENTITY_TYPE_NOTE)) {
             out.add(Map.of("id", id));
         }
         return out;

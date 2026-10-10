@@ -17,14 +17,13 @@
   <packaging>pom</packaging>
   <name>thisnode-backend</name>
   <description>
-    thisnote 后端父工程：插件契约（plugin-api）、插件侧共享支持（plugin-support）、各插件（独立构件）、应用（app）。
-    插件只依赖 plugin-api 与 plugin-support —— 编译期就看不到核心内部类，因此可以单独发版、单独替换 jar。
+    thisnote 后端父工程：插件契约（plugin-api）、各插件（独立构件）、应用（app）。
+    插件只依赖 plugin-api（外加 SBP 框架本身）—— 编译期就看不到核心内部类，因此可以单独发版、单独替换 jar。
     仓库根只作普通工作区，不放 Maven 文件；Maven 构建全部从本目录（backend/）进行。
   </description>
 
   <modules>
     <module>plugin-api</module>
-    <module>plugin-support</module>
     <module>plugins/memory-curve</module>
     <module>plugins/search</module>
     <module>plugins/fuzzy-search</module>
@@ -47,11 +46,6 @@
       <dependency>
         <groupId>com.thisnode</groupId>
         <artifactId>plugin-api</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.thisnode</groupId>
-        <artifactId>plugin-support</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
