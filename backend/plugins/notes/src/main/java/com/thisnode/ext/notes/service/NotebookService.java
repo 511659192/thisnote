@@ -62,7 +62,6 @@ public class NotebookService {
         for (NoteMeta note : noteRepository.getAll()) {
             if (id.equals(note.getNotebookId())) {
                 note.setNotebookId(NotebookRepository.DEFAULT_GROUP_ID);
-                note.setUpdatedAt(System.currentTimeMillis());
                 noteRepository.save(note);
             }
         }

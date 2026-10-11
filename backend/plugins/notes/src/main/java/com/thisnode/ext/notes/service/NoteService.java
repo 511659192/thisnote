@@ -3,6 +3,7 @@ package com.thisnode.ext.notes.service;
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.Card;
+import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -12,6 +13,8 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Note aggregate: CRUD and list queries.
@@ -34,14 +37,10 @@ public class NoteService {
     public String create(Dtos.CreateNodeRequest req) {
         String id = IdUtil.randomUUID();
         String groupId = req.notebookId() == null ? notebookService.ensureDefaultGroup() : req.notebookId();
-        NoteMeta meta = new NoteMeta()
-                .setId(id)
-                .setTitle(req.title())
-                .setType(req.type())
-                .setNotebookId(groupId);
-        Card.CardMeta firstCard = Card.CardMeta.newCardMeta(
-                IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
+        NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(groupId);
+        CardMeta firstCard = CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
         String cardFileName = cardRepository.save(firstCard, req.contentMd(), null);
+
         meta.setCardFileNames(List.of(cardFileName));
         noteRepository.save(meta);
         return id;
@@ -49,17 +48,11 @@ public class NoteService {
 
     public void update(String id,
                        Dtos.UpdateNodeRequest req) {
-        NoteMeta meta = noteRepository.getOne(id);
-        if (meta == null) {
-            throw new NotFoundException("node " + id);
-        }
-        if (req.title() != null) {
-            meta.setTitle(req.title());
-        }
-        if (req.contentMd() != null) {
-            replaceNoteContent(meta, req.contentMd());
-        }
-        meta.setUpdatedAt(System.currentTimeMillis());
+        NoteMeta meta = require(id);
+
+        Optional.ofNullable(req.title()).ifPresent(meta::setTitle);
+        Optional.ofNullable(req.contentMd()).ifPresent(contentMd -> replaceNoteContent(meta, contentMd));
+
         noteRepository.save(meta);
     }
 
@@ -131,11 +124,11 @@ public class NoteService {
         return page;
     }
 
-    private void replaceNoteContent(NoteMeta note, String contentMd) {
+    private void replaceNoteContent(NoteMeta note,
+                                    String contentMd) {
         List<String> fileNames = new ArrayList<>(note.getCardFileNames());
         if (fileNames.isEmpty()) {
-            Card.CardMeta card = Card.CardMeta.newCardMeta(
-                    IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
+            CardMeta card = CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
             fileNames.add(cardRepository.save(card, contentMd, null));
             note.setCardFileNames(fileNames);
             return;

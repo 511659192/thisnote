@@ -11,11 +11,9 @@ import com.thisnode.ext.notes.repository.NoteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+
+import static com.thisnode.ext.notes.api.dto.Dtos.*;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +24,8 @@ public class CardService {
     private final NoteService noteService;
     private final NotesConfig config;
 
-    public static class CardLimitException extends com.thisnode.plugin.api.CardLimitException {
+    public static class CardLimitException
+            extends com.thisnode.plugin.api.CardLimitException {
         public CardLimitException(int limit) {
             super("每篇笔记最多 " + limit + " 张卡片，无法继续新增。请新建一篇笔记。", limit);
         }
@@ -80,28 +79,31 @@ public class CardService {
         return cardFileNames(note).size();
     }
 
-    private void requireCapacity(NoteMeta note, int adding) {
+    private void requireCapacity(NoteMeta note,
+                                 int adding) {
         int limit = config.getMaxCardsPerNote();
         if (count(note) + adding > limit) {
             throw new CardLimitException(limit);
         }
     }
 
-    public Dtos.CardsDto page(String noteId, List<String> ids) {
+    public CardsDto page(String noteId,
+                              List<String> ids) {
         NoteMeta note = noteService.require(noteId);
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);
         List<StoredCard> rows = cards(note);
         if (wanted != null) {
             rows = rows.stream().filter(card -> wanted.contains(card.meta().getId())).toList();
         }
-        List<Dtos.CardView> views = new ArrayList<>(rows.size());
+        List<CardView> views = new ArrayList<>(rows.size());
         for (StoredCard stored : rows) {
-            views.add(new Dtos.CardView(stored.meta(), stored.card().getContent(), note.getTitle()));
+            views.add(new CardView(stored.meta(), stored.card().getContent(), note.getTitle()));
         }
-        return new Dtos.CardsDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
+        return new CardsDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
     }
 
-    public Dtos.CardView create(String noteId, Dtos.CreateCardRequest req) {
+    public CardView create(String noteId,
+                                CreateCardRequest req) {
         NoteMeta note = noteService.require(noteId);
         requireCapacity(note, 1);
         String content = req.contentMd();
@@ -115,34 +117,37 @@ public class CardService {
         int slot = insertionSlot(existing, y, h);
         long now = System.currentTimeMillis();
         CardMeta card = new CardMeta(CardMeta.SCHEMA, IdUtil.randomUUID(), title, x, y, w, h,
-                slot, req.color(), null, false, Map.of(), now, now);
+                                     slot, req.color(), null, false, Map.of(), now, now);
         String fileName = cardRepository.save(card, content, null);
         List<String> fileNames = new ArrayList<>(cardFileNames(note));
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
         note.setCardFileNames(fileNames);
-        note.setUpdatedAt(now);
         noteRepository.save(note);
-        return new Dtos.CardView(card, content, note.getTitle());
+        return new CardView(card, content, note.getTitle());
     }
 
     private double[] nextFlowPosition(NoteMeta note) {
         double bottom = cards(note).stream()
-                .mapToDouble(stored -> stored.meta().getY() + stored.meta().getH())
-                .max()
-                .orElse(0);
+                                   .mapToDouble(stored -> stored.meta().getY() + stored.meta().getH())
+                                   .max()
+                                   .orElse(0);
         return new double[]{CardRepository.FLOW_X, bottom <= 0 ? 0 : bottom + CardRepository.FLOW_GAP};
     }
 
-    private static int insertionSlot(List<StoredCard> cards, double y, double height) {
+    private static int insertionSlot(List<StoredCard> cards,
+                                     double y,
+                                     double height) {
         double center = y + height / 2;
         long before = cards.stream()
-                .map(StoredCard::meta)
-                .filter(card -> card.getY() + card.getH() / 2 < center)
-                .count();
+                           .map(StoredCard::meta)
+                           .filter(card -> card.getY() + card.getH() / 2 < center)
+                           .count();
         return (int) Math.min(before, cards.size());
     }
 
-    public Dtos.CardView writeContent(String cardId, String contentMd, String baseContentMd) {
+    public CardView writeContent(String cardId,
+                                      String contentMd,
+                                      String baseContentMd) {
         StoredCard stored = requireCard(cardId);
         String current = stored.card().getContent();
         if (baseContentMd != null && !baseContentMd.equals(current)) {
@@ -152,12 +157,12 @@ public class CardService {
         CardMeta meta = stored.meta().setUpdatedAt(System.currentTimeMillis());
         String body = contentMd == null ? "" : contentMd;
         cardRepository.save(meta, body, stored.fileName());
-        stored.note().setUpdatedAt(System.currentTimeMillis());
         noteRepository.save(stored.note());
-        return new Dtos.CardView(meta, body, stored.note().getTitle());
+        return new CardView(meta, body, stored.note().getTitle());
     }
 
-    public CardMeta update(String cardId, Dtos.CardUpdate changes) {
+    public CardMeta update(String cardId,
+                           CardUpdate changes) {
         StoredCard stored = requireCard(cardId);
         CardMeta meta = stored.meta();
         double x = changes.x() == null ? meta.getX() : changes.x();
@@ -174,9 +179,9 @@ public class CardService {
         return meta;
     }
 
-    public void batchUpdate(Dtos.BatchCardUpdateRequest req) {
-        List<Dtos.CardUpdate> updates = req.cards();
-        for (Dtos.CardUpdate update : updates) {
+    public void batchUpdate(BatchCardUpdateRequest req) {
+        List<CardUpdate> updates = req.cards();
+        for (CardUpdate update : updates) {
             if (update != null && update.id() != null) {
                 update(update.id(), update);
             }

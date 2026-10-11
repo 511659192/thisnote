@@ -26,6 +26,7 @@ public class NoteRepository {
         if (note == null || StrUtil.isBlank(note.getId())) {
             return;
         }
+        note.setUpdatedAt(System.currentTimeMillis());
         JsonFileUtils.write(metaPath(note.getId()), note);
     }
 
