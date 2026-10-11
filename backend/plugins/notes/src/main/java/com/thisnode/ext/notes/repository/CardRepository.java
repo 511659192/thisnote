@@ -49,24 +49,6 @@ public class CardRepository {
         return cards;
     }
 
-    public List<String> getContents(List<String> fileNames) {
-        return getAll(fileNames).stream().map(Card::getContent).toList();
-    }
-
-    public String getJoinedContents(List<String> fileNames) {
-        StringBuilder joined = new StringBuilder();
-        for (String part : getContents(fileNames)) {
-            if (part == null || part.isBlank()) {
-                continue;
-            }
-            if (joined.length() > 0) {
-                joined.append("\n\n");
-            }
-            joined.append(part.strip());
-        }
-        return joined.toString();
-    }
-
     /**
      * Write using the card ID as the filename, or preserve a known filename.
      */

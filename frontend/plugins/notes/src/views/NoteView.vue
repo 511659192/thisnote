@@ -153,7 +153,7 @@ function onKeydown(e: KeyboardEvent) {
   const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable
   if (primary && e.key.toLowerCase() === 's' && !typing) {
     e.preventDefault()
-    void nodes.flushAll()
+    void pageRef.value?.finishEditing()
   }
   if (e.key === 'Escape') menu.value.open = false
 }

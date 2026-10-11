@@ -1,44 +1,26 @@
 import { defineStore } from 'pinia'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { notebookApi } from '@/api'
 import type { NoteDetail, NoteMeta, Notebook } from '@/api/types'
 import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter, toast } from '@thisnode/plugin-api'
 
-const AUTOSAVE_DEBOUNCE_MS = 500
-
-/**
- * Notes: list, selection and autosave.
- *
- * Autosave is per-node debounced (F-P-01 防抖 500ms). A pending save is flushed when the
- * user switches notes so fast navigation never loses the last keystrokes.
- */
+/** Notes: list, selection, notebook navigation and title updates. */
 export const useNoteStore = defineStore('notes', () => {
 
   const nodes = ref<NoteMeta[]>([])
   const current = ref<NoteDetail | null>(null)
   const loadingList = ref(false)
   const loadingNode = ref(false)
-  const saving = ref(false)
-  const savedAt = ref<number | null>(null)
   const notebooks = ref<Notebook[]>([])
 
   const activeNotebookId = ref<string | null>(null)
   const listQuery = ref('')
   const selectedIds = ref<string[]>([])
 
-  /** Per-node pending content so switching notes mid-debounce is lossless. */
-  const pending = reactive<Record<string, { contentMd?: string; title?: string }>>({})
-  const timers = new Map<string, number>()
   let detailToken = 0
 
   const currentId = computed(() => current.value?.id ?? null)
-  const wordCount = computed(() => {
-    const text = current.value?.contentMd ?? ''
-    const cjk = (text.match(/[\u3400-\u9fff]/g) || []).length
-    const latin = (text.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_'-]+/g) || []).length
-    return cjk + latin
-  })
 
   async function loadList() {
     loadingList.value = true
@@ -291,7 +273,6 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   async function select(id: string | null) {
-    await flushAll()
     if (!id) {
       current.value = null
       return
@@ -303,7 +284,6 @@ export const useNoteStore = defineStore('notes', () => {
       const detail = await noteApi.get(id)
       if (token !== detailToken) return
       current.value = detail
-      savedAt.value = null
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -330,61 +310,6 @@ export const useNoteStore = defineStore('notes', () => {
       toast((e as Error).message, 'error')
       return null
     }
-  }
-
-  /** Apply a content/title edit locally and schedule a debounced save. */
-  function edit(changes: { contentMd?: string; title?: string }) {
-    const doc = current.value
-    if (!doc) return
-    if (changes.contentMd !== undefined) doc.contentMd = changes.contentMd
-    if (changes.title !== undefined) doc.title = changes.title
-
-    const bucket = pending[doc.id] ?? {}
-    Object.assign(bucket, changes)
-    pending[doc.id] = bucket
-
-    const existing = timers.get(doc.id)
-    if (existing) window.clearTimeout(existing)
-    timers.set(
-      doc.id,
-      window.setTimeout(() => void flush(doc.id), AUTOSAVE_DEBOUNCE_MS),
-    )
-  }
-
-  /** Immediately persist any debounced edit for one node. */
-  async function flush(id: string) {
-    const bucket = pending[id]
-    if (!bucket) return
-    delete pending[id]
-    const timer = timers.get(id)
-    if (timer) {
-      window.clearTimeout(timer)
-      timers.delete(id)
-    }
-    saving.value = true
-    try {
-      const detail = await noteApi.update(id, bucket)
-      if (current.value?.id === id) {
-        // Keep local cursor/selection state authoritative: only merge server fields.
-        current.value.updatedAt = detail.updatedAt
-      }
-      savedAt.value = Date.now()
-      scheduleListRefresh()
-    } catch (e) {
-      toast(`保存失败：${(e as Error).message}`, 'error')
-    } finally {
-      saving.value = false
-    }
-  }
-
-  async function flushAll() {
-    await Promise.all(Object.keys(pending).map((id) => flush(id)))
-  }
-
-  let listRefreshTimer: number | null = null
-  function scheduleListRefresh() {
-    if (listRefreshTimer) window.clearTimeout(listRefreshTimer)
-    listRefreshTimer = window.setTimeout(() => void loadList(), 900)
   }
 
   async function createNode(payload: {
@@ -425,11 +350,7 @@ export const useNoteStore = defineStore('notes', () => {
   async function syncFromServer() {
     await loadList()
     if (currentId.value) {
-      const id = currentId.value
-      const stale = pending[id]
-      if (!stale) {
-        current.value = await noteApi.get(id)
-      }
+      current.value = await noteApi.get(currentId.value)
     }
   }
 
@@ -443,13 +364,10 @@ export const useNoteStore = defineStore('notes', () => {
     currentId,
     loadingList,
     loadingNode,
-    saving,
-    savedAt,
     notebooks,
     activeNotebookId,
     listQuery,
     selectedIds,
-    wordCount,
     loadList,
     refreshMeta,
     refreshAll,
@@ -474,9 +392,6 @@ export const useNoteStore = defineStore('notes', () => {
     select,
     reloadCurrent,
     updateCurrent,
-    edit,
-    flush,
-    flushAll,
     createNode,
     createAndSelect,
     deleteForever,

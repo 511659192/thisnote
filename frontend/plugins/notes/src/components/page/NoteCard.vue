@@ -166,6 +166,11 @@ function onKeydown(e: KeyboardEvent) {
     emit('end-edit')
     return
   }
+  if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault()
+    commit()
+    return
+  }
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
     commit()

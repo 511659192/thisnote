@@ -13,8 +13,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
-import java.util.function.Consumer;
 
 /**
  * Note aggregate: CRUD and list queries.
@@ -49,11 +47,10 @@ public class NoteService {
     public void update(String id,
                        Dtos.UpdateNodeRequest req) {
         NoteMeta meta = require(id);
-
-        Optional.ofNullable(req.title()).ifPresent(meta::setTitle);
-        Optional.ofNullable(req.contentMd()).ifPresent(contentMd -> replaceNoteContent(meta, contentMd));
-
-        noteRepository.save(meta);
+        if (req.title() != null && !req.title().equals(meta.getTitle())) {
+            meta.setTitle(req.title());
+            noteRepository.save(meta);
+        }
     }
 
     public void delete(String id) {
@@ -75,7 +72,6 @@ public class NoteService {
 
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
-        String content = cardRepository.getJoinedContents(meta.getCardFileNames());
         List<String> cardIds = new ArrayList<>();
         for (String fileName : meta.getCardFileNames()) {
             Card card = cardRepository.get(fileName);
@@ -85,7 +81,6 @@ public class NoteService {
         }
         return new Dtos.NoteDetail(meta.getId(),
                                    meta.getTitle(),
-                                   content,
                                    meta.getType(),
                                    cardIds,
                                    notebookService.notebooksOf(id),
@@ -124,24 +119,6 @@ public class NoteService {
         return page;
     }
 
-    private void replaceNoteContent(NoteMeta note,
-                                    String contentMd) {
-        List<String> fileNames = new ArrayList<>(note.getCardFileNames());
-        if (fileNames.isEmpty()) {
-            CardMeta card = CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-            fileNames.add(cardRepository.save(card, contentMd, null));
-            note.setCardFileNames(fileNames);
-            return;
-        }
-        for (int i = 0; i < fileNames.size(); i++) {
-            Card card = cardRepository.get(fileNames.get(i));
-            if (card == null || card.getMeta() == null) {
-                continue;
-            }
-            cardRepository.save(card.getMeta(), i == 0 ? contentMd : "", fileNames.get(i));
-        }
-    }
-
     private boolean matches(NoteMeta meta,
                             Query query) {
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.getType())) {
@@ -152,9 +129,13 @@ public class NoteService {
         }
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
-            String body = cardRepository.getJoinedContents(meta.getCardFileNames()).toLowerCase(Locale.ROOT);
-            boolean hit = (meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
-            if (!hit) {
+            boolean titleHit = meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle);
+            boolean cardHit = !titleHit && cardRepository.getAll(meta.getCardFileNames()).stream()
+                                                         .map(Card::getContent)
+                                                         .filter(content -> content != null)
+                                                         .map(content -> content.toLowerCase(Locale.ROOT))
+                                                         .anyMatch(content -> content.contains(needle));
+            if (!titleHit && !cardHit) {
                 return false;
             }
         }

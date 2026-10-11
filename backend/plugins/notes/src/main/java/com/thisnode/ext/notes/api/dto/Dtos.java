@@ -42,7 +42,6 @@ public final class Dtos {
 
     public record NoteDetail(String id,
                              String title,
-                             String contentMd,
                              String type,
                              List<String> cards,
                              List<NotebookDto> notebooks,
@@ -60,7 +59,7 @@ public final class Dtos {
         }
     }
 
-    public record UpdateNodeRequest(String title, String contentMd) {
+    public record UpdateNodeRequest(String title) {
         public UpdateNodeRequest {
             if (title != null && title.isBlank()) {
                 title = currentTimeTitle();

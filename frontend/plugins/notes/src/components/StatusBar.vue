@@ -2,16 +2,12 @@
 import { computed } from 'vue'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
-import { backendMessage, backendOnline, formatRelative, shellState } from '@thisnode/plugin-api'
+import { backendMessage, backendOnline, shellState } from '@thisnode/plugin-api'
 
 const nodes = useNoteStore()
 const page = usePageStore()
 
-const saveState = computed(() => {
-  if (nodes.saving || page.savingContent) return '保存中…'
-  if (nodes.savedAt) return `已保存 · ${formatRelative(nodes.savedAt)}`
-  return '已保存'
-})
+const saveState = computed(() => page.savingContent ? '保存中…' : '已保存')
 </script>
 
 <template>
@@ -21,7 +17,6 @@ const saveState = computed(() => {
     <span class="divider-v"></span>
     <template v-if="nodes.current">
       <span class="divider-v"></span>
-      <span class="small muted">{{ nodes.wordCount }} 字</span>
       <span class="small muted">{{ page.limitLabel }}</span>
       <span class="small muted">{{ saveState }}</span>
     </template>

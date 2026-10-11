@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
-import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
@@ -88,7 +87,7 @@ public class CardService {
     }
 
     public CardsDto page(String noteId,
-                              List<String> ids) {
+                         List<String> ids) {
         NoteMeta note = noteService.require(noteId);
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);
         List<StoredCard> rows = cards(note);
@@ -103,7 +102,7 @@ public class CardService {
     }
 
     public CardView create(String noteId,
-                                CreateCardRequest req) {
+                           CreateCardRequest req) {
         NoteMeta note = noteService.require(noteId);
         requireCapacity(note, 1);
         String content = req.contentMd();
@@ -146,8 +145,8 @@ public class CardService {
     }
 
     public CardView writeContent(String cardId,
-                                      String contentMd,
-                                      String baseContentMd) {
+                                 String contentMd,
+                                 String baseContentMd) {
         StoredCard stored = requireCard(cardId);
         String current = stored.card().getContent();
         if (baseContentMd != null && !baseContentMd.equals(current)) {

@@ -24,7 +24,6 @@ export const noteApi = {
     id: string,
     payload: {
       title?: string
-      contentMd?: string
     },
   ) => http.post<NoteDetail>('/api/notes/update', payload, { id }),
 

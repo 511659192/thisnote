@@ -74,7 +74,6 @@ export interface NoteMeta {
 export interface NoteDetail {
   id: string
   title: string
-  contentMd: string
   type: NoteType
   /** 有序卡片 ID 清单；页面级数据按需取。 */
   cards: CardId[]
