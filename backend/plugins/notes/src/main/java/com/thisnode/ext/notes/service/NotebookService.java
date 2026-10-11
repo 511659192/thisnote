@@ -22,7 +22,7 @@ public class NotebookService {
     private final NoteRepository noteRepository;
 
     public List<NotebookDto> list(String type) {
-        List<Notebook> notebooks = notebookRepository.list(type);
+        List<Notebook> notebooks = notebookRepository.getAll(type);
         List<NoteMeta> notes = noteRepository.getAll();
         List<NotebookDto> result = new ArrayList<>(notebooks.size());
         for (Notebook notebook : notebooks) {
@@ -30,7 +30,6 @@ public class NotebookService {
             result.add(new NotebookDto(notebook.id(),
                                        notebook.type(),
                                        notebook.title(),
-                                       notebook.parentId(),
                                        notebook.icon(),
                                        notebook.sortOrder(),
                                        count,
@@ -41,11 +40,10 @@ public class NotebookService {
     }
 
     public NotebookDto find(String id) {
-        Notebook notebook = notebookRepository.find(id);
+        Notebook notebook = notebookRepository.getOne(id);
         return notebook == null ? null : new NotebookDto(notebook.id(),
                                                          notebook.type(),
                                                          notebook.title(),
-                                                         notebook.parentId(),
                                                          notebook.icon(),
                                                          notebook.sortOrder(),
                                                          countNotes(id),
@@ -54,22 +52,19 @@ public class NotebookService {
     }
 
     public String create(String title,
-                         String parentId,
                          String icon,
                          String type) {
-        return notebookRepository.create(title, parentId, icon, type);
+        return notebookRepository.create(title, icon, type);
     }
 
     public NotebookDto update(String id,
                               String title,
-                              String parentId,
                               String icon,
                               Integer sortOrder) {
-        Notebook notebook = notebookRepository.update(id, title, parentId, icon, sortOrder);
+        Notebook notebook = notebookRepository.update(id, title, icon, sortOrder);
         return new NotebookDto(notebook.id(),
                                notebook.type(),
                                notebook.title(),
-                               notebook.parentId(),
                                notebook.icon(),
                                notebook.sortOrder(),
                                countNotes(id),
@@ -81,12 +76,12 @@ public class NotebookService {
         if (id == null) {
             return;
         }
-        if (NotebookRepository.DEFAULT_GROUP_ID.equals(id)) {
-            throw new IllegalArgumentException("「" + NotebookRepository.DEFAULT_GROUP_TITLE + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
+        if (Notebook.DEFAULT_GROUP_ID.equals(id)) {
+            throw new IllegalArgumentException("「" + Notebook.DEFAULT_GROUP_TITLE + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
         }
         for (NoteMeta note : noteRepository.getAll()) {
             if (id.equals(note.getNotebookId())) {
-                note.setNotebookId(NotebookRepository.DEFAULT_GROUP_ID);
+                note.setNotebookId(Notebook.DEFAULT_GROUP_ID);
                 noteRepository.save(note);
             }
         }

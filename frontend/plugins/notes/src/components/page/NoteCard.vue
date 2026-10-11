@@ -212,8 +212,8 @@ function contentEl(): HTMLElement | null {
  *
  * <p>ResizeObserver 一挂上就会先回调一次；若在挂载时就挂，等于「每打开/切回一次笔记都强制
  * 贴合一次」—— 那会把用户自己调好的高度覆盖成按视口封顶的值（切走再切回，高度弹回浏览器长度）。
- * 只在内容真的变了（打字、外部改写、切显示模式）之后再观察，尺寸变化（图片加载、markdown 重排）
- * 才会继续触发贴合。
+ * 只在内容、编辑模式或卡片宽度变化时触发首次贴合；观察器挂上后，图片加载、markdown 重排等尺寸
+ * 变化才会继续触发贴合。
  */
 let fitObserver: ResizeObserver | null = null
 let observedEl: HTMLElement | null = null
@@ -225,7 +225,7 @@ function armFitObserver() {
   fitObserver.disconnect()
   fitObserver.observe(el)
 }
-watch([() => props.editing, () => contentMode.value], () => {
+watch([() => props.editing, () => contentMode.value, () => card.value.w], () => {
   void nextTick(() => fitHeight())
 })
 watch(() => content.value, () => fitHeight())

@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.api.dto;
 
-import com.thisnode.ext.notes.domain.NotebookBook;
+import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.util.NoteTitleDefaults;
 
 public record CreateNoteRequest(String title, String content, String type, String notebookId) {
@@ -9,6 +9,6 @@ public record CreateNoteRequest(String title, String content, String type, Strin
         title = title.isBlank() ? NoteTitleDefaults.currentTimeTitle() : title;
         content = content == null ? "" : content;
         type = type == null || type.isBlank() ? "note" : type;
-        notebookId = notebookId == null || notebookId.isBlank() ? NotebookBook.DEFAULT_GROUP_ID : notebookId;
+        notebookId = notebookId == null || notebookId.isBlank() ? Notebook.DEFAULT_GROUP_ID : notebookId;
     }
 }

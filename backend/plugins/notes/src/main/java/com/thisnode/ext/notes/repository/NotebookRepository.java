@@ -1,9 +1,9 @@
 package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.util.IdUtil;
+import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Notebook;
-import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -12,31 +12,30 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Persists the notebook hierarchy ledger only. Note membership belongs to NotebookService.
- */
+/** Persists the flat notebook list; note membership belongs to NotebookService. */
 @Repository
 @RequiredArgsConstructor
 public class NotebookRepository {
 
     private static final Logger log = LoggerFactory.getLogger(NotebookRepository.class);
 
-    public static final String DEFAULT_GROUP_ID = NotebookBook.DEFAULT_GROUP_ID;
-    public static final String DEFAULT_GROUP_TITLE = NotebookBook.DEFAULT_GROUP_TITLE;
-
     private final NotesConfig notesConfig;
 
     @PostConstruct
     private void initializeDefaultGroup() {
-        NotebookBook current = book();
-        if (current.find(DEFAULT_GROUP_ID) == null) {
+        List<Notebook> notebooks = getAll();
+        if (getOne(notebooks, Notebook.DEFAULT_GROUP_ID) == null) {
             long now = System.currentTimeMillis();
-            save(current.with(Notebook.fresh(DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK, DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
+            notebooks.add(Notebook.fresh(Notebook.DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK,
+                    Notebook.DEFAULT_GROUP_TITLE, "📥", 0, now));
+            save(notebooks);
         }
     }
 
@@ -44,120 +43,101 @@ public class NotebookRepository {
         return notesConfig.getNotebookDir().resolve("notebooks.json");
     }
 
-    private NotebookBook book() {
+    private List<Notebook> getAll() {
+        Path file = ledgerPath();
+        if (!Files.isRegularFile(file)) {
+            return new ArrayList<>();
+        }
         try {
-            NotebookBook loaded = JsonFileUtils.read(ledgerPath(), NotebookBook.class);
-            return loaded == null ? NotebookBook.empty() : loaded;
+            String json = Files.readString(file, StandardCharsets.UTF_8);
+            if (json.isBlank()) {
+                return new ArrayList<>();
+            }
+            List<Notebook> loaded = JSON.parseArray(json, Notebook.class);
+            return loaded == null ? new ArrayList<>() : new ArrayList<>(loaded);
         } catch (IOException | RuntimeException e) {
-            log.warn("分组台账无法读取，按空台账处理：{}", e.toString());
-            return NotebookBook.empty();
+            log.warn("分组清单无法读取，按空清单处理：{}", e.toString());
+            return new ArrayList<>();
         }
     }
 
-    private void save(NotebookBook next) {
-        JsonFileUtils.write(ledgerPath(), next);
+    private void save(List<Notebook> notebooks) {
+        JsonFileUtils.write(ledgerPath(), notebooks);
     }
 
-    public List<Notebook> list(String type) {
+    public List<Notebook> getAll(String type) {
         String wantedType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
-        return book().getNotebooks()
-                     .stream()
-                     .filter(notebook -> notebook.type().equals(wantedType))
-                     .sorted(Comparator.comparingInt(Notebook::sortOrder).thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
-                     .toList();
+        return getAll().stream()
+                .filter(notebook -> notebook.type().equals(wantedType))
+                .sorted(Comparator.comparingInt(Notebook::sortOrder)
+                        .thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
-    public Notebook find(String id) {
-        return book().find(id);
+    public Notebook getOne(String id) {
+        return getOne(getAll(), id);
     }
 
     public String create(String title,
-                         String parentId,
                          String icon,
                          String type) {
-        NotebookBook current = book();
-        String parent = requireParent(parentId, current);
+        List<Notebook> notebooks = getAll();
         String id = IdUtil.randomUUID();
         long now = System.currentTimeMillis();
         int max = 0;
-        for (Notebook notebook : current.getNotebooks()) {
+        for (Notebook notebook : notebooks) {
             max = Math.max(max, notebook.sortOrder());
         }
-        save(current.with(Notebook.fresh(id, type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type, title, parent, icon, max + 1, now)));
+        notebooks.add(Notebook.fresh(id,
+                type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
+                title, icon, max + 1, now));
+        save(notebooks);
         return id;
     }
 
-    /**
-     * Full replacement: {@code parentId=null} means move to the top level.
-     */
     public Notebook update(String id,
                            String title,
-                           String parentId,
                            String icon,
                            Integer sortOrder) {
-        NotebookBook currentBook = book();
-        Notebook current = currentBook.find(id);
+        List<Notebook> notebooks = getAll();
+        Notebook current = getOne(notebooks, id);
         if (current == null) {
             throw new IllegalArgumentException("分组不存在：" + id);
         }
-        if (DEFAULT_GROUP_ID.equals(id) && parentId != null) {
-            throw new IllegalArgumentException("默认分组不能移到别的分组下：它是无归属笔记的落脚点");
+        Notebook updated = new Notebook(current.v(), id, current.type(),
+                title == null || title.isBlank() ? current.title() : title.trim(),
+                icon == null ? current.icon() : icon,
+                sortOrder == null ? current.sortOrder() : sortOrder,
+                current.createdAt(), System.currentTimeMillis());
+        for (int i = 0; i < notebooks.size(); i++) {
+            if (id.equals(notebooks.get(i).id())) {
+                notebooks.set(i, updated);
+                break;
+            }
         }
-        String parent = requireParent(parentId, currentBook);
-        assertNoCycle(id, parent, currentBook);
-        Notebook updated = new Notebook(current.v(),
-                                        id,
-                                        current.type(),
-                                        title == null || title.isBlank() ? current.title() : title.trim(),
-                                        parent,
-                                        icon == null ? current.icon() : icon,
-                                        sortOrder == null ? current.sortOrder() : sortOrder,
-                                        current.createdAt(),
-                                        System.currentTimeMillis());
-        save(currentBook.with(updated));
+        save(notebooks);
         return updated;
     }
 
-    private String requireParent(String parentId,
-                                 NotebookBook current) {
-        if (parentId == null || parentId.isBlank()) {
-            return null;
-        }
-        String parent = parentId.trim();
-        if (current.find(parent) == null) {
-            throw new IllegalArgumentException("目标分组不存在：" + parent);
-        }
-        return parent;
-    }
-
-    private void assertNoCycle(String id,
-                               String parent,
-                               NotebookBook current) {
-        String cursor = parent;
-        while (cursor != null) {
-            if (cursor.equals(id)) {
-                throw new IllegalArgumentException("不能把分组移到它自己或它的子分组下面");
-            }
-            Notebook next = current.find(cursor);
-            cursor = next == null ? null : next.parentId();
-        }
-    }
-
-    /**
-     * Remove the ledger entry and lift child groups to its former parent.
-     */
     public void delete(String id) {
         if (id == null) {
             return;
         }
-        NotebookBook current = book();
-        Notebook gone = current.find(id);
-        String fallbackParent = gone == null ? null : gone.parentId();
-        NotebookBook next = current.without(id);
-        List<Notebook> reparented = new ArrayList<>();
-        for (Notebook notebook : next.getNotebooks()) {
-            reparented.add(id.equals(notebook.parentId()) ? notebook.withParent(fallbackParent) : notebook);
+        List<Notebook> notebooks = getAll();
+        notebooks.removeIf(notebook -> id.equals(notebook.id()));
+        save(notebooks);
+    }
+
+    private static Notebook getOne(List<Notebook> notebooks,
+                                   String id) {
+        if (id == null) {
+            return null;
         }
-        save(new NotebookBook(next.getV(), reparented));
+        for (Notebook notebook : notebooks) {
+            if (id.equals(notebook.id())) {
+                return notebook;
+            }
+        }
+        return null;
     }
 }

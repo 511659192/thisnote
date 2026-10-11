@@ -120,102 +120,10 @@ export const useNoteStore = defineStore('notes', () => {
     void loadList()
   }
 
-  // ---------------------------------------------------------------- 分组树
-  //
-  // 分组层级存储在 notebooks.parentId 中，侧栏按 parentId 递归渲染；新建笔记时将归属写入 meta.notebookId。
+  // ---------------------------------------------------------------- 分组列表
 
-  /** 展开的分组 id（ref<Set> 必须整体替换才会触发更新）。持久化到 localStorage：树的展开状态
-      应该像文件管理器一样记住，不然每次刷新都要重新一层层点开。 */
-  const EXPANDED_KEY = 'thisnode.groups.expanded'
-  function loadExpanded(): Set<string> {
-    try {
-      const raw = localStorage.getItem(EXPANDED_KEY)
-      return new Set<string>(raw ? (JSON.parse(raw) as string[]) : [])
-    } catch {
-      return new Set()
-    }
-  }
-  function saveExpanded(next: Set<string>) {
-    expandedGroups.value = next
-    try {
-      localStorage.setItem(EXPANDED_KEY, JSON.stringify([...next]))
-    } catch {
-      // 存不进去也不影响本次会话
-    }
-  }
-
-  const expandedGroups = ref<Set<string>>(loadExpanded())
-  /** 「全部笔记」那一层的展开态：收起时侧栏只看核心视图，不显示分组树。 */
+  /** 侧栏可折叠的扁平分组列表。 */
   const groupsShown = ref(true)
-
-  const sortGroups = (a: Notebook, b: Notebook) =>
-    (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title, 'zh')
-
-  /** 顶层分组（没有父级的）。 */
-  const rootGroups = computed(() => notebooks.value.filter((g) => !g.parentId).sort(sortGroups))
-
-  /** 某个分组的直接子分组。 */
-  function childGroups(parentId: string): Notebook[] {
-    return notebooks.value.filter((g) => g.parentId === parentId).sort(sortGroups)
-  }
-
-  function hasChildren(id: string): boolean {
-    return notebooks.value.some((g) => g.parentId === id)
-  }
-
-  /**
-   * 按当前展开状态把树压平成一行行（带层级深度）。
-   *
-   * <p>侧栏用左内边距表现层级，就不用写递归组件了：树的深度靠数据表达，渲染保持一层循环。
-   */
-  const visibleGroups = computed(() => {
-    const out: { group: Notebook; depth: number }[] = []
-    const walk = (items: Notebook[], depth: number) => {
-      for (const group of items) {
-        out.push({ group, depth })
-        if (expandedGroups.value.has(group.id)) walk(childGroups(group.id), depth + 1)
-      }
-    }
-    walk(rootGroups.value, 0)
-    return out
-  })
-
-  function isGroupExpanded(id: string): boolean {
-    return expandedGroups.value.has(id)
-  }
-
-  function toggleGroup(id: string) {
-    const next = new Set(expandedGroups.value)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    saveExpanded(next)
-  }
-
-  function expandGroup(id: string) {
-    if (expandedGroups.value.has(id)) return
-    saveExpanded(new Set([...expandedGroups.value, id]))
-  }
-
-  /** 把 groupId 的祖先链收集出来 —— 定位到某个分组时要用它逐级展开。 */
-  function ancestorsOf(id: string): string[] {
-    const out: string[] = []
-    let cursor = notebooks.value.find((g) => g.id === id)?.parentId ?? null
-    while (cursor) {
-      out.push(cursor)
-      cursor = notebooks.value.find((g) => g.id === cursor)?.parentId ?? null
-    }
-    return out
-  }
-
-  /** candidate 是不是 groupId 的后代（移动分组时用来挡「移到自己里面」）。 */
-  function isDescendant(candidate: string, groupId: string): boolean {
-    let cursor: string | null = candidate
-    while (cursor) {
-      if (cursor === groupId) return true
-      cursor = notebooks.value.find((g) => g.id === cursor)?.parentId ?? null
-    }
-    return false
-  }
 
   async function createGroup(title: string): Promise<Notebook> {
     const created = await notebookApi.create(title)
@@ -224,25 +132,8 @@ export const useNoteStore = defineStore('notes', () => {
     return created
   }
 
-  /**
-   * update 是全量替换（parentId=null 就是移到顶层）：四个字段都要从当前台账值出发带上，
-   * 缺一个就等于显式清掉那个字段。
-   */
-  async function patchGroup(
-    id: string,
-    patch: { title?: string; parentId?: string | null },
-  ) {
-    const current = notebooks.value.find((n) => n.id === id)
-    await notebookApi.update(id, {
-      title: patch.title ?? current?.title ?? '',
-      parentId: patch.parentId !== undefined ? patch.parentId : (current?.parentId ?? null),
-      icon: current?.icon ?? null,
-      sortOrder: current?.sortOrder ?? null,
-    })
-  }
-
   async function renameGroup(id: string, title: string) {
-    await patchGroup(id, { title })
+    await notebookApi.update(id, { title })
     await refreshMeta()
   }
 
@@ -252,18 +143,8 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  async function moveGroup(id: string, parentId: string | null) {
-    if (parentId && (parentId === id || isDescendant(parentId, id))) {
-      throw new Error('不能把分组移到它自己或它的子分组里')
-    }
-    await patchGroup(id, { parentId })
-    if (parentId) expandGroup(parentId)
-    await refreshMeta()
-  }
-
-  /** 打开某个分组：展开它的祖先链，并在右侧列表按它过滤。 */
   function openGroup(id: string) {
-    for (const ancestor of ancestorsOf(id)) expandGroup(ancestor)
+    groupsShown.value = true
     setNotebook(id)
   }
 
@@ -374,20 +255,11 @@ export const useNoteStore = defineStore('notes', () => {
     showAll,
     setNotebook,
     setListQuery,
-    // 分组树
-    expandedGroups,
+    // 分组列表
     groupsShown,
-    rootGroups,
-    childGroups,
-    hasChildren,
-    visibleGroups,
-    isGroupExpanded,
-    toggleGroup,
-    expandGroup,
     createGroup,
     renameGroup,
     deleteGroup,
-    moveGroup,
     openGroup,
     select,
     reloadCurrent,

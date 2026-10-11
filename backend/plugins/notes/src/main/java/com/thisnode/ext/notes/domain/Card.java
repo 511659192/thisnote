@@ -24,6 +24,7 @@ public class Card {
 
     private CardMeta meta;
     private String content;
+    private String fileName;
 
     @SneakyThrows
     public static Card parse(Path file) {
@@ -34,7 +35,7 @@ public class Card {
 
         CardMeta cardMeta = meta(raw);
         String content = content(raw);
-        return new Card(cardMeta, content);
+        return new Card(cardMeta, content, file.getFileName().toString());
     }
 
     private static String headerLine(String fileContent) {

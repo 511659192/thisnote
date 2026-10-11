@@ -18,7 +18,7 @@ import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import type { Notebook } from '@/api/types'
 
 /**
- * 笔记域的侧栏主面板：新建、视图筛选、分组树、插件筛选、插件入口与标签。
+ * 笔记域的侧栏主面板：新建、视图筛选、分组列表、插件筛选与插件入口。
  *
  * <p>产物分离后侧栏容器归宿主，本面板由 notes 经 registerSidebarPanel 登记。
  * 插件入口（复习/收藏徽标轨）与插件筛选同样只面向注册器渲染 ——
@@ -105,13 +105,11 @@ async function createNote() {
   if (detail) void router.push(`/notes/${detail.id}`)
 }
 
-// ---------------------------------------------------------------- 分组树
+// ---------------------------------------------------------------- 分组列表
 
 /** 默认分组的固定 id（与后端 NotebookRepository.DEFAULT_GROUP_ID 一致）。 */
 const DEFAULT_GROUP_ID = 'grp-default'
 
-/** 拖拽悬停中的分组（落点高亮）。 */
-const dragOverGroupId = ref<string | null>(null)
 const groupMenu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[] }>({
   open: false,
   x: 0,
@@ -146,66 +144,19 @@ async function removeGroup(id: string, title: string) {
   }
 }
 
-/** 把分组移到另一个分组下（或移到顶层）。 */
-async function moveGroupTo(id: string, parentId: string | null) {
-  try {
-    await nodes.moveGroup(id, parentId)
-  } catch (e) {
-    toast((e as Error).message, 'error')
-  }
-}
-
 function onGroupContext(e: MouseEvent, group: Notebook) {
   const entries: MenuEntry[] = [
     { label: '打开', action: () => openNotebook(group.id) },
     { label: '重命名', action: () => void renameGroup(group.id, group.title) },
     { separator: true },
-    { label: '移到顶层', disabled: !group.parentId, action: () => void moveGroupTo(group.id, null) },
-    {
-      label: '移入其他分组…',
-      disabled: nodes.rootGroups.filter((g) => g.id !== group.id).length === 0,
-      action: () => {
-        const candidates = nodes.rootGroups.filter((g) => g.id !== group.id)
-        const list = candidates.map((g, i) => `${i + 1}. ${g.title}`).join('\n')
-        const answer = window.prompt(`把「${group.title}」移到哪个分组下？输入序号：\n\n${list}`)
-        const index = Number(answer) - 1
-        if (candidates[index]) void moveGroupTo(group.id, candidates[index].id)
-      },
-    },
-    { separator: true },
     {
       label: '删除分组',
       danger: true,
-      // 默认分组是「无归属」笔记的落脚点，删了就不变量就破了 —— 界面先挡一道（后端也会拒）
       disabled: group.id === DEFAULT_GROUP_ID,
       action: () => void removeGroup(group.id, group.title),
     },
   ]
   groupMenu.value = { open: true, x: e.clientX, y: e.clientY, entries }
-}
-
-function onGroupDragStart(e: DragEvent, id: string) {
-  e.dataTransfer?.setData('application/x-thisnode-group', id)
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
-}
-
-function onGroupDragOver(e: DragEvent, id: string) {
-  if (e.dataTransfer?.types.includes('application/x-thisnode-group')) {
-    dragOverGroupId.value = id
-  }
-}
-
-function onGroupDragLeave(id: string) {
-  if (dragOverGroupId.value === id) dragOverGroupId.value = null
-}
-
-/** 拖入分组时把它变成目标分组的子分组；笔记不再支持拖入分组树转移。 */
-async function onGroupDrop(e: DragEvent, groupId: string) {
-  dragOverGroupId.value = null
-  const draggedGroupId = e.dataTransfer?.getData('application/x-thisnode-group')
-  if (draggedGroupId) {
-    await moveGroupTo(draggedGroupId, groupId)
-  }
 }
 
 watch(
@@ -238,7 +189,7 @@ watch(
           <span class="ico add">＋</span>
         </span>
         <span class="label">全部笔记</span>
-        <!-- 「全部笔记」是分组树的根：分组就是它的下一层 -->
+        <!-- 「全部笔记」下方显示扁平分组列表。 -->
         <span
           class="caret root-caret"
           :title="nodes.groupsShown ? '收起分组' : '展开分组'"
@@ -246,33 +197,18 @@ watch(
         >{{ nodes.groupsShown ? '▾' : '▸' }}</span>
       </button>
 
-        <!-- 分组树：挂在「全部笔记」下面，可无限嵌套（后端 notebooks.parent_id 本来就是这个意思） -->
         <template v-if="nodes.groupsShown">
           <button
-            v-for="row in nodes.visibleGroups"
-            :key="row.group.id"
+            v-for="group in nodes.notebooks"
+            :key="group.id"
             class="nav-item group-item"
-            :class="{
-              active: nodes.activeNotebookId === row.group.id,
-              'drop-target': dragOverGroupId === row.group.id,
-            }"
-            :style="{ paddingLeft: 8 + row.depth * 14 + 'px' }"
-            :title="row.group.title"
-            draggable="true"
-            @click="openNotebook(row.group.id)"
-            @dragstart="onGroupDragStart($event, row.group.id)"
-            @contextmenu.prevent="onGroupContext($event, row.group)"
-            @dragover.prevent="onGroupDragOver($event, row.group.id)"
-            @dragleave="onGroupDragLeave(row.group.id)"
-            @drop.prevent="onGroupDrop($event, row.group.id)"
+            :class="{ active: nodes.activeNotebookId === group.id }"
+            :title="group.title"
+            @click="openNotebook(group.id)"
+            @contextmenu.prevent="onGroupContext($event, group)"
           >
-            <span
-              class="caret"
-              :class="{ invisible: !nodes.hasChildren(row.group.id) }"
-              @click.stop="nodes.toggleGroup(row.group.id)"
-            >{{ nodes.isGroupExpanded(row.group.id) ? '▾' : '▸' }}</span>
-            <span class="label">{{ row.group.title }}</span>
-            <span v-if="row.group.count" class="count">{{ row.group.count }}</span>
+            <span class="label">{{ group.title }}</span>
+            <span v-if="group.count" class="count">{{ group.count }}</span>
           </button>
         </template>
 
@@ -368,7 +304,7 @@ watch(
   color: var(--c-text-3);
 }
 
-/* ---- 分组树 ---- */
+/* ---- 分组列表 ---- */
 .caret {
   flex: 0 0 auto;
   width: 12px;
@@ -377,25 +313,12 @@ watch(
   opacity: 0.65;
   cursor: pointer;
 }
-.caret.invisible {
-  visibility: hidden;
-  cursor: default;
-}
 .root-caret {
   margin-left: auto;
   padding: 0 2px;
 }
 .group-item {
   font-size: 12.5px;
-}
-.group-item .ico {
-  opacity: 0.5;
-  font-size: 10px;
-}
-.group-item.drop-target {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
-  outline-offset: -2px;
 }
 .ico-swap {
   flex: 0 0 auto;

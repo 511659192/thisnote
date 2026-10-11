@@ -29,14 +29,13 @@ public class NotebookController {
 
     @PostMapping("/create")
     public NotebookDto create(@RequestBody CreateNotebookRequest req) {
-        String id = notebookService.create(req.title(), null, req.icon(), "notebook");
+        String id = notebookService.create(req.title(), req.icon(), "notebook");
         return notebookService.find(id);
     }
 
     @PostMapping("/update")
     public NotebookDto update(@RequestParam String id, @RequestBody UpdateNotebookRequest req) {
-        return notebookService.update(id, req.title(), req.parentId(), req.icon(),
-                req.sortOrder());
+        return notebookService.update(id, req.title(), req.icon(), req.sortOrder());
     }
 
     @PostMapping("/delete")

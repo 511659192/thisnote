@@ -7,7 +7,6 @@ export interface Notebook {
   id: string
   type: string
   title: string
-  parentId?: string | null
   icon?: string | null
   sortOrder?: number | null
   count?: number | null
