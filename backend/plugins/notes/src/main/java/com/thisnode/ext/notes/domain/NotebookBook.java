@@ -38,15 +38,6 @@ public record NotebookBook(int v,
         return null;
     }
 
-    public Notebook findByTitle(String type, String title) {
-        for (Notebook notebook : notebooks) {
-            if (notebook.type().equals(type) && notebook.title().equalsIgnoreCase(title)) {
-                return notebook;
-            }
-        }
-        return null;
-    }
-
     public NotebookBook with(Notebook notebook) {
         List<Notebook> next = new ArrayList<>();
         boolean replaced = false;

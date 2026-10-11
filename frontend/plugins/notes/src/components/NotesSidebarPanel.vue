@@ -94,12 +94,6 @@ function openAll() {
   void router.push('/notes')
 }
 
-function openTag(name: string) {
-  clearActiveListFilter()
-  nodes.setTag(name)
-  void router.push('/notes')
-}
-
 function openNotebook(id: string) {
   clearActiveListFilter()
   nodes.openGroup(id)
@@ -125,12 +119,11 @@ const groupMenu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[
   entries: [],
 })
 
-async function promptNewGroup(parentId: string | null) {
-  const label = parentId ? '新建子分组名称' : '新建分组名称'
-  const title = window.prompt(label)
+async function promptNewGroup() {
+  const title = window.prompt('新建分组名称')
   if (!title || !title.trim()) return
   try {
-    await nodes.createGroup(title.trim(), parentId)
+    await nodes.createGroup(title.trim())
     ui.toast('分组已创建', 'success')
   } catch (e) {
     ui.toast(`创建失败：${(e as Error).message}`, 'error')
@@ -165,7 +158,6 @@ async function moveGroupTo(id: string, parentId: string | null) {
 function onGroupContext(e: MouseEvent, group: Notebook) {
   const entries: MenuEntry[] = [
     { label: '打开', action: () => openNotebook(group.id) },
-    { label: '新建子分组', action: () => void promptNewGroup(group.id) },
     { label: '重命名', action: () => void renameGroup(group.id, group.title) },
     { separator: true },
     { label: '移到顶层', disabled: !group.parentId, action: () => void moveGroupTo(group.id, null) },
@@ -249,11 +241,11 @@ watch(
       <div class="group-title">笔记</div>
       <button
         class="nav-item"
-        :class="{ active: !isPluginPage && !nodes.activeTag && !nodes.activeNotebookId }"
+        :class="{ active: !isPluginPage && !nodes.activeNotebookId }"
         @click="openAll()"
       >
         <!-- 图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
-        <span class="ico-swap" title="新建分组" @click.stop="promptNewGroup(null)">
+        <span class="ico-swap" title="新建分组" @click.stop="promptNewGroup()">
           <span class="ico base">▤</span>
           <span class="ico add">＋</span>
         </span>
@@ -291,11 +283,6 @@ watch(
               :class="{ invisible: !nodes.hasChildren(row.group.id) }"
               @click.stop="nodes.toggleGroup(row.group.id)"
             >{{ nodes.isGroupExpanded(row.group.id) ? '▾' : '▸' }}</span>
-            <!-- 悬停时 ▣ 变 ＋：在这个分组下新建子分组 -->
-            <span class="ico-swap" title="新建子分组" @click.stop="promptNewGroup(row.group.id)">
-              <span class="ico base">▣</span>
-              <span class="ico add">＋</span>
-            </span>
             <span class="label">{{ row.group.title }}</span>
             <span v-if="row.group.count" class="count">{{ row.group.count }}</span>
           </button>
@@ -331,21 +318,6 @@ watch(
         </span>
       </button>
 
-      <template v-if="nodes.tags.length">
-        <div class="group-title">标签</div>
-        <div class="tags">
-          <button
-            v-for="t in nodes.tags.slice(0, 40)"
-            :key="t.id"
-            class="tag"
-            :class="{ active: nodes.activeTag === t.name }"
-            :title="`${t.count} 篇`"
-            @click="openTag(t.name)"
-          >
-            #{{ t.name }}<span class="tag-count">{{ t.count }}</span>
-          </button>
-        </div>
-      </template>
     </nav>
   </aside>
 
@@ -492,32 +464,4 @@ watch(
   color: var(--c-text-3);
 }
 
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 2px var(--space-2);
-}
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--c-surface-3);
-  color: var(--c-text-2);
-  font-size: 11.5px;
-}
-.tag:hover {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.tag.active {
-  background: var(--accent);
-  color: #fff;
-}
-.tag-count {
-  opacity: 0.6;
-  font-size: 10px;
-}
 </style>

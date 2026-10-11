@@ -137,7 +137,7 @@ if (await count('.zoom-bar')) {
   record('缩放控件存在', false)
 }
 
-console.log('\n=== 反向链接面板 ===')
+console.log('\n=== 笔记信息面板 ===')
 const panelToggle = page
   .locator('.topbar button[title*="右侧面板"]')
   .first()
@@ -146,13 +146,7 @@ if (await panelToggle.count()) {
     await panelToggle.click()
     await page.waitForTimeout(900)
   }
-  record('反向链接面板可打开', (await count('.panel')) > 0)
-  const backlinkTab = page.locator('.panel .tabs button', { hasText: '反向链接' }).first()
-  if (await backlinkTab.count()) {
-    await backlinkTab.click()
-    await page.waitForTimeout(600)
-    record('面板标签可切换', (await count('.panel-body')) > 0)
-  }
+  record('笔记信息面板可打开', (await count('.panel')) > 0)
 } else {
   record('右侧面板开关存在', false)
 }
@@ -225,7 +219,7 @@ for (const [tab, label] of [
   }
 }
 
-console.log('\n=== 回收站（入口已移到命令面板）/ 标签筛选 ===')
+console.log('\n=== 回收站（入口已移到命令面板） ===')
 // 前置：清空回收站。否则列表里是别人的遗留笔记，「空回收站」的空状态就不会出现，
 // 这一步就会变成依赖外部状态的脆弱断言。
 await fetch('http://127.0.0.1:45917/api/notes/trash', { method: 'DELETE' }).catch(() => undefined)
@@ -264,12 +258,6 @@ if (await trashCommand.count()) {
   record('回收站命令存在', false, '命令面板里没找到')
 }
 
-const tag = page.locator('.sidebar .tag').first()
-if (await tag.count()) {
-  await tag.click()
-  await page.waitForTimeout(1000)
-  record('点击标签筛选不报错', (await count('.note-list')) > 0)
-}
 
 console.log('\n=== 画布概念已移除 ===')
 const sidebarText = await page.locator('.sidebar').innerText()

@@ -27,7 +27,7 @@ const ui = useUiStore()
       <button
         class="btn ghost icon"
         :class="{ active: ui.rightPanelOpen }"
-        :title="ui.rightPanelOpen ? '隐藏右侧面板（反向链接）' : '显示右侧面板（反向链接）'"
+        :title="ui.rightPanelOpen ? '隐藏笔记信息面板' : '显示笔记信息面板'"
         @click="ui.toggleRightPanel()"
       >
         ⊟

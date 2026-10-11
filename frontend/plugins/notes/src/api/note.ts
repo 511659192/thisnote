@@ -2,7 +2,6 @@ import { http } from '@/core/http'
 import type { NoteDetail, NoteMeta } from './types'
 
 export interface NoteQuery {
-  tag?: string
   notebookId?: string
   type?: string
   text?: string
@@ -18,8 +17,7 @@ export const noteApi = {
     title?: string
     contentMd?: string
     type?: string
-    tags?: string[]
-      notebookId?: string
+    notebookId?: string
   }) => http.post<NoteDetail>('/api/notes', payload),
 
   update: (
@@ -29,7 +27,6 @@ export const noteApi = {
       contentMd?: string
       source?: string
       status?: string
-      tags?: string[]
       notebookId?: string
       clearNotebook?: boolean
     },
@@ -37,10 +34,4 @@ export const noteApi = {
 
   delete: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
 
-  addTag: (id: string, name: string) =>
-    http.post<NoteDetail['tags']>('/api/notes/tags/add', undefined, { id, name }),
-  removeTag: (id: string, name: string) =>
-    http.post<NoteDetail['tags']>('/api/notes/tags/remove', undefined, { id, name }),
-  resolveStub: (title: string) =>
-    http.post<NoteDetail>('/api/notes/resolve-stub', { title }),
 }

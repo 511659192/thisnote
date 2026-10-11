@@ -83,8 +83,6 @@ function askRemove(node: NoteMeta) {
         </div>
         <div class="row-3">
           <span class="date small muted">{{ formatDate(n.updatedAt) }}</span>
-          <span v-for="t in n.tags.slice(0, 2)" :key="t" class="chip">#{{ t }}</span>
-          <span v-if="n.tags.length > 2" class="small muted">+{{ n.tags.length - 2 }}</span>
         </div>
       </button>
     </div>

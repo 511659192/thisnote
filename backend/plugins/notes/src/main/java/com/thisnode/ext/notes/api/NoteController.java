@@ -1,9 +1,8 @@
 package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,18 +20,15 @@ import java.util.Map;
 public class NoteController {
 
     private final NoteService noteService;
-    private final NoteRepository noteRepository;
 
     @GetMapping
     public List<NoteMeta> list(
-            @RequestParam(required = false) String tag,
             @RequestParam(required = false) String notebookId,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String text,
-
             @RequestParam(defaultValue = "500") int limit,
             @RequestParam(defaultValue = "0") int offset) {
-        return noteService.list(new NoteService.Query(tag, notebookId, type, text, limit, offset));
+        return noteService.list(new NoteService.Query(notebookId, type, text, limit, offset));
     }
 
     @PostMapping("/create")
@@ -49,7 +45,7 @@ public class NoteController {
     public Dtos.NoteDetail update(@RequestParam String id, @RequestBody Dtos.UpdateNodeRequest req) {
         if (req != null && req.contentMd() != null) {
             throw new IllegalArgumentException(
-                    "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/{noteId}/cardRefs/{cardId}/content）");
+                    "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/cards/content）");
         }
         noteService.update(id, req);
         return noteService.detail(id);
@@ -59,28 +55,5 @@ public class NoteController {
     public Map<String, Object> delete(@RequestParam String id) {
         noteService.delete(id);
         return Map.of("ok", true);
-    }
-
-    // ---------------- tags ----------------
-
-    @PostMapping("/tags/add")
-    public List<Dtos.TagDto> addTag(@RequestParam String id, @RequestParam String name) {
-        noteService.require(id);
-        return noteService.addTag(id, name);
-    }
-
-    @PostMapping("/tags/remove")
-    public List<Dtos.TagDto> removeTag(@RequestParam String id, @RequestParam String name) {
-        noteService.require(id);
-        return noteService.removeTag(id, name);
-    }
-
-
-    // ---------------- unresolved links ----------------
-
-    @PostMapping("/resolve-stub")
-    public Dtos.NoteDetail resolveStub(@RequestBody Map<String, String> body) {
-        String id = noteService.createFromStub(body.get("title"));
-        return noteService.detail(id);
     }
 }

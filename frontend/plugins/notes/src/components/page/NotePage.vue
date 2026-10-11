@@ -26,10 +26,6 @@ const ui = useUiStore()
 
 const emit = defineEmits<{
   (e: 'context', p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }): void
-  // 卡片正文里的链接点击：页面只做转发，由 NoteView 决定跳转还是新建
-  (e: 'open-note', id: string): void
-  (e: 'create-note', title: string): void
-  (e: 'open-tag', tag: string): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -588,9 +584,6 @@ defineExpose({ size, beginEdit, finishEditing })
             page.commit([{ id, collapsed: !page.cards.find((b) => b.card.id === id)?.card.collapsed }])
         "
         @focus="(id: string) => page.select([id])"
-  @open-note="(id: string) => emit('open-note', id)"
-  @create-note="(title: string) => emit('create-note', title)"
-  @open-tag="(tag: string) => emit('open-tag', tag)"
       />
 
       <!-- 「进入视口才拉」的哨兵：还有没取回来的卡片时存在，靠近它即取下一批 -->

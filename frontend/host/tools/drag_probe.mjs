@@ -15,16 +15,14 @@ const browser = await chromium.launch(
 const page = await browser.newPage({ viewport: { width: 1500, height: 950 } })
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`))
 
-// Close the backlinks panel: it overlays the right part of the page surface where a card may
-// sit, which sent an earlier version of this probe to the wrong element.
+// Close the right-side information panel: it overlays the page surface and can intercept a drag.
 await page.addInitScript(() => {
   localStorage.setItem('thisnote.rightPanel', 'closed')
 })
 
 await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 })
 await page.waitForTimeout(2500)
-// Close the backlinks panel if it is open: it covers the right edge of the page surface, and a
-// card sitting there would otherwise be unreachable for a drag.
+// Close the information panel if it is open, so the full page surface is available for dragging.
 const panelToggle = page.locator('.topbar button', { hasText: '▤' })
 if (await page.locator('aside.panel').count()) {
   const toggle = page.locator('.topbar .btn.ghost.icon').nth(2)
@@ -57,8 +55,8 @@ console.log('boundingBox:', JSON.stringify(box))
 
 /**
  * Find a point on any card that lies inside the visible page surface. A card can sit partly
- * outside the viewport (the page is a free surface, and the backlinks panel shrinks the visible
- * part), so only the overlap region is safe to press.
+ * outside the viewport (the page is a free surface and the information panel reduces its visible
+ * area), so only the overlap region is safe to press.
  */
 const grab = await page.evaluate(() => {
   const surface = document.querySelector('.page-surface').getBoundingClientRect()

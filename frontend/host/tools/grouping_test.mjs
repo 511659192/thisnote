@@ -1,5 +1,5 @@
 /**
- * 分组树：在「全部笔记」下建分组、无限嵌套、把笔记放进分组（右键菜单 + 拖拽）。
+ * 分组树：创建顶层分组、把笔记放进分组（右键菜单 + 拖拽）。
  *
  *   node tools/grouping_test.mjs
  *
@@ -13,7 +13,6 @@ const API = 'http://127.0.0.1:45917'
 const APP = 'http://localhost:5173'
 const RUN = Date.now().toString().slice(-5)
 const ROOT = `测试分组${RUN}`
-const CHILD = `子分组${RUN}`
 const CANDIDATES = [
   (process.env.LOCALAPPDATA ?? '') + '\\ms-playwright\\chromium-1208\\chrome-win64\\chrome.exe',
 ]
@@ -99,38 +98,13 @@ check('默认分组的「删除分组」被禁用', await deleteEntry.isDisabled
 await win.mouse.click(720, 520)
 await win.waitForTimeout(400)
 
-// 在 ROOT 上右键 → 新建子分组
+// 分组右键菜单不再提供新建子分组。
 await groupRow(ROOT).click({ button: 'right' })
 await win.waitForTimeout(500)
-dialogAnswer = CHILD
-await win.locator('.ctx-menu button', { hasText: '新建子分组' }).first().click()
-await win.waitForTimeout(1600)
-check('子分组建好后父分组自动展开', (await groupRow(CHILD).count()) === 1, CHILD)
-
-// 层级：子分组有缩进（paddingLeft 更大）
-const indent = await win.evaluate(([root, child]) => {
-  const rows = [...document.querySelectorAll('.sidebar .group-item')]
-  const find = (t) => rows.find((r) => (r.textContent ?? '').includes(t))
-  const a = find(root)
-  const b = find(child)
-  if (!a || !b) return null
-  return { root: parseFloat(getComputedStyle(a).paddingLeft), child: parseFloat(getComputedStyle(b).paddingLeft) }
-}, [ROOT, CHILD])
-check('子分组比父分组缩进一层', !!indent && indent.child > indent.root,
-  indent ? `父 ${indent.root}px < 子 ${indent.child}px` : '找不到行')
-
-// 收起父分组：子分组随父一起隐藏
-await groupRow(ROOT).locator('.caret').click()
-await win.waitForTimeout(600)
-check('收起父分组后子分组隐藏', (await groupRow(CHILD).count()) === 0)
-await groupRow(ROOT).locator('.caret').click()
-await win.waitForTimeout(600)
-check('再展开后子分组回来', (await groupRow(CHILD).count()) === 1)
-
-// 展开状态要活过刷新（树的展开态像文件管理器一样被记住）
-await win.reload({ waitUntil: 'networkidle' })
-await win.waitForTimeout(2500)
-check('刷新后展开状态仍在（子分组依然可见）', (await groupRow(CHILD).count()) === 1)
+check('分组菜单不提供新建子分组',
+  !(await win.locator('.ctx-menu').innerText()).includes('新建子分组'))
+await win.mouse.click(720, 520)
+await win.waitForTimeout(400)
 
 // ---------------------------------------------------------------- 拖拽：列表里的笔记 → 分组
 const noteTitle = (await win.locator('.note-row .title').first().innerText()).trim()
@@ -171,25 +145,22 @@ check('点分组后右侧列表被它过滤', listedTitles.some((t) => t.trim() 
 // ---------------------------------------------------------------- 右键菜单：加入分组…
 await win.goto(`${APP}/#/notes`, { waitUntil: 'networkidle' })
 await win.waitForTimeout(1600)
-const childId = ((await api('GET', '/api/notebooks')).body ?? []).find((g) => g.title === CHILD)?.id
 await win.locator('.note-row').first().click({ button: 'right' })
 await win.waitForTimeout(500)
 await win.locator('.ctx-menu button', { hasText: '移到分组' }).first().click()
 await win.waitForTimeout(700)
 const pickerRows = await win.locator('.gp-row').allTextContents()
-check('选择器列出了分组（含子分组）',
-  pickerRows.some((t) => t.includes(ROOT)) && pickerRows.some((t) => t.includes(CHILD)),
+check('选择器列出可用分组', pickerRows.some((t) => t.includes(ROOT)),
   pickerRows.map((t) => t.trim().replace(/\s+/g, ' ')).join(' | '))
-await win.locator('.gp-row', { hasText: CHILD }).first().click()
+await win.locator('.gp-row', { hasText: ROOT }).first().click()
 await win.waitForTimeout(1600)
 const afterPick = (await api('GET', `/api/notes/${noteId}`)).body
 check('通过选择器也能改归属（单归属）',
-  (afterPick?.containers ?? []).length === 1 && (afterPick?.containers ?? [])[0].id === childId,
+  (afterPick?.containers ?? []).length === 1 && (afterPick?.containers ?? [])[0].id === rootId,
   (afterPick?.containers ?? []).map((c) => c.title).join(' · '))
 
 // ---------------------------------------------------------------- 归属：必填 + 自动带入
-// 列表里显示归属分组。注意先回到「全部笔记」：上一步用选择器把笔记移到了子分组，
-// 而当前列表还过滤在父分组上（已经空了），空列表当然没有 chip —— 这是测试顺序问题。
+// 列表里显示归属分组。先回到「全部笔记」，确保当前列表不受分组筛选影响。
 await allRow.click()
 await win.waitForTimeout(1800)
 await win.waitForSelector('.note-row .group-chip', { timeout: 8000 }).catch(() => undefined)
@@ -234,18 +205,19 @@ const orphanCheck = await win.evaluate(async (api) => {
 check('没有无归属的笔记', orphanCheck.orphans === 0,
   `${orphanCheck.total} 篇里 ${orphanCheck.orphans} 篇无归属`)
 
-await groupRow(CHILD).click({ button: 'right' })
+await groupRow(ROOT).click({ button: 'right' })
 await win.waitForTimeout(500)
 dialogAnswer = `重命名${RUN}`
 await win.locator('.ctx-menu button', { hasText: '重命名' }).first().click()
 await win.waitForTimeout(1500)
-check('重命名生效', (await groupRow(`重命名${RUN}`).count()) === 1)
+const renamed = `重命名${RUN}`
+check('重命名生效', (await groupRow(renamed).count()) === 1)
 
-await groupRow(ROOT).click({ button: 'right' })
+await groupRow(renamed).click({ button: 'right' })
 await win.waitForTimeout(500)
 await win.locator('.ctx-menu button', { hasText: '删除分组' }).first().click()
 await win.waitForTimeout(1600)
-check('删除分组后它从侧栏消失', (await groupRow(ROOT).count()) === 0)
+check('删除分组后它从侧栏消失', (await groupRow(renamed).count()) === 0)
 check('删分组不删笔记', (await api('GET', `/api/notes/${noteId}`)).ok)
 
 check('全程无运行时错误', errors.length === 0, errors.slice(0, 2).join(' | ') || '无')

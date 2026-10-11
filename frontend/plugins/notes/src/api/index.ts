@@ -1,23 +1,14 @@
 import { http } from '@/core/http'
-import type { Notebook, Tag } from './types'
+import type { Notebook } from './types'
 
-/** 笔记域的附属客户端：标签、分组（笔记本）、附件上传。 */
-
-export const tagApi = {
-  list: () => http.get<Tag[]>('/api/tags'),
-  rename: (id: string, name: string) =>
-    http.post<{ ok: boolean }>('/api/tags/update', { name }, { id }),
-}
+/** Notes-domain clients: notebooks and attachment upload. */
 
 export const notebookApi = {
   list: () => http.get<Notebook[]>('/api/notebooks'),
 
-  /**
-   * 新建分组/笔记本。parentId 就是「树」的由来 —— 后端台账里每个分组带自引用的
-   * parentId 与 type（notebook/group）。
-   */
-  create: (title: string, parentId?: string | null, icon?: string | null) =>
-    http.post<Notebook>('/api/notebooks/create', { title, parentId: parentId ?? null, icon: icon ?? null }),
+  /** 新建分组时始终创建在顶层。 */
+  create: (title: string, icon?: string | null) =>
+    http.post<Notebook>('/api/notebooks/create', { title, icon: icon ?? null }),
 
   /** 全量替换：改标题/父级/图标/排序，四个字段都以本次请求为准（parentId=null 即移到顶层）。 */
   update: (id: string, patch: {

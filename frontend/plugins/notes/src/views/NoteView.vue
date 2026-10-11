@@ -41,9 +41,6 @@ const titleInput = ref<HTMLInputElement | null>(null)
  * discarding it. The flag makes "cancel" reach the blur handler.
  */
 let renameCancelled = false
-const tagDraft = ref('')
-const addingTag = ref(false)
-
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b']
 
 const modKey = computed(() => primaryLabel())
@@ -78,7 +75,7 @@ watch(
   },
 )
 
-// ---------------------------------------------------------------- title & tags
+// ---------------------------------------------------------------- title
 
 /** Open the rename field, seeded with the current title and ready to type in. */
 async function startRename() {
@@ -120,20 +117,6 @@ async function commitTitle() {
     page.noteTitle = detail.title
     await page.reload()
   }
-}
-
-async function submitTag() {
-  const name = tagDraft.value.trim()
-  tagDraft.value = ''
-  addingTag.value = false
-  if (!name) return
-  await nodes.addTag(name)
-  await page.reload()
-}
-
-async function removeTag(name: string) {
-  await nodes.removeTag(name)
-  await page.reload()
 }
 
 // ---------------------------------------------------------------- page actions
@@ -224,7 +207,7 @@ async function pickGroup(notebookId: string | null) {
 async function createGroupFromPicker() {
   const title = window.prompt('新建分组名称')
   if (!title || !title.trim()) return
-  const created = await nodes.createGroup(title.trim(), null)
+  const created = await nodes.createGroup(title.trim())
   await pickGroup(created.id)
 }
 
@@ -337,20 +320,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                   {{ '　'.repeat(row.depth) }}{{ row.group.title }}
                 </option>
               </select>
-              <span v-for="t in page.tags" :key="t.id" class="chip tag-chip">
-                #{{ t.name }}
-                <button class="x" title="移除标签" @click="removeTag(t.name)">✕</button>
-              </span>
-              <input
-                v-if="addingTag"
-                v-model="tagDraft"
-                class="tag-input"
-                placeholder="标签名，回车确认"
-                @keydown.enter="submitTag"
-                @keydown.esc="addingTag = false"
-                @blur="submitTag"
-              />
-              <button v-else class="chip add-tag" @click="addingTag = true">＋ 标签</button>
               <div class="spacer"></div>
               <!-- Quiet until it matters: the running card count is only worth showing once the
                    note has actually hit its cap. -->
@@ -360,48 +329,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             </div>
           </header>
 
-          <NotePage
-            ref="pageRef"
-            @context="onPageContext"
-            @open-note="openNode"
-            @create-note="
-              async (title: string) => {
-                // 标题已被占用：直接打开那一篇；还没人用过这个名字：当场新建一篇。
-                // resolveStub 在后端就是「有就返回、没有就建」，给不出结果时才需要自己兜底。
-                try {
-                  const d = await nodes.resolveStub(title)
-                  if (d) {
-                    openNode(d.id)
-                    return
-                  }
-                } catch {
-                  // 没有占位就是这条路径，继续往下新建
-                }
-                const fresh = await nodes.createAndSelect({ title })
-                if (fresh) openNode(fresh.id)
-              }
-            "
-            @open-tag="
-              (tag: string) => {
-                nodes.setTag(tag)
-                void router.push('/')
-              }
-            "
-          />
+          <NotePage ref="pageRef" @context="onPageContext" />
           <div class="page-toolbar">
             <span class="small muted">双击空白处新建卡片 · Ctrl+V 粘贴 · 拖动卡片摆放 · 双击卡片输入</span>
           </div>
         </div>
-        <NoteInfoPanel
-          v-if="ui.rightPanelOpen && docForPanel"
-          :doc="docForPanel"
-          @create="
-            async (title: string) => {
-              const d = await nodes.resolveStub(title)
-              if (d) openNode(d.id)
-            }
-          "
-        />
+        <NoteInfoPanel v-if="ui.rightPanelOpen && docForPanel" :doc="docForPanel" />
       </template>
 
       <div v-else class="empty">
@@ -475,38 +408,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   background: var(--c-surface-2);
   color: var(--c-text-2);
   font-size: 12px;
-}
-.tag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.tag-chip .x {
-  font-size: 10px;
-  opacity: 0.6;
-}
-.tag-chip .x:hover {
-  opacity: 1;
-}
-.add-tag {
-  border: 1px dashed var(--c-border-strong);
-  background: transparent;
-  cursor: pointer;
-}
-.add-tag:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.tag-input {
-  width: 140px;
-  padding: 1px 8px;
-  font-size: 11.5px;
-  border-radius: 999px;
-  border: 1px solid var(--accent);
-  outline: none;
-  background: var(--c-surface);
 }
 .limit-full {
   color: var(--danger);

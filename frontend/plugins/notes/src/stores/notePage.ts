@@ -43,7 +43,6 @@ export const usePageStore = defineStore('notePage', () => {
   const noteId = ref<string | null>(null)
   const noteTitle = ref('')
   const cards = ref<CardView[]>([])
-  const tags = ref<NotePageData['tags']>([])
   const maxBlocks = ref(100)
   const loading = ref(false)
   const savingContent = ref<string | null>(null)
@@ -100,7 +99,6 @@ export const usePageStore = defineStore('notePage', () => {
       noteId.value = page.noteId
       noteTitle.value = page.noteTitle
       cards.value = page.cards
-      tags.value = page.tags
       maxBlocks.value = page.maxCardsPerNote || 100
       // 清单里可能含已被别处删掉的卡片：只惦记真正没取回来的那些。
       const loaded = new Set(cards.value.map((b) => b.card.id))
@@ -149,7 +147,6 @@ export const usePageStore = defineStore('notePage', () => {
     const extra = page.cards.filter((b) => !seen.has(b.card.id))
     cards.value = [...page.cards, ...extra]
     noteTitle.value = page.noteTitle
-    tags.value = page.tags
   }
 
   function requireCapacity(adding = 1): boolean {
@@ -566,7 +563,6 @@ export const usePageStore = defineStore('notePage', () => {
     noteId,
     noteTitle,
     cards,
-    tags,
     maxBlocks,
     loading,
     savingContent,

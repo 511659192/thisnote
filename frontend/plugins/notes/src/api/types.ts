@@ -3,13 +3,6 @@
  * Keep both sides in sync when the API changes.
  */
 
-export interface Tag {
-  id: string
-  name: string
-  color?: string | null
-  count?: number | null
-}
-
 export interface Notebook {
   id: string
   type: string
@@ -60,7 +53,6 @@ export interface CardView {
   /** Mirror of `card.contentMd`, kept for convenience when rendering. */
   contentMd: string
   noteTitle: string
-  tags: Tag[]
   /** Client-only transient flags. */
   selected?: boolean
 }
@@ -69,7 +61,6 @@ export interface NotePageData {
   noteId: string
   noteTitle: string
   cards: CardView[]
-  tags: Tag[]
   maxCardsPerNote: number
   updatedAt: number
 }
@@ -84,8 +75,6 @@ export interface NoteMeta {
   id: string
   title: string
   type: NoteType
-  /** 标签名。颜色与计数只在独立的 `GET /api/tags` 目录里，列表接口不背。 */
-  tags: string[]
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
   /** 本篇卡片文件相对笔记根目录的路径清单（顺序即阅读顺序）。 */
@@ -99,12 +88,9 @@ export interface NoteDetail {
   title: string
   contentMd: string
   type: NoteType
-  tags: string[]
   /** 有序卡片 ID 清单；页面级数据按需取。 */
   cards: CardId[]
   notebooks: Notebook[]
-  unresolved: string[]
-  unlinkedMentions: string[]
   createdAt: number
   updatedAt: number
 }

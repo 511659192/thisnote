@@ -51,7 +51,7 @@ const created = []
 await api('PUT', '/api/plugins/memory-curve/active?value=true').catch(() => undefined)
 
 async function newNote(title, contentMd = '') {
-  const note = await api('POST', '/api/notes', { title: `${title}-${RUN}`, contentMd: '', tags: [] })
+  const note = await api('POST', '/api/notes', { title: `${title}-${RUN}`, contentMd: '' })
   created.push(note.id)
   const page = `/api/notes/${note.id}/blocks`
   if (contentMd) {

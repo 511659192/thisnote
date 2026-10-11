@@ -144,13 +144,6 @@ public class NotebookRepository {
 
     // ------------------------------------------------------------ 台账（增删改）
 
-    public String ensureByTitle(String title, String type) {
-        String clean = title == null || title.isBlank() ? "未分类" : title.trim();
-        String wantType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
-        Notebook existing = book().findByTitle(wantType, clean);
-        return existing != null ? existing.id() : create(clean, null, null, wantType);
-    }
-
     public String create(String title, String parentId, String icon, String type) {
         String parent = requireParent(parentId);
         String id = IdUtil.randomUUID();

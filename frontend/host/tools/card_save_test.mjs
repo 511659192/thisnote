@@ -48,7 +48,7 @@ const RUN = Date.now().toString().slice(-6)
 const created = []
 
 async function newNote(title) {
-  const note = await api('POST', '/api/notes', { title: `${title}-${RUN}`, contentMd: '', tags: [] })
+  const note = await api('POST', '/api/notes', { title: `${title}-${RUN}`, contentMd: '' })
   created.push(note.id)
   return { id: note.id, page: `/api/notes/${note.id}/blocks` }
 }

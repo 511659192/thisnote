@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
-import { tagApi, notebookApi } from '@/api'
-import type { NoteDetail, NoteMeta, Notebook, Tag } from '@/api/types'
+import { notebookApi } from '@/api'
+import type { NoteDetail, NoteMeta, Notebook } from '@/api/types'
 import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter } from '@thisnode/plugin-api'
 import { useUiStore } from './ui'
 
@@ -23,10 +23,8 @@ export const useNoteStore = defineStore('notes', () => {
   const loadingNode = ref(false)
   const saving = ref(false)
   const savedAt = ref<number | null>(null)
-  const tags = ref<Tag[]>([])
   const notebooks = ref<Notebook[]>([])
 
-  const activeTag = ref<string | null>(null)
   const activeNotebookId = ref<string | null>(null)
   const listQuery = ref('')
   const selectedIds = ref<string[]>([])
@@ -44,19 +42,10 @@ export const useNoteStore = defineStore('notes', () => {
     return cjk + latin
   })
 
-  const filterLabel = computed(() => {
-    if (activeTag.value) return `#${activeTag.value}`
-    if (activeNotebookId.value) {
-      return notebooks.value.find((n) => n.id === activeNotebookId.value)?.title ?? '笔记本'
-    }
-    return '全部笔记'
-  })
-
   async function loadList() {
     loadingList.value = true
     try {
       nodes.value = await noteApi.list({
-        tag: activeTag.value ?? undefined,
         notebookId: activeNotebookId.value ?? undefined,
         text: listQuery.value || undefined,
       })
@@ -68,9 +57,9 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   /**
-   * 拉一次元数据（计数 / 标签 / 笔记本）。
+   * 拉一次笔记本台账。
    *
-   * <p><b>并发去重</b>：一次调用就是三个请求，而启动时 App 与侧栏几乎同时调它
+   * <p><b>并发去重</b>：启动时 App 与侧栏几乎同时调它
    * （侧栏看到 notebooks 还空，于是又拉一次），不去重就是同一组请求打两遍。
    * 并发调用共用同一个 Promise；**不带新鲜期** —— 写操作之后的刷新必须实时。
    */
@@ -126,9 +115,7 @@ export const useNoteStore = defineStore('notes', () => {
     }
     metaInflight = (async () => {
       try {
-        const [t, n] = await Promise.all([tagApi.list(), notebookApi.list()])
-        tags.value = t
-        notebooks.value = n
+        notebooks.value = await notebookApi.list()
       } catch (e) {
         /* meta refresh is best-effort */
       } finally {
@@ -142,26 +129,14 @@ export const useNoteStore = defineStore('notes', () => {
     await Promise.all([loadList(), refreshMeta()])
   }
 
-  /** 回到「全部笔记」：清掉标签/分组限定，重新拉列表。 */
+  /** 回到「全部笔记」：清掉分组限定，重新拉列表。 */
   function showAll() {
-    activeTag.value = null
     activeNotebookId.value = null
-    void loadList()
-  }
-
-  function setTag(tag: string | null) {
-    activeTag.value = tag
-    if (tag) {
-      activeNotebookId.value = null
-    }
     void loadList()
   }
 
   function setNotebook(id: string | null) {
     activeNotebookId.value = id
-    if (id) {
-      activeTag.value = null
-    }
     void loadList()
   }
 
@@ -263,10 +238,10 @@ export const useNoteStore = defineStore('notes', () => {
     return false
   }
 
-  async function createGroup(title: string, parentId: string | null = null): Promise<Notebook> {
-    const created = await notebookApi.create(title, parentId)
-    if (parentId) expandGroup(parentId)
+  async function createGroup(title: string): Promise<Notebook> {
+    const created = await notebookApi.create(title)
     await refreshMeta()
+    groupsShown.value = true
     return created
   }
 
@@ -353,10 +328,9 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  /** Update the open note (title/tags…) and keep the cached detail in sync. */
+  /** Update the open note and keep the cached detail in sync. */
   async function updateCurrent(changes: {
     title?: string
-    tags?: string[]
     notebookId?: string
   }): Promise<NoteDetail | null> {
     if (!current.value) return null
@@ -407,9 +381,6 @@ export const useNoteStore = defineStore('notes', () => {
       if (current.value?.id === id) {
         // Keep local cursor/selection state authoritative: only merge server fields.
         current.value.updatedAt = detail.updatedAt
-        current.value.unresolved = detail.unresolved
-        current.value.unlinkedMentions = detail.unlinkedMentions
-        current.value.tags = detail.tags
       }
       savedAt.value = Date.now()
       scheduleListRefresh()
@@ -435,7 +406,6 @@ export const useNoteStore = defineStore('notes', () => {
     contentMd?: string
     type?: string
     notebookId?: string
-    tags?: string[]
   }): Promise<NoteDetail | null> {
     try {
       const detail = await noteApi.create(payload)
@@ -465,49 +435,6 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
 
-  async function updateMeta(changes: {
-    tags?: string[]
-    notebookId?: string
-    clearNotebook?: boolean
-  }) {
-    if (!current.value) return
-    const id = current.value.id
-    const detail = await noteApi.update(id, changes)
-    const cursor = (document.activeElement as HTMLElement | null)?.tagName
-    current.value = detail
-    void cursor
-    await Promise.all([loadList(), refreshMeta()])
-  }
-
-  async function addTag(name: string) {
-    if (!current.value || !name.trim()) return
-    const id = current.value.id
-    const detail = await noteApi.addTag(id, name.trim())
-    if (current.value?.id === id) current.value.tags = detail
-    await Promise.all([loadList(), refreshMeta()])
-  }
-
-  async function removeTag(name: string) {
-    if (!current.value) return
-    const id = current.value.id
-    const detail = await noteApi.removeTag(id, name)
-    if (current.value?.id === id) current.value.tags = detail
-    await Promise.all([loadList(), refreshMeta()])
-  }
-
-
-  async function resolveStub(title: string) {
-    const detail = await noteApi.resolveStub(title)
-    await Promise.all([loadList(), refreshMeta()])
-    return detail
-  }
-
-  async function renameTag(id: string, name: string) {
-    await tagApi.rename(id, name)
-    if (current.value) await reloadCurrent()
-    await refreshAll()
-  }
-
   /** Re-read the current note from disk-backed state (after an external edit). */
   async function syncFromServer() {
     await loadList()
@@ -532,19 +459,15 @@ export const useNoteStore = defineStore('notes', () => {
     loadingNode,
     saving,
     savedAt,
-    tags,
     notebooks,
-    activeTag,
     activeNotebookId,
     listQuery,
     selectedIds,
     wordCount,
-    filterLabel,
     loadList,
     refreshMeta,
     refreshAll,
     showAll,
-    setTag,
     setNotebook,
     setListQuery,
     // 分组树
@@ -572,11 +495,6 @@ export const useNoteStore = defineStore('notes', () => {
     createNode,
     createAndSelect,
     deleteForever,
-    updateMeta,
-    addTag,
-    removeTag,
-    resolveStub,
-    renameTag,
     syncFromServer,
   }
 })

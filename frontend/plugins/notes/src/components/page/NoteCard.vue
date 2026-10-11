@@ -39,10 +39,6 @@ const emit = defineEmits<{
   (e: 'toggle-collapse', id: string): void
   (e: 'focus', id: string): void
   (e: 'fit-height', p: { cardId: string; h: number }): void
-  // 卡片正文里的 wiki 链接/标签：预览组件只负责认出来，跳转要靠这里往上抛
-  (e: 'open-note', id: string): void
-  (e: 'create-note', title: string): void
-  (e: 'open-tag', tag: string): void
 }>()
 
 /** How a card's content is displayed. */
@@ -309,9 +305,6 @@ onBeforeUnmount(() => {
         <component :is="MarkdownView"
           v-if="previewSource"
           :content="previewSource"
-          @open="(id: string) => emit('open-note', id)"
-          @create="(title: string) => emit('create-note', title)"
-          @tag="(tag: string) => emit('open-tag', tag)"
         />
         <div v-else class="preview empty-hint">写点什么，这里会出现预览</div>
       </div>
@@ -335,9 +328,6 @@ onBeforeUnmount(() => {
       <component :is="MarkdownView"
         v-if="content"
         :content="content"
-        @open="(id: string) => emit('open-note', id)"
-        @create="(title: string) => emit('create-note', title)"
-        @tag="(tag: string) => emit('open-tag', tag)"
       />
       <div v-else class="preview empty-hint">点击写点什么</div>
     </div>

@@ -371,16 +371,6 @@ a {
 .md-preview input[type='checkbox'] {
   margin-right: 6px;
 }
-.md-preview .md-wikilink {
-  color: var(--accent);
-  cursor: pointer;
-  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
-}
-.md-preview .md-wikilink.unresolved {
-  color: var(--warning);
-  border-bottom-style: dotted;
-}
-
 /* ---------- animations ---------- */
 
 @keyframes fade-in {

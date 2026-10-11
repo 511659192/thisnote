@@ -52,12 +52,11 @@ public class CardService {
         if (wanted != null) {
             rows = rows.stream().filter(b -> wanted.contains(b.id())).toList();
         }
-        List<Dtos.TagDto> noteTags = noteService.tagsOf(noteId);
         List<Dtos.CardView> views = new ArrayList<>(rows.size());
         for (Dtos.CardDto b : rows) {
-            views.add(new Dtos.CardView(b, b.contentMd(), note.getTitle(), noteTags));
+            views.add(new Dtos.CardView(b, b.contentMd(), note.getTitle()));
         }
-        return new Dtos.CardsDto(note.getId(), note.getTitle(), views, noteTags,
+        return new Dtos.CardsDto(note.getId(), note.getTitle(), views,
                 maxCardsPerNote(), note.getUpdatedAt());
     }
 
@@ -85,8 +84,7 @@ public class CardService {
         syncNoteFromCards(noteId);
         NoteMeta fresh = noteService.require(noteId);
         Dtos.CardDto stored = cardRepository.find(id);
-        return new Dtos.CardView(stored, stored.contentMd(), fresh.getTitle(),
-                noteService.tagsOf(noteId));
+        return new Dtos.CardView(stored, stored.contentMd(), fresh.getTitle());
     }
 
     public Dtos.CardView writeContent(String cardId, String contentMd, String baseContentMd) {
@@ -96,7 +94,7 @@ public class CardService {
         syncNoteFromCards(note.getId());
         NoteMeta fresh = noteService.require(note.getId());
         return new Dtos.CardView(cardRepository.find(cardId),
-                contentMd == null ? "" : contentMd, fresh.getTitle(), noteService.tagsOf(note.getId()));
+                contentMd == null ? "" : contentMd, fresh.getTitle());
     }
 
     private void syncNoteFromCards(String noteId) {
@@ -115,7 +113,7 @@ public class CardService {
         String current = noteRepository.noteMarkdown(noteId);
         if (!next.equals(current)) {
             noteService.update(noteId, new Dtos.UpdateNodeRequest(
-                    null, next, null, null, null, null, null));
+                    null, next, null, null, null, null));
         }
     }
 
@@ -150,8 +148,7 @@ public class CardService {
     public Dtos.CardDto duplicate(String cardId, double dx, double dy) {
         Dtos.CardDto src = requireCard(cardId);
         String newNoteId = noteService.create(new Dtos.CreateNodeRequest(
-                null, src.contentMd() == null ? "" : src.contentMd(), "note",
-                null, null));
+                null, src.contentMd() == null ? "" : src.contentMd(), "note", null));
         String id = cardRepository.create(newNoteId, 0d, 0d, src.w(), src.h(), src.color(), src.status(),
                 src.contentMd() == null ? "" : src.contentMd(), src.title());
         return cardRepository.find(id);
