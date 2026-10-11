@@ -35,7 +35,7 @@ public class CardRepository {
         if (fileName == null || fileName.isBlank()) {
             return null;
         }
-        Path file = cardPath(fileName);
+        Path file = notesConfig.getCardsDir().resolve(fileName);
         return Files.isRegularFile(file) ? Card.parse(file) : null;
     }
 
@@ -53,13 +53,13 @@ public class CardRepository {
         return cards;
     }
 
-    public List<String> contentsInOrder(List<String> fileNames) {
+    public List<String> getContents(List<String> fileNames) {
         return getAll(fileNames).stream().map(Card::getContent).toList();
     }
 
-    public String text(List<String> fileNames) {
+    public String getJoinedContents(List<String> fileNames) {
         StringBuilder joined = new StringBuilder();
-        for (String part : contentsInOrder(fileNames)) {
+        for (String part : getContents(fileNames)) {
             if (part == null || part.isBlank()) {
                 continue;
             }
@@ -74,13 +74,13 @@ public class CardRepository {
     /**
      * Write to a known file or choose a unique descriptive filename.
      */
-    public String write(String noteTitle,
-                        CardMeta meta,
-                        String contentMd,
-                        String knownFileName) {
+    public String save(String noteTitle,
+                       CardMeta meta,
+                       String contentMd,
+                       String knownFileName) {
         Path file = knownFileName == null
                 ? resolveContentPath(noteTitle, cardSlug(meta.getTitle(), contentMd), meta.getId())
-                : cardPath(knownFileName);
+                : notesConfig.getCardsDir().resolve(knownFileName);
         JsonFileUtils.writeText(file, Card.compose(meta, contentMd));
         return file.getFileName().toString();
     }
@@ -88,24 +88,20 @@ public class CardRepository {
     /**
      * Rewrite only a card header while preserving its body.
      */
-    public void writeMeta(String fileName,
-                          CardMeta meta) {
+    public void save(String fileName,
+                     CardMeta meta) {
         Card card = get(fileName);
         String body = card == null ? "" : card.getContent();
-        JsonFileUtils.writeText(cardPath(fileName), Card.compose(meta, body));
+        JsonFileUtils.writeText(notesConfig.getCardsDir().resolve(fileName), Card.compose(meta, body));
     }
 
-    public void deleteFiles(List<String> fileNames) {
+    public void delete(List<String> fileNames) {
         if (fileNames == null) {
             return;
         }
         for (String fileName : fileNames) {
-            FileUtil.del(cardPath(fileName));
+            FileUtil.del(notesConfig.getCardsDir().resolve(fileName));
         }
-    }
-
-    private Path cardPath(String fileName) {
-        return notesConfig.getCardsDir().resolve(fileName);
     }
 
     private Path resolveContentPath(String noteTitle,

@@ -13,7 +13,6 @@ public final class MarkdownUtils {
     private MarkdownUtils() {
     }
 
-    /** First ATX heading, used as the implicit title when the user leaves the title blank. */
     public static String firstHeading(String contentMd) {
         if (contentMd == null) {
             return null;
@@ -26,25 +25,6 @@ public final class MarkdownUtils {
         return null;
     }
 
-    /** Plain-text projection (Markdown syntax stripped) for card previews. */
-    public static String plainPreview(String contentMd, int maxChars) {
-        if (contentMd == null || contentMd.isEmpty()) {
-            return "";
-        }
-        String text = FENCED_CODE.matcher(contentMd).replaceAll(" ");
-        text = IMAGE.matcher(text).replaceAll(" ");
-        text = text.replaceAll("(?m)^\\s{0,3}#{1,6}\\s*", "")
-                .replaceAll("(?m)^\\s{0,3}[>\\-*+]\\s+", "")
-                .replaceAll("(?m)^\\s{0,3}\\d+\\.\\s+", "")
-                .replaceAll("(?m)^\\s*\\|.*\\|\\s*$", " ")
-                .replaceAll("\\*\\*|__|~~|\\*|_", "")
-                .replaceAll("\\s+", " ")
-                .trim();
-        if (maxChars > 0 && text.length() > maxChars) {
-            return text.substring(0, maxChars) + "…";
-        }
-        return text;
-    }
 
     /** Filesystem-safe slug that keeps readable UTF-8 characters. */
     public static String slug(String title) {

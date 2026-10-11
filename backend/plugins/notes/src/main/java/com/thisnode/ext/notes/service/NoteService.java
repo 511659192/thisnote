@@ -40,7 +40,7 @@ public class NoteService {
         NoteMeta meta = noteRepository.getOne(id);
         Card.CardMeta firstCard = Card.CardMeta.newCardMeta(
                 IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-        String cardFileName = cardRepository.write(meta.getTitle(), firstCard, content, null);
+        String cardFileName = cardRepository.save(meta.getTitle(), firstCard, content, null);
         meta.setCardFileNames(List.of(cardFileName));
         noteRepository.save(meta);
 
@@ -67,7 +67,7 @@ public class NoteService {
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
-        String content = cardRepository.text(meta.getCardFileNames());
+        String content = cardRepository.getJoinedContents(meta.getCardFileNames());
         boolean contentChanged = false;
         String oldTitle = meta.getTitle();
         boolean renamed = req.title() != null && !req.title().equals(oldTitle);
@@ -102,7 +102,7 @@ public class NoteService {
         if (meta == null) {
             return;
         }
-        cardRepository.deleteFiles(meta.getCardFileNames());
+        cardRepository.delete(meta.getCardFileNames());
         noteRepository.delete(id);
     }
 
@@ -116,7 +116,7 @@ public class NoteService {
 
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
-        String content = cardRepository.text(meta.getCardFileNames());
+        String content = cardRepository.getJoinedContents(meta.getCardFileNames());
         List<String> cardIds = new ArrayList<>();
         for (String fileName : meta.getCardFileNames()) {
             Card card = cardRepository.get(fileName);
@@ -166,7 +166,7 @@ public class NoteService {
         if (fileNames.isEmpty()) {
             Card.CardMeta card = Card.CardMeta.newCardMeta(
                     IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-            fileNames.add(cardRepository.write(note.getTitle(), card, body, null));
+            fileNames.add(cardRepository.save(note.getTitle(), card, body, null));
             note.setCardFileNames(fileNames);
             noteRepository.save(note);
             return;
@@ -176,7 +176,7 @@ public class NoteService {
             if (card == null || card.getMeta() == null) {
                 continue;
             }
-            cardRepository.write(note.getTitle(), card.getMeta(), i == 0 ? body : "", fileNames.get(i));
+            cardRepository.save(note.getTitle(), card.getMeta(), i == 0 ? body : "", fileNames.get(i));
         }
     }
 
@@ -190,7 +190,7 @@ public class NoteService {
         }
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
-            String body = cardRepository.text(meta.getCardFileNames()).toLowerCase(Locale.ROOT);
+            String body = cardRepository.getJoinedContents(meta.getCardFileNames()).toLowerCase(Locale.ROOT);
             boolean hit = (meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
             if (!hit) {
                 return false;
