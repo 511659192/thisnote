@@ -9,10 +9,7 @@ thisnode:
   # Root of the human-readable Markdown mirror (F-P-03).
   data-root: ${user.home}/.thisnode
   markdown-root: ${user.home}/.thisnode/notes
-  snapshot-root: ${user.home}/.thisnode/snapshots
-  snapshot-retention-days: 7
-  # Auto-snapshot a running instance once per day.
-  snapshot-auto: true
+
 
 spring:
   # SBP 会传递引入 Flyway；插件不连数据库，留着只是防它去动别的库。

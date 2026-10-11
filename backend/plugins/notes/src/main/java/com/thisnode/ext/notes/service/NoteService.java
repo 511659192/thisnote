@@ -6,13 +6,10 @@ import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.repository.NotebookRepository;
-import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.ext.notes.util.MarkdownUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -30,7 +27,7 @@ import java.util.Locale;
 public class NoteService {
 
     private final NoteRepository noteRepository;
-    private final NotebookRepository notebookRepository;
+    private final NotebookService notebookService;
     private final CardRepository cardRepository;
 
     // ================================================================= create
@@ -40,10 +37,15 @@ public class NoteService {
         String content = req.contentMd() == null ? "" : req.contentMd();
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
         String id = noteRepository.insert(titleOf(title, content), type);
-        cardRepository.putCard(id, Card.CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis()), content);
+        NoteMeta meta = noteRepository.getOne(id);
+        Card.CardMeta firstCard = Card.CardMeta.newCardMeta(
+                IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
+        String cardFileName = cardRepository.write(meta.getTitle(), firstCard, content, null);
+        meta.setCardFileNames(List.of(cardFileName));
+        noteRepository.save(meta);
 
-        String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookRepository.ensureDefaultGroup();
-        notebookRepository.addNodeToNotebook(id, groupId);
+        String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookService.ensureDefaultGroup();
+        notebookService.addNodeToNotebook(id, groupId);
         return id;
     }
 
@@ -65,7 +67,7 @@ public class NoteService {
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
-        String content = noteRepository.text(meta);
+        String content = cardRepository.text(meta.getCardFileNames());
         boolean contentChanged = false;
         String oldTitle = meta.getTitle();
         boolean renamed = req.title() != null && !req.title().equals(oldTitle);
@@ -81,21 +83,26 @@ public class NoteService {
         }
         meta.setTitle(nextTitle);
         meta.setUpdatedAt(System.currentTimeMillis());
-        JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", id + ".json"), meta);
+        noteRepository.save(meta);
 
         if (Boolean.TRUE.equals(req.clearNotebook())) {
             // 单归属且必有归属：「移出分组」= 回到默认分组，不是变成无归属
-            notebookRepository.setExclusiveGroup(id, notebookRepository.ensureDefaultGroup());
+            notebookService.setExclusiveGroup(id, notebookService.ensureDefaultGroup());
         } else if (req.notebookId() != null && !req.notebookId().isBlank()) {
-            notebookRepository.setExclusiveGroup(id, req.notebookId());
+            notebookService.setExclusiveGroup(id, req.notebookId());
         }
         if (contentChanged) {
             // 整篇正文替换（写回首卡）。
-            noteRepository.replaceNoteContent(id, nextContent);
+            replaceNoteContent(meta, nextContent);
         }
     }
 
     public void delete(String id) {
+        NoteMeta meta = noteRepository.getOne(id);
+        if (meta == null) {
+            return;
+        }
+        cardRepository.deleteFiles(meta.getCardFileNames());
         noteRepository.delete(id);
     }
 
@@ -109,14 +116,20 @@ public class NoteService {
 
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
-        String content = noteRepository.text(meta);
-        List<String> cardIds = noteRepository.cards(id).stream().map(Card.CardMeta::getId).toList();
+        String content = cardRepository.text(meta.getCardFileNames());
+        List<String> cardIds = new ArrayList<>();
+        for (String fileName : meta.getCardFileNames()) {
+            Card card = cardRepository.read(fileName);
+            if (card != null && card.getMeta() != null) {
+                cardIds.add(card.getMeta().getId());
+            }
+        }
         return new Dtos.NoteDetail(meta.getId(),
                                    meta.getTitle(),
                                    content,
                                    meta.getType(),
                                    cardIds,
-                                   notebookRepository.notebooksOf(id),
+                                   notebookService.notebooksOf(id),
                                    meta.getCreatedAt(),
                                    meta.getUpdatedAt());
     }
@@ -147,6 +160,26 @@ public class NoteService {
         return page;
     }
 
+    private void replaceNoteContent(NoteMeta note, String contentMd) {
+        String body = contentMd == null ? "" : contentMd;
+        List<String> fileNames = new ArrayList<>(note.getCardFileNames());
+        if (fileNames.isEmpty()) {
+            Card.CardMeta card = Card.CardMeta.newCardMeta(
+                    IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
+            fileNames.add(cardRepository.write(note.getTitle(), card, body, null));
+            note.setCardFileNames(fileNames);
+            noteRepository.save(note);
+            return;
+        }
+        for (int i = 0; i < fileNames.size(); i++) {
+            Card card = cardRepository.read(fileNames.get(i));
+            if (card == null || card.getMeta() == null) {
+                continue;
+            }
+            cardRepository.write(note.getTitle(), card.getMeta(), i == 0 ? body : "", fileNames.get(i));
+        }
+    }
+
     private boolean matches(NoteMeta meta,
                             Query query) {
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.getType())) {
@@ -157,7 +190,7 @@ public class NoteService {
         }
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
-            String body = noteRepository.text(meta).toLowerCase(Locale.ROOT);
+            String body = cardRepository.text(meta.getCardFileNames()).toLowerCase(Locale.ROOT);
             boolean hit = (meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
             if (!hit) {
                 return false;

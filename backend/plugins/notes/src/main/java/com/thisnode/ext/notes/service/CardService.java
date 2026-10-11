@@ -1,7 +1,9 @@
 package com.thisnode.ext.notes.service;
 
+import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.Card;
+import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -12,12 +14,13 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-
 
 @Service
 @RequiredArgsConstructor
 public class CardService {
+
     private final CardRepository cardRepository;
     private final NoteRepository noteRepository;
     private final NoteService noteService;
@@ -29,122 +32,161 @@ public class CardService {
         return Math.max(1, maxCardsPerNote);
     }
 
-    public static class CardLimitException
-            extends com.thisnode.plugin.api.CardLimitException {
+    public static class CardLimitException extends com.thisnode.plugin.api.CardLimitException {
         public CardLimitException(int limit) {
             super("每篇笔记最多 " + limit + " 张卡片，无法继续新增。请新建一篇笔记。", limit);
         }
     }
 
-    public Dtos.CardsDto page(String noteId,
-                              List<String> ids) {
-        NoteMeta note = noteService.require(noteId);
-        Set<String> wanted = ids == null ? null : new HashSet<>(ids);
-        List<Card.CardMeta> rows = cardRepository.cards(noteId);
-        if (wanted != null) {
-            rows = rows.stream().filter(card -> wanted.contains(card.getId())).toList();
-        }
-        List<Dtos.CardView> views = new ArrayList<>(rows.size());
-        for (Card.CardMeta card : rows) {
-            views.add(new Dtos.CardView(card, noteRepository.content(card.getId()), note.getTitle()));
-        }
-        return new Dtos.CardsDto(note.getId(), note.getTitle(), views, maxCardsPerNote(), note.getUpdatedAt());
-    }
-
-    // ---------------------------------------------------------------- write
-
-    private void requireCapacity(String noteId,
-                                 int adding) {
-        int limit = maxCardsPerNote();
-        if (cardRepository.count(noteId) + adding > limit) {
-            throw new CardLimitException(limit);
+    private record StoredCard(NoteMeta note, String fileName, Card card) {
+        CardMeta meta() {
+            return card.getMeta();
         }
     }
 
-    /**
-     * Add an empty (or seeded) card to a note's page.
-     */
-    public Dtos.CardView create(String noteId,
-                                Dtos.CreateCardRequest req) {
-        noteService.require(noteId);
-        requireCapacity(noteId, 1);
-        String content = req == null || req.contentMd() == null ? "" : req.contentMd();
-        String title = req == null || req.title() == null ? "" : req.title().trim();
-        double[] flow = cardRepository.nextFlowPosition(noteId);
-        double x = req != null && req.x() != null ? Math.max(0, req.x()) : flow[0];
-        double y = req != null && req.y() != null ? Math.max(0, req.y()) : flow[1];
-        String id = cardRepository.createAt(noteId,
-                                            x,
-                                            y,
-                                            req == null ? null : req.w(),
-                                            req == null ? null : req.h(),
-                                            req == null ? null : req.color(),
-                                            null,
-                                            content,
-                                            title);
-        syncNoteFromCards(noteId);
-        NoteMeta fresh = noteService.require(noteId);
-        Card.CardMeta stored = cardRepository.find(id);
-        return new Dtos.CardView(stored, content, fresh.getTitle());
+    private List<String> cardFileNames(NoteMeta note) {
+        return note == null || note.getCardFileNames() == null ? List.of() : note.getCardFileNames();
     }
 
-    public Dtos.CardView writeContent(String cardId,
-                                      String contentMd,
-                                      String baseContentMd) {
-        requireCard(cardId);
-        String noteId = noteRepository.noteIdOf(cardId);
-        cardRepository.setContent(cardId, contentMd, baseContentMd);
-        NoteMeta note = noteService.require(noteId);
-        syncNoteFromCards(note.getId());
-        NoteMeta fresh = noteService.require(note.getId());
-        return new Dtos.CardView(cardRepository.find(cardId), contentMd == null ? "" : contentMd, fresh.getTitle());
-    }
-
-    private void syncNoteFromCards(String noteId) {
-        List<String> parts = cardRepository.contentsInOrder(noteId);
-        StringBuilder joined = new StringBuilder();
-        for (String part : parts) {
-            if (part == null || part.isBlank()) {
-                continue;
+    private List<StoredCard> cards(NoteMeta note) {
+        List<StoredCard> result = new ArrayList<>();
+        for (String fileName : cardFileNames(note)) {
+            Card card = cardRepository.read(fileName);
+            if (card != null && card.getMeta() != null) {
+                result.add(new StoredCard(note, fileName, card));
             }
-            if (joined.length() > 0) {
-                joined.append("\n\n");
-            }
-            joined.append(part.strip());
         }
-        String next = joined.toString();
-        String current = noteRepository.text(noteId);
-        if (!next.equals(current)) {
-            noteService.update(noteId, new Dtos.UpdateNodeRequest(null, next, null, null, null, null));
-        }
+        return result;
     }
 
-    private Card.CardMeta requireCard(String id) {
-        Card.CardMeta card = cardRepository.find(id);
+    private StoredCard locate(String cardId) {
+        if (cardId == null || cardId.isBlank()) {
+            return null;
+        }
+        for (NoteMeta note : noteRepository.getAll()) {
+            for (String fileName : cardFileNames(note)) {
+                Card card = cardRepository.read(fileName);
+                if (card != null && card.getMeta() != null && cardId.equals(card.getMeta().getId())) {
+                    return new StoredCard(note, fileName, card);
+                }
+            }
+        }
+        return null;
+    }
+
+    private StoredCard requireCard(String cardId) {
+        StoredCard card = locate(cardId);
         if (card == null) {
-            throw new NoteService.NotFoundException("card " + id);
+            throw new NoteService.NotFoundException("card " + cardId);
         }
         return card;
     }
 
-    public Card.CardMeta update(String cardId,
-                                Dtos.CardUpdate changes) {
-        requireCard(cardId);
-        cardRepository.update(cardId,
-                              changes.title(),
-                              changes.x(),
-                              changes.y(),
-                              changes.w(),
-                              changes.h(),
-                              changes.color(),
-                              changes.status(),
-                              changes.collapsed());
-        return cardRepository.find(cardId);
+    private int count(NoteMeta note) {
+        return cardFileNames(note).size();
+    }
+
+    private void requireCapacity(NoteMeta note, int adding) {
+        int limit = maxCardsPerNote();
+        if (count(note) + adding > limit) {
+            throw new CardLimitException(limit);
+        }
+    }
+
+    public Dtos.CardsDto page(String noteId, List<String> ids) {
+        NoteMeta note = noteService.require(noteId);
+        Set<String> wanted = ids == null ? null : new HashSet<>(ids);
+        List<StoredCard> rows = cards(note);
+        if (wanted != null) {
+            rows = rows.stream().filter(card -> wanted.contains(card.meta().getId())).toList();
+        }
+        List<Dtos.CardView> views = new ArrayList<>(rows.size());
+        for (StoredCard stored : rows) {
+            views.add(new Dtos.CardView(stored.meta(), stored.card().getContent(), note.getTitle()));
+        }
+        return new Dtos.CardsDto(note.getId(), note.getTitle(), views,
+                maxCardsPerNote(), note.getUpdatedAt());
+    }
+
+    public Dtos.CardView create(String noteId, Dtos.CreateCardRequest req) {
+        NoteMeta note = noteService.require(noteId);
+        requireCapacity(note, 1);
+        String content = req == null || req.contentMd() == null ? "" : req.contentMd();
+        String title = req == null || req.title() == null ? "" : req.title().trim();
+        double[] flow = nextFlowPosition(note);
+        double x = req != null && req.x() != null ? Math.max(0, req.x()) : flow[0];
+        double y = req != null && req.y() != null ? Math.max(0, req.y()) : flow[1];
+        double w = req == null || req.w() == null ? CardRepository.DEFAULT_W : Math.max(CardRepository.MIN_W, req.w());
+        double h = req == null || req.h() == null ? CardRepository.DEFAULT_H : Math.max(CardRepository.MIN_H, req.h());
+        List<StoredCard> existing = cards(note);
+        int slot = insertionSlot(existing, y, h);
+        long now = System.currentTimeMillis();
+        CardMeta card = new CardMeta(CardMeta.SCHEMA, IdUtil.randomUUID(), title, x, y, w, h,
+                slot, req == null ? null : req.color(), null, false, Map.of(), now, now);
+        String fileName = cardRepository.write(note.getTitle(), card, content, null);
+        List<String> fileNames = new ArrayList<>(cardFileNames(note));
+        fileNames.add(Math.min(slot, fileNames.size()), fileName);
+        note.setCardFileNames(fileNames);
+        note.setUpdatedAt(now);
+        noteRepository.save(note);
+        return new Dtos.CardView(card, content, note.getTitle());
+    }
+
+    private double[] nextFlowPosition(NoteMeta note) {
+        double bottom = cards(note).stream()
+                .mapToDouble(stored -> stored.meta().getY() + stored.meta().getH())
+                .max()
+                .orElse(0);
+        return new double[]{CardRepository.FLOW_X, bottom <= 0 ? 0 : bottom + CardRepository.FLOW_GAP};
+    }
+
+    private static int insertionSlot(List<StoredCard> cards, double y, double height) {
+        double center = y + height / 2;
+        long before = cards.stream()
+                .map(StoredCard::meta)
+                .filter(card -> card.getY() + card.getH() / 2 < center)
+                .count();
+        return (int) Math.min(before, cards.size());
+    }
+
+    public Dtos.CardView writeContent(String cardId, String contentMd, String baseContentMd) {
+        StoredCard stored = requireCard(cardId);
+        String current = stored.card().getContent();
+        if (baseContentMd != null && !baseContentMd.equals(current)) {
+            throw new com.thisnode.plugin.api.ConflictException(
+                    "这张卡片已被外部修改（磁盘上的内容与你打开时的不一样），已停止保存");
+        }
+        CardMeta meta = stored.meta().setUpdatedAt(System.currentTimeMillis());
+        String body = contentMd == null ? "" : contentMd;
+        cardRepository.write(stored.note().getTitle(), meta, body, stored.fileName());
+        stored.note().setUpdatedAt(System.currentTimeMillis());
+        noteRepository.save(stored.note());
+        return new Dtos.CardView(meta, body, stored.note().getTitle());
+    }
+
+    public CardMeta update(String cardId, Dtos.CardUpdate changes) {
+        StoredCard stored = requireCard(cardId);
+        CardMeta meta = stored.meta();
+        double x = changes.x() == null ? meta.getX() : changes.x();
+        double y = changes.y() == null ? meta.getY() : changes.y();
+        double w = changes.w() == null ? meta.getW() : Math.max(CardRepository.MIN_W, changes.w());
+        double h = changes.h() == null ? meta.getH() : Math.max(CardRepository.MIN_H, changes.h());
+        meta.setX(x).setY(y).setW(w).setH(h);
+        if (changes.title() != null) meta.setTitle(changes.title());
+        if (changes.color() != null) meta.setColor(changes.color());
+        if (changes.status() != null) meta.setStatus(changes.status());
+        if (changes.collapsed() != null) meta.setCollapsed(changes.collapsed());
+        meta.setUpdatedAt(System.currentTimeMillis());
+        cardRepository.writeMeta(stored.fileName(), meta);
+        return meta;
     }
 
     public void batchUpdate(Dtos.BatchCardUpdateRequest req) {
         List<Dtos.CardUpdate> updates = req == null || req.cards() == null ? List.of() : req.cards();
-        cardRepository.updateBatch(updates);
+        for (Dtos.CardUpdate update : updates) {
+            if (update != null && update.id() != null) {
+                update(update.id(), update);
+            }
+        }
     }
-
 }
