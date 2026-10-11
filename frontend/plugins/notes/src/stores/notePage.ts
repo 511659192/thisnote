@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { pageApi, type CardUpdate } from '@/api/page'
-import { ApiError } from '@/core/http'
+import { ApiError, toast } from '@thisnode/plugin-api'
 import type { CardView, NotePageData } from '@/api/types'
-import { useUiStore } from './ui'
 
 export interface Viewport {
   x: number
@@ -38,7 +37,6 @@ const LIMITS = { maxW: 680, defaultH: 260, widthRatio: 0.62, minVisibleGap: 140 
  * batched PATCH when the gesture ends.
  */
 export const usePageStore = defineStore('notePage', () => {
-  const ui = useUiStore()
 
   const noteId = ref<string | null>(null)
   const noteTitle = ref('')
@@ -108,7 +106,7 @@ export const usePageStore = defineStore('notePage', () => {
       restoreViewport(page.noteId)
       return page
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
       return null
     } finally {
       loading.value = false
@@ -133,7 +131,7 @@ export const usePageStore = defineStore('notePage', () => {
         .filter((x) => !arrived.has(x))
       return true
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
       return false
     }
   }
@@ -151,7 +149,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   function requireCapacity(adding = 1): boolean {
     if (count.value + adding <= maxBlocks.value) return true
-    ui.toast(
+    toast(
       `每篇笔记最多 ${maxBlocks.value} 张卡片，当前 ${count.value} 张。` +
         `请新建另一篇笔记，或整理当前笔记中的卡片内容。`,
       'error',
@@ -220,7 +218,7 @@ export const usePageStore = defineStore('notePage', () => {
     try {
       await pageApi.updateBlocks(updates)
     } catch (e) {
-      ui.toast(`页面保存失败：${(e as Error).message}`, 'error')
+      toast(`页面保存失败：${(e as Error).message}`, 'error')
       await reload()
     }
   }
@@ -284,7 +282,7 @@ export const usePageStore = defineStore('notePage', () => {
       selection.value = [fresh.card.id]
       return fresh
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
       return null
     }
   }
@@ -331,14 +329,14 @@ export const usePageStore = defineStore('notePage', () => {
       if (updated.noteTitle) noteTitle.value = updated.noteTitle
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        ui.toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
+        toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
         await reload()
       } else {
         // A note/card file removed externally while this write was in flight is an expected
         // race, not an error worth shouting about.
         const message = (e as Error).message
         if (!message.includes('card')) {
-          ui.toast(`保存失败：${message}`, 'error')
+          toast(`保存失败：${message}`, 'error')
         }
       }
     } finally {

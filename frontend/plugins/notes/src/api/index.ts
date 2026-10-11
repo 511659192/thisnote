@@ -1,4 +1,4 @@
-import { http } from '@/core/http'
+import { http } from '@thisnode/plugin-api'
 import type { Notebook } from './types'
 
 /** Notes-domain clients. */

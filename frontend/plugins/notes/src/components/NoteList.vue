@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { listHeaders_ } from '@thisnode/plugin-api'
+import { formatDate, listHeaders_ } from '@thisnode/plugin-api'
 import { useNoteStore } from '@/stores/notes'
-import { useUiStore } from '@/stores/ui'
-import { formatDate } from '@/core/utils'
 import type { NoteMeta } from '@/api/types'
 
 defineProps<{ nodes: NoteMeta[]; loading?: boolean; currentId?: string | null }>()
@@ -13,7 +11,6 @@ const emit = defineEmits<{
 }>()
 
 const store = useNoteStore()
-const ui = useUiStore()
 // 列表接口的 notebooks 只带归属 id（笔记 meta 里的字段），标题用这里已加载的台账解析。
 const notebookTitle = (id: string) => store.notebooks.find((nb) => nb.id === id)?.title ?? id
 

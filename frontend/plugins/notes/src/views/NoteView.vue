@@ -2,14 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import '@/plugins'
-import { activeNoteTools } from '@/plugins'
+import { activeNoteTools, primaryLabel } from '@thisnode/plugin-api'
 import { usePageStore } from '@/stores/notePage'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
-import { primaryLabel } from '@/core/utils'
 import type { NoteMeta, CardView } from '@/api/types'
 
 const route = useRoute()
@@ -37,10 +35,6 @@ const titleInput = ref<HTMLInputElement | null>(null)
  * discarding it. The flag makes "cancel" reach the blur handler.
  */
 let renameCancelled = false
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b']
-
-const modKey = computed(() => primaryLabel())
-
 function openNode(id: string) {
   void router.push(`/notes/${id}`)
 }

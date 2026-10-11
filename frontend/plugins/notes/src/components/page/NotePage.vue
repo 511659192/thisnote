@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, usePageStore } from '@/stores/notePage'
-import { useUiStore } from '@/stores/ui'
 import NoteCard from './NoteCard.vue'
-import '@/plugins'
-import { activeCardPlugins } from '@/plugins'
+import { activeCardPlugins, toast } from '@thisnode/plugin-api'
 import type { CardView } from '@/api/types'
 import type { CardUpdate } from '@/api/page'
 
@@ -21,7 +19,6 @@ import type { CardUpdate } from '@/api/page'
  * There is no dot grid, no groups, no connectors, no board concept.
  */
 const page = usePageStore()
-const ui = useUiStore()
 
 const emit = defineEmits<{
   (e: 'context', p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }): void
@@ -464,7 +461,7 @@ async function onPaste(e: ClipboardEvent) {
   const world = page.screenToWorld(lastPointer.value)
   const at = { x: Math.round(world.x), y: Math.round(world.y) }
   const created = await page.addBlockFromContent(text, at)
-  if (created) ui.toast('已粘贴为卡片', 'success')
+  if (created) toast('已粘贴为卡片', 'success')
 }
 
 // ---------------------------------------------------------------- keyboard

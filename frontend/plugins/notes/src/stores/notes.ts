@@ -3,8 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { notebookApi } from '@/api'
 import type { NoteDetail, NoteMeta, Notebook } from '@/api/types'
-import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter } from '@thisnode/plugin-api'
-import { useUiStore } from './ui'
+import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter, toast } from '@thisnode/plugin-api'
 
 const AUTOSAVE_DEBOUNCE_MS = 500
 
@@ -15,7 +14,6 @@ const AUTOSAVE_DEBOUNCE_MS = 500
  * user switches notes so fast navigation never loses the last keystrokes.
  */
 export const useNoteStore = defineStore('notes', () => {
-  const ui = useUiStore()
 
   const nodes = ref<NoteMeta[]>([])
   const current = ref<NoteDetail | null>(null)
@@ -50,7 +48,7 @@ export const useNoteStore = defineStore('notes', () => {
         text: listQuery.value || undefined,
       })
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
     } finally {
       loadingList.value = false
     }
@@ -307,7 +305,7 @@ export const useNoteStore = defineStore('notes', () => {
       current.value = detail
       savedAt.value = null
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
     } finally {
       if (token === detailToken) loadingNode.value = false
     }
@@ -320,11 +318,7 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  /** Update the open note and keep the cached detail in sync. */
-  async function updateCurrent(changes: {
-    title?: string
-    notebookId?: string
-  }): Promise<NoteDetail | null> {
+  async function updateCurrent(changes: { title?: string }): Promise<NoteDetail | null> {
     if (!current.value) return null
     const id = current.value.id
     try {
@@ -333,7 +327,7 @@ export const useNoteStore = defineStore('notes', () => {
       await Promise.all([loadList(), refreshMeta()])
       return detail
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
       return null
     }
   }
@@ -377,7 +371,7 @@ export const useNoteStore = defineStore('notes', () => {
       savedAt.value = Date.now()
       scheduleListRefresh()
     } catch (e) {
-      ui.toast(`保存失败：${(e as Error).message}`, 'error')
+      toast(`保存失败：${(e as Error).message}`, 'error')
     } finally {
       saving.value = false
     }
@@ -404,7 +398,7 @@ export const useNoteStore = defineStore('notes', () => {
       await Promise.all([loadList(), refreshMeta()])
       return detail
     } catch (e) {
-      ui.toast((e as Error).message, 'error')
+      toast((e as Error).message, 'error')
       return null
     }
   }
@@ -423,7 +417,7 @@ export const useNoteStore = defineStore('notes', () => {
     await noteApi.delete(id)
     if (currentId.value === id) current.value = null
     await Promise.all([loadList(), refreshMeta()])
-    ui.toast('已彻底删除', 'success')
+    toast('已彻底删除', 'success')
   }
 
 

@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import { useUiStore } from '@/stores/ui'
 import { notebookApi } from '@/api'
 import {
   activeListFilter_,
@@ -13,6 +12,7 @@ import {
   refreshPluginAvailability,
   setActiveListFilter,
   type NoteListFilter,
+  toast,
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import type { Notebook } from '@/api/types'
@@ -124,9 +124,9 @@ async function promptNewGroup() {
   if (!title || !title.trim()) return
   try {
     await nodes.createGroup(title.trim())
-    ui.toast('分组已创建', 'success')
+    toast('分组已创建', 'success')
   } catch (e) {
-    ui.toast(`创建失败：${(e as Error).message}`, 'error')
+    toast(`创建失败：${(e as Error).message}`, 'error')
   }
 }
 
@@ -140,9 +140,9 @@ async function removeGroup(id: string, title: string) {
   if (!window.confirm(`删除分组「${title}」？\n\n分组里的笔记不会被删除，只是不再属于这个分组。`)) return
   try {
     await nodes.deleteGroup(id)
-    ui.toast('分组已删除', 'success')
+    toast('分组已删除', 'success')
   } catch (e) {
-    ui.toast(`删除失败：${(e as Error).message}`, 'error')
+    toast(`删除失败：${(e as Error).message}`, 'error')
   }
 }
 
@@ -151,7 +151,7 @@ async function moveGroupTo(id: string, parentId: string | null) {
   try {
     await nodes.moveGroup(id, parentId)
   } catch (e) {
-    ui.toast((e as Error).message, 'error')
+    toast((e as Error).message, 'error')
   }
 }
 

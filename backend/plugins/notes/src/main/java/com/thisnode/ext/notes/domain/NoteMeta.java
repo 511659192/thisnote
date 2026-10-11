@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.domain;
 
-import com.alibaba.fastjson2.annotation.JSONField;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,7 +23,6 @@ public class NoteMeta {
     private String title;
     private String type;
     private String notebookId;
-    @JSONField(alternateNames = {"cardPaths"})
     private List<String> cardFileNames = List.of();
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();

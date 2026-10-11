@@ -1,24 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
-import { useUiStore } from '@/stores/ui'
-import { backendMessage, backendOnline } from '@/core/http'
-import { formatRelative } from '@/core/utils'
+import { backendMessage, backendOnline, formatRelative, shellState } from '@thisnode/plugin-api'
 
 const nodes = useNoteStore()
 const page = usePageStore()
-const ui = useUiStore()
-
-const clock = ref(Date.now())
-let timer: number | null = null
-
-onMounted(() => {
-  timer = window.setInterval(() => (clock.value = Date.now()), 30_000)
-})
-onBeforeUnmount(() => {
-  if (timer) window.clearInterval(timer)
-})
 
 const saveState = computed(() => {
   if (nodes.saving || page.savingContent) return '保存中…'
@@ -43,7 +30,7 @@ const saveState = computed(() => {
       <span class="small muted">选中 {{ page.selection.length }}</span>
       <span class="small muted">缩放 {{ Math.round(page.viewport.zoom * 100) }}%</span>
     </template>
-    <span class="small muted">{{ ui.theme === 'dark' ? '深色' : '浅色' }}</span>
+    <span class="small muted">{{ shellState.theme === 'dark' ? '深色' : '浅色' }}</span>
   </footer>
 </template>
 

@@ -38,9 +38,6 @@ public class NoteController {
     @PostMapping("/update")
     public Dtos.NoteDetail update(@RequestParam String id,
                                   @RequestBody Dtos.UpdateNodeRequest req) {
-        if (req != null && req.contentMd() != null) {
-            throw new IllegalArgumentException("整篇正文改写已停用：请在卡片里编辑（POST /api/notes/cards/content）");
-        }
         noteService.update(id, req);
         return noteService.detail(id);
     }

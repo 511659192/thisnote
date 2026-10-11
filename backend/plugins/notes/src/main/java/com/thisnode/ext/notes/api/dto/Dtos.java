@@ -60,7 +60,7 @@ public final class Dtos {
         }
     }
 
-    public record UpdateNodeRequest(String title, String contentMd, String source, String status) {
+    public record UpdateNodeRequest(String title, String contentMd) {
         public UpdateNodeRequest {
             if (title != null && title.isBlank()) {
                 title = currentTimeTitle();

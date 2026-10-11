@@ -1,4 +1,4 @@
-import { http } from '@/core/http'
+import { http } from '@thisnode/plugin-api'
 import type { NoteDetail, NoteMeta } from './types'
 
 export interface NoteQuery {
@@ -18,15 +18,13 @@ export const noteApi = {
     contentMd?: string
     type?: string
     notebookId?: string
-  }) => http.post<NoteDetail>('/api/notes', payload),
+  }) => http.post<NoteDetail>('/api/notes/create', payload),
 
   update: (
     id: string,
     payload: {
       title?: string
       contentMd?: string
-      source?: string
-      status?: string
     },
   ) => http.post<NoteDetail>('/api/notes/update', payload, { id }),
 

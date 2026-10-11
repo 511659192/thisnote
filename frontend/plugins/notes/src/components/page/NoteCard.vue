@@ -5,9 +5,7 @@ import { host } from '@thisnode/plugin-api'
 
 /** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
 const MarkdownView = host().MarkdownView
-// '@/plugins' 触发插件自注册；registry 提供列表（直接导入，绕开类型推断上的环）。
-import '@/plugins'
-import { activeCardPlugins } from '@/plugins'
+import { activeCardPlugins } from '@thisnode/plugin-api'
 import { BLOCK_MIN_H } from '@/stores/notePage'
 
 /**
