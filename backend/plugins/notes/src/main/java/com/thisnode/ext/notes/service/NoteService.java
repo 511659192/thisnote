@@ -8,6 +8,7 @@ import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -36,10 +37,9 @@ public class NoteService {
 
     public String create(CreateNoteRequest req) {
         String id = IdUtil.randomUUID();
-        String groupId = req.notebookId() == null ? notebookService.ensureDefaultGroup() : req.notebookId();
-        NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(groupId);
+        NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(req.notebookId());
         CardMeta firstCard = new CardMeta().setId(IdUtil.randomUUID()).setTitle("");
-        String cardFileName = cardRepository.save(firstCard, req.contentMd(), null);
+        String cardFileName = cardRepository.save(firstCard, req.content(), null);
 
         meta.setCardFileNames(List.of(cardFileName));
         noteRepository.save(meta);

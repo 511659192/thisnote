@@ -37,10 +37,6 @@ public class NotebookService {
         return notebook == null ? null : dto(notebook, countNotes(id));
     }
 
-    public String ensureDefaultGroup() {
-        return notebookRepository.ensureDefaultGroup();
-    }
-
     public String create(String title, String parentId, String icon, String type) {
         return notebookRepository.create(title, parentId, icon, type);
     }
@@ -58,7 +54,6 @@ public class NotebookService {
             throw new IllegalArgumentException("「" + NotebookRepository.DEFAULT_GROUP_TITLE
                     + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
         }
-        ensureDefaultGroup();
         for (NoteMeta note : noteRepository.getAll()) {
             if (id.equals(note.getNotebookId())) {
                 note.setNotebookId(NotebookRepository.DEFAULT_GROUP_ID);

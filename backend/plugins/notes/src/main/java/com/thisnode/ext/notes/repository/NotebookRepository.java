@@ -5,6 +5,7 @@ import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,16 @@ public class NotebookRepository {
     public static final String DEFAULT_GROUP_TITLE = NotebookBook.DEFAULT_GROUP_TITLE;
 
     private final NotesConfig notesConfig;
+
+    @PostConstruct
+    private void initializeDefaultGroup() {
+        NotebookBook current = book();
+        if (current.find(DEFAULT_GROUP_ID) == null) {
+            long now = System.currentTimeMillis();
+            save(current.with(Notebook.fresh(DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK,
+                                             DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
+        }
+    }
 
     private Path ledgerPath() {
         return notesConfig.getNotebookDir().resolve("notebooks.json");
@@ -59,17 +70,6 @@ public class NotebookRepository {
 
     public Notebook find(String id) {
         return book().find(id);
-    }
-
-    public String ensureDefaultGroup() {
-        NotebookBook current = book();
-        if (current.find(DEFAULT_GROUP_ID) != null) {
-            return DEFAULT_GROUP_ID;
-        }
-        long now = System.currentTimeMillis();
-        save(current.with(Notebook.fresh(DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK,
-                                         DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
-        return DEFAULT_GROUP_ID;
     }
 
     public String create(String title,
