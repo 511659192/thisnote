@@ -1,9 +1,8 @@
 package com.thisnode.ext.notes.config;
 
-import com.thisnode.ext.notes.domain.NoteFilePaths;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 
@@ -33,7 +32,6 @@ public class NotesConfig {
     @Value("${thisnode.attachment-root}")
     private String attachmentRoot;
 
-
     public Path markdownRoot() {
         return Paths.get(markdownRoot).toAbsolutePath().normalize();
     }
@@ -46,27 +44,13 @@ public class NotesConfig {
         return Paths.get(dataRoot).toAbsolutePath().normalize();
     }
 
-    /**
-     * 笔记目录的路径规则：卡片 md（{@code cardRefs/}）、笔记 meta（{@code meta/}）、
-     * 台账（{@code ledgers/}）与日志（{@code logs/}）都挂在 {@code thisnode.markdown-root} 下。
-     *
-     * <p>领域层（{@code NoteRepository}/{@code CardRepository}）依赖这个值对象而不是本配置类 ——
-     * 路径规则集中在一处，测试也能拿临时目录自己造一个。
-     */
-    @Bean
-    public NoteFilePaths noteFilePaths() {
-        return new NoteFilePaths(markdownRoot());
-    }
-
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() throws IOException {
-        for (Path p : new Path[]{
-                dataRoot(), markdownRoot(), attachmentRoot(),
-                Paths.get(dataRoot, "logs")
-        }) {
+        NoteFilePaths.configure(markdownRoot());
+
+        for (Path p : new Path[]{dataRoot(), markdownRoot(), attachmentRoot(), Paths.get(dataRoot, "logs")}) {
             Files.createDirectories(p);
         }
-        // 不再预建 daily/ templates/：卡片 md 平铺在笔记目录根目录，靠 meta 里的 type 区分
-        // 每日笔记与模板，目录不再承担这个语义。
+
     }
 }

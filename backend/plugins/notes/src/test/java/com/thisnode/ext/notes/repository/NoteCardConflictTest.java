@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.domain.NoteFilePaths;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.CardFile;
 import com.thisnode.ext.notes.domain.NoteMeta;
@@ -37,7 +37,8 @@ class NoteCardConflictTest {
 
     @BeforeEach
     void setUp() {
-        store = new NoteRepository(new NoteFilePaths(root));
+        NoteFilePaths.configure(root);
+        store = new NoteRepository();
         cardRepository = new CardRepository(store);
         repository = new CardRepository(store);
     }
@@ -45,7 +46,7 @@ class NoteCardConflictTest {
     /** 建一篇笔记 + 一张卡，返回卡片 id（正文 = 原始内容）。 */
     private String seedCard() {
         String noteId = "note-1";
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.noteFilePaths().noteMetaFilePath(noteId),
+        com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId),
                 NoteMeta.newNoteMeta(noteId, "笔记", "note", null));
         cardRepository.putCard(noteId, CardMeta.newCardMeta("card-1", 0, 0, "", null, null, 1L), "原始内容");
         return "card-1";

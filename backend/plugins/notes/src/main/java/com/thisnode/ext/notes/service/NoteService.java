@@ -3,6 +3,7 @@ package com.thisnode.ext.notes.service;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.Tag;
 import cn.hutool.core.util.IdUtil;
@@ -117,7 +118,7 @@ public class NoteService {
         }
         meta.setTitle(nextTitle);
         meta.touch(System.currentTimeMillis());
-        JsonFileUtils.write(noteRepository.noteFilePaths().noteMetaFilePath(id), meta);
+        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(id), meta);
 
         if (req.tags() != null) {
             setTags(id, req.tags());

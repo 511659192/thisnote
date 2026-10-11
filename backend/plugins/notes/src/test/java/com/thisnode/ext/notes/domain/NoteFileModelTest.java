@@ -3,6 +3,7 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.ext.notes.service.StartupMaintenanceService;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,8 @@ class NoteFileModelTest {
 
     @BeforeEach
     void setUp() {
-        store = new NoteRepository(new NoteFilePaths(root));
+        NoteFilePaths.configure(root);
+        store = new NoteRepository();
         cardRepository = new CardRepository(store);
         maintenance = new StartupMaintenanceService(store);
         maintenance.run();
@@ -193,7 +195,7 @@ class NoteFileModelTest {
         Files.createDirectories(metaDir);
         String legacyMeta = com.alibaba.fastjson2.JSON.toJSONString(Map.of(
                 "v", 2, "id", "note-legacy", "title", "旧笔记", "type", "note",
-                "cardPath", List.of(store.paths().relative(card)),
+                "cardPath", List.of(NoteFilePaths.relative(card)),
                 "createdAt", 1, "updatedAt", 1));
         Files.writeString(metaDir.resolve("note-legacy.json"), legacyMeta, StandardCharsets.UTF_8);
 
@@ -238,7 +240,7 @@ class NoteFileModelTest {
     // ------------------------------------------------------------------ helpers
 
     private void writeNoteMeta(NoteMeta note) {
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMetaPath(note.getId()), note);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaPath(note.getId()), note);
     }
 
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
@@ -250,12 +252,12 @@ class NoteFileModelTest {
                 0, slot * 300.0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, slot,
                 null, null, false, Map.of(), 1L, 1L);
         store.writeCard("测试笔记", card, content, md);
-        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().noteMetaPath(noteId), NoteMeta.class);
+        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(NoteFilePaths.noteMetaPath(noteId), NoteMeta.class);
         if (note != null) {
             List<String> paths = new ArrayList<>(note.getCardPaths());
-            paths.add(Math.max(0, Math.min(slot, paths.size())), store.paths().relative(md));
+            paths.add(Math.max(0, Math.min(slot, paths.size())), NoteFilePaths.relative(md));
             note.setCardPaths(paths);
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMetaPath(note.getId()), note);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaPath(note.getId()), note);
         }
     }
 }

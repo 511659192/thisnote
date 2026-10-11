@@ -3,6 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.domain.NotebookBook;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.util.JsonFileUtils;
@@ -48,7 +49,7 @@ public class NotebookRepository {
             if (book == null) {
                 NotebookBook loaded;
                 try {
-                    loaded = JsonFileUtils.read(noteRepository.noteFilePaths().notebooksFilePath(), NotebookBook.class);
+                    loaded = JsonFileUtils.read(NoteFilePaths.notebooksFilePath(), NotebookBook.class);
                 } catch (IOException | RuntimeException e) {
                     log.warn("分组台账无法读取，按空台账处理：{}", e.toString());
                     loaded = null;
@@ -60,7 +61,7 @@ public class NotebookRepository {
     }
 
     private void save(NotebookBook next) {
-        JsonFileUtils.write(noteRepository.noteFilePaths().notebooksFilePath(), next);
+        JsonFileUtils.write(NoteFilePaths.notebooksFilePath(), next);
         book = next;
     }
 
@@ -137,7 +138,7 @@ public class NotebookRepository {
         if (meta != null) {
             meta.setNotebookId(notebookId);
             meta.touch(System.currentTimeMillis());
-            JsonFileUtils.write(noteRepository.noteFilePaths().noteMetaFilePath(meta.getId()), meta);
+            JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(meta.getId()), meta);
         }
     }
 
@@ -226,7 +227,7 @@ public class NotebookRepository {
             if (id.equals(meta.getNotebookId())) {
                 meta.setNotebookId(DEFAULT_GROUP_ID);
                 meta.touch(System.currentTimeMillis());
-                JsonFileUtils.write(noteRepository.noteFilePaths().noteMetaFilePath(meta.getId()), meta);
+                JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(meta.getId()), meta);
             }
         }
         NotebookBook next = book().without(id);

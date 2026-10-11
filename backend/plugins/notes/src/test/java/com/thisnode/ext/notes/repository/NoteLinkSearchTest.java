@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.CardMeta;
 import cn.hutool.core.util.IdUtil;
-import com.thisnode.ext.notes.domain.NoteFilePaths;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,12 +35,13 @@ class NoteLinkSearchTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        store = new NoteRepository(new NoteFilePaths(root));
+        NoteFilePaths.configure(root);
+        store = new NoteRepository();
         cardRepository = new CardRepository(store);
 
         nodes = store;
         CardRepository blocks = new CardRepository(store);
-        tags = new TagRepository(store.noteFilePaths());
+        tags = new TagRepository();
         NotebookRepository notebooks = new NotebookRepository(store);
         service = new NoteService(nodes, tags, notebooks, blocks);
 

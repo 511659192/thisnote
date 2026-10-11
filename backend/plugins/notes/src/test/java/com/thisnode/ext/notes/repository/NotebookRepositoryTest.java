@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.domain.NoteFilePaths;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.CardMeta;
 import cn.hutool.core.util.IdUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +27,8 @@ class NotebookRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        store = new NoteRepository(new NoteFilePaths(root));
+        NoteFilePaths.configure(root);
+        store = new NoteRepository();
         notebooks = new NotebookRepository(store);
     }
 

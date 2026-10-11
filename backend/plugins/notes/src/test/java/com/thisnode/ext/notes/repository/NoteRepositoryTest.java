@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.domain.NoteFilePaths;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.CardFile;
@@ -38,12 +38,13 @@ class NoteRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        store = new NoteRepository(new NoteFilePaths(root));
+        NoteFilePaths.configure(root);
+        store = new NoteRepository();
         cardRepository = new CardRepository(store);
 
         noteRepository = store;
         blockRepository = new CardRepository(store);
-        tagRepository = new TagRepository(store.noteFilePaths());
+        tagRepository = new TagRepository();
         notebookRepository = new NotebookRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, notebookRepository, blockRepository);
     }

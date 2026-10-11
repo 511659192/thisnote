@@ -1,10 +1,9 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.domain.NoteFilePaths;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.domain.TagBook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
@@ -22,18 +21,15 @@ import java.util.List;
  * <p>标签的身份就是它规范化之后的名字（规则见 {@link Tag#normalizeName(String)}）。
  */
 @Repository
-@RequiredArgsConstructor
 public class TagRepository {
 
     private static final Logger log = LoggerFactory.getLogger(TagRepository.class);
-
-    private final NoteFilePaths paths;
 
     /** 台账缓存：读一次就够（与分组台账同构）。 */
     private volatile TagBook book;
 
     private Path tagsFile() {
-        return paths.tagsFilePath();
+        return NoteFilePaths.tagsFilePath();
     }
 
     private TagBook book() {
@@ -55,7 +51,7 @@ public class TagRepository {
             TagBook loaded = JsonFileUtils.read(file, TagBook.class);
             return loaded == null ? TagBook.empty() : loaded;
         } catch (IOException | RuntimeException e) {
-            log.warn("标签台账无法读取：{}（{}）", paths.relative(file), e.toString());
+            log.warn("标签台账无法读取：{}（{}）", NoteFilePaths.relative(file), e.toString());
             return TagBook.empty();
         }
     }

@@ -2,6 +2,7 @@ package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.ext.notes.service.StartupMaintenanceService;
+import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,8 @@ class NoteLoadPerfProbe {
     void probe() throws IOException {
         for (int cards : new int[]{1000, 5000, 10000}) {
             Path caseRoot = Files.createTempDirectory("note-perf-" + cards + "-");
-            NoteRepository store = new NoteRepository(new NoteFilePaths(caseRoot));
+            NoteFilePaths.configure(caseRoot);
+            NoteRepository store = new NoteRepository();
             seed(store, caseRoot, cards);
 
                 StartupMaintenanceService maintenance = new StartupMaintenanceService(store);
@@ -76,11 +78,11 @@ class NoteLoadPerfProbe {
                 Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
-                refs.add(store.noteFilePaths().relative(md));
+                refs.add(NoteFilePaths.relative(md));
             }
             NoteMeta meta = NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default");
             meta.setCardPaths(refs);
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.noteFilePaths().noteMetaFilePath(noteId), meta);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), meta);
         }
     }
 
