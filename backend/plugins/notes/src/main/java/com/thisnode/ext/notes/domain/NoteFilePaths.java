@@ -10,7 +10,6 @@ public final class NoteFilePaths {
     /** 卡片内容目录。 */
     public static final String CARDS_DIR = "cardRefs";
     public static final String MD_SUFFIX = ".md";
-    public static final String META_SUFFIX = ".meta.json";
 
     private final Path root;
 
@@ -38,17 +37,17 @@ public final class NoteFilePaths {
     }
 
     /** 一篇笔记的元数据文件；笔记本身没有 md，所以这里只放 json。 */
-    public Path noteMeta(String noteId) {
+    public Path noteMetaFilePath(String noteId) {
         return noteMetaDir().resolve(safeSegment(noteId) + ".json");
     }
 
     /** 标签台账：一个文件装全部标签（名称 / 颜色 / 建立与更新时间），见 {@link TagBook}。 */
-    public Path tagsFile() {
+    public Path tagsFilePath() {
         return ledgersDir().resolve("tags.json");
     }
 
     /** 分组（笔记本）台账（读与写同一个文件）。 */
-    public Path notebooksFile() {
+    public Path notebooksFilePath() {
         return ledgersDir().resolve("notebooks.json");
     }
 
@@ -65,20 +64,9 @@ public final class NoteFilePaths {
         return prefix;
     }
 
-    /** 卡片的 sidecar：{@code x.md} → {@code x.meta.json}（同目录同基名）。 */
-    public static Path sidecarFor(Path contentFile) {
-        String name = contentFile.getFileName().toString();
-        String base = name.endsWith(MD_SUFFIX)
-                ? name.substring(0, name.length() - MD_SUFFIX.length())
-                : name;
-        return contentFile.resolveSibling(base + META_SUFFIX);
-    }
-
-    /** 会被扫描聚合的卡片内容文件：{@code .md}，且不是 sidecar。 */
+    /** 会被扫描聚合的卡片内容文件：{@code .md}。 */
     public boolean isContentFile(Path file) {
-        String name = file.getFileName().toString();
-        return name.toLowerCase(Locale.ROOT).endsWith(MD_SUFFIX)
-                && !name.toLowerCase(Locale.ROOT).endsWith(META_SUFFIX);
+        return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(MD_SUFFIX);
     }
 
     /** 卡片在 meta 里的 id 是完整 UUID，文件名只取前 8 位十六进制。 */

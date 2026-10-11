@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 
@@ -160,7 +159,7 @@ public class CardService {
 
     public void delete(String cardId, boolean deleteContent) {
         Dtos.CardDto card = requireCard(cardId);
-        NoteMeta note = noteRepository.getOne(card.noteId());
+        NoteMeta note = noteRepository.getOneNoteMeta(card.noteId());
         if (cardRepository.count(card.noteId()) <= 1) {
             if (deleteContent) {
                 noteService.delete(card.noteId());

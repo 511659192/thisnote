@@ -24,7 +24,7 @@ public class NoteMeta {
     private String type;
     private List<String> tags;
     private String notebookId;
-    private List<String> cardPath;
+    private List<String> cardPaths;
     private long createdAt;
     private long updatedAt;
 

@@ -33,7 +33,7 @@ public class TagRepository {
     private volatile TagBook book;
 
     private Path tagsFile() {
-        return paths.tagsFile();
+        return paths.tagsFilePath();
     }
 
     private TagBook book() {

@@ -72,7 +72,7 @@ public class NoteService {
 
     /** 扫描正文，找出以标题链接引用该笔记的其他笔记。只在改名时按需计算。 */
     private List<String> referencingNodeIds(String noteId) {
-        NoteMeta note = noteRepository.getOne(noteId);
+        NoteMeta note = noteRepository.getOneNoteMeta(noteId);
         if (note == null || note.getTitle().isBlank()) {
             return List.of();
         }
@@ -94,7 +94,7 @@ public class NoteService {
     }
 
     public void update(String id, Dtos.UpdateNodeRequest req) {
-        NoteMeta meta = noteRepository.getOne(id);
+        NoteMeta meta = noteRepository.getOneNoteMeta(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
@@ -117,7 +117,7 @@ public class NoteService {
         }
         meta.setTitle(nextTitle);
         meta.touch(System.currentTimeMillis());
-        JsonFileUtils.write(noteRepository.paths().noteMeta(id), meta);
+        JsonFileUtils.write(noteRepository.noteFilePaths().noteMetaFilePath(id), meta);
 
         if (req.tags() != null) {
             setTags(id, req.tags());
@@ -152,7 +152,7 @@ public class NoteService {
     }
 
     public List<String> tagsOfNames(String noteId) {
-        NoteMeta meta = noteRepository.getOne(noteId);
+        NoteMeta meta = noteRepository.getOneNoteMeta(noteId);
         if (meta == null) {
             return List.of();
         }
@@ -229,7 +229,7 @@ public class NoteService {
     // ================================================================= delete
 
     /**
-     * 硬删除：卡片 md、sidecar 与笔记 meta 一起消失（仓库层 removeNote）。
+     * 硬删除：卡片 md 与笔记 meta 一起消失。
      */
     public void delete(String id) {
         noteRepository.delete(id);
@@ -238,7 +238,7 @@ public class NoteService {
     // ================================================================= read
 
     public NoteMeta require(String id) {
-        NoteMeta meta = noteRepository.getOne(id);
+        NoteMeta meta = noteRepository.getOneNoteMeta(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }

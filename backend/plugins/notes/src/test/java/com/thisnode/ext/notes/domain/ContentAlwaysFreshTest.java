@@ -34,7 +34,7 @@ class ContentAlwaysFreshTest {
     void setUp() {
         store = new NoteRepository(new NoteFilePaths(root));
         cardRepository = new CardRepository(store);
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(NOTE),
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.noteFilePaths().noteMetaFilePath(NOTE),
                 NoteMeta.newNoteMeta(NOTE, "现读测试", "note", null));
     }
 

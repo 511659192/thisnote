@@ -45,7 +45,7 @@ class NoteCardConflictTest {
     /** 建一篇笔记 + 一张卡，返回卡片 id（正文 = 原始内容）。 */
     private String seedCard() {
         String noteId = "note-1";
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(noteId),
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.noteFilePaths().noteMetaFilePath(noteId),
                 NoteMeta.newNoteMeta(noteId, "笔记", "note", null));
         cardRepository.putCard(noteId, CardMeta.newCardMeta("card-1", 0, 0, "", null, null, 1L), "原始内容");
         return "card-1";

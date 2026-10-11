@@ -76,11 +76,11 @@ class NoteLoadPerfProbe {
                 Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
-                refs.add(store.paths().relative(md));
+                refs.add(store.noteFilePaths().relative(md));
             }
             NoteMeta meta = NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default");
-            meta.setCardPath(refs);
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(noteId), meta);
+            meta.setCardPaths(refs);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.noteFilePaths().noteMetaFilePath(noteId), meta);
         }
     }
 

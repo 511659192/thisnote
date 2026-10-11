@@ -43,12 +43,12 @@ class NoteRepositoryTest {
 
         noteRepository = store;
         blockRepository = new CardRepository(store);
-        tagRepository = new TagRepository(store.paths());
+        tagRepository = new TagRepository(store.noteFilePaths());
         notebookRepository = new NotebookRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, notebookRepository, blockRepository);
     }
 
-    private String newGetOne(String title, String contentMd) {
+    private String newGetOneNoteMeta(String title, String contentMd) {
         String id = noteRepository.insert(title, "note");
         // 首卡编排（NoteService.create 同款）：新架构下 insert 只写 meta。
         cardRepository.putCard(id, CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null,
@@ -59,9 +59,9 @@ class NoteRepositoryTest {
     @Test
     @DisplayName("新建笔记时正文落成一张卡片，读回来是卡片拼接的结果")
     void contentBecomesACard() {
-        String id = newGetOne("会议记录", "# 会议记录\n\n今天讨论了三件事。");
+        String id = newGetOneNoteMeta("会议记录", "# 会议记录\n\n今天讨论了三件事。");
 
-        assertThat(noteRepository.getOne(id).getTitle()).isEqualTo("会议记录");
+        assertThat(noteRepository.getOneNoteMeta(id).getTitle()).isEqualTo("会议记录");
         assertThat(noteRepository.noteMarkdown(id)).isEqualTo("# 会议记录\n\n今天讨论了三件事。");
 
         List<CardMeta> cards = store.cards(id);
@@ -72,7 +72,7 @@ class NoteRepositoryTest {
     @Test
     @DisplayName("硬删除把卡片文件与 meta 一起清掉")
     void deleteRemovesEveryFile() throws IOException {
-        String id = newGetOne("要删的笔记", "内容还在");
+        String id = newGetOneNoteMeta("要删的笔记", "内容还在");
         String cardId = store.cards(id).get(0).id();
         Path card = store.fileOf(cardId);
         assertThat(Files.exists(card)).isTrue();
@@ -82,19 +82,19 @@ class NoteRepositoryTest {
 
         noteRepository.delete(id);
         assertThat(Files.exists(card)).isFalse();
-        assertThat(noteRepository.getOne(id)).isNull();
+        assertThat(noteRepository.getOneNoteMeta(id)).isNull();
         assertThat(store.cards(id)).isEmpty();
         assertThat(Files.exists(root.resolve("meta").resolve(id + ".json"))).isFalse();
     }
 
     @Test
     @DisplayName("标签写在笔记 meta 里，标签 id 就是它的名字")
-    void tagsLiveInGetOneMeta() {
-        String id = newGetOne("带标签的笔记", "正文");
+    void tagsLiveInGetOneNoteMetaMeta() {
+        String id = newGetOneNoteMeta("带标签的笔记", "正文");
 
         store.setNodeTags(id, List.of("#设计", "随笔", "设计"));
         assertThat(noteService.tagsOfNames(id)).containsExactly("设计", "随笔");
-        assertThat(store.getOne(id).getTags()).containsExactly("设计", "随笔");
+        assertThat(store.getOneNoteMeta(id).getTags()).containsExactly("设计", "随笔");
 
         tagRepository.setColor("设计", "#ff0000");
         assertThat(noteService.tagsOf(id)).anySatisfy(tag -> {
@@ -115,31 +115,31 @@ class NoteRepositoryTest {
 
     @Test
     @DisplayName("归属分组写在笔记 meta 上，移动笔记只改那一个文件")
-    void notebookAssignmentIsStoredOnTheGetOne() {
-        String id = newGetOne("要归组的笔记", "正文");
+    void notebookAssignmentIsStoredOnTheGetOneNoteMeta() {
+        String id = newGetOneNoteMeta("要归组的笔记", "正文");
         String group = notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(id, group);
 
-        assertThat(store.getOne(id).getNotebookId()).isEqualTo(group);
+        assertThat(store.getOneNoteMeta(id).getNotebookId()).isEqualTo(group);
         assertThat(notebookRepository.nodeIdsOf(group)).containsExactly(id);
         assertThat(notebookRepository.list("notebook")).singleElement()
                 .satisfies(c -> assertThat(c.count()).isEqualTo(1));
 
         String other = notebookRepository.create("工作", null, "💼", "notebook");
         notebookRepository.setExclusiveGroup(id, other);
-        assertThat(store.getOne(id).getNotebookId()).isEqualTo(other);
+        assertThat(store.getOneNoteMeta(id).getNotebookId()).isEqualTo(other);
         assertThat(notebookRepository.nodeIdsOf(group)).isEmpty();
 
         // 删分组不能让笔记变成无归属
         notebookRepository.delete(other);
-        assertThat(store.getOne(id).getNotebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
+        assertThat(store.getOneNoteMeta(id).getNotebookId()).isEqualTo(NotebookRepository.DEFAULT_GROUP_ID);
     }
 
     @Test
     @DisplayName("列表过滤（标签 / 全文）在内存过滤上等价于旧的 SQL 条件")
     void listFiltersMatchTheOldSql() {
-        String a = newGetOne("苹果笔记", "关于苹果的正文");
-        String b = newGetOne("香蕉笔记", "关于香蕉的正文");
+        String a = newGetOneNoteMeta("苹果笔记", "关于苹果的正文");
+        String b = newGetOneNoteMeta("香蕉笔记", "关于香蕉的正文");
         assertThat(noteService.list(NoteService.Query.defaults())).hasSize(2);
 
         assertThat(noteService.list(new NoteService.Query(null, null, null, "苹果", 500, 0)))

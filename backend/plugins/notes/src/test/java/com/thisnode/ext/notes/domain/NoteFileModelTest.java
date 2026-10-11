@@ -62,12 +62,11 @@ class NoteFileModelTest {
         // 笔记 meta 落在 meta/ 下
         assertThat(Files.exists(root.resolve("meta").resolve(note.getId() + ".json"))).isTrue();
 
-        // 一张卡：文件原地不动，meta 写进了它的头部注释，不再有 sidecar
+        // 一张卡：文件原地不动，meta 写在它的头部注释里
         List<CardMeta> cards = store.cards(note.getId());
         assertThat(cards).hasSize(1);
         assertThat(store.noteIdOf(cards.get(0).id())).isEqualTo(note.getId());
         assertThat(store.content(cards.get(0).id())).contains("今天讨论了三件事");
-        assertThat(Files.exists(NoteFilePaths.sidecarFor(md))).isFalse();
         assertThat(Files.readString(md, StandardCharsets.UTF_8))
                 .startsWith(CardFile.META_PREFIX)
                 .contains(cards.get(0).id());
@@ -109,11 +108,11 @@ class NoteFileModelTest {
         assertThat(Files.exists(b2)).isFalse();
         assertThat(Files.exists(root.resolve("meta").resolve(now + ".json"))).isFalse();
 
-        assertThat(store.getOne(now)).isNull();
+        assertThat(store.getOneNoteMeta(now)).isNull();
         assertThat(store.cards(now)).isEmpty();
         assertThat(store.card("b1")).isNull();
 
-        assertThat(store.getOne(other)).isNotNull();
+        assertThat(store.getOneNoteMeta(other)).isNotNull();
         assertThat(Files.exists(b3)).isTrue();
         assertThat(store.noteMarkdown(other)).isEqualTo("别的内容");
     }
@@ -129,7 +128,7 @@ class NoteFileModelTest {
                 "正文内容");
         store.putExtension("b1", "memory-curve", Map.of("state", "review", "reps", 2));
 
-        NoteMeta note = store.getOne("n1");
+        NoteMeta note = store.getOneNoteMeta("n1");
         assertThat(note.getTitle()).isEqualTo("往返");
         assertThat(note.getTags()).containsExactly("标签一");
         assertThat(note.getNotebookId()).isEqualTo("grp-default");
@@ -171,7 +170,7 @@ class NoteFileModelTest {
         writeCard("only", "card-x", "note-lost", 0, "孤立卡片的内容");
         Files.deleteIfExists(root.resolve("meta").resolve("note-lost.json"));
 
-        assertThat(store.getOne("note-lost")).isNull();
+        assertThat(store.getOneNoteMeta("note-lost")).isNull();
         assertThat(store.findAll()).isEmpty();
 
         // 对账做的事：发现清单里没有这个文件 → 认领成一篇新笔记
@@ -198,10 +197,10 @@ class NoteFileModelTest {
                 "createdAt", 1, "updatedAt", 1));
         Files.writeString(metaDir.resolve("note-legacy.json"), legacyMeta, StandardCharsets.UTF_8);
 
-        NoteMeta loaded = store.getOne("note-legacy");
+        NoteMeta loaded = store.getOneNoteMeta("note-legacy");
 
         assertThat(loaded).isNotNull();
-        assertThat(loaded.getCardPath()).hasSize(1);
+        assertThat(loaded.getCardPaths()).hasSize(1);
         assertThat(store.noteMarkdown("note-legacy")).isEqualTo("旧格式中的正文");
     }
 
@@ -224,39 +223,22 @@ class NoteFileModelTest {
     }
 
     @Test
-    @DisplayName("遗留的 sidecar 不会被清理，也不会污染索引")
-    void legacySidecarIsIgnoredNotSwept() throws IOException {
-        Path md = store.writeCard("残留测试", new CardMeta(CardMeta.SCHEMA, "bbbbbbbb-2222", "",
-                0, 0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, 0, null, null, false,
-                Map.of(), 1L, 1L), "残留卡片正文", null);
-        Path sidecar = NoteFilePaths.sidecarFor(md);
-        Files.writeString(sidecar, "{\"v\":1,\"id\":\"bbbbbbbb-2222\",\"noteId\":\"wrong-note\"}",
+    @DisplayName("非 md 文件不会被认领成笔记")
+    void nonMarkdownFileIsNotClaimed() throws IOException {
+        Path stray = root.resolve("早就删掉的卡片-deadbeef.meta.json");
+        Files.writeString(stray, "{\"v\":1,\"id\":\"deadbeef-1111\",\"noteId\":\"gone\"}",
                 StandardCharsets.UTF_8);
 
         maintenance.run();
 
-        assertThat(Files.exists(sidecar)).isTrue();
-        assertThat(store.findAll()).hasSize(1);
-        assertThat(store.findAll().get(0).getCardPath()).containsExactly(store.paths().relative(md));
-    }
-
-    @Test
-    @DisplayName("孤立的 sidecar（没有同名 md）留在原地，且不会被认领成笔记")
-    void orphanSidecarIsNotClaimed() throws IOException {
-        Path sidecar = root.resolve("早就删掉的卡片-deadbeef.meta.json");
-        Files.writeString(sidecar, "{\"v\":1,\"id\":\"deadbeef-1111\",\"noteId\":\"gone\"}",
-                StandardCharsets.UTF_8);
-
-        maintenance.run();
-
-        assertThat(Files.exists(sidecar)).isTrue();
+        assertThat(Files.exists(stray)).isTrue();
         assertThat(store.findAll()).isEmpty();
     }
 
     // ------------------------------------------------------------------ helpers
 
     private void writeNoteMeta(NoteMeta note) {
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.getId()), note);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMetaPath(note.getId()), note);
     }
 
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
@@ -268,12 +250,12 @@ class NoteFileModelTest {
                 0, slot * 300.0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, slot,
                 null, null, false, Map.of(), 1L, 1L);
         store.writeCard("测试笔记", card, content, md);
-        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().noteMeta(noteId), NoteMeta.class);
+        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().noteMetaPath(noteId), NoteMeta.class);
         if (note != null) {
-            List<String> paths = new ArrayList<>(note.getCardPath());
+            List<String> paths = new ArrayList<>(note.getCardPaths());
             paths.add(Math.max(0, Math.min(slot, paths.size())), store.paths().relative(md));
-            note.setCardPath(paths);
-            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(note.getId()), note);
+            note.setCardPaths(paths);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMetaPath(note.getId()), note);
         }
     }
 }

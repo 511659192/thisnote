@@ -33,7 +33,7 @@ class TagRepositoryTest {
     @BeforeEach
     void setUp() {
         store = new NoteRepository(new NoteFilePaths(root));
-        tags = new TagRepository(store.paths());
+        tags = new TagRepository(store.noteFilePaths());
         // 标签的归属在 meta（NoteRepository）、属性在台账（TagRepository）：跨两边的操作由服务编排。
         service = new NoteService(store, tags, new NotebookRepository(store), new CardRepository(store));
     }
@@ -41,11 +41,11 @@ class TagRepositoryTest {
     private void seedNote(String id, String... tagNames) {
         NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null);
         meta.setTags(List.of(tagNames));
-        com.thisnode.ext.notes.util.JsonFileUtils.write(store.paths().noteMeta(id), meta);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(store.noteFilePaths().noteMetaFilePath(id), meta);
     }
 
     private TagBook ledger() throws IOException {
-        return com.thisnode.ext.notes.util.JsonFileUtils.read(store.paths().tagsFile(), TagBook.class);
+        return com.thisnode.ext.notes.util.JsonFileUtils.read(store.noteFilePaths().tagsFilePath(), TagBook.class);
     }
 
     @Test
@@ -68,7 +68,7 @@ class TagRepositoryTest {
 
         service.addTag("n1", "#新标签");
 
-        assertThat(store.getOne("n1").getTags()).containsExactly("新标签");
+        assertThat(store.getOneNoteMeta("n1").getTags()).containsExactly("新标签");
         assertThat(ledger().find("新标签")).isNotNull();
         assertThat(ledger().tags()).hasSize(1);
     }
@@ -81,7 +81,7 @@ class TagRepositoryTest {
 
         service.renameTag("设计", "设计原则");
 
-        assertThat(store.getOne("n1").getTags()).containsExactly("设计原则");
+        assertThat(store.getOneNoteMeta("n1").getTags()).containsExactly("设计原则");
         assertThat(ledger().find("设计")).isNull();
         assertThat(ledger().find("设计原则").color()).isEqualTo("#ff0000");
         assertThat(service.tagCatalog()).extracting(Dtos.TagDto::name).containsExactly("设计原则");

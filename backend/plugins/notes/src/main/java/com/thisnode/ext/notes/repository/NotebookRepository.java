@@ -48,7 +48,7 @@ public class NotebookRepository {
             if (book == null) {
                 NotebookBook loaded;
                 try {
-                    loaded = JsonFileUtils.read(noteRepository.paths().notebooksFile(), NotebookBook.class);
+                    loaded = JsonFileUtils.read(noteRepository.noteFilePaths().notebooksFilePath(), NotebookBook.class);
                 } catch (IOException | RuntimeException e) {
                     log.warn("分组台账无法读取，按空台账处理：{}", e.toString());
                     loaded = null;
@@ -60,7 +60,7 @@ public class NotebookRepository {
     }
 
     private void save(NotebookBook next) {
-        JsonFileUtils.write(noteRepository.paths().notebooksFile(), next);
+        JsonFileUtils.write(noteRepository.noteFilePaths().notebooksFilePath(), next);
         book = next;
     }
 
@@ -133,11 +133,11 @@ public class NotebookRepository {
      * <p>界面上的「移到分组」就是它：归属是唯一的，不是累加。
      */
     public void setExclusiveGroup(String nodeId, String notebookId) {
-        NoteMeta meta = noteRepository.getOne(nodeId);
+        NoteMeta meta = noteRepository.getOneNoteMeta(nodeId);
         if (meta != null) {
             meta.setNotebookId(notebookId);
             meta.touch(System.currentTimeMillis());
-            JsonFileUtils.write(noteRepository.paths().noteMeta(meta.getId()), meta);
+            JsonFileUtils.write(noteRepository.noteFilePaths().noteMetaFilePath(meta.getId()), meta);
         }
     }
 
@@ -226,7 +226,7 @@ public class NotebookRepository {
             if (id.equals(meta.getNotebookId())) {
                 meta.setNotebookId(DEFAULT_GROUP_ID);
                 meta.touch(System.currentTimeMillis());
-                JsonFileUtils.write(noteRepository.paths().noteMeta(meta.getId()), meta);
+                JsonFileUtils.write(noteRepository.noteFilePaths().noteMetaFilePath(meta.getId()), meta);
             }
         }
         NotebookBook next = book().without(id);
@@ -244,7 +244,7 @@ public class NotebookRepository {
     }
 
     public List<Dtos.NotebookDto> notebooksOf(String nodeId) {
-        NoteMeta meta = noteRepository.getOne(nodeId);
+        NoteMeta meta = noteRepository.getOneNoteMeta(nodeId);
         if (meta == null || meta.getNotebookId() == null) {
             return List.of();
         }

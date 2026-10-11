@@ -40,7 +40,7 @@ class NoteLinkSearchTest {
 
         nodes = store;
         CardRepository blocks = new CardRepository(store);
-        tags = new TagRepository(store.paths());
+        tags = new TagRepository(store.noteFilePaths());
         NotebookRepository notebooks = new NotebookRepository(store);
         service = new NoteService(nodes, tags, notebooks, blocks);
 

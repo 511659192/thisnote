@@ -36,7 +36,7 @@ class NoteListTagsTest {
         NoteRepository store = new NoteRepository(new NoteFilePaths(root));
         NoteRepository noteRepository = store;
         CardRepository blockRepository = new CardRepository(store);
-        tagRepository = new TagRepository(store.paths());
+        tagRepository = new TagRepository(store.noteFilePaths());
         NotebookRepository notebookRepository = new NotebookRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, notebookRepository, blockRepository);
     }
