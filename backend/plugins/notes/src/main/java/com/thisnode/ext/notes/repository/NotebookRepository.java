@@ -91,7 +91,7 @@ public class NotebookRepository {
 
     private int countNotes(String notebookId) {
         int count = 0;
-        for (NoteMeta meta : noteRepository.findAll()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (notebookId.equals(meta.getNotebookId())) {
                 count++;
             }
@@ -120,7 +120,7 @@ public class NotebookRepository {
 
     public List<String> nodeIdsOf(String notebookId) {
         List<String> out = new ArrayList<>();
-        for (NoteMeta meta : noteRepository.findAll()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (notebookId != null && notebookId.equals(meta.getNotebookId())) {
                 out.add(meta.getId());
             }
@@ -216,7 +216,7 @@ public class NotebookRepository {
         ensureDefaultGroup();
         Notebook gone = book().find(id);
         String fallbackParent = gone == null ? null : gone.parentId();
-        for (NoteMeta meta : noteRepository.findAll()) {
+        for (NoteMeta meta : noteRepository.getAll()) {
             if (id.equals(meta.getNotebookId())) {
                 meta.setNotebookId(DEFAULT_GROUP_ID);
                 meta.setUpdatedAt(System.currentTimeMillis());

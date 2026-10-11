@@ -23,7 +23,7 @@ public class NoteMeta {
     private String title;
     private String type;
     private String notebookId;
-    private List<String> cardPaths;
+    private List<String> cardFileNames;
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
 

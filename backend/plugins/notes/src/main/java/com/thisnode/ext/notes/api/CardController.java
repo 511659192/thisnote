@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 
 @RestController
@@ -44,33 +43,9 @@ public class CardController {
                 req == null ? null : req.baseContentMd());
     }
 
-    @PostMapping("/batch-update")
-    public Map<String, Object> batchUpdate(@RequestBody Dtos.BatchCardUpdateRequest req) {
-        cardService.batchUpdate(req);
-        return Map.of("ok", true);
-    }
-
     @PostMapping("/update")
     public Card.CardMeta update(@RequestParam String cardId, @RequestBody Dtos.CardUpdate changes) {
         return cardService.update(cardId, changes);
     }
 
-    @PostMapping("/duplicate")
-    public Card.CardMeta duplicate(@RequestParam String cardId,
-                                       @RequestParam(defaultValue = "28") double dx,
-                                       @RequestParam(defaultValue = "28") double dy) {
-        return cardService.duplicate(cardId, dx, dy);
-    }
-
-    @PostMapping("/z")
-    public Card.CardMeta zOrder(@RequestBody Map<String, String> body) {
-        return cardService.zOrder(body.getOrDefault("id", ""), body.getOrDefault("op", "top"));
-    }
-
-    @PostMapping("/delete")
-    public Map<String, Object> delete(@RequestParam String cardId,
-                                      @RequestParam(defaultValue = "false") boolean deleteContent) {
-        cardService.delete(cardId, deleteContent);
-        return Map.of("ok", true);
-    }
 }

@@ -63,13 +63,9 @@ public final class Dtos {
                              Double y,
                              Double w,
                              Double h,
-                             Integer z,
                              String color,
                              String status,
                              Boolean collapsed) {
-    }
-
-    public record BatchCardUpdateRequest(List<CardUpdate> cards) {
     }
 
 }

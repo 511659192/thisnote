@@ -31,12 +31,12 @@ public class Card {
             return null;
         }
 
-        CardMeta cardMeta = CardMeta.metaOf(raw);
-        String content = bodyOf(raw);
+        CardMeta cardMeta = meta(raw);
+        String content = content(raw);
         return new Card(cardMeta, content);
     }
 
-    private static String firstLineOf(String fileContent) {
+    private static String headerLine(String fileContent) {
         if (fileContent == null) {
             return "";
         }
@@ -49,23 +49,30 @@ public class Card {
      * 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。
      */
     public static String compose(CardMeta meta,
-                                 String contentMd) {
+                                 String content) {
         String json = JSON.toJSONString(meta).replace("\r", " ").replace("\n", " ");
-        return META_PREFIX + json + META_SUFFIX + "\n" + (contentMd == null ? "" : contentMd);
+        return META_PREFIX + json + META_SUFFIX + "\n" + (content == null ? "" : content);
     }
 
+    public static CardMeta meta(String fileContent) {
+        String firstLine = headerLine(fileContent);
+        if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX) || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
+            return null;
+        }
+        String json = firstLine.substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length()).strip();
+        try {
+            return JSON.parseObject(json, CardMeta.class);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
 
-
-
-    /**
-     * 正文 = 文件内容去掉头部注释行（没有注释就是原样）。
-     */
-    public static String bodyOf(String fileContent) {
+    public static String content(String fileContent) {
         if (fileContent == null) {
             return "";
         }
         int newline = fileContent.indexOf('\n');
-        if (!firstLineOf(fileContent).startsWith(META_PREFIX)) {
+        if (!headerLine(fileContent).startsWith(META_PREFIX)) {
             return fileContent;
         }
         return newline < 0 ? "" : fileContent.substring(newline + 1);
@@ -107,19 +114,6 @@ public class Card {
                                            String status,
                                            long now) {
             return new CardMeta(SCHEMA, id, title, x, y, DEFAULT_W, DEFAULT_H, 0, color, status, false, Map.of(), now, now);
-        }
-
-        public static CardMeta metaOf(String fileContent) {
-            String firstLine = firstLineOf(fileContent);
-            if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX) || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
-                return null;
-            }
-            String json = firstLine.substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length()).strip();
-            try {
-                return JSON.parseObject(json, CardMeta.class);
-            } catch (RuntimeException e) {
-                return null;
-            }
         }
     }
 }

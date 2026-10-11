@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.repository;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.Card;
@@ -190,7 +189,6 @@ public class CardRepository {
                        Double y,
                        Double w,
                        Double h,
-                       Integer z,
                        String color,
                        String status,
                        Boolean collapsed) {
@@ -198,61 +196,10 @@ public class CardRepository {
         if (current == null) {
             return;
         }
-        putCardMeta(current.setX(x).setY(y).setW(w).setH(h).setZ(z)
+        putCardMeta(current.setX(x).setY(y).setW(w).setH(h)
                            .setTitle(title != null ? title : current.getTitle())
                            .setColor(color).setStatus(status).setCollapsed(collapsed)
                            .setUpdatedAt(System.currentTimeMillis()));
-    }
-
-    /**
-     * Batched geometry write for drag / resize / distribute.
-     */
-    public void updateBatch(List<Dtos.CardUpdate> updates) {
-        if (updates == null || updates.isEmpty()) {
-            return;
-        }
-        for (Dtos.CardUpdate change : updates) {
-            if (change == null || change.id() == null) {
-                continue;
-            }
-            update(change.id(),
-                   change.title(),
-                   change.x(),
-                   change.y(),
-                   change.w(),
-                   change.h(),
-                   change.z(),
-                   change.color(),
-                   change.status(),
-                   change.collapsed());
-        }
-    }
-
-    /**
-     * Highest z on the page; the next card goes on top.
-     */
-    public int nextZ(String noteId) {
-        int top = 0;
-        boolean any = false;
-        for (Card.CardMeta card : noteRepository.cards(noteId)) {
-            top = Math.max(top, card.getZ());
-            any = true;
-        }
-        return any ? top + 1 : 1;
-    }
-
-    public int lowestZ(String noteId) {
-        int low = 0;
-        boolean any = false;
-        for (Card.CardMeta card : noteRepository.cards(noteId)) {
-            low = any ? Math.min(low, card.getZ()) : card.getZ();
-            any = true;
-        }
-        return any ? low - 1 : -1;
-    }
-
-    public void delete(String id) {
-        removeCard(id);
     }
 
     // ================================================================ 卡片写入
@@ -278,9 +225,9 @@ public class CardRepository {
             return null;
         }
         int at = indexOfCard(note, card.getId());
-        Path knownFile = at >= 0 ? Path.of(noteRepository.getRoot().toString(), "cards", note.getCardPaths().get(at)) : null;
+        Path knownFile = at >= 0 ? Path.of(noteRepository.getRoot().toString(), "cards", note.getCardFileNames().get(at)) : null;
         Path file = noteRepository.writeCard(note.getTitle(), card, contentMd, knownFile);
-        List<String> paths = new ArrayList<>(note.getCardPaths());
+        List<String> paths = new ArrayList<>(note.getCardFileNames());
         String cardFileName = file.getFileName().toString();
         if (at >= 0) {
             paths.set(at, cardFileName);
@@ -289,7 +236,7 @@ public class CardRepository {
         } else {
             paths.add(cardFileName);
         }
-        note.setCardPaths(paths);
+        note.setCardFileNames(paths);
         note.setUpdatedAt(System.currentTimeMillis());
         JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", note.getId() + ".json"), note);
         return card;
@@ -306,28 +253,10 @@ public class CardRepository {
         noteRepository.writeCardMeta(card, owned.file());
     }
 
-    /**
-     * 删一张卡片：先摘出笔记清单，再删文件。
-     */
-    public void removeCard(String cardId) {
-        NoteRepository.Owned owned = noteRepository.ownerOf(cardId);
-        if (owned == null) {
-            return;
-        }
-
-        FileUtil.del(owned.file());
-        List<String> paths = new ArrayList<>(owned.note().getCardPaths());
-        paths.remove(owned.file().getFileName().toString());
-        owned.note().setCardPaths(paths);
-        owned.note().setUpdatedAt(System.currentTimeMillis());
-        JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", owned.note().getId() + ".json"), owned.note());
-    }
-
-
     private int indexOfCard(NoteMeta note,
                             String cardId) {
-        for (int i = 0; i < note.getCardPaths().size(); i++) {
-            Path file = Path.of(noteRepository.getRoot().toString(), "cards", note.getCardPaths().get(i));
+        for (int i = 0; i < note.getCardFileNames().size(); i++) {
+            Path file = Path.of(noteRepository.getRoot().toString(), "cards", note.getCardFileNames().get(i));
             Card data = Card.parse(file);
             if (data != null && data.getMeta() != null && cardId.equals(data.getMeta().getId())) {
                 return i;

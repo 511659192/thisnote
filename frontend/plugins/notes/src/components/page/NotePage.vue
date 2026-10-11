@@ -16,7 +16,7 @@ import type { CardUpdate } from '@/api/page'
  *     the clicked point becomes the card's top-left corner
  *   * Ctrl+V                          → the clipboard becomes a card
  *   * type in a card                  → written straight into the note
- *   * a card left empty is removed automatically
+ *   * empty cards remain until their note is deleted
  *
  * There is no dot grid, no groups, no connectors, no board concept.
  */
@@ -349,10 +349,9 @@ async function beginEdit(view: CardView) {
 
 /**
  * Text most recently handed over by a card's blur handler, together with the save request
- * it started. `finishEditing` awaits the request before pruning, so the delete can never race
- * the save (which used to produce a "card not found" 404).
+ * it started. `finishEditing` awaits the request before ending edit mode, so writes stay ordered.
  */
-const lastSave = reactive(new Map<string, { text: string; done: Promise<void> }>())
+const lastSave = reactive(new Map<string, Promise<void>>())
 
 /**
  * The live text of the card being edited, read straight from its textarea.
@@ -360,7 +359,7 @@ const lastSave = reactive(new Map<string, { text: string; done: Promise<void> }>
  * <p>This cannot come from the store or from `lastSave`: the pointer press that leaves a card
  * fires *before* the textarea's `blur`, so at this moment neither has seen the typed text yet.
  * Reading the DOM is what makes "type, then click away" save instead of silently dropping the
- * edit — and dropping it used to delete the card as if it had been left empty.
+ * edit — otherwise typing and clicking away could silently lose the latest text.
  */
 function currentEditorText(cardId: string): string | null {
   const el = root.value?.querySelector<HTMLTextAreaElement>(
@@ -369,12 +368,7 @@ function currentEditorText(cardId: string): string | null {
   return el ? el.value : null
 }
 
-/**
- * Leave the current card: save it first, then drop it if it turned out to be empty.
- *
- * Saving before deleting matters — a card deleted while its own save is in flight would make
- * the server answer "card not found".
- */
+/** Finish editing the current card only after pending writes have completed. */
 async function finishEditing(cardId?: string) {
   const id = cardId ?? page.editingCardId
   if (!id) return
@@ -385,25 +379,20 @@ async function finishEditing(cardId?: string) {
   }
   const live = currentEditorText(id)
   await nextTick()
-  // Prefer the blur handler's save when it already ran (it has the same text); otherwise save
-  // the live text now, and await it so the delete below cannot overtake the save.
+  // Prefer the blur handler's save when it already ran; otherwise save the live text now and
+  // await it before completing the edit.
   let pending = lastSave.get(id)
   if (!pending && live !== null) {
     // Record the write before starting it, so the blur that follows this very press finds a
     // save already in flight and does not send the same text a second time.
-    pending = { text: live, done: page.writeContent(id, live) }
+    pending = page.writeContent(id, live)
     lastSave.set(id, pending)
   }
-  if (pending) await pending.done
-  const text = (pending?.text ?? view.contentMd ?? '').trim()
-  const title = (view.card.title ?? '').trim()
-  if (page.editingCardId === id) page.editingCardId = null
-  if (text || title) return
-  const removed = await page.removeIfEmpty(id)
-  if (removed) {
-    lastSave.delete(id)
-    ui.toast('空卡片已自动删除', 'info', 1800)
+  if (pending) {
+    await pending
+    if (lastSave.get(id) === pending) lastSave.delete(id)
   }
+  if (page.editingCardId === id) page.editingCardId = null
 }
 
 function onSave(p: { cardId: string; contentMd: string }) {
@@ -412,12 +401,12 @@ function onSave(p: { cardId: string; contentMd: string }) {
   // that trailing blur from sending a duplicate request.
   const view = page.cards.find((b) => b.card.id === p.cardId)
   if (view && view.contentMd === p.contentMd) {
-    lastSave.set(p.cardId, { text: p.contentMd, done: Promise.resolve() })
+    lastSave.set(p.cardId, Promise.resolve())
     return Promise.resolve()
   }
-  const done = page.writeContent(p.cardId, p.contentMd)
-  lastSave.set(p.cardId, { text: p.contentMd, done })
-  return done
+  const pending = page.writeContent(p.cardId, p.contentMd)
+  lastSave.set(p.cardId, pending)
+  return pending
 }
 
 /**
@@ -487,16 +476,14 @@ function onKeydown(e: KeyboardEvent) {
     return
   }
   const primary = navigator.platform.toLowerCase().includes('mac') ? e.metaKey : e.ctrlKey
+  if ((primary && e.key.toLowerCase() === 'd') || e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault()
+    return
+  }
 
   if (primary && e.key.toLowerCase() === 'a') {
     e.preventDefault()
     page.selectAll()
-  } else if (primary && e.key.toLowerCase() === 'd') {
-    e.preventDefault()
-    void page.duplicateSelected()
-  } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    e.preventDefault()
-    void page.removeSelected()
   } else if (e.key === 'Escape') {
     if (page.editingCardId) void finishEditing()
     else page.clearSelection()

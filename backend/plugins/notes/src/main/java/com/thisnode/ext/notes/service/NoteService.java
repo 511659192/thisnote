@@ -145,7 +145,7 @@ public class NoteService {
         Query query = q == null ? Query.defaults() : q;
 
         List<NoteMeta> matched = new ArrayList<>();
-        for (NoteMeta noteMeta : noteRepository.findAll()) {
+        for (NoteMeta noteMeta : noteRepository.getAll()) {
             if (matches(noteMeta, query)) {
                 matched.add(noteMeta);
             }

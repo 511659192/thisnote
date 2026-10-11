@@ -32,7 +32,7 @@ public class CardService {
     public static class CardLimitException
             extends com.thisnode.plugin.api.CardLimitException {
         public CardLimitException(int limit) {
-            super("每篇笔记最多 " + limit + " 张卡片。请新建一篇笔记，或先合并/删除部分卡片。", limit);
+            super("每篇笔记最多 " + limit + " 张卡片，无法继续新增卡片。", limit);
         }
     }
 
@@ -139,75 +139,7 @@ public class CardService {
                                 Dtos.CardUpdate changes) {
         requireCard(cardId);
         cardRepository.update(cardId, changes.title(), changes.x(), changes.y(), changes.w(), changes.h(),
-                              changes.z(), changes.color(), changes.status(), changes.collapsed());
-        return cardRepository.find(cardId);
-    }
-
-    /**
-     * Batched geometry write for drag / resize / distribute.
-     */
-    public void batchUpdate(Dtos.BatchCardUpdateRequest req) {
-        List<Dtos.CardUpdate> updates = req == null || req.cards() == null ? List.of() : req.cards();
-        if (updates.isEmpty()) {
-            return;
-        }
-        cardRepository.updateBatch(updates);
-    }
-
-    /**
-     * Duplicate a card into a brand-new note (so the copy can diverge from the original).
-     * The new note starts with the card's text.
-     */
-    public Card.CardMeta duplicate(String cardId,
-                                   double dx,
-                                   double dy) {
-        Card.CardMeta src = requireCard(cardId);
-        String content = noteRepository.content(src.getId());
-        String newNoteId = noteService.create(new Dtos.CreateNodeRequest(
-                null, content, "note", null));
-        String id = cardRepository.create(newNoteId, 0d, 0d, src.getW(), src.getH(), src.getColor(), src.getStatus(),
-                                          content, src.getTitle());
-        return cardRepository.find(id);
-    }
-
-    public void delete(String cardId,
-                       boolean deleteContent) {
-        requireCard(cardId);
-        String noteId = noteRepository.noteIdOf(cardId);
-        NoteMeta note = noteRepository.getOne(noteId);
-        if (cardRepository.count(noteId) <= 1) {
-            if (deleteContent) {
-                noteService.delete(noteId);
-                return;
-            }
-            // Keep the page non-empty: clear the last card rather than leaving nothing.
-            cardRepository.setContent(cardId, "");
-            if (note != null) {
-                syncNoteFromCards(note.getId());
-            }
-            return;
-        }
-        cardRepository.delete(cardId);
-        if (note != null) {
-            syncNoteFromCards(note.getId());
-        }
-    }
-
-    /**
-     * z-order: bring a card to the front or send it back.
-     */
-    public Card.CardMeta zOrder(String cardId,
-                                String op) {
-        Card.CardMeta card = requireCard(cardId);
-        String noteId = noteRepository.noteIdOf(cardId);
-        Integer z = switch (op == null ? "" : op) {
-            case "top" -> cardRepository.nextZ(noteId);
-            case "bottom" -> cardRepository.lowestZ(noteId);
-            case "up" -> card.getZ() + 1;
-            case "down" -> card.getZ() - 1;
-            default -> card.getZ();
-        };
-        cardRepository.update(cardId, null, null, null, null, null, z, null, null, null);
+                              changes.color(), changes.status(), changes.collapsed());
         return cardRepository.find(cardId);
     }
 

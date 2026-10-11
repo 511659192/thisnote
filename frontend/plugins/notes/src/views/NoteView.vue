@@ -133,42 +133,10 @@ async function addCard() {
 function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }) {
   const entries: MenuEntry[] = []
   if (p.target === 'card') {
-    entries.push(
-      { label: '编辑卡片内容', action: () => p.view && void pageRef.value?.beginEdit(p.view) },
-      { label: '复制卡片', shortcut: 'Ctrl D', action: () => void page.duplicateSelected() },
-      { separator: true },
-      { label: '置于顶层', action: () => void page.zOrder('top') },
-      { label: '置于底层', action: () => void page.zOrder('bottom') },
-      { label: '上移一层', action: () => void page.zOrder('up') },
-      { label: '下移一层', action: () => void page.zOrder('down') },
-      { separator: true },
-      {
-        label: '用该卡片新建一篇笔记',
-        action: async () => {
-          const view = p.view
-          if (!view) return
-          const detail = await nodes.createNode({
-            title: view.contentMd.split('\n')[0]?.replace(/^#+\s*/, '').slice(0, 40) || '新笔记',
-            contentMd: view.contentMd,
-          })
-          if (detail) {
-            ui.toast('已用卡片内容新建笔记', 'success')
-            openNode(detail.id)
-          }
-        },
-      },
-      { separator: true },
-      {
-        label: '删除卡片（保留笔记内容）',
-        danger: true,
-        action: () => p.view && void page.removeBlock(p.view.card.id, false),
-      },
-      {
-        label: '删除卡片并删除整篇笔记',
-        danger: true,
-        action: () => p.view && void page.removeBlock(p.view.card.id, true),
-      },
-    )
+    entries.push({
+      label: '编辑卡片内容',
+      action: () => p.view && void pageRef.value?.beginEdit(p.view),
+    })
   } else {
     entries.push(
       { label: '新建卡片（或双击页面空白处）', action: addCard },

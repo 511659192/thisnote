@@ -8,7 +8,6 @@ export interface CardUpdate {
   y?: number | null
   w?: number | null
   h?: number | null
-  z?: number | null
   color?: string | null
   status?: string | null
   collapsed?: boolean | null
@@ -59,12 +58,4 @@ export const pageApi = {
   writeContent: (cardId: string, contentMd: string, baseContentMd: string) =>
     http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardId }),
 
-  duplicateBlock: (cardId: string, dx = 48, dy = 48) =>
-    http.post<CardMeta>('/api/notes/cards/duplicate', undefined, { cardId, dx, dy }),
-
-  removeBlock: (cardId: string, deleteContent = false) =>
-    http.post<{ ok: boolean }>('/api/notes/cards/delete', undefined, { cardId, deleteContent }),
-
-  zOrder: (id: string, op: 'top' | 'bottom' | 'up' | 'down') =>
-    http.post<CardMeta>('/api/notes/cards/z', { id, op }),
 }

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError } from '@/core/http'
-import type { CardMeta, CardView, NotePageData } from '@/api/types'
+import type { CardView, NotePageData } from '@/api/types'
 import { useUiStore } from './ui'
 
 export interface Viewport {
@@ -153,7 +153,7 @@ export const usePageStore = defineStore('notePage', () => {
     if (count.value + adding <= maxBlocks.value) return true
     ui.toast(
       `每篇笔记最多 ${maxBlocks.value} 张卡片，当前 ${count.value} 张。` +
-        `请新建一篇笔记，或先合并/删除部分卡片。`,
+        `请新建另一篇笔记，或整理当前笔记中的卡片内容。`,
       'error',
       5200,
     )
@@ -273,8 +273,7 @@ export const usePageStore = defineStore('notePage', () => {
         title: opts.title ?? '',
       })
       await reload()
-      // 结构性变化要同步进总数缓存：removeIfEmpty 靠它判断「至少保留一张卡」，
-      // 缓存停在 load() 时的旧值会让空卡回收被误拦。
+      // Keep the capacity count current after creating a card.
       totalCards.value++
       // reload() 只按已装载的 ids 拉（懒加载分页），新建的卡不在其中 —— 不补进列表它就不会
       // 渲染，双击建卡看起来「没反应」，打进去的字也随编辑态一起丢掉。
@@ -288,29 +287,6 @@ export const usePageStore = defineStore('notePage', () => {
     } catch (e) {
       ui.toast((e as Error).message, 'error')
       return null
-    }
-  }
-
-  /**
-   * Remove a card that holds nothing. Called when a card is left with neither text nor a
-   * title: an empty card is just noise on the page.
-   *
-   * The page always keeps at least one card, so the last remaining card is cleared instead.
-   */
-  async function removeIfEmpty(cardId: string): Promise<boolean> {
-    if (!noteId.value) return false
-    const view = cards.value.find((b) => b.card.id === cardId)
-    if (!view) return false
-    if ((view.contentMd ?? '').trim() || (view.card.title ?? '').trim()) return false
-    if (count.value <= 1) return false
-    try {
-      await pageApi.removeBlock(cardId, false)
-      totalCards.value--
-      await reload()
-      selection.value = selection.value.filter((id) => id !== cardId)
-      return true
-    } catch {
-      return false
     }
   }
 
@@ -359,8 +335,8 @@ export const usePageStore = defineStore('notePage', () => {
         ui.toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
         await reload()
       } else {
-        // A card deleted while its content was still in flight is an expected race, not an
-        // error worth shouting about.
+        // A note/card file removed externally while this write was in flight is an expected
+        // race, not an error worth shouting about.
         const message = (e as Error).message
         if (!message.includes('card')) {
           ui.toast(`保存失败：${message}`, 'error')
@@ -370,57 +346,6 @@ export const usePageStore = defineStore('notePage', () => {
       savingContent.value = null
       editingCardId.value = null
     }
-  }
-
-  async function removeBlock(cardId: string, deleteContent = false) {
-    if (!noteId.value) return
-    await pageApi.removeBlock(cardId, deleteContent)
-    totalCards.value--
-    // The remaining cards keep the positions the user gave them; the gap stays open.
-    await reload()
-    selection.value = selection.value.filter((id) => id !== cardId)
-  }
-
-  async function removeSelected() {
-    if (!selection.value.length) return
-    const ids = [...selection.value]
-    // Removing the only card would leave the page empty, so keep the last one.
-    const keep = count.value - ids.length
-    const idsToDelete = keep < 1 ? ids.slice(0, ids.length - 1) : ids
-    if (!idsToDelete.length) {
-      ui.toast('页面至少需要保留一张卡片', 'error')
-      return
-    }
-    for (const id of idsToDelete) {
-      await pageApi.removeBlock(id, false)
-    }
-    totalCards.value -= idsToDelete.length
-    // Re-read rather than trusting the local list: the server re-flows the column, so
-    // positions of the surviving cards change too.
-    await reload()
-    selection.value = []
-    if (idsToDelete.length < ids.length) {
-      ui.toast('已保留最后一张卡片（页面不能为空）')
-    }
-  }
-
-  async function duplicateSelected(dx = GRID * 2, dy = GRID * 2) {
-    if (!noteId.value || !selection.value.length) return
-    if (!requireCapacity()) return
-    const created: CardMeta[] = []
-    for (const id of selection.value) {
-      created.push(await pageApi.duplicateBlock(id, dx, dy))
-    }
-    await reload()
-    selection.value = created.map((b) => b.id)
-  }
-
-  async function zOrder(op: 'top' | 'bottom' | 'up' | 'down') {
-    if (!noteId.value || !selection.value.length) return
-    for (const id of selection.value) {
-      await pageApi.zOrder(id, op)
-    }
-    await reload()
   }
 
   async function setColor(color: string | null) {
@@ -590,16 +515,11 @@ export const usePageStore = defineStore('notePage', () => {
     commit,
     addBlock,
     addBlockFromContent,
-    removeIfEmpty,
     sizeForContent,
     defaultCardWidth,
     defaultCardHeight,
     clampWidths,
     writeContent,
-    removeBlock,
-    removeSelected,
-    duplicateSelected,
-    zOrder,
     markManualHeight,
     isManualHeight,
     setColor,
