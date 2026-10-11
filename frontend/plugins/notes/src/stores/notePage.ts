@@ -68,15 +68,15 @@ export const usePageStore = defineStore('notePage', () => {
    * 一批取多少张卡。
    *
    * <p>坐标与正文都在卡片文件里，属于页面级数据：打开笔记时先取这一批交给首屏，滚动到
-   * 底部再由 {@link loadMore} 接着取。列表接口只给了卡片清单（id），不背几何。
+   * 底部再由 {@link loadMore} 接着取。笔记详情只给文件名清单，不背几何。
    */
   const PAGE_SIZE = 8
 
-  const pendingIds = ref<string[]>([])
+  const pendingFileNames = ref<string[]>([])
   const totalCards = ref(0)
 
   /** 本笔记一共有多少张卡（含尚未取回正文的那部分）。 */
-  const pendingCount = computed(() => pendingIds.value.length)
+  const pendingCount = computed(() => pendingFileNames.value.length)
 
   /** 下一页的哨兵落在已加载卡片的下方：靠近视口时取下一批（见 NotePage 的观察器）。 */
   const sentinelY = computed(() => {
@@ -85,22 +85,21 @@ export const usePageStore = defineStore('notePage', () => {
     return lowest + 160
   })
 
-  async function load(id: string, cardIds?: string[]) {
+  async function load(id: string, cardFileNames?: string[]) {
     loading.value = true
     try {
       cards.value = []
-      const all = cardIds ?? []
+      const all = cardFileNames ?? []
       totalCards.value = all.length
       const first = all.slice(0, PAGE_SIZE)
-      pendingIds.value = all.slice(PAGE_SIZE)
+      pendingFileNames.value = all.slice(PAGE_SIZE)
       const page = await pageApi.get(id, first.length ? first : undefined)
       noteId.value = page.noteId
       noteTitle.value = page.noteTitle
       cards.value = page.cards
       maxBlocks.value = page.maxCardsPerNote || 100
-      // 清单里可能含已被别处删掉的卡片：只惦记真正没取回来的那些。
-      const loaded = new Set(cards.value.map((b) => b.card.id))
-      pendingIds.value = pendingIds.value.filter((x) => !loaded.has(x))
+      const loaded = new Set(cards.value.map((view) => view.fileName))
+      pendingFileNames.value = pendingFileNames.value.filter((fileName) => !loaded.has(fileName))
       selection.value = []
       editingCardId.value = null
       restoreViewport(page.noteId)
@@ -116,19 +115,18 @@ export const usePageStore = defineStore('notePage', () => {
   /** 取下一批卡片（视口滚到底时调用）：几何与正文一起回来，追加到页面末尾。 */
   async function loadMore(): Promise<boolean> {
     const id = noteId.value
-    if (!id || !pendingIds.value.length || loading.value) return false
-    const batch = pendingIds.value.slice(0, PAGE_SIZE)
+    if (!id || !pendingFileNames.value.length || loading.value) return false
+    const batch = pendingFileNames.value.slice(0, PAGE_SIZE)
     try {
       const page = await pageApi.get(id, batch)
-      const seen = new Set(cards.value.map((b) => b.card.id))
+      const seen = new Set(cards.value.map((view) => view.card.id))
       for (const view of page.cards) {
         if (!seen.has(view.card.id)) cards.value.push(view)
       }
-      const arrived = new Set(page.cards.map((b) => b.card.id))
-      // 别处删掉的卡片不会再回来：把这一批里没回来的从待取队列里摘掉，避免反复请求。
-      pendingIds.value = pendingIds.value
+      const arrived = new Set(page.cards.map((view) => view.fileName))
+      pendingFileNames.value = pendingFileNames.value
         .slice(PAGE_SIZE)
-        .filter((x) => !arrived.has(x))
+        .filter((fileName) => !arrived.has(fileName))
       return true
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -139,10 +137,10 @@ export const usePageStore = defineStore('notePage', () => {
   /** Re-read the page without disturbing the viewport or the card being edited. */
   async function reload() {
     if (!noteId.value) return
-    const ids = cards.value.map((b) => b.card.id)
-    const page = await pageApi.get(noteId.value, ids.length ? ids : undefined)
-    const seen = new Set(ids)
-    const extra = page.cards.filter((b) => !seen.has(b.card.id))
+    const fileNames = cards.value.map((view) => view.fileName)
+    const cardIds = new Set(cards.value.map((view) => view.card.id))
+    const page = await pageApi.get(noteId.value, fileNames.length ? fileNames : undefined)
+    const extra = page.cards.filter((view) => !cardIds.has(view.card.id))
     cards.value = [...page.cards, ...extra]
     noteTitle.value = page.noteTitle
   }

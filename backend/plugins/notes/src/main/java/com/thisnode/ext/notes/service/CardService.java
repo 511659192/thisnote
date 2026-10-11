@@ -83,16 +83,27 @@ public class CardService {
     }
 
     public CardsPageDto page(String noteId,
-                         List<String> ids) {
+                             List<String> requestedFileNames) {
         NoteMeta note = noteService.require(noteId);
-        Set<String> wanted = ids == null ? null : new HashSet<>(ids);
-        List<StoredCard> rows = cards(note);
-        if (wanted != null) {
-            rows = rows.stream().filter(card -> wanted.contains(card.meta().getId())).toList();
+        List<StoredCard> rows;
+        if (requestedFileNames == null) {
+            rows = cards(note);
+        } else {
+            Set<String> wanted = new HashSet<>(requestedFileNames);
+            rows = new ArrayList<>(wanted.size());
+            for (String fileName : cardFileNames(note)) {
+                if (!wanted.contains(fileName)) {
+                    continue;
+                }
+                Card card = cardRepository.get(fileName);
+                if (card != null && card.getMeta() != null) {
+                    rows.add(new StoredCard(note, fileName, card));
+                }
+            }
         }
         List<CardViewDto> views = new ArrayList<>(rows.size());
         for (StoredCard stored : rows) {
-            views.add(new CardViewDto(stored.meta(), stored.card().getContent(), note.getTitle()));
+            views.add(new CardViewDto(stored.fileName(), stored.meta(), stored.card().getContent(), note.getTitle()));
         }
         return new CardsPageDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
     }
@@ -117,7 +128,7 @@ public class CardService {
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
         note.setCardFileNames(fileNames);
         noteRepository.save(note);
-        return new CardViewDto(card, content, note.getTitle());
+        return new CardViewDto(fileName, card, content, note.getTitle());
     }
 
     private double[] nextFlowPosition(NoteMeta note) {
@@ -152,7 +163,7 @@ public class CardService {
         String body = contentMd == null ? "" : contentMd;
         cardRepository.save(meta, body, stored.fileName());
         noteRepository.save(stored.note());
-        return new CardViewDto(meta, body, stored.note().getTitle());
+        return new CardViewDto(stored.fileName(), meta, body, stored.note().getTitle());
     }
 
     public CardMeta update(String cardId,

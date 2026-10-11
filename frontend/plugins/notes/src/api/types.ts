@@ -37,6 +37,7 @@ export interface CardMeta {
 
 /** A card's metadata plus the note-level context delivered by the page endpoint. */
 export interface CardView {
+  fileName: string
   card: CardMeta
   /** Card body, stored separately from the card's metadata. */
   contentMd: string
@@ -52,8 +53,6 @@ export interface NotePageData {
   maxCardsPerNote: number
   updatedAt: number
 }
-
-export type CardId = string
 
 /**
  * 一篇笔记的 meta（后端原样返回的列表行）：没有正文体，摘要与计数是后端写入时算好的缓存。
@@ -75,9 +74,8 @@ export interface NoteDetail {
   id: string
   title: string
   type: NoteType
-  /** 有序卡片 ID 清单；页面级数据按需取。 */
-  cards: CardId[]
-  notebooks: Notebook[]
+  /** 有序卡片文件名清单；页面级数据按需取。 */
+  cardFileNames: string[]
   createdAt: number
   updatedAt: number
 }

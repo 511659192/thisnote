@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Coordinates notebook-ledger operations with note metadata membership. */
+/**
+ * Coordinates notebook-ledger operations with note metadata membership.
+ */
 @Service
 @RequiredArgsConstructor
 public class NotebookService {
@@ -24,26 +26,55 @@ public class NotebookService {
         List<NoteMeta> notes = noteRepository.getAll();
         List<NotebookDto> result = new ArrayList<>(notebooks.size());
         for (Notebook notebook : notebooks) {
-            int count = (int) notes.stream()
-                    .filter(note -> notebook.id().equals(note.getNotebookId()))
-                    .count();
-            result.add(dto(notebook, count));
+            int count = (int) notes.stream().filter(note -> notebook.id().equals(note.getNotebookId())).count();
+            result.add(new NotebookDto(notebook.id(),
+                                       notebook.type(),
+                                       notebook.title(),
+                                       notebook.parentId(),
+                                       notebook.icon(),
+                                       notebook.sortOrder(),
+                                       count,
+                                       notebook.createdAt(),
+                                       notebook.updatedAt()));
         }
         return result;
     }
 
     public NotebookDto find(String id) {
         Notebook notebook = notebookRepository.find(id);
-        return notebook == null ? null : dto(notebook, countNotes(id));
+        return notebook == null ? null : new NotebookDto(notebook.id(),
+                                                         notebook.type(),
+                                                         notebook.title(),
+                                                         notebook.parentId(),
+                                                         notebook.icon(),
+                                                         notebook.sortOrder(),
+                                                         countNotes(id),
+                                                         notebook.createdAt(),
+                                                         notebook.updatedAt());
     }
 
-    public String create(String title, String parentId, String icon, String type) {
+    public String create(String title,
+                         String parentId,
+                         String icon,
+                         String type) {
         return notebookRepository.create(title, parentId, icon, type);
     }
 
-    public NotebookDto update(String id, String title, String parentId, String icon, Integer sortOrder) {
+    public NotebookDto update(String id,
+                              String title,
+                              String parentId,
+                              String icon,
+                              Integer sortOrder) {
         Notebook notebook = notebookRepository.update(id, title, parentId, icon, sortOrder);
-        return dto(notebook, countNotes(id));
+        return new NotebookDto(notebook.id(),
+                               notebook.type(),
+                               notebook.title(),
+                               notebook.parentId(),
+                               notebook.icon(),
+                               notebook.sortOrder(),
+                               countNotes(id),
+                               notebook.createdAt(),
+                               notebook.updatedAt());
     }
 
     public void delete(String id) {
@@ -51,8 +82,7 @@ public class NotebookService {
             return;
         }
         if (NotebookRepository.DEFAULT_GROUP_ID.equals(id)) {
-            throw new IllegalArgumentException("「" + NotebookRepository.DEFAULT_GROUP_TITLE
-                    + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
+            throw new IllegalArgumentException("「" + NotebookRepository.DEFAULT_GROUP_TITLE + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
         }
         for (NoteMeta note : noteRepository.getAll()) {
             if (id.equals(note.getNotebookId())) {
@@ -61,15 +91,6 @@ public class NotebookService {
             }
         }
         notebookRepository.delete(id);
-    }
-
-    public List<NotebookDto> notebooksOf(String noteId) {
-        NoteMeta note = noteRepository.getOne(noteId);
-        if (note == null || note.getNotebookId() == null) {
-            return List.of();
-        }
-        Notebook notebook = notebookRepository.find(note.getNotebookId());
-        return notebook == null ? List.of() : List.of(dto(notebook, null));
     }
 
     private int countNotes(String notebookId) {
@@ -82,9 +103,4 @@ public class NotebookService {
         return count;
     }
 
-    private static NotebookDto dto(Notebook notebook, Integer count) {
-        return new NotebookDto(notebook.id(), notebook.type(), notebook.title(),
-                notebook.parentId(), notebook.icon(), notebook.sortOrder(), count,
-                notebook.createdAt(), notebook.updatedAt());
-    }
 }

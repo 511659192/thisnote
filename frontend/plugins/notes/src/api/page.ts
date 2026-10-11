@@ -19,15 +19,15 @@ export interface CardUpdate {
  * <p>Nested under the note because a card has no meaning outside its note — there is no
  * board/container entity in this model.
  *
- * <p>列表接口只给卡片清单（`NoteMeta.cards`，只有身份）；坐标与正文都在卡片文件里，
- * 属于页面级数据，打开笔记时用 {@link pageApi.get} 的 `ids` 按视口分批取。
+ * <p>笔记详情只给卡片文件名清单；坐标与正文都在卡片文件里，属于页面级数据，
+ * 打开笔记时用 {@link pageApi.get} 的 `cardFileNames` 按视口分批取。
  */
 export const pageApi = {
-  /** 这几张卡（`ids` 省略 = 整页）：卡片几何 + 它自己的正文。 */
-  get: (noteId: string, ids?: string[]) =>
+  /** 这些卡片文件名省略 = 整页：卡片几何 + 它自己的正文。 */
+  get: (noteId: string, cardFileNames?: string[]) =>
     http.get<NotePageData>('/api/notes/cards', {
       noteId,
-      ids: ids && ids.length ? ids.map(encodeURIComponent).join(',') : undefined,
+      cardFileNames: cardFileNames && cardFileNames.length ? cardFileNames.join(',') : undefined,
     }),
 
   addBlock: (

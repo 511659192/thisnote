@@ -32,7 +32,6 @@ import java.util.Locale;
 public class NoteService {
 
     private final NoteRepository noteRepository;
-    private final NotebookService notebookService;
     private final CardRepository cardRepository;
 
     public String create(CreateNoteRequest req) {
@@ -74,20 +73,12 @@ public class NoteService {
 
     public NoteDetailDto detail(String id) {
         NoteMeta meta = require(id);
-        List<String> cardIds = new ArrayList<>();
-        for (String fileName : meta.getCardFileNames()) {
-            Card card = cardRepository.get(fileName);
-            if (card != null && card.getMeta() != null) {
-                cardIds.add(card.getMeta().getId());
-            }
-        }
         return new NoteDetailDto(meta.getId(),
-                              meta.getTitle(),
-                              meta.getType(),
-                              cardIds,
-                              notebookService.notebooksOf(id),
-                              meta.getCreatedAt(),
-                              meta.getUpdatedAt());
+                                 meta.getTitle(),
+                                 meta.getType(),
+                                 meta.getCardFileNames(),
+                                 meta.getCreatedAt(),
+                                 meta.getUpdatedAt());
     }
 
     public List<NoteMeta> list(NoteListQuery q) {
