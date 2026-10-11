@@ -1,12 +1,11 @@
 package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
-import com.thisnode.ext.notes.api.dto.BatchCardUpdateRequest;
-import com.thisnode.ext.notes.api.dto.CardUpdate;
-import com.thisnode.ext.notes.api.dto.CardView;
-import com.thisnode.ext.notes.api.dto.CardsDto;
+import com.thisnode.ext.notes.api.dto.BatchUpdateCardsRequest;
+import com.thisnode.ext.notes.api.dto.CardViewDto;
+import com.thisnode.ext.notes.api.dto.CardsPageDto;
 import com.thisnode.ext.notes.api.dto.CreateCardRequest;
-import com.thisnode.ext.notes.api.dto.WriteContentRequest;
+import com.thisnode.ext.notes.api.dto.UpdateCardRequest;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
@@ -83,7 +82,7 @@ public class CardService {
         }
     }
 
-    public CardsDto page(String noteId,
+    public CardsPageDto page(String noteId,
                          List<String> ids) {
         NoteMeta note = noteService.require(noteId);
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);
@@ -91,14 +90,14 @@ public class CardService {
         if (wanted != null) {
             rows = rows.stream().filter(card -> wanted.contains(card.meta().getId())).toList();
         }
-        List<CardView> views = new ArrayList<>(rows.size());
+        List<CardViewDto> views = new ArrayList<>(rows.size());
         for (StoredCard stored : rows) {
-            views.add(new CardView(stored.meta(), stored.card().getContent(), note.getTitle()));
+            views.add(new CardViewDto(stored.meta(), stored.card().getContent(), note.getTitle()));
         }
-        return new CardsDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
+        return new CardsPageDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
     }
 
-    public CardView create(String noteId,
+    public CardViewDto create(String noteId,
                            CreateCardRequest req) {
         NoteMeta note = noteService.require(noteId);
         requireCapacity(note, 1);
@@ -119,7 +118,7 @@ public class CardService {
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
         note.setCardFileNames(fileNames);
         noteRepository.save(note);
-        return new CardView(card, content, note.getTitle());
+        return new CardViewDto(card, content, note.getTitle());
     }
 
     private double[] nextFlowPosition(NoteMeta note) {
@@ -141,7 +140,7 @@ public class CardService {
         return (int) Math.min(before, cards.size());
     }
 
-    public CardView writeContent(String cardId,
+    public CardViewDto writeContent(String cardId,
                                  String contentMd,
                                  String baseContentMd) {
         StoredCard stored = requireCard(cardId);
@@ -154,11 +153,11 @@ public class CardService {
         String body = contentMd == null ? "" : contentMd;
         cardRepository.save(meta, body, stored.fileName());
         noteRepository.save(stored.note());
-        return new CardView(meta, body, stored.note().getTitle());
+        return new CardViewDto(meta, body, stored.note().getTitle());
     }
 
     public CardMeta update(String cardId,
-                           CardUpdate changes) {
+                           UpdateCardRequest changes) {
         StoredCard stored = requireCard(cardId);
         CardMeta meta = stored.meta();
         double x = changes.x() == null ? meta.getX() : changes.x();
@@ -175,9 +174,9 @@ public class CardService {
         return meta;
     }
 
-    public void batchUpdate(BatchCardUpdateRequest req) {
-        List<CardUpdate> updates = req.cards();
-        for (CardUpdate update : updates) {
+    public void batchUpdate(BatchUpdateCardsRequest req) {
+        List<UpdateCardRequest> updates = req.cards();
+        for (UpdateCardRequest update : updates) {
             if (update != null && update.id() != null) {
                 update(update.id(), update);
             }

@@ -1,9 +1,9 @@
 package com.thisnode.ext.notes.api;
 
-import com.thisnode.ext.notes.api.dto.CreateNodeRequest;
-import com.thisnode.ext.notes.api.dto.NoteDetail;
-import com.thisnode.ext.notes.api.dto.NoteQuery;
-import com.thisnode.ext.notes.api.dto.UpdateNodeRequest;
+import com.thisnode.ext.notes.api.dto.CreateNoteRequest;
+import com.thisnode.ext.notes.api.dto.NoteDetailDto;
+import com.thisnode.ext.notes.api.dto.NoteListQuery;
+import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.service.NoteService;
 import lombok.RequiredArgsConstructor;
@@ -25,22 +25,22 @@ public class NoteController {
                                @RequestParam(required = false) String text,
                                @RequestParam(defaultValue = "500") int limit,
                                @RequestParam(defaultValue = "0") int offset) {
-        return noteService.list(new NoteQuery(notebookId, type, text, limit, offset));
+        return noteService.list(new NoteListQuery(notebookId, type, text, limit, offset));
     }
 
     @PostMapping("/create")
-    public NoteDetail create(@RequestBody CreateNodeRequest req) {
+    public NoteDetailDto create(@RequestBody CreateNoteRequest req) {
         return noteService.detail(noteService.create(req));
     }
 
     @GetMapping("/detail")
-    public NoteDetail detail(@RequestParam String id) {
+    public NoteDetailDto detail(@RequestParam String id) {
         return noteService.detail(id);
     }
 
     @PostMapping("/update")
-    public NoteDetail update(@RequestParam String id,
-                             @RequestBody UpdateNodeRequest req) {
+    public NoteDetailDto update(@RequestParam String id,
+                                @RequestBody UpdateNoteRequest req) {
         noteService.update(id, req);
         return noteService.detail(id);
     }

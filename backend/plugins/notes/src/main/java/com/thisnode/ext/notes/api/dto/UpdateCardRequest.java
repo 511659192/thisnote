@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.api.dto;
 
-public record CardUpdate(String id,
+public record UpdateCardRequest(String id,
                          String title,
                          Double x,
                          Double y,

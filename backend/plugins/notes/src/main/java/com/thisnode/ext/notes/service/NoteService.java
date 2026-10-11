@@ -1,10 +1,10 @@
 package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
-import com.thisnode.ext.notes.api.dto.CreateNodeRequest;
-import com.thisnode.ext.notes.api.dto.NoteDetail;
-import com.thisnode.ext.notes.api.dto.NoteQuery;
-import com.thisnode.ext.notes.api.dto.UpdateNodeRequest;
+import com.thisnode.ext.notes.api.dto.CreateNoteRequest;
+import com.thisnode.ext.notes.api.dto.NoteDetailDto;
+import com.thisnode.ext.notes.api.dto.NoteListQuery;
+import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
@@ -34,7 +34,7 @@ public class NoteService {
     private final NotebookService notebookService;
     private final CardRepository cardRepository;
 
-    public String create(CreateNodeRequest req) {
+    public String create(CreateNoteRequest req) {
         String id = IdUtil.randomUUID();
         String groupId = req.notebookId() == null ? notebookService.ensureDefaultGroup() : req.notebookId();
         NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(groupId);
@@ -47,7 +47,7 @@ public class NoteService {
     }
 
     public void update(String id,
-                       UpdateNodeRequest req) {
+                       UpdateNoteRequest req) {
         NoteMeta meta = require(id);
         if (req.title() != null && !req.title().equals(meta.getTitle())) {
             meta.setTitle(req.title());
@@ -72,7 +72,7 @@ public class NoteService {
         return meta;
     }
 
-    public NoteDetail detail(String id) {
+    public NoteDetailDto detail(String id) {
         NoteMeta meta = require(id);
         List<String> cardIds = new ArrayList<>();
         for (String fileName : meta.getCardFileNames()) {
@@ -81,7 +81,7 @@ public class NoteService {
                 cardIds.add(card.getMeta().getId());
             }
         }
-        return new NoteDetail(meta.getId(),
+        return new NoteDetailDto(meta.getId(),
                               meta.getTitle(),
                               meta.getType(),
                               cardIds,
@@ -90,8 +90,8 @@ public class NoteService {
                               meta.getUpdatedAt());
     }
 
-    public List<NoteMeta> list(NoteQuery q) {
-        NoteQuery query = q == null ? NoteQuery.defaults() : q;
+    public List<NoteMeta> list(NoteListQuery q) {
+        NoteListQuery query = q == null ? NoteListQuery.defaults() : q;
 
         List<NoteMeta> matched = new ArrayList<>();
         for (NoteMeta noteMeta : noteRepository.getAll()) {
@@ -111,7 +111,7 @@ public class NoteService {
     }
 
     private boolean matches(NoteMeta meta,
-                            NoteQuery query) {
+                            NoteListQuery query) {
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.getType())) {
             return false;
         }

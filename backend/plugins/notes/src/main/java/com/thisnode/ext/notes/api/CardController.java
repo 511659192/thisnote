@@ -1,11 +1,11 @@
 package com.thisnode.ext.notes.api;
 
-import com.thisnode.ext.notes.api.dto.BatchCardUpdateRequest;
-import com.thisnode.ext.notes.api.dto.CardUpdate;
-import com.thisnode.ext.notes.api.dto.CardView;
-import com.thisnode.ext.notes.api.dto.CardsDto;
+import com.thisnode.ext.notes.api.dto.BatchUpdateCardsRequest;
+import com.thisnode.ext.notes.api.dto.CardViewDto;
+import com.thisnode.ext.notes.api.dto.CardsPageDto;
 import com.thisnode.ext.notes.api.dto.CreateCardRequest;
-import com.thisnode.ext.notes.api.dto.WriteContentRequest;
+import com.thisnode.ext.notes.api.dto.UpdateCardRequest;
+import com.thisnode.ext.notes.api.dto.WriteCardContentRequest;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.service.CardService;
 import lombok.RequiredArgsConstructor;
@@ -29,33 +29,33 @@ public class CardController {
 
     /** 这几张卡（{@code ids} 省略 = 整页）：卡片几何 + 它自己的正文。 */
     @GetMapping
-    public CardsDto get(@RequestParam String noteId,
+    public CardsPageDto get(@RequestParam String noteId,
                                   @RequestParam(required = false) List<String> ids) {
         return cardService.page(noteId, ids);
     }
 
     @PostMapping("/create")
-    public CardView create(@RequestParam String noteId,
+    public CardViewDto create(@RequestParam String noteId,
                                      @RequestBody(required = false) CreateCardRequest req) {
         return cardService.create(noteId, req == null ? new CreateCardRequest() : req);
     }
 
     /** Write markdown typed inside a card back into the note. */
     @PostMapping("/content")
-    public CardView writeContent(@RequestParam String cardId,
-                                           @RequestBody(required = false) WriteContentRequest req) {
-        WriteContentRequest request = req == null ? new WriteContentRequest() : req;
+    public CardViewDto writeContent(@RequestParam String cardId,
+                                           @RequestBody(required = false) WriteCardContentRequest req) {
+        WriteCardContentRequest request = req == null ? new WriteCardContentRequest() : req;
         return cardService.writeContent(cardId, request.contentMd(), request.baseContentMd());
     }
 
     @PostMapping("/batch-update")
-    public Map<String, Object> batchUpdate(@RequestBody BatchCardUpdateRequest req) {
+    public Map<String, Object> batchUpdate(@RequestBody BatchUpdateCardsRequest req) {
         cardService.batchUpdate(req);
         return Map.of("ok", true);
     }
 
     @PostMapping("/update")
-    public Card.CardMeta update(@RequestParam String cardId, @RequestBody CardUpdate changes) {
+    public Card.CardMeta update(@RequestParam String cardId, @RequestBody UpdateCardRequest changes) {
         return cardService.update(cardId, changes);
     }
 

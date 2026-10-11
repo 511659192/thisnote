@@ -1,8 +1,8 @@
 package com.thisnode.ext.notes.api;
 
-import com.thisnode.ext.notes.api.dto.NotebookCreateRequest;
+import com.thisnode.ext.notes.api.dto.CreateNotebookRequest;
 import com.thisnode.ext.notes.api.dto.NotebookDto;
-import com.thisnode.ext.notes.api.dto.NotebookRequest;
+import com.thisnode.ext.notes.api.dto.UpdateNotebookRequest;
 import com.thisnode.ext.notes.service.NotebookService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,13 +28,13 @@ public class NotebookController {
     }
 
     @PostMapping("/create")
-    public NotebookDto create(@RequestBody NotebookCreateRequest req) {
+    public NotebookDto create(@RequestBody CreateNotebookRequest req) {
         String id = notebookService.create(req.title(), null, req.icon(), "notebook");
         return notebookService.find(id);
     }
 
     @PostMapping("/update")
-    public NotebookDto update(@RequestParam String id, @RequestBody NotebookRequest req) {
+    public NotebookDto update(@RequestParam String id, @RequestBody UpdateNotebookRequest req) {
         return notebookService.update(id, req.title(), req.parentId(), req.icon(),
                 req.sortOrder());
     }
