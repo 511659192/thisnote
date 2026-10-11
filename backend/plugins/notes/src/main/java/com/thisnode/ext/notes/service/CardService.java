@@ -33,12 +33,6 @@ public class CardService {
     private final NoteService noteService;
     private final NotesConfig config;
 
-    private record StoredCard(NoteMeta note, String fileName, Card card) {
-        CardMeta meta() {
-            return card.getMeta();
-        }
-    }
-
     private List<String> cardFileNames(NoteMeta note) {
         return note == null || note.getCardFileNames() == null ? List.of() : note.getCardFileNames();
     }

@@ -1,5 +1,6 @@
 package com.thisnode.ext.memorycurve;
 
+import com.thisnode.ext.memorycurve.api.dto.ScheduleView;
 import com.thisnode.plugin.api.PluginDataRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,7 +93,7 @@ public class SrsService {
         return Map.of(
                 "cardId", cardId,
                 "enabled", enabled(cardId),
-                "schedule", s == null ? ScheduleView.empty(cardId) : ScheduleView.of(s),
+                "schedule", s == null ? emptySchedule(cardId) : scheduleView(s),
                 "gradePreview", previewDue(basis, System.currentTimeMillis()));
     }
 
@@ -155,7 +156,7 @@ public class SrsService {
         s.setLastReviewedAt(now);
         s.setUpdatedAt(now);
         save(s);
-        return ScheduleView.of(s);
+        return scheduleView(s);
     }
 
     private void apply(CardSchedule s, int grade, long now) {
@@ -389,6 +390,16 @@ public class SrsService {
         return raw instanceof Number n ? n.doubleValue() : fallback;
     }
 
+    private ScheduleView emptySchedule(String cardId) {
+        return new ScheduleView(cardId, "new", EASE_INIT, 0, 0, null, 0, 0, false);
+    }
+
+    private ScheduleView scheduleView(CardSchedule schedule) {
+        return new ScheduleView(schedule.getCardId(), schedule.getState(), schedule.getEase(), schedule.getIntervalDays(),
+                schedule.getDueAt(), schedule.getLastReviewedAt(), schedule.getReps(), schedule.getLapses(),
+                schedule.getDueAt() <= System.currentTimeMillis());
+    }
+
     /**
      * 下一次复习时间，按评分 1..4 各预览一份（epoch 毫秒）。
      *
@@ -410,18 +421,4 @@ public class SrsService {
         return out;
     }
 
-    /** The API shape of one card's schedule; {@code due} is computed, not stored. */
-    public record ScheduleView(String cardId, String state, double ease, double intervalDays,
-                               long dueAt, Long lastReviewedAt, int reps, int lapses, boolean due) {
-
-        public static ScheduleView empty(String cardId) {
-            return new ScheduleView(cardId, "new", EASE_INIT, 0, 0, null, 0, 0, false);
-        }
-
-        public static ScheduleView of(CardSchedule s) {
-            return new ScheduleView(s.getCardId(), s.getState(), s.getEase(), s.getIntervalDays(),
-                    s.getDueAt(), s.getLastReviewedAt(), s.getReps(), s.getLapses(),
-                    s.getDueAt() <= System.currentTimeMillis());
-        }
-    }
 }
