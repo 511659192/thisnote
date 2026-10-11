@@ -480,7 +480,6 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault()
     return
   }
-
   if (primary && e.key.toLowerCase() === 'a') {
     e.preventDefault()
     page.selectAll()

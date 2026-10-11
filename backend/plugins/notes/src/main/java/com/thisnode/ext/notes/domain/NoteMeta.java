@@ -1,5 +1,6 @@
 package com.thisnode.ext.notes.domain;
 
+import com.alibaba.fastjson2.annotation.JSONField;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,7 +24,8 @@ public class NoteMeta {
     private String title;
     private String type;
     private String notebookId;
-    private List<String> cardFileNames;
+    @JSONField(alternateNames = {"cardPaths"})
+    private List<String> cardFileNames = List.of();
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
 
@@ -33,7 +35,11 @@ public class NoteMeta {
         }
 
         try {
-            return JsonFileUtils.read(filePath, NoteMeta.class);
+            NoteMeta note = JsonFileUtils.read(filePath, NoteMeta.class);
+            if (note != null && note.getCardFileNames() == null) {
+                note.setCardFileNames(List.of());
+            }
+            return note;
         } catch (IOException | RuntimeException e) {
             log.warn("元数据无法解析，已跳过：{}", filePath, e);
             return null;

@@ -82,8 +82,7 @@ public class NoteRepository {
     }
 
     public String text(NoteMeta note) {
-        List<String> cardFileNames = Optional.of(note.getCardFileNames()).orElse(Collections.emptyList());
-        return text(cardFileNames);
+        return text(note == null ? null : note.getCardFileNames());
     }
 
     public String text(String id) {
@@ -92,6 +91,9 @@ public class NoteRepository {
     }
 
     public String text(List<String> cardFileNames) {
+        if (cardFileNames == null || cardFileNames.isEmpty()) {
+            return "";
+        }
         StringBuilder joined = new StringBuilder();
         for (String cardFileName : cardFileNames) {
             Card data = Card.parse(Path.of(root.toString(), "cards", cardFileName));
@@ -122,7 +124,7 @@ public class NoteRepository {
 
     private List<String> cardFileNames(String noteId) {
         NoteMeta note = getOne(noteId);
-        return note == null ? List.of() : note.getCardFileNames();
+        return note == null || note.getCardFileNames() == null ? List.of() : note.getCardFileNames();
     }
 
     /**

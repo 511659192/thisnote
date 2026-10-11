@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 
 @RestController
@@ -41,6 +42,12 @@ public class CardController {
         return cardService.writeContent(cardId,
                 req == null || req.contentMd() == null ? "" : req.contentMd(),
                 req == null ? null : req.baseContentMd());
+    }
+
+    @PostMapping("/batch-update")
+    public Map<String, Object> batchUpdate(@RequestBody Dtos.BatchCardUpdateRequest req) {
+        cardService.batchUpdate(req);
+        return Map.of("ok", true);
     }
 
     @PostMapping("/update")

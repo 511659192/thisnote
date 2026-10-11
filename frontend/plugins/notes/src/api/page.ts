@@ -58,4 +58,5 @@ export const pageApi = {
   writeContent: (cardId: string, contentMd: string, baseContentMd: string) =>
     http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardId }),
 
+
 }

@@ -196,10 +196,31 @@ public class CardRepository {
         if (current == null) {
             return;
         }
-        putCardMeta(current.setX(x).setY(y).setW(w).setH(h)
+        double nextX = x == null ? current.getX() : x;
+        double nextY = y == null ? current.getY() : y;
+        double nextW = w == null ? current.getW() : w;
+        double nextH = h == null ? current.getH() : h;
+        String nextColor = color == null ? current.getColor() : color;
+        String nextStatus = status == null ? current.getStatus() : status;
+        boolean nextCollapsed = collapsed == null ? current.isCollapsed() : collapsed;
+        putCardMeta(current.setX(nextX).setY(nextY).setW(nextW).setH(nextH)
                            .setTitle(title != null ? title : current.getTitle())
-                           .setColor(color).setStatus(status).setCollapsed(collapsed)
+                           .setColor(nextColor).setStatus(nextStatus).setCollapsed(nextCollapsed)
                            .setUpdatedAt(System.currentTimeMillis()));
+    }
+
+    /** Batch geometry and appearance changes from a single page interaction. */
+    public void updateBatch(List<Dtos.CardUpdate> updates) {
+        if (updates == null || updates.isEmpty()) {
+            return;
+        }
+        for (Dtos.CardUpdate change : updates) {
+            if (change == null || change.id() == null) {
+                continue;
+            }
+            update(change.id(), change.title(), change.x(), change.y(), change.w(), change.h(),
+                    change.color(), change.status(), change.collapsed());
+        }
     }
 
     // ================================================================ 卡片写入

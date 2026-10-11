@@ -15,23 +15,8 @@ const browser = await chromium.launch(
 const page = await browser.newPage({ viewport: { width: 1500, height: 950 } })
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`))
 
-// Close the right-side information panel: it overlays the page surface and can intercept a drag.
-await page.addInitScript(() => {
-  localStorage.setItem('thisnote.rightPanel', 'closed')
-})
-
 await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 })
 await page.waitForTimeout(2500)
-// Close the information panel if it is open, so the full page surface is available for dragging.
-const panelToggle = page.locator('.topbar button', { hasText: '▤' })
-if (await page.locator('aside.panel').count()) {
-  const toggle = page.locator('.topbar .btn.ghost.icon').nth(2)
-  if (await toggle.count()) {
-    await toggle.click()
-    await page.waitForTimeout(600)
-  }
-  console.log('panel present after toggle attempt:', await page.locator('aside.panel').count())
-}
 await page.locator('.note-row').first().click()
 await page.waitForTimeout(2500)
 

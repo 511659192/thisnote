@@ -9,7 +9,6 @@ import { useUiStore } from '@/stores/ui'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
-import NoteInfoPanel from '@/components/NoteInfoPanel.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import GroupPicker from '@/components/GroupPicker.vue'
 import { primaryLabel } from '@/core/utils'
@@ -44,9 +43,6 @@ let renameCancelled = false
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b']
 
 const modKey = computed(() => primaryLabel())
-
-/** `nodes.current` is already the full detail payload, so the panel can take it as-is. */
-const docForPanel = computed(() => nodes.current)
 
 function openNode(id: string) {
   void router.push(`/notes/${id}`)
@@ -302,7 +298,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <span class="small muted">双击空白处新建卡片 · Ctrl+V 粘贴 · 拖动卡片摆放 · 双击卡片输入</span>
           </div>
         </div>
-        <NoteInfoPanel v-if="ui.rightPanelOpen && docForPanel" :doc="docForPanel" />
       </template>
 
       <div v-else class="empty">

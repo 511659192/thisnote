@@ -26,14 +26,6 @@ const ui = useUiStore()
       <div class="spacer"></div>
       <button
         class="btn ghost icon"
-        :class="{ active: ui.rightPanelOpen }"
-        :title="ui.rightPanelOpen ? '隐藏笔记信息面板' : '显示笔记信息面板'"
-        @click="ui.toggleRightPanel()"
-      >
-        ⊟
-      </button>
-      <button
-        class="btn ghost icon"
         :title="ui.theme === 'dark' ? '切换到浅色' : '切换到深色'"
         @click="ui.toggleTheme()"
       >

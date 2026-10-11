@@ -137,20 +137,6 @@ if (await count('.zoom-bar')) {
   record('缩放控件存在', false)
 }
 
-console.log('\n=== 笔记信息面板 ===')
-const panelToggle = page
-  .locator('.topbar button[title*="右侧面板"]')
-  .first()
-if (await panelToggle.count()) {
-  if (!(await count('.panel'))) {
-    await panelToggle.click()
-    await page.waitForTimeout(900)
-  }
-  record('笔记信息面板可打开', (await count('.panel')) > 0)
-} else {
-  record('右侧面板开关存在', false)
-}
-
 console.log('\n=== 编辑器标题重命名 ===')
 const titleEl = page.locator('.note-head .title').first()
 if (await titleEl.count()) {

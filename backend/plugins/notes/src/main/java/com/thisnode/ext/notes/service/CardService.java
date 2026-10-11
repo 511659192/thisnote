@@ -32,7 +32,7 @@ public class CardService {
     public static class CardLimitException
             extends com.thisnode.plugin.api.CardLimitException {
         public CardLimitException(int limit) {
-            super("每篇笔记最多 " + limit + " 张卡片，无法继续新增卡片。", limit);
+            super("每篇笔记最多 " + limit + " 张卡片，无法继续新增。请新建一篇笔记。", limit);
         }
     }
 
@@ -141,6 +141,11 @@ public class CardService {
         cardRepository.update(cardId, changes.title(), changes.x(), changes.y(), changes.w(), changes.h(),
                               changes.color(), changes.status(), changes.collapsed());
         return cardRepository.find(cardId);
+    }
+
+    public void batchUpdate(Dtos.BatchCardUpdateRequest req) {
+        List<Dtos.CardUpdate> updates = req == null || req.cards() == null ? List.of() : req.cards();
+        cardRepository.updateBatch(updates);
     }
 
 }

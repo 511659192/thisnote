@@ -208,7 +208,6 @@ export const usePageStore = defineStore('notePage', () => {
       if (p.y !== undefined && p.y !== null) view.card.y = p.y
       if (p.w !== undefined && p.w !== null) view.card.w = Math.max(BLOCK_MIN_W, p.w)
       if (p.h !== undefined && p.h !== null) view.card.h = Math.max(BLOCK_MIN_H, p.h)
-      if (p.z !== undefined && p.z !== null) view.card.z = p.z
       if (p.color !== undefined) view.card.color = p.color
       if (p.status !== undefined) view.card.status = p.status
       if (p.collapsed !== undefined && p.collapsed !== null) view.card.collapsed = p.collapsed

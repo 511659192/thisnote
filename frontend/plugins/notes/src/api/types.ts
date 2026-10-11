@@ -65,8 +65,8 @@ export interface NoteMeta {
   type: NoteType
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
-  /** 本篇卡片文件相对笔记根目录的路径清单（顺序即阅读顺序）。 */
-  cardPath: string[]
+  /** 本篇卡片文件名清单（顺序即阅读顺序）。 */
+  cardFileNames: string[]
   createdAt: number
   updatedAt: number
 }

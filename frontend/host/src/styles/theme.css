@@ -1,6 +1,6 @@
 /* ============================================================================
    thisnode design tokens + base layout
-   Light/dark via [data-theme] on <html>; the shell is a three-pane app frame.
+   Light/dark via [data-theme] on <html>; the shell is a two-pane app frame.
    ========================================================================== */
 
 :root {
@@ -24,7 +24,6 @@
 
   --topbar-h: 44px;
   --sidebar-w: 268px;
-  --panel-w: 320px;
 
   --accent: #2563eb;
   --accent-soft: #dbeafe;

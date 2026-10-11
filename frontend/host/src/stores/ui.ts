@@ -5,14 +5,13 @@ import {
   setBusy as shellSetBusy,
   shellState,
   toast as shellToast,
-  toggleRightPanel as shellToggleRightPanel,
   toggleTheme as shellToggleTheme,
 } from '@thisnode/plugin-api'
 
 /**
  * 宿主壳级 UI 状态。
  *
- * 产物分离后，theme / 右侧面板 / toast / busy 是**跨微应用共享**的壳级状态，
+ * 产物分离后，theme / toast / busy 是**跨微应用共享**的壳级状态，
  * 真身放在 {@link shellState}（@thisnode/plugin-api，模块级 reactive 单例）——
  * notes 微应用与宿主看到的是同一份。这里只保留宿主独有的侧栏折叠，
  * 并把共享状态以 Pinia 计算属性的形式代理出去，老调用点（ui.toast(...)）无需改动。
@@ -28,12 +27,10 @@ export const useUiStore = defineStore('ui', () => {
   return {
     // —— 共享壳状态（真身在 @thisnode/plugin-api/shell-state）——
     theme: computed(() => shellState.theme),
-    rightPanelOpen: computed(() => shellState.rightPanelOpen),
     toasts: computed(() => shellState.toasts),
     busy: computed(() => shellState.busy),
     busyLabel: computed(() => shellState.busyLabel),
     toggleTheme: shellToggleTheme,
-    toggleRightPanel: shellToggleRightPanel,
     toast: shellToast,
     dismiss: shellDismiss,
     setBusy: shellSetBusy,

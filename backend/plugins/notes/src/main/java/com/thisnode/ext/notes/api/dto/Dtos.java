@@ -68,4 +68,7 @@ public final class Dtos {
                              Boolean collapsed) {
     }
 
+    public record BatchCardUpdateRequest(List<CardUpdate> cards) {
+    }
+
 }
