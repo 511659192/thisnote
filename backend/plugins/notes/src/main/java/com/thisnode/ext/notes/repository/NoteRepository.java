@@ -6,8 +6,8 @@ import cn.hutool.core.util.StrUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.util.JsonFileUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.nio.file.DirectoryStream;
@@ -18,18 +18,10 @@ import java.util.List;
 
 /** Persists note metadata only. Card files and card-content operations belong to CardRepository. */
 @Repository
+@RequiredArgsConstructor
 public class NoteRepository {
 
-    private final NotesConfig nacosConfig;
-
-    @Autowired
-    public NoteRepository(NotesConfig config) {
-        this(config.markdownRoot());
-    }
-
-    public NoteRepository(Path root) {
-        this.root = root.toAbsolutePath().normalize();
-    }
+    private final NotesConfig notesConfig;
 
     public String insert(String title, String type) {
         String id = IdUtil.randomUUID();
@@ -51,7 +43,7 @@ public class NoteRepository {
 
     @SneakyThrows
     public List<NoteMeta> getAll() {
-        Path metaDir = root.resolve("meta");
+        Path metaDir = notesConfig.getNoteMetaDir();
         if (!Files.isDirectory(metaDir)) {
             return List.of();
         }
@@ -76,6 +68,6 @@ public class NoteRepository {
     }
 
     private Path metaPath(String id) {
-        return root.resolve("meta").resolve(id + ".json");
+        return notesConfig.getNoteMetaDir().resolve(id + ".json");
     }
 }

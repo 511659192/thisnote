@@ -2,13 +2,13 @@ package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,13 +24,7 @@ public class CardService {
     private final CardRepository cardRepository;
     private final NoteRepository noteRepository;
     private final NoteService noteService;
-
-    @Value("${thisnode.max-cards-per-note:100}")
-    private int maxCardsPerNote;
-
-    public int maxCardsPerNote() {
-        return Math.max(1, maxCardsPerNote);
-    }
+    private final NotesConfig config;
 
     public static class CardLimitException extends com.thisnode.plugin.api.CardLimitException {
         public CardLimitException(int limit) {
@@ -51,7 +45,7 @@ public class CardService {
     private List<StoredCard> cards(NoteMeta note) {
         List<StoredCard> result = new ArrayList<>();
         for (String fileName : cardFileNames(note)) {
-            Card card = cardRepository.read(fileName);
+            Card card = cardRepository.get(fileName);
             if (card != null && card.getMeta() != null) {
                 result.add(new StoredCard(note, fileName, card));
             }
@@ -65,7 +59,7 @@ public class CardService {
         }
         for (NoteMeta note : noteRepository.getAll()) {
             for (String fileName : cardFileNames(note)) {
-                Card card = cardRepository.read(fileName);
+                Card card = cardRepository.get(fileName);
                 if (card != null && card.getMeta() != null && cardId.equals(card.getMeta().getId())) {
                     return new StoredCard(note, fileName, card);
                 }
@@ -87,7 +81,7 @@ public class CardService {
     }
 
     private void requireCapacity(NoteMeta note, int adding) {
-        int limit = maxCardsPerNote();
+        int limit = config.getMaxCardsPerNote();
         if (count(note) + adding > limit) {
             throw new CardLimitException(limit);
         }
@@ -104,8 +98,7 @@ public class CardService {
         for (StoredCard stored : rows) {
             views.add(new Dtos.CardView(stored.meta(), stored.card().getContent(), note.getTitle()));
         }
-        return new Dtos.CardsDto(note.getId(), note.getTitle(), views,
-                maxCardsPerNote(), note.getUpdatedAt());
+        return new Dtos.CardsDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
     }
 
     public Dtos.CardView create(String noteId, Dtos.CreateCardRequest req) {

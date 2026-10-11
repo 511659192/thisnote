@@ -1,10 +1,10 @@
 package com.thisnode.ext.notes.repository;
 
+import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
-import cn.hutool.core.util.IdUtil;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +16,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/** Persists the notebook hierarchy ledger only. Note membership belongs to NotebookService. */
+/**
+ * Persists the notebook hierarchy ledger only. Note membership belongs to NotebookService.
+ */
 @Repository
 @RequiredArgsConstructor
 public class NotebookRepository {
@@ -26,11 +28,11 @@ public class NotebookRepository {
     public static final String DEFAULT_GROUP_ID = NotebookBook.DEFAULT_GROUP_ID;
     public static final String DEFAULT_GROUP_TITLE = NotebookBook.DEFAULT_GROUP_TITLE;
 
-    private final NotesConfig config;
+    private final NotesConfig notesConfig;
     private volatile NotebookBook book;
 
     private Path ledgerPath() {
-        return config.markdownRoot().resolve("ledgers").resolve("notebooks.json");
+        return notesConfig.getNotebookDir().resolve("notebooks.json");
     }
 
     private NotebookBook book() {
@@ -61,10 +63,10 @@ public class NotebookRepository {
     public List<Notebook> list(String type) {
         String wantedType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
         return book().notebooks().stream()
-                .filter(notebook -> notebook.type().equals(wantedType))
-                .sorted(Comparator.comparingInt(Notebook::sortOrder)
-                        .thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
-                .toList();
+                     .filter(notebook -> notebook.type().equals(wantedType))
+                     .sorted(Comparator.comparingInt(Notebook::sortOrder)
+                                       .thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
+                     .toList();
     }
 
     public Notebook find(String id) {
@@ -78,11 +80,14 @@ public class NotebookRepository {
         }
         long now = System.currentTimeMillis();
         save(current.with(Notebook.fresh(DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK,
-                DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
+                                         DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
         return DEFAULT_GROUP_ID;
     }
 
-    public String create(String title, String parentId, String icon, String type) {
+    public String create(String title,
+                         String parentId,
+                         String icon,
+                         String type) {
         String parent = requireParent(parentId);
         String id = IdUtil.randomUUID();
         long now = System.currentTimeMillis();
@@ -91,14 +96,20 @@ public class NotebookRepository {
             max = Math.max(max, notebook.sortOrder());
         }
         save(book().with(Notebook.fresh(id,
-                type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
-                title == null || title.isBlank() ? "新建笔记本" : title.trim(),
-                parent, icon, max + 1, now)));
+                                        type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
+                                        title == null || title.isBlank() ? "新建笔记本" : title.trim(),
+                                        parent, icon, max + 1, now)));
         return id;
     }
 
-    /** Full replacement: {@code parentId=null} means move to the top level. */
-    public Notebook update(String id, String title, String parentId, String icon, Integer sortOrder) {
+    /**
+     * Full replacement: {@code parentId=null} means move to the top level.
+     */
+    public Notebook update(String id,
+                           String title,
+                           String parentId,
+                           String icon,
+                           Integer sortOrder) {
         Notebook current = book().find(id);
         if (current == null) {
             throw new IllegalArgumentException("分组不存在：" + id);
@@ -109,11 +120,11 @@ public class NotebookRepository {
         String parent = requireParent(parentId);
         assertNoCycle(id, parent);
         Notebook updated = new Notebook(current.v(), id, current.type(),
-                title == null || title.isBlank() ? current.title() : title.trim(),
-                parent,
-                icon == null ? current.icon() : icon,
-                sortOrder == null ? current.sortOrder() : sortOrder,
-                current.createdAt(), System.currentTimeMillis());
+                                        title == null || title.isBlank() ? current.title() : title.trim(),
+                                        parent,
+                                        icon == null ? current.icon() : icon,
+                                        sortOrder == null ? current.sortOrder() : sortOrder,
+                                        current.createdAt(), System.currentTimeMillis());
         save(book().with(updated));
         return updated;
     }
@@ -129,7 +140,8 @@ public class NotebookRepository {
         return parent;
     }
 
-    private void assertNoCycle(String id, String parent) {
+    private void assertNoCycle(String id,
+                               String parent) {
         String cursor = parent;
         while (cursor != null) {
             if (cursor.equals(id)) {
@@ -140,7 +152,9 @@ public class NotebookRepository {
         }
     }
 
-    /** Remove the ledger entry and lift child groups to its former parent. */
+    /**
+     * Remove the ledger entry and lift child groups to its former parent.
+     */
     public void delete(String id) {
         if (id == null) {
             return;
@@ -151,7 +165,7 @@ public class NotebookRepository {
         List<Notebook> reparented = new ArrayList<>();
         for (Notebook notebook : next.notebooks()) {
             reparented.add(id.equals(notebook.parentId())
-                    ? notebook.withParent(fallbackParent) : notebook);
+                                   ? notebook.withParent(fallbackParent) : notebook);
         }
         save(new NotebookBook(next.v(), reparented));
     }

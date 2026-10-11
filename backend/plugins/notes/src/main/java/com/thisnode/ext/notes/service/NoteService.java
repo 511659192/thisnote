@@ -119,7 +119,7 @@ public class NoteService {
         String content = cardRepository.text(meta.getCardFileNames());
         List<String> cardIds = new ArrayList<>();
         for (String fileName : meta.getCardFileNames()) {
-            Card card = cardRepository.read(fileName);
+            Card card = cardRepository.get(fileName);
             if (card != null && card.getMeta() != null) {
                 cardIds.add(card.getMeta().getId());
             }
@@ -172,7 +172,7 @@ public class NoteService {
             return;
         }
         for (int i = 0; i < fileNames.size(); i++) {
-            Card card = cardRepository.read(fileNames.get(i));
+            Card card = cardRepository.get(fileNames.get(i));
             if (card == null || card.getMeta() == null) {
                 continue;
             }

@@ -1,12 +1,12 @@
 package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.ext.notes.util.MarkdownUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.nio.file.Files;
@@ -15,8 +15,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Reads and writes card files. Note ownership and manifests are coordinated by services. */
+/**
+ * Reads and writes card files. Note ownership and manifests are coordinated by services.
+ */
 @Repository
+@RequiredArgsConstructor
 public class CardRepository {
 
     public static final int DEFAULT_W = 720;
@@ -26,13 +29,9 @@ public class CardRepository {
     public static final int FLOW_GAP = 16;
     public static final int FLOW_X = 0;
 
-    private final Path cardsRoot;
+    private final NotesConfig notesConfig;
 
-    public CardRepository(NotesConfig config) {
-        cardsRoot = config.markdownRoot().resolve("cards");
-    }
-
-    public Card read(String fileName) {
+    public Card get(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return null;
         }
@@ -40,13 +39,13 @@ public class CardRepository {
         return Files.isRegularFile(file) ? Card.parse(file) : null;
     }
 
-    public List<Card> readAll(List<String> fileNames) {
+    public List<Card> getAll(List<String> fileNames) {
         if (fileNames == null || fileNames.isEmpty()) {
             return List.of();
         }
         List<Card> cards = new ArrayList<>(fileNames.size());
         for (String fileName : fileNames) {
-            Card card = read(fileName);
+            Card card = get(fileName);
             if (card != null && card.getMeta() != null) {
                 cards.add(card);
             }
@@ -55,7 +54,7 @@ public class CardRepository {
     }
 
     public List<String> contentsInOrder(List<String> fileNames) {
-        return readAll(fileNames).stream().map(Card::getContent).toList();
+        return getAll(fileNames).stream().map(Card::getContent).toList();
     }
 
     public String text(List<String> fileNames) {
@@ -72,8 +71,13 @@ public class CardRepository {
         return joined.toString();
     }
 
-    /** Write to a known file or choose a unique descriptive filename. */
-    public String write(String noteTitle, CardMeta meta, String contentMd, String knownFileName) {
+    /**
+     * Write to a known file or choose a unique descriptive filename.
+     */
+    public String write(String noteTitle,
+                        CardMeta meta,
+                        String contentMd,
+                        String knownFileName) {
         Path file = knownFileName == null
                 ? resolveContentPath(noteTitle, cardSlug(meta.getTitle(), contentMd), meta.getId())
                 : cardPath(knownFileName);
@@ -81,9 +85,12 @@ public class CardRepository {
         return file.getFileName().toString();
     }
 
-    /** Rewrite only a card header while preserving its body. */
-    public void writeMeta(String fileName, CardMeta meta) {
-        Card card = read(fileName);
+    /**
+     * Rewrite only a card header while preserving its body.
+     */
+    public void writeMeta(String fileName,
+                          CardMeta meta) {
+        Card card = get(fileName);
         String body = card == null ? "" : card.getContent();
         JsonFileUtils.writeText(cardPath(fileName), Card.compose(meta, body));
     }
@@ -98,27 +105,30 @@ public class CardRepository {
     }
 
     private Path cardPath(String fileName) {
-        return cardsRoot.resolve(fileName);
+        return notesConfig.getCardsDir().resolve(fileName);
     }
 
-    private Path resolveContentPath(String noteTitle, String cardTitle, String cardId) {
+    private Path resolveContentPath(String noteTitle,
+                                    String cardTitle,
+                                    String cardId) {
         String noteSlug = cardSlug(noteTitle, null);
         String prefix = cardFilePrefix(noteSlug, cardTitle);
-        Path candidate = cardsRoot.resolve(prefix + "-" + shortId(cardId) + ".md");
+        Path candidate = notesConfig.getCardsDir().resolve(prefix + "-" + shortId(cardId) + ".md");
         if (!Files.exists(candidate)) {
             return candidate;
         }
         String hex = cardId.replace("-", "");
         for (int length = 12; length < hex.length(); length += 4) {
-            Path longer = cardsRoot.resolve(prefix + "-" + hex.substring(0, length) + ".md");
+            Path longer = notesConfig.getCardsDir().resolve(prefix + "-" + hex.substring(0, length) + ".md");
             if (!Files.exists(longer)) {
                 return longer;
             }
         }
-        return cardsRoot.resolve(prefix + "-" + cardId + ".md");
+        return notesConfig.getCardsDir().resolve(prefix + "-" + cardId + ".md");
     }
 
-    private static String cardSlug(String title, String contentMd) {
+    private static String cardSlug(String title,
+                                   String contentMd) {
         if (title != null && !title.isBlank()) {
             return MarkdownUtils.slug(title);
         }
@@ -136,7 +146,8 @@ public class CardRepository {
         return "untitled";
     }
 
-    private static String cardFilePrefix(String noteSlug, String cardSlug) {
+    private static String cardFilePrefix(String noteSlug,
+                                         String cardSlug) {
         String prefix = noteSlug == null || noteSlug.isBlank() ? "untitled" : noteSlug;
         if (cardSlug != null && !cardSlug.isBlank() && !cardSlug.equals(prefix)) {
             prefix += "-" + cardSlug;
