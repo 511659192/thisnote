@@ -1,5 +1,5 @@
 import { http } from '@thisnode/plugin-api'
-import type { CardMeta, CardView, NotePageData } from './types'
+import type { Card, CardMeta, NotePageData } from './types'
 
 export interface CardUpdate {
   fileName: string
@@ -41,7 +41,7 @@ export const pageApi = {
       title?: string
       color?: string
     },
-  ) => http.post<CardView>('/api/notes/cards/create', payload, { noteId }),
+  ) => http.post<Card>('/api/notes/cards/create', payload, { noteId }),
 
   updateBlocks: (cards: CardUpdate[]) =>
     http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { cards }),
@@ -56,7 +56,7 @@ export const pageApi = {
    * 由调用方提示并重新载入 —— 不覆盖外部编辑器（Obsidian / VS Code）写进去的改动。
    */
   writeContent: (cardFileName: string, contentMd: string, baseContentMd: string) =>
-    http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardFileName }),
+    http.post<Card>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardFileName }),
 
 
 }

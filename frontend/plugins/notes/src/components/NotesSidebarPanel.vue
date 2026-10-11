@@ -208,7 +208,7 @@ watch(
             @contextmenu.prevent="onGroupContext($event, group)"
           >
             <span class="label">{{ group.title }}</span>
-            <span v-if="group.count" class="count">{{ group.count }}</span>
+            <span v-if="nodes.notebookCounts[group.id]" class="count">{{ nodes.notebookCounts[group.id] }}</span>
           </button>
         </template>
 

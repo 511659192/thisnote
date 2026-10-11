@@ -31,8 +31,12 @@ public record Notebook(int v, String id, String type, String title,
         title = title == null ? "" : title;
     }
 
-    public static Notebook fresh(String id, String type, String title,
-                                 String icon, int sortOrder, long now) {
+    public static Notebook fresh(String id,
+                                 String type,
+                                 String title,
+                                 String icon,
+                                 int sortOrder,
+                                 long now) {
         return new Notebook(SCHEMA, id, type, title, icon, sortOrder, now, now);
     }
 

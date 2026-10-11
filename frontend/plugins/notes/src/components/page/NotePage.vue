@@ -437,7 +437,6 @@ function onFitHeight(p: { cardId: string; h: number }) {
 /** Double-click empty space: a card whose top-left corner is the clicked point. */
 async function onDoubleClick(e: MouseEvent) {
   if ((e.target as HTMLElement).closest('.card')) return
-  if (!page.requireCapacity()) return
   const world = page.screenToWorld(localPoint(e))
   // The clicked point is the card's left/top edge, so the card lands where the user aimed, and
   // its width is sized to the visible page so a blank strip always remains.
@@ -457,10 +456,6 @@ async function onPaste(e: ClipboardEvent) {
 
   const text = e.clipboardData?.getData('text/plain') ?? ''
   if (!text.trim()) return
-  if (!page.requireCapacity()) {
-    e.preventDefault()
-    return
-  }
   e.preventDefault()
 
   const world = page.screenToWorld(lastPointer.value)

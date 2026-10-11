@@ -2,15 +2,12 @@ package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.BatchUpdateCardsRequest;
-import com.thisnode.ext.notes.api.dto.CardViewDto;
 import com.thisnode.ext.notes.api.dto.CardsPageDto;
 import com.thisnode.ext.notes.api.dto.CreateCardRequest;
 import com.thisnode.ext.notes.api.dto.UpdateCardRequest;
-import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.exception.CardLimitException;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -20,7 +17,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -30,12 +26,11 @@ public class CardService {
     private final CardRepository cardRepository;
     private final NoteRepository noteRepository;
     private final NoteService noteService;
-    private final NotesConfig config;
 
     private List<Card> cards(NoteMeta note) {
         List<Card> result = new ArrayList<>();
         for (String fileName : note.getCardFileNames()) {
-            Card card = cardRepository.get(fileName);
+            Card card = cardRepository.getOne(fileName);
             if (card != null && card.getMeta() != null) {
                 result.add(card);
             }
@@ -52,18 +47,6 @@ public class CardService {
         return null;
     }
 
-    private int count(NoteMeta note) {
-        return note.getCardFileNames().size();
-    }
-
-    private void requireCapacity(NoteMeta note,
-                                 int adding) {
-        int limit = config.getMaxCardsPerNote();
-        if (count(note) + adding > limit) {
-            throw new CardLimitException(limit);
-        }
-    }
-
     public CardsPageDto page(String noteId,
                              List<String> requestedFileNames) {
         NoteMeta note = noteService.require(noteId);
@@ -77,23 +60,18 @@ public class CardService {
                 if (!wanted.contains(fileName)) {
                     continue;
                 }
-                Card card = cardRepository.get(fileName);
+                Card card = cardRepository.getOne(fileName);
                 if (card != null && card.getMeta() != null) {
                     rows.add(card);
                 }
             }
         }
-        List<CardViewDto> views = new ArrayList<>(rows.size());
-        for (Card card : rows) {
-            views.add(new CardViewDto(card.getFileName(), card.getMeta(), card.getContent(), note.getTitle()));
-        }
-        return new CardsPageDto(note.getId(), note.getTitle(), views, config.getMaxCardsPerNote(), note.getUpdatedAt());
+        return new CardsPageDto(note.getId(), note.getTitle(), rows, note.getUpdatedAt());
     }
 
-    public CardViewDto create(String noteId,
-                           CreateCardRequest req) {
+    public Card create(String noteId,
+                       CreateCardRequest req) {
         NoteMeta note = noteService.require(noteId);
-        requireCapacity(note, 1);
         String content = req.contentMd();
         String title = req.title();
         double[] flow = nextFlowPosition(note);
@@ -111,7 +89,7 @@ public class CardService {
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
         note.setCardFileNames(fileNames);
         noteRepository.save(note);
-        return new CardViewDto(fileName, card, content, note.getTitle());
+        return new Card(card, content, fileName);
     }
 
     private double[] nextFlowPosition(NoteMeta note) {
@@ -126,21 +104,24 @@ public class CardService {
                                      double y,
                                      double height) {
         double center = y + height / 2;
-        long before = cards.stream()
-                           .map(Card::getMeta)
-                           .filter(card -> card.getY() + card.getH() / 2 < center)
-                           .count();
-        return (int) Math.min(before, cards.size());
+        int slot = 0;
+        for (Card card : cards) {
+            CardMeta meta = card.getMeta();
+            if (meta.getY() + meta.getH() / 2 < center) {
+                slot++;
+            }
+        }
+        return Math.min(slot, cards.size());
     }
 
-    public CardViewDto writeContent(String cardFileName,
-                                    String contentMd,
-                                    String baseContentMd) {
+    public Card writeContent(String cardFileName,
+                             String contentMd,
+                             String baseContentMd) {
         NoteMeta note = noteForFile(cardFileName);
         if (note == null) {
             throw new NotFoundException("card " + cardFileName);
         }
-        Card card = cardRepository.get(cardFileName);
+        Card card = cardRepository.getOne(cardFileName);
         if (card == null || card.getMeta() == null) {
             throw new NotFoundException("card " + cardFileName);
         }
@@ -154,7 +135,7 @@ public class CardService {
         cardRepository.save(meta, body, cardFileName);
         note.setUpdatedAt(System.currentTimeMillis());
         noteRepository.save(note);
-        return new CardViewDto(cardFileName, meta, body, note.getTitle());
+        return new Card(meta, body, cardFileName);
     }
 
     public CardMeta update(String fileName,
@@ -162,7 +143,7 @@ public class CardService {
         if (noteForFile(fileName) == null) {
             throw new NotFoundException("card " + fileName);
         }
-        Card card = cardRepository.get(fileName);
+        Card card = cardRepository.getOne(fileName);
         if (card == null || card.getMeta() == null) {
             throw new NotFoundException("card " + fileName);
         }

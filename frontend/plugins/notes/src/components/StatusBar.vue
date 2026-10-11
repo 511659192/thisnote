@@ -17,11 +17,10 @@ const saveState = computed(() => page.savingContent ? '保存中…' : '已保�
     <span class="divider-v"></span>
     <template v-if="nodes.current">
       <span class="divider-v"></span>
-      <span class="small muted">{{ page.limitLabel }}</span>
       <span class="small muted">{{ saveState }}</span>
     </template>
     <div class="spacer"></div>
-    <template v-if="nodes.current && page.count">
+    <template v-if="nodes.current">
       <span class="small muted">选中 {{ page.selection.length }}</span>
       <span class="small muted">缩放 {{ Math.round(page.viewport.zoom * 100) }}%</span>
     </template>

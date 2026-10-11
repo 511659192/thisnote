@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError, toast } from '@thisnode/plugin-api'
-import type { CardView, NotePageData } from '@/api/types'
+import type { Card, CardView } from '@/api/types'
 
 export interface Viewport {
   x: number
@@ -41,7 +41,6 @@ export const usePageStore = defineStore('notePage', () => {
   const noteId = ref<string | null>(null)
   const noteTitle = ref('')
   const cards = ref<CardView[]>([])
-  const maxBlocks = ref(100)
   const loading = ref(false)
   const savingContent = ref<string | null>(null)
   const editingCardId = ref<string | null>(null)
@@ -50,11 +49,6 @@ export const usePageStore = defineStore('notePage', () => {
   const gridVisible = ref(localStorage.getItem('thisnote.page.grid') !== 'off')
   const snapToGrid = ref(localStorage.getItem('thisnote.page.snap') === 'on')
 
-  /** 卡片总数（含尚未取回正文的那些）：容量校验与「还可以加几张」都按它算。 */
-  const count = computed(() => (totalCards.value > 0 ? totalCards.value : cards.value.length))
-  const full = computed(() => count.value >= maxBlocks.value)
-  const remaining = computed(() => Math.max(0, maxBlocks.value - count.value))
-  const limitLabel = computed(() => `${count.value} / ${maxBlocks.value} 张卡片`)
   const selectedBlocks = computed(() =>
     cards.value.filter((b) => selection.value.includes(b.card.id)),
   )
@@ -73,10 +67,13 @@ export const usePageStore = defineStore('notePage', () => {
   const PAGE_SIZE = 8
 
   const pendingFileNames = ref<string[]>([])
-  const totalCards = ref(0)
 
   /** 本笔记一共有多少张卡（含尚未取回正文的那部分）。 */
   const pendingCount = computed(() => pendingFileNames.value.length)
+
+  function toCardView(card: Card): CardView {
+    return { fileName: card.fileName, card: card.meta, contentMd: card.content }
+  }
 
   /** 下一页的哨兵落在已加载卡片的下方：靠近视口时取下一批（见 NotePage 的观察器）。 */
   const sentinelY = computed(() => {
@@ -90,14 +87,12 @@ export const usePageStore = defineStore('notePage', () => {
     try {
       cards.value = []
       const all = cardFileNames ?? []
-      totalCards.value = all.length
       const first = all.slice(0, PAGE_SIZE)
       pendingFileNames.value = all.slice(PAGE_SIZE)
       const page = await pageApi.get(id, first.length ? first : undefined)
       noteId.value = page.noteId
       noteTitle.value = page.noteTitle
-      cards.value = page.cards
-      maxBlocks.value = page.maxCardsPerNote || 100
+      cards.value = page.cards.map(toCardView)
       const loaded = new Set(cards.value.map((view) => view.fileName))
       pendingFileNames.value = pendingFileNames.value.filter((fileName) => !loaded.has(fileName))
       selection.value = []
@@ -120,10 +115,14 @@ export const usePageStore = defineStore('notePage', () => {
     try {
       const page = await pageApi.get(id, batch)
       const seen = new Set(cards.value.map((view) => view.card.id))
-      for (const view of page.cards) {
-        if (!seen.has(view.card.id)) cards.value.push(view)
+      for (const card of page.cards) {
+        const view = toCardView(card)
+        if (!seen.has(view.card.id)) {
+          cards.value.push(view)
+          seen.add(view.card.id)
+        }
       }
-      const arrived = new Set(page.cards.map((view) => view.fileName))
+      const arrived = new Set(page.cards.map((card) => card.fileName))
       pendingFileNames.value = pendingFileNames.value
         .slice(PAGE_SIZE)
         .filter((fileName) => !arrived.has(fileName))
@@ -140,20 +139,10 @@ export const usePageStore = defineStore('notePage', () => {
     const fileNames = cards.value.map((view) => view.fileName)
     const cardIds = new Set(cards.value.map((view) => view.card.id))
     const page = await pageApi.get(noteId.value, fileNames.length ? fileNames : undefined)
-    const extra = page.cards.filter((view) => !cardIds.has(view.card.id))
-    cards.value = [...page.cards, ...extra]
+    const refreshed = page.cards.map(toCardView)
+    const extra = refreshed.filter((view) => !cardIds.has(view.card.id))
+    cards.value = [...refreshed, ...extra]
     noteTitle.value = page.noteTitle
-  }
-
-  function requireCapacity(adding = 1): boolean {
-    if (count.value + adding <= maxBlocks.value) return true
-    toast(
-      `每篇笔记最多 ${maxBlocks.value} 张卡片，当前 ${count.value} 张。` +
-        `请新建另一篇笔记，或整理当前笔记中的卡片内容。`,
-      'error',
-      5200,
-    )
-    return false
   }
 
   // ---------------------------------------------------------------- selection
@@ -257,9 +246,8 @@ export const usePageStore = defineStore('notePage', () => {
     opts: { contentMd?: string; title?: string; w?: number; h?: number; surfaceWidth?: number } = {},
   ): Promise<CardView | null> {
     if (!noteId.value) return null
-    if (!requireCapacity()) return null
     try {
-      const created = await pageApi.addBlock(noteId.value, {
+      const createdCard = await pageApi.addBlock(noteId.value, {
         x: Math.round(at.x),
         y: Math.round(at.y),
         w: opts.w ?? defaultCardWidth(opts.surfaceWidth),
@@ -268,10 +256,8 @@ export const usePageStore = defineStore('notePage', () => {
         title: opts.title ?? '',
       })
       await reload()
-      // Keep the capacity count current after creating a card.
-      totalCards.value++
-      // reload() 只按已装载的 ids 拉（懒加载分页），新建的卡不在其中 —— 不补进列表它就不会
-      // 渲染，双击建卡看起来「没反应」，打进去的字也随编辑态一起丢掉。
+      // reload() 只按已装载的文件名拉；新建的卡可能不在其中，因此补进列表供页面渲染。
+      const created = toCardView(createdCard)
       let fresh = cards.value.find((b) => b.card.id === created.card.id)
       if (!fresh) {
         cards.value.push(created)
@@ -323,8 +309,7 @@ export const usePageStore = defineStore('notePage', () => {
     // blur must see the new text so it does not send the same content again.
     view.contentMd = contentMd
     try {
-      const updated = await pageApi.writeContent(view.fileName, contentMd, baseContentMd)
-      if (updated.noteTitle) noteTitle.value = updated.noteTitle
+      await pageApi.writeContent(view.fileName, contentMd, baseContentMd)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
@@ -345,7 +330,9 @@ export const usePageStore = defineStore('notePage', () => {
 
   async function setColor(color: string | null) {
     if (!selection.value.length) return
-    await commit(selection.value.map((id) => ({ id, color })))
+    await commit(cards.value
+      .filter((view) => selection.value.includes(view.card.id))
+      .map((view) => ({ fileName: view.fileName, color })))
   }
 
   // ---------------------------------------------------------------- viewport
@@ -482,7 +469,6 @@ export const usePageStore = defineStore('notePage', () => {
     noteId,
     noteTitle,
     cards,
-    maxBlocks,
     loading,
     savingContent,
     editingCardId,
@@ -492,17 +478,12 @@ export const usePageStore = defineStore('notePage', () => {
     viewport,
     gridVisible,
     snapToGrid,
-    count,
     pendingCount,
     sentinelY,
-    full,
-    remaining,
-    limitLabel,
     bounds,
     load,
     loadMore,
     reload,
-    requireCapacity,
     select,
     clearSelection,
     selectAll,

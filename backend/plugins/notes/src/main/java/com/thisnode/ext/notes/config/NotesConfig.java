@@ -16,9 +16,6 @@ public class NotesConfig {
     @Value("${thisnode.root-dir}")
     private Path rootDir;
 
-    @Value("${thisnode.max-cards-per-note:100}")
-    private int maxCardsPerNote;
-
     @Value("${thisnode.note-meta-dir}")
     private Path noteMetaDir;
 

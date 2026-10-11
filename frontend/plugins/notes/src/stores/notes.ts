@@ -13,6 +13,7 @@ export const useNoteStore = defineStore('notes', () => {
   const loadingList = ref(false)
   const loadingNode = ref(false)
   const notebooks = ref<Notebook[]>([])
+  const notebookCounts = ref<Record<string, number>>({})
 
   const activeNotebookId = ref<string | null>(null)
   const listQuery = ref('')
@@ -89,13 +90,27 @@ export const useNoteStore = defineStore('notes', () => {
     if (!ids) return nodes.value
     return nodes.value.filter((n) => ids.has(n.id))
   })
+  async function countNotesByNotebook(): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {}
+    const pageSize = 500
+    for (let offset = 0; ; offset += pageSize) {
+      const page = await noteApi.list({ limit: pageSize, offset })
+      for (const note of page) {
+        if (note.notebookId) counts[note.notebookId] = (counts[note.notebookId] ?? 0) + 1
+      }
+      if (page.length < pageSize) return counts
+    }
+  }
+
   async function refreshMeta(): Promise<void> {
     if (metaInflight) {
       return metaInflight
     }
     metaInflight = (async () => {
       try {
-        notebooks.value = await notebookApi.list()
+        const [loadedNotebooks, counts] = await Promise.all([notebookApi.list(), countNotesByNotebook()])
+        notebooks.value = loadedNotebooks
+        notebookCounts.value = counts
       } catch (e) {
         /* meta refresh is best-effort */
       } finally {
@@ -246,6 +261,7 @@ export const useNoteStore = defineStore('notes', () => {
     loadingList,
     loadingNode,
     notebooks,
+    notebookCounts,
     activeNotebookId,
     listQuery,
     selectedIds,

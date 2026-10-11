@@ -111,7 +111,7 @@ async function commitTitle() {
 async function addCard() {
   if (!pageRef.value) return
   const created = await page.addBlock(
-    { x: 40 + page.count * 24, y: 40 + page.count * 24 },
+    { x: 40 + (page.cards.length + page.pendingCount) * 24, y: 40 + (page.cards.length + page.pendingCount) * 24 },
     { contentMd: '' },
   )
   if (created) await pageRef.value.beginEdit(created)
@@ -213,13 +213,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                 />
             </div>
 
-            <div class="head-meta">
-              <!-- Quiet until it matters: the running card count is only worth showing once the
-                   note has actually hit its cap. -->
-              <span v-if="page.full" class="small limit-full">
-                已达上限 {{ page.maxBlocks }} 张卡片
-              </span>
-            </div>
           </header>
 
           <NotePage ref="pageRef" @context="onPageContext" />
@@ -279,18 +272,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   outline: none;
   min-width: 260px;
 }
-.head-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.limit-full {
-  color: var(--danger);
-  font-weight: 600;
-}
-
 .view-body {
   flex: 1;
   display: flex;

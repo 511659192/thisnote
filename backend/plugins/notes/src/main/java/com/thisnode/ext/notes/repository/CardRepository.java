@@ -27,7 +27,7 @@ public class CardRepository {
 
     private final NotesConfig notesConfig;
 
-    public Card get(String fileName) {
+    public Card getOne(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return null;
         }
@@ -41,7 +41,7 @@ public class CardRepository {
         }
         List<Card> cards = new ArrayList<>(fileNames.size());
         for (String fileName : fileNames) {
-            Card card = get(fileName);
+            Card card = getOne(fileName);
             if (card != null && card.getMeta() != null) {
                 cards.add(card);
             }
@@ -66,7 +66,7 @@ public class CardRepository {
      */
     public void save(String fileName,
                      CardMeta meta) {
-        Card card = get(fileName);
+        Card card = getOne(fileName);
         String body = card == null ? "" : card.getContent();
         JsonFileUtils.writeText(notesConfig.getCardsDir().resolve(fileName), Card.compose(meta, body));
     }

@@ -27,7 +27,7 @@ public class CardController {
     }
 
     @PostMapping("/create")
-    public CardViewDto create(@RequestParam String noteId,
+    public Card create(@RequestParam String noteId,
                               @RequestBody(required = false) CreateCardRequest req) {
         return cardService.create(noteId, req == null ? new CreateCardRequest() : req);
     }
@@ -36,7 +36,7 @@ public class CardController {
      * Write markdown typed inside a card back into the note.
      */
     @PostMapping("/content")
-    public CardViewDto writeContent(@RequestParam String cardFileName,
+    public Card writeContent(@RequestParam String cardFileName,
                                     @RequestBody(required = false) WriteCardContentRequest req) {
         WriteCardContentRequest request = req == null ? new WriteCardContentRequest() : req;
         return cardService.writeContent(cardFileName, request.contentMd(), request.baseContentMd());

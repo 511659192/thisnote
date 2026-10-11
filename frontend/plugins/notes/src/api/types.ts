@@ -1,22 +1,22 @@
 /**
- * JSON contract mirroring the backend DTOs (backend/.../api/dto/Dtos.java).
+ * JSON contract for backend API and domain responses.
  * Keep both sides in sync when the API changes.
  */
 
 export interface Notebook {
+  v: number
   id: string
   type: string
   title: string
   icon?: string | null
-  sortOrder?: number | null
-  count?: number | null
-  createdAt?: number
-  updatedAt?: number
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
 }
 
 export type NoteType = 'note' | 'daily' | 'template'
 
-/** Card metadata returned directly by the backend. The card body is carried by `CardView`. */
+/** Card metadata returned by the backend inside the Card domain object. */
 export interface CardMeta {
   v: number
   id: string
@@ -34,13 +34,18 @@ export interface CardMeta {
   updatedAt: number
 }
 
-/** A card's metadata plus the note-level context delivered by the page endpoint. */
+/** Card domain object returned by the backend. */
+export interface Card {
+  meta: CardMeta
+  content: string
+  fileName: string
+}
+
+/** Frontend presentation shape derived from `Card`; not part of the HTTP contract. */
 export interface CardView {
   fileName: string
   card: CardMeta
-  /** Card body, stored separately from the card's metadata. */
   contentMd: string
-  noteTitle: string
   /** Client-only transient flags. */
   selected?: boolean
 }
@@ -48,8 +53,7 @@ export interface CardView {
 export interface NotePageData {
   noteId: string
   noteTitle: string
-  cards: CardView[]
-  maxCardsPerNote: number
+  cards: Card[]
   updatedAt: number
 }
 

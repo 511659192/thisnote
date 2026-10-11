@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.service;
 
-import com.thisnode.ext.notes.api.dto.NotebookDto;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -8,7 +7,6 @@ import com.thisnode.ext.notes.repository.NotebookRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,34 +19,12 @@ public class NotebookService {
     private final NotebookRepository notebookRepository;
     private final NoteRepository noteRepository;
 
-    public List<NotebookDto> list(String type) {
-        List<Notebook> notebooks = notebookRepository.getAll(type);
-        List<NoteMeta> notes = noteRepository.getAll();
-        List<NotebookDto> result = new ArrayList<>(notebooks.size());
-        for (Notebook notebook : notebooks) {
-            int count = (int) notes.stream().filter(note -> notebook.id().equals(note.getNotebookId())).count();
-            result.add(new NotebookDto(notebook.id(),
-                                       notebook.type(),
-                                       notebook.title(),
-                                       notebook.icon(),
-                                       notebook.sortOrder(),
-                                       count,
-                                       notebook.createdAt(),
-                                       notebook.updatedAt()));
-        }
-        return result;
+    public List<Notebook> list(String type) {
+        return notebookRepository.getAll(type);
     }
 
-    public NotebookDto find(String id) {
-        Notebook notebook = notebookRepository.getOne(id);
-        return notebook == null ? null : new NotebookDto(notebook.id(),
-                                                         notebook.type(),
-                                                         notebook.title(),
-                                                         notebook.icon(),
-                                                         notebook.sortOrder(),
-                                                         countNotes(id),
-                                                         notebook.createdAt(),
-                                                         notebook.updatedAt());
+    public Notebook find(String id) {
+        return notebookRepository.getOne(id);
     }
 
     public String create(String title,
@@ -57,19 +33,11 @@ public class NotebookService {
         return notebookRepository.create(title, icon, type);
     }
 
-    public NotebookDto update(String id,
-                              String title,
-                              String icon,
-                              Integer sortOrder) {
-        Notebook notebook = notebookRepository.update(id, title, icon, sortOrder);
-        return new NotebookDto(notebook.id(),
-                               notebook.type(),
-                               notebook.title(),
-                               notebook.icon(),
-                               notebook.sortOrder(),
-                               countNotes(id),
-                               notebook.createdAt(),
-                               notebook.updatedAt());
+    public Notebook update(String id,
+                           String title,
+                           String icon,
+                           Integer sortOrder) {
+        return notebookRepository.update(id, title, icon, sortOrder);
     }
 
     public void delete(String id) {
@@ -88,14 +56,5 @@ public class NotebookService {
         notebookRepository.delete(id);
     }
 
-    private int countNotes(String notebookId) {
-        int count = 0;
-        for (NoteMeta note : noteRepository.getAll()) {
-            if (notebookId.equals(note.getNotebookId())) {
-                count++;
-            }
-        }
-        return count;
-    }
 
 }
