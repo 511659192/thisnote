@@ -42,13 +42,4 @@ public class NotebookController {
         notebookService.delete(id);
         return java.util.Map.of("ok", true);
     }
-
-    /** 把笔记移进这个分组（单归属：会离开原来的分组）。 */
-    @PostMapping("/nodes")
-    public java.util.Map<String, Object> addNode(@RequestParam String id,
-                                                 @RequestParam String noteId) {
-        notebookService.setExclusiveGroup(noteId, id);
-        return java.util.Map.of("ok", true);
-    }
-
 }

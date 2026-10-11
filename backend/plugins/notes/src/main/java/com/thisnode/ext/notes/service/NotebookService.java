@@ -69,20 +69,6 @@ public class NotebookService {
         notebookRepository.delete(id);
     }
 
-    public void setExclusiveGroup(String noteId, String notebookId) {
-        NoteMeta note = noteRepository.getOne(noteId);
-        if (note == null) {
-            return;
-        }
-        note.setNotebookId(notebookId);
-        note.setUpdatedAt(System.currentTimeMillis());
-        noteRepository.save(note);
-    }
-
-    public void addNodeToNotebook(String noteId, String notebookId) {
-        setExclusiveGroup(noteId, notebookId);
-    }
-
     public List<Dtos.NotebookDto> notebooksOf(String noteId) {
         NoteMeta note = noteRepository.getOne(noteId);
         if (note == null || note.getNotebookId() == null) {

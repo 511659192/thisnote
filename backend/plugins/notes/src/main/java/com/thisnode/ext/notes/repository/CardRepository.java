@@ -12,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Reads and writes card files. Note ownership and manifests are coordinated by services.
@@ -70,16 +69,12 @@ public class CardRepository {
         return joined.toString();
     }
 
-    /**
-     * Write to a known file or choose a unique descriptive filename.
-     */
-    public String save(String noteTitle,
-                       CardMeta meta,
+    /** Write using the card ID as the filename, or preserve a known filename. */
+    public String save(CardMeta meta,
                        String contentMd,
                        String knownFileName) {
-        Path file = knownFileName == null
-                ? resolveContentPath(noteTitle, cardSlug(meta.getTitle()), meta.getId())
-                : notesConfig.getCardsDir().resolve(knownFileName);
+        String fileName = knownFileName == null ? meta.getId() + ".md" : knownFileName;
+        Path file = notesConfig.getCardsDir().resolve(fileName);
         JsonFileUtils.writeText(file, Card.compose(meta, contentMd));
         return file.getFileName().toString();
     }
@@ -101,57 +96,5 @@ public class CardRepository {
         for (String fileName : fileNames) {
             FileUtil.del(notesConfig.getCardsDir().resolve(fileName));
         }
-    }
-
-    private Path resolveContentPath(String noteTitle,
-                                    String cardTitle,
-                                    String cardId) {
-        String noteSlug = cardSlug(noteTitle);
-        String prefix = cardFilePrefix(noteSlug, cardTitle);
-        Path candidate = notesConfig.getCardsDir().resolve(prefix + "-" + shortId(cardId) + ".md");
-        if (!Files.exists(candidate)) {
-            return candidate;
-        }
-        String hex = cardId.replace("-", "");
-        for (int length = 12; length < hex.length(); length += 4) {
-            Path longer = notesConfig.getCardsDir().resolve(prefix + "-" + hex.substring(0, length) + ".md");
-            if (!Files.exists(longer)) {
-                return longer;
-            }
-        }
-        return notesConfig.getCardsDir().resolve(prefix + "-" + cardId + ".md");
-    }
-
-    private static String cardSlug(String title) {
-        if (title == null || title.isBlank()) {
-            return Long.toString(System.currentTimeMillis());
-        }
-        String slug = title.trim()
-                .replaceAll("[\\\\/:*?\"<>|]", "-")
-                .replaceAll("[\\p{Cntrl}]", "")
-                .replaceAll("\\s+", "-")
-                .replaceAll("-{2,}", "-")
-                .replaceAll("^[.\\-]+|[.\\-]+$", "");
-        if (slug.isBlank()) {
-            slug = "untitled";
-        }
-        return slug.length() > 60 ? slug.substring(0, 60) : slug;
-    }
-
-    private static String cardFilePrefix(String noteSlug,
-                                         String cardSlug) {
-        String prefix = noteSlug == null || noteSlug.isBlank() ? "untitled" : noteSlug;
-        if (cardSlug != null && !cardSlug.isBlank() && !cardSlug.equals(prefix)) {
-            prefix += "-" + cardSlug;
-        }
-        return prefix;
-    }
-
-    private static String shortId(String cardId) {
-        String hex = cardId == null ? "" : cardId.replace("-", "");
-        if (hex.length() >= 8) {
-            return hex.substring(0, 8).toLowerCase(Locale.ROOT);
-        }
-        return (hex + "00000000").substring(0, 8).toLowerCase(Locale.ROOT);
     }
 }

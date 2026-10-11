@@ -19,6 +19,4 @@ export const notebookApi = {
   }) => http.post<Notebook>('/api/notebooks/update', patch, { id }),
 
   remove: (id: string) => http.post<{ ok: boolean }>('/api/notebooks/delete', undefined, { id }),
-  addNode: (id: string, noteId: string) =>
-    http.post<{ ok: boolean }>('/api/notebooks/nodes', undefined, { id, noteId }),
 }

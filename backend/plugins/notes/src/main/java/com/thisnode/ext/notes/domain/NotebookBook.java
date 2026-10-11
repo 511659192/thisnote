@@ -6,19 +6,39 @@ import java.util.List;
 /**
  * 分组（笔记本）台账：一个文件装全部分组。
  *
- * <p>分组只有个位到十位数量级，不值得一份文件一个。**笔记的归属不在这里**——它在各自笔记 meta 的
- * {@code notebookId} 里，所以移动一篇笔记只改那一个文件，不会牵动全库台账。
+ * <p>分组只有个位到十位数量级，不值得一份文件一个。笔记的归属记录在各自笔记 meta 的
+ * {@code notebookId} 字段中。
  */
-public record NotebookBook(int v,
-                           List<Notebook> notebooks) {
+public class NotebookBook {
 
     public static final int SCHEMA = 1;
     public static final String DEFAULT_GROUP_ID = "grp-default";
     public static final String DEFAULT_GROUP_TITLE = "收集箱";
 
-    /** 规范构造器：归一化缺省/非法值（{@code v} 补成当前 SCHEMA、清单不可变）。 */
+    private int v = SCHEMA;
+    private List<Notebook> notebooks = List.of();
+
+    public NotebookBook() {
+    }
+
     public NotebookBook(int v, List<Notebook> notebooks) {
+        setV(v);
+        setNotebooks(notebooks);
+    }
+
+    public int getV() {
+        return v;
+    }
+
+    public void setV(int v) {
         this.v = v <= 0 ? SCHEMA : v;
+    }
+
+    public List<Notebook> getNotebooks() {
+        return notebooks;
+    }
+
+    public void setNotebooks(List<Notebook> notebooks) {
         this.notebooks = notebooks == null ? List.of() : List.copyOf(notebooks);
     }
 

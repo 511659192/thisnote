@@ -142,8 +142,7 @@ export const useNoteStore = defineStore('notes', () => {
 
   // ---------------------------------------------------------------- 分组树
   //
-  // 父子关系本来就存在后端（notebooks.parentId + type=group/notebook），这里只是把它读成树：
-  // 侧栏按 parentId 递归渲染，移动分组 = 改 parentId，笔记进分组 = 改笔记 meta 里的 notebookId。
+  // 分组层级存储在 notebooks.parentId 中，侧栏按 parentId 递归渲染；新建笔记时将归属写入 meta.notebookId。
 
   /** 展开的分组 id（ref<Set> 必须整体替换才会触发更新）。持久化到 localStorage：树的展开状态
       应该像文件管理器一样记住，不然每次刷新都要重新一层层点开。 */
@@ -280,13 +279,6 @@ export const useNoteStore = defineStore('notes', () => {
     await patchGroup(id, { parentId })
     if (parentId) expandGroup(parentId)
     await refreshMeta()
-  }
-
-  /** 把一篇笔记移到某个分组（单归属：会离开原来的分组）。 */
-  async function moveNoteToGroup(noteId: string, notebookId: string) {
-    await notebookApi.addNode(notebookId, noteId)
-    expandGroup(notebookId)
-    await Promise.all([loadList(), refreshMeta()])
   }
 
   /** 打开某个分组：展开它的祖先链，并在右侧列表按它过滤。 */
@@ -484,7 +476,6 @@ export const useNoteStore = defineStore('notes', () => {
     renameGroup,
     deleteGroup,
     moveGroup,
-    moveNoteToGroup,
     openGroup,
     select,
     reloadCurrent,

@@ -5,20 +5,17 @@ import { useNoteStore } from '@/stores/notes'
 import '@/plugins'
 import { activeNoteTools } from '@/plugins'
 import { usePageStore } from '@/stores/notePage'
-import { useUiStore } from '@/stores/ui'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
-import GroupPicker from '@/components/GroupPicker.vue'
 import { primaryLabel } from '@/core/utils'
-import type { NoteMeta, CardView, Notebook } from '@/api/types'
+import type { NoteMeta, CardView } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
 const nodes = useNoteStore()
 const page = usePageStore()
-const ui = useUiStore()
 
 const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
 /** 插件贡献的笔记工具（按插件启用状态过滤）。 */
@@ -149,59 +146,8 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
 
 // ---------------------------------------------------------------- node context menu
 
-/** 「移到分组…」的选择器：归属是唯一的，选中即替换原来的分组。 */
-const groupPicker = ref<{ open: boolean; noteId: string | null }>({ open: false, noteId: null })
-
-function openGroupPicker(noteId: string) {
-  groupPicker.value = { open: true, noteId }
-}
-
-async function pickGroup(notebookId: string | null) {
-  const noteId = groupPicker.value.noteId
-  groupPicker.value = { open: false, noteId: null }
-  if (!noteId || !notebookId) return
-  try {
-    await nodes.moveNoteToGroup(noteId, notebookId)
-    ui.toast('已移到该分组', 'success')
-  } catch (e) {
-    ui.toast(`加入失败：${(e as Error).message}`, 'error')
-  }
-}
-
-async function createGroupFromPicker() {
-  const title = window.prompt('新建分组名称')
-  if (!title || !title.trim()) return
-  const created = await nodes.createGroup(title.trim())
-  await pickGroup(created.id)
-}
-
-/** 笔记本下拉的选项：整棵分组树按深度平铺（不受侧栏折叠影响）。 */
-const notebookOptions = computed(() => {
-  const out: { group: Notebook; depth: number }[] = []
-  const walk = (parent: string | null, depth: number) => {
-    for (const g of nodes.notebooks.filter((n) => (n.parentId ?? null) === parent)) {
-      out.push({ group: g, depth })
-      walk(g.id, depth + 1)
-    }
-  }
-  walk(null, 0)
-  return out
-})
-
-async function changeNotebook(notebookId: string) {
-  const current = nodes.current
-  if (!current || current.notebooks?.[0]?.id === notebookId) return
-  await nodes.moveNoteToGroup(current.id, notebookId)
-  const picked = nodes.notebooks.find((n) => n.id === notebookId)
-  if (picked) nodes.current = { ...current, notebooks: [picked] }
-}
-
 function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
-  const node = payload.node
-  const entries: MenuEntry[] = [
-    { label: '打开', action: () => openNode(node.id) },
-    { label: '移到分组…', action: () => openGroupPicker(node.id) },
-  ]
+  const entries: MenuEntry[] = [{ label: '打开', action: () => openNode(payload.node.id) }]
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
 
@@ -274,17 +220,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             </div>
 
             <div class="head-meta">
-              <select
-                class="notebook-select"
-                title="所属分组"
-                :value="nodes.current.notebooks?.[0]?.id ?? ''"
-                @change="changeNotebook(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="row in notebookOptions" :key="row.group.id" :value="row.group.id">
-                  {{ '　'.repeat(row.depth) }}{{ row.group.title }}
-                </option>
-              </select>
-              <div class="spacer"></div>
               <!-- Quiet until it matters: the running card count is only worth showing once the
                    note has actually hit its cap. -->
               <span v-if="page.full" class="small limit-full">
@@ -309,14 +244,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </div>
 
     <ContextMenu :open="menu.open" :x="menu.x" :y="menu.y" :entries="menu.entries" @close="menu.open = false" />
-    <GroupPicker
-      :open="groupPicker.open"
-      :rows="nodes.visibleGroups"
-      title="移到分组"
-      @pick="pickGroup"
-      @create="createGroupFromPicker"
-      @close="groupPicker = { open: false, noteId: null }"
-    />
     <StatusBar />
   </div>
 </template>
@@ -361,16 +288,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .head-meta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 5px;
   flex-wrap: wrap;
-}
-.notebook-select {
-  padding: 2px 6px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  background: var(--c-surface-2);
-  color: var(--c-text-2);
-  font-size: 12px;
 }
 .limit-full {
   color: var(--danger);

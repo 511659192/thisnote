@@ -3,8 +3,8 @@ package com.thisnode.ext.notes.domain;
 /**
  * 一个分组（笔记本）。
  *
- * <p>台账 {@link NotebookBook} 里装的是它们的清单；**笔记的归属不在这里** —— 归属写在各自笔记
- * meta 的 {@code notebookId} 里，所以移动一篇笔记只改那一个文件。
+ * <p>台账 {@link NotebookBook} 保存分组清单；**笔记的归属不在这里**，而是记录在各自笔记 meta 的
+ * {@code notebookId} 字段中。
  */
 public record Notebook(int v, String id, String type, String title, String parentId,
                        String icon, int sortOrder, long createdAt, long updatedAt) {

@@ -54,17 +54,8 @@ function askRemove(node: NoteMeta) {
         class="note-row"
         :class="{ active: n.id === currentId }"
         :data-node-id="n.id"
-        draggable="true"
-        title="拖到侧栏分组里可归类"
         @click="emit('open', n.id)"
         @contextmenu="onContext($event, n)"
-        @dragstart="
-          (e: DragEvent) => {
-            e.dataTransfer?.setData('application/x-thisnode-node', n.id)
-            e.dataTransfer?.setData('text/plain', n.id)
-            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy'
-          }
-        "
       >
         <div class="row-1">
           <span class="title">{{ n.title }}</span>

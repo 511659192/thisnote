@@ -42,7 +42,7 @@ public final class Dtos {
     public record CreateNodeRequest(String title, String contentMd, String type, String notebookId) {
     }
 
-    public record UpdateNodeRequest(String title, String contentMd, String source, String status, String notebookId, Boolean clearNotebook) {
+    public record UpdateNodeRequest(String title, String contentMd, String source, String status) {
     }
 
     public record CardView(Card.CardMeta card, String contentMd, String noteTitle) {

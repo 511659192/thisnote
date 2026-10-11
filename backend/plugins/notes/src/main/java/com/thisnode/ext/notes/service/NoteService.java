@@ -41,14 +41,13 @@ public class NoteService {
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
         String id = noteRepository.insert(titleOf(title), type);
         NoteMeta meta = noteRepository.getOne(id);
+        String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookService.ensureDefaultGroup();
+        meta.setNotebookId(groupId);
         Card.CardMeta firstCard = Card.CardMeta.newCardMeta(
                 IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-        String cardFileName = cardRepository.save(meta.getTitle(), firstCard, content, null);
+        String cardFileName = cardRepository.save(firstCard, content, null);
         meta.setCardFileNames(List.of(cardFileName));
         noteRepository.save(meta);
-
-        String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookService.ensureDefaultGroup();
-        notebookService.addNodeToNotebook(id, groupId);
         return id;
     }
 
@@ -84,12 +83,6 @@ public class NoteService {
         meta.setUpdatedAt(System.currentTimeMillis());
         noteRepository.save(meta);
 
-        if (Boolean.TRUE.equals(req.clearNotebook())) {
-            // 单归属且必有归属：「移出分组」= 回到默认分组，不是变成无归属
-            notebookService.setExclusiveGroup(id, notebookService.ensureDefaultGroup());
-        } else if (req.notebookId() != null && !req.notebookId().isBlank()) {
-            notebookService.setExclusiveGroup(id, req.notebookId());
-        }
         if (contentChanged) {
             // 整篇正文替换（写回首卡）。
             replaceNoteContent(meta, nextContent);
@@ -165,7 +158,7 @@ public class NoteService {
         if (fileNames.isEmpty()) {
             Card.CardMeta card = Card.CardMeta.newCardMeta(
                     IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-            fileNames.add(cardRepository.save(note.getTitle(), card, body, null));
+            fileNames.add(cardRepository.save(card, body, null));
             note.setCardFileNames(fileNames);
             noteRepository.save(note);
             return;
@@ -175,7 +168,7 @@ public class NoteService {
             if (card == null || card.getMeta() == null) {
                 continue;
             }
-            cardRepository.save(note.getTitle(), card.getMeta(), i == 0 ? body : "", fileNames.get(i));
+            cardRepository.save(card.getMeta(), i == 0 ? body : "", fileNames.get(i));
         }
     }
 

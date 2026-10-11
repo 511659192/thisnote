@@ -116,7 +116,7 @@ public class CardService {
         long now = System.currentTimeMillis();
         CardMeta card = new CardMeta(CardMeta.SCHEMA, IdUtil.randomUUID(), title, x, y, w, h,
                 slot, req == null ? null : req.color(), null, false, Map.of(), now, now);
-        String fileName = cardRepository.save(note.getTitle(), card, content, null);
+        String fileName = cardRepository.save(card, content, null);
         List<String> fileNames = new ArrayList<>(cardFileNames(note));
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
         note.setCardFileNames(fileNames);
@@ -151,7 +151,7 @@ public class CardService {
         }
         CardMeta meta = stored.meta().setUpdatedAt(System.currentTimeMillis());
         String body = contentMd == null ? "" : contentMd;
-        cardRepository.save(stored.note().getTitle(), meta, body, stored.fileName());
+        cardRepository.save(meta, body, stored.fileName());
         stored.note().setUpdatedAt(System.currentTimeMillis());
         noteRepository.save(stored.note());
         return new Dtos.CardView(meta, body, stored.note().getTitle());

@@ -189,32 +189,20 @@ function onGroupDragStart(e: DragEvent, id: string) {
   if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
 }
 
+function onGroupDragOver(e: DragEvent, id: string) {
+  if (e.dataTransfer?.types.includes('application/x-thisnode-group')) {
+    dragOverGroupId.value = id
+  }
+}
+
 function onGroupDragLeave(id: string) {
   if (dragOverGroupId.value === id) dragOverGroupId.value = null
 }
 
-/**
- * 树节点的落点：拖来的是笔记 → 加进这个分组；拖来的是分组 → 把自己变成它的子分组。
- *
- * <p>笔记的拖拽源是笔记列表行（本来就带 {@code application/x-thisnode-node}，画布拖拽也在用），
- * 这里只是复用它；分组用自己的 {@code application/x-thisnode-group} 与笔记区分开，
- * 于是同一个落点能各管各的（笔记是**改归属**，分组是改父级）。
- */
+/** 拖入分组时把它变成目标分组的子分组；笔记不再支持拖入分组树转移。 */
 async function onGroupDrop(e: DragEvent, groupId: string) {
   dragOverGroupId.value = null
-  const dt = e.dataTransfer
-  if (!dt) return
-  const noteId = dt.getData('application/x-thisnode-node') || dt.getData('application/x-thisnode-note')
-  if (noteId) {
-    try {
-      await nodes.moveNoteToGroup(noteId, groupId)
-      ui.toast('已移到该分组', 'success')
-    } catch (err) {
-      ui.toast(`加入失败：${(err as Error).message}`, 'error')
-    }
-    return
-  }
-  const draggedGroupId = dt.getData('application/x-thisnode-group')
+  const draggedGroupId = e.dataTransfer?.getData('application/x-thisnode-group')
   if (draggedGroupId) {
     await moveGroupTo(draggedGroupId, groupId)
   }
@@ -274,7 +262,7 @@ watch(
             @click="openNotebook(row.group.id)"
             @dragstart="onGroupDragStart($event, row.group.id)"
             @contextmenu.prevent="onGroupContext($event, row.group)"
-            @dragover.prevent="dragOverGroupId = row.group.id"
+            @dragover.prevent="onGroupDragOver($event, row.group.id)"
             @dragleave="onGroupDragLeave(row.group.id)"
             @drop.prevent="onGroupDrop($event, row.group.id)"
           >

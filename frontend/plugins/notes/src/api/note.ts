@@ -27,8 +27,6 @@ export const noteApi = {
       contentMd?: string
       source?: string
       status?: string
-      notebookId?: string
-      clearNotebook?: boolean
     },
   ) => http.post<NoteDetail>('/api/notes/update', payload, { id }),
 
