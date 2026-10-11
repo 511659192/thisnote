@@ -2,13 +2,11 @@ package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.CreateNoteRequest;
-import com.thisnode.ext.notes.api.dto.NoteDetailDto;
 import com.thisnode.ext.notes.api.dto.NoteListQuery;
 import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.domain.NotebookBook;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -71,14 +69,8 @@ public class NoteService {
         return meta;
     }
 
-    public NoteDetailDto detail(String id) {
-        NoteMeta meta = require(id);
-        return new NoteDetailDto(meta.getId(),
-                                 meta.getTitle(),
-                                 meta.getType(),
-                                 meta.getCardFileNames(),
-                                 meta.getCreatedAt(),
-                                 meta.getUpdatedAt());
+    public NoteMeta detail(String id) {
+        return require(id);
     }
 
     public List<NoteMeta> list(NoteListQuery q) {

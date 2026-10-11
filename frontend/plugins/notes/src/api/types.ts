@@ -70,14 +70,3 @@ export interface NoteMeta {
   updatedAt: number
 }
 
-export interface NoteDetail {
-  id: string
-  title: string
-  type: NoteType
-  /** 有序卡片文件名清单；页面级数据按需取。 */
-  cardFileNames: string[]
-  createdAt: number
-  updatedAt: number
-}
-
-

@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.CreateNoteRequest;
-import com.thisnode.ext.notes.api.dto.NoteDetailDto;
 import com.thisnode.ext.notes.api.dto.NoteListQuery;
 import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
 import com.thisnode.ext.notes.domain.NoteMeta;
@@ -29,17 +28,17 @@ public class NoteController {
     }
 
     @PostMapping("/create")
-    public NoteDetailDto create(@RequestBody CreateNoteRequest req) {
+    public NoteMeta create(@RequestBody CreateNoteRequest req) {
         return noteService.detail(noteService.create(req));
     }
 
     @GetMapping("/detail")
-    public NoteDetailDto detail(@RequestParam String id) {
+    public NoteMeta detail(@RequestParam String id) {
         return noteService.detail(id);
     }
 
     @PostMapping("/update")
-    public NoteDetailDto update(@RequestParam String id,
+    public NoteMeta update(@RequestParam String id,
                                 @RequestBody UpdateNoteRequest req) {
         noteService.update(id, req);
         return noteService.detail(id);

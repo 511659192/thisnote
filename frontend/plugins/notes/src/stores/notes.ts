@@ -2,14 +2,14 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { notebookApi } from '@/api'
-import type { NoteDetail, NoteMeta, Notebook } from '@/api/types'
+import type { NoteMeta, Notebook } from '@/api/types'
 import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter, toast } from '@thisnode/plugin-api'
 
 /** Notes: list, selection, notebook navigation and title updates. */
 export const useNoteStore = defineStore('notes', () => {
 
   const nodes = ref<NoteMeta[]>([])
-  const current = ref<NoteDetail | null>(null)
+  const current = ref<NoteMeta | null>(null)
   const loadingList = ref(false)
   const loadingNode = ref(false)
   const notebooks = ref<Notebook[]>([])
@@ -298,7 +298,7 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  async function updateCurrent(changes: { title?: string }): Promise<NoteDetail | null> {
+  async function updateCurrent(changes: { title?: string }): Promise<NoteMeta | null> {
     if (!current.value) return null
     const id = current.value.id
     try {
@@ -317,7 +317,7 @@ export const useNoteStore = defineStore('notes', () => {
     contentMd?: string
     type?: string
     notebookId?: string
-  }): Promise<NoteDetail | null> {
+  }): Promise<NoteMeta | null> {
     try {
       const detail = await noteApi.create(payload)
       await Promise.all([loadList(), refreshMeta()])

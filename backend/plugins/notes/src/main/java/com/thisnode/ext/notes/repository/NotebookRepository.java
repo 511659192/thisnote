@@ -36,8 +36,7 @@ public class NotebookRepository {
         NotebookBook current = book();
         if (current.find(DEFAULT_GROUP_ID) == null) {
             long now = System.currentTimeMillis();
-            save(current.with(Notebook.fresh(DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK,
-                                             DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
+            save(current.with(Notebook.fresh(DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK, DEFAULT_GROUP_TITLE, null, "📥", 0, now)));
         }
     }
 
@@ -61,10 +60,10 @@ public class NotebookRepository {
 
     public List<Notebook> list(String type) {
         String wantedType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
-        return book().getNotebooks().stream()
+        return book().getNotebooks()
+                     .stream()
                      .filter(notebook -> notebook.type().equals(wantedType))
-                     .sorted(Comparator.comparingInt(Notebook::sortOrder)
-                                       .thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
+                     .sorted(Comparator.comparingInt(Notebook::sortOrder).thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
                      .toList();
     }
 
@@ -84,10 +83,7 @@ public class NotebookRepository {
         for (Notebook notebook : current.getNotebooks()) {
             max = Math.max(max, notebook.sortOrder());
         }
-        save(current.with(Notebook.fresh(id,
-                                         type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
-                                         title,
-                                         parent, icon, max + 1, now)));
+        save(current.with(Notebook.fresh(id, type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type, title, parent, icon, max + 1, now)));
         return id;
     }
 
@@ -109,12 +105,15 @@ public class NotebookRepository {
         }
         String parent = requireParent(parentId, currentBook);
         assertNoCycle(id, parent, currentBook);
-        Notebook updated = new Notebook(current.v(), id, current.type(),
+        Notebook updated = new Notebook(current.v(),
+                                        id,
+                                        current.type(),
                                         title == null || title.isBlank() ? current.title() : title.trim(),
                                         parent,
                                         icon == null ? current.icon() : icon,
                                         sortOrder == null ? current.sortOrder() : sortOrder,
-                                        current.createdAt(), System.currentTimeMillis());
+                                        current.createdAt(),
+                                        System.currentTimeMillis());
         save(currentBook.with(updated));
         return updated;
     }
@@ -157,8 +156,7 @@ public class NotebookRepository {
         NotebookBook next = current.without(id);
         List<Notebook> reparented = new ArrayList<>();
         for (Notebook notebook : next.getNotebooks()) {
-            reparented.add(id.equals(notebook.parentId())
-                                   ? notebook.withParent(fallbackParent) : notebook);
+            reparented.add(id.equals(notebook.parentId()) ? notebook.withParent(fallbackParent) : notebook);
         }
         save(new NotebookBook(next.getV(), reparented));
     }
