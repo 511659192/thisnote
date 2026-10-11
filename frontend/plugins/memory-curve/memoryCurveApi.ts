@@ -83,7 +83,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     const pages = await Promise.all(batch.map(async (note) => {
       try {
         const page = await http.get<{
-          cards: Array<{ card: { id: string; title: string; contentMd: string } }>
+          cards: Array<{ card: { id: string; title: string }; contentMd: string }>
         }>('/api/notes/cards', { noteId: note.id })
         return { note, page }
       } catch {
@@ -97,7 +97,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
           found.set(view.card.id, {
             noteTitle: item.note.title,
             cardTitle: view.card.title,
-            contentMd: view.card.contentMd,
+            contentMd: view.contentMd,
           })
         }
       }

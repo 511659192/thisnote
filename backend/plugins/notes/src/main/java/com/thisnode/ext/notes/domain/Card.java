@@ -4,8 +4,12 @@ import com.alibaba.fastjson2.JSON;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 @Getter
@@ -20,6 +24,18 @@ public class Card {
     private CardMeta meta;
     private String content;
 
+    @SneakyThrows
+    public static Card parse(Path file) {
+        String raw = Files.readString(file, StandardCharsets.UTF_8);
+        if (raw == null) {
+            return null;
+        }
+
+        CardMeta cardMeta = CardMeta.metaOf(raw);
+        String content = bodyOf(raw);
+        return new Card(cardMeta, content);
+    }
+
     private static String firstLineOf(String fileContent) {
         if (fileContent == null) {
             return "";
@@ -32,25 +48,14 @@ public class Card {
     /**
      * 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。
      */
-    public static String compose(Card.CardMeta meta,
+    public static String compose(CardMeta meta,
                                  String contentMd) {
         String json = JSON.toJSONString(meta).replace("\r", " ").replace("\n", " ");
         return META_PREFIX + json + META_SUFFIX + "\n" + (contentMd == null ? "" : contentMd);
     }
 
 
-    public static Card.CardMeta metaOf(String fileContent) {
-        String firstLine = firstLineOf(fileContent);
-        if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX) || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
-            return null;
-        }
-        String json = firstLine.substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length()).strip();
-        try {
-            return JSON.parseObject(json, Card.CardMeta.class);
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
+
 
     /**
      * 正文 = 文件内容去掉头部注释行（没有注释就是原样）。
@@ -104,26 +109,17 @@ public class Card {
             return new CardMeta(SCHEMA, id, title, x, y, DEFAULT_W, DEFAULT_H, 0, color, status, false, Map.of(), now, now);
         }
 
-        public CardMeta touched(long now) {
-            return new CardMeta(v, id, title, x, y, w, h, z, color, status, collapsed, ext, createdAt, now);
-        }
-
-        public CardMeta withGeometry(Double nx,
-                                     Double ny,
-                                     Double nw,
-                                     Double nh,
-                                     Integer nz) {
-            return this.setX(nx).setY(ny).setW(nw).setH(nh).setZ(nz);
-        }
-
-        public CardMeta withTitle(String next) {
-            return this.setTitle(next == null ? "" : next);
-        }
-
-        public CardMeta withAppearance(String ncolor,
-                                       String nstatus,
-                                       Boolean ncollapsed) {
-            return this.setColor(ncolor).setStatus(nstatus).setCollapsed(ncollapsed);
+        public static CardMeta metaOf(String fileContent) {
+            String firstLine = firstLineOf(fileContent);
+            if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX) || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
+                return null;
+            }
+            String json = firstLine.substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length()).strip();
+            try {
+                return JSON.parseObject(json, CardMeta.class);
+            } catch (RuntimeException e) {
+                return null;
+            }
         }
     }
 }

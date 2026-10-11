@@ -6,7 +6,7 @@ import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
 
 /**
- * 笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / IO / 笔记目录同步）。
+ * 笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 快照 / IO / 笔记目录同步）。
  *
  * <p>按 sbp 最佳实践（参考 sbp-demo 的 plugin-app），主体应用是<b>纯平台</b>——只做插件生命周期
  * 管理、共享 DataSource 与界面产物托管，不带业务。业务领域以插件形态交付：本插件在自己的

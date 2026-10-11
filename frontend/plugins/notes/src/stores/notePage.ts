@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError } from '@/core/http'
-import type { NoteCard, CardView, NotePageData } from '@/api/types'
+import type { CardMeta, CardView, NotePageData } from '@/api/types'
 import { useUiStore } from './ui'
 
 export interface Viewport {
@@ -301,7 +301,7 @@ export const usePageStore = defineStore('notePage', () => {
     if (!noteId.value) return false
     const view = cards.value.find((b) => b.card.id === cardId)
     if (!view) return false
-    if ((view.card.contentMd ?? '').trim() || (view.card.title ?? '').trim()) return false
+    if ((view.contentMd ?? '').trim() || (view.card.title ?? '').trim()) return false
     if (count.value <= 1) return false
     try {
       await pageApi.removeBlock(cardId, false)
@@ -347,10 +347,9 @@ export const usePageStore = defineStore('notePage', () => {
     if (!view) return
     savingContent.value = cardId
     // 基线必须在乐观改写之前取：它就是这次编辑开始时用户看到的正文。
-    const baseContentMd = view.card.contentMd ?? ''
+    const baseContentMd = view.contentMd ?? ''
     // Reflect the text before the round trip: writing a card ends its edit, and the trailing
     // blur must see the new text so it does not send the same content again.
-    view.card.contentMd = contentMd
     view.contentMd = contentMd
     try {
       const updated = await pageApi.writeContent(cardId, contentMd, baseContentMd)
@@ -408,7 +407,7 @@ export const usePageStore = defineStore('notePage', () => {
   async function duplicateSelected(dx = GRID * 2, dy = GRID * 2) {
     if (!noteId.value || !selection.value.length) return
     if (!requireCapacity()) return
-    const created: NoteCard[] = []
+    const created: CardMeta[] = []
     for (const id of selection.value) {
       created.push(await pageApi.duplicateBlock(id, dx, dy))
     }

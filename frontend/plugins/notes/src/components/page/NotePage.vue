@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, usePageStore } from '@/stores/notePage'
 import { useUiStore } from '@/stores/ui'
-import { attachmentApi } from '@/api'
 import NoteCard from './NoteCard.vue'
 import '@/plugins'
 import { activeCardPlugins } from '@/plugins'
@@ -396,7 +395,7 @@ async function finishEditing(cardId?: string) {
     lastSave.set(id, pending)
   }
   if (pending) await pending.done
-  const text = (pending?.text ?? view.card.contentMd ?? '').trim()
+  const text = (pending?.text ?? view.contentMd ?? '').trim()
   const title = (view.card.title ?? '').trim()
   if (page.editingCardId === id) page.editingCardId = null
   if (text || title) return
@@ -412,7 +411,7 @@ function onSave(p: { cardId: string; contentMd: string }) {
   // carrying the same text. Ignoring a save that would write what the card already holds stops
   // that trailing blur from sending a duplicate request.
   const view = page.cards.find((b) => b.card.id === p.cardId)
-  if (view && (view.card.contentMd ?? '') === p.contentMd) {
+  if (view && view.contentMd === p.contentMd) {
     lastSave.set(p.cardId, { text: p.contentMd, done: Promise.resolve() })
     return Promise.resolve()
   }
@@ -465,11 +464,8 @@ async function onPaste(e: ClipboardEvent) {
   if (target.closest('textarea, input, .cm-editor')) return
   if (page.editingCardId) return
 
-  const data = e.clipboardData
-  if (!data) return
-  const files = Array.from(data.files ?? []).filter((f) => f.type.startsWith('image/'))
-  const text = data.getData('text/plain') ?? ''
-  if (!files.length && !text.trim()) return
+  const text = e.clipboardData?.getData('text/plain') ?? ''
+  if (!text.trim()) return
   if (!page.requireCapacity()) {
     e.preventDefault()
     return
@@ -478,24 +474,6 @@ async function onPaste(e: ClipboardEvent) {
 
   const world = page.screenToWorld(lastPointer.value)
   const at = { x: Math.round(world.x), y: Math.round(world.y) }
-
-  if (files.length) {
-    const parts: string[] = []
-    for (const file of files) {
-      try {
-        const res = await attachmentApi.upload(file)
-        parts.push(`![${file.name.replace(/\.[^.]+$/, '')}](${res.url})`)
-      } catch (err) {
-        ui.toast(`图片粘贴失败：${(err as Error).message}`, 'error')
-      }
-    }
-    if (text.trim()) parts.push(text.trim())
-    if (!parts.length) return
-    const created = await page.addBlockFromContent(parts.join('\n\n'), at)
-    if (created) ui.toast('已粘贴为卡片', 'success')
-    return
-  }
-
   const created = await page.addBlockFromContent(text, at)
   if (created) ui.toast('已粘贴为卡片', 'success')
 }

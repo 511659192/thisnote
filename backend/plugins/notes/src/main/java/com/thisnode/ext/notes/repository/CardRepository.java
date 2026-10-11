@@ -46,35 +46,12 @@ public class CardRepository {
         this.noteRepository = noteRepository;
     }
 
-    private Dtos.CardDto dto(Card.CardMeta card) {
-        // 归属不在卡片里（改由笔记持清单），所以经索引反查 —— 一次内存 map 查询，不读文件。
-        return new Dtos.CardDto(card.getId(),
-                                noteRepository.noteIdOf(card.getId()),
-                                card.getTitle(),
-                                card.getX(),
-                                card.getY(),
-                                card.getW(),
-                                card.getH(),
-                                card.getZ(),
-                                card.getColor(),
-                                card.getStatus(),
-                                card.isCollapsed(),
-                                noteRepository.content(card.getId()),
-                                card.getCreatedAt(),
-                                card.getUpdatedAt());
+    public List<Card.CardMeta> cards(String noteId) {
+        return noteRepository.cards(noteId);
     }
 
-    public List<Dtos.CardDto> cards(String noteId) {
-        List<Dtos.CardDto> out = new ArrayList<>();
-        for (Card.CardMeta card : noteRepository.cards(noteId)) {
-            out.add(dto(card));
-        }
-        return out;
-    }
-
-    public Dtos.CardDto find(String id) {
-        Card.CardMeta card = noteRepository.card(id);
-        return card == null ? null : dto(card);
+    public Card.CardMeta find(String id) {
+        return noteRepository.card(id);
     }
 
     public int count(String noteId) {
@@ -160,7 +137,7 @@ public class CardRepository {
         String noteId = noteRepository.noteIdOf(cardId);
         Card.CardMeta current = noteRepository.card(cardId);
         if (noteId != null && current != null) {
-            putCard(noteId, current.touched(System.currentTimeMillis()), contentMd);
+            putCard(noteId, current.setUpdatedAt(System.currentTimeMillis()), contentMd);
         }
     }
 
@@ -221,10 +198,10 @@ public class CardRepository {
         if (current == null) {
             return;
         }
-        putCardMeta(current.withGeometry(x, y, w, h, z)
-                           .withTitle(title != null ? title : current.getTitle())
-                           .withAppearance(color, status, collapsed)
-                           .touched(System.currentTimeMillis()));
+        putCardMeta(current.setX(x).setY(y).setW(w).setH(h).setZ(z)
+                           .setTitle(title != null ? title : current.getTitle())
+                           .setColor(color).setStatus(status).setCollapsed(collapsed)
+                           .setUpdatedAt(System.currentTimeMillis()));
     }
 
     /**
@@ -296,7 +273,7 @@ public class CardRepository {
                                  Card.CardMeta card,
                                  String contentMd,
                                  int slot) {
-        NoteMeta note = noteRepository.getNoteMeta(noteId);
+        NoteMeta note = noteRepository.getOne(noteId);
         if (note == null) {
             return null;
         }
@@ -351,7 +328,7 @@ public class CardRepository {
                             String cardId) {
         for (int i = 0; i < note.getCardPaths().size(); i++) {
             Path file = Path.of(noteRepository.getRoot().toString(), "cards", note.getCardPaths().get(i));
-            Card data = noteRepository.readCard(file);
+            Card data = Card.parse(file);
             if (data != null && data.getMeta() != null && cardId.equals(data.getMeta().getId())) {
                 return i;
             }

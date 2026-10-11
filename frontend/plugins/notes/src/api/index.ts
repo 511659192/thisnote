@@ -1,7 +1,7 @@
 import { http } from '@/core/http'
 import type { Notebook } from './types'
 
-/** Notes-domain clients: notebooks and attachment upload. */
+/** Notes-domain clients. */
 
 export const notebookApi = {
   list: () => http.get<Notebook[]>('/api/notebooks'),
@@ -21,13 +21,4 @@ export const notebookApi = {
   remove: (id: string) => http.post<{ ok: boolean }>('/api/notebooks/delete', undefined, { id }),
   addNode: (id: string, noteId: string) =>
     http.post<{ ok: boolean }>('/api/notebooks/nodes', undefined, { id, noteId }),
-}
-
-export const attachmentApi = {
-  upload: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return http.upload<{ name: string; url: string; size: number }>('/api/attachments/upload', form)
-  },
-  url: (relative: string) => http.url(`/api/attachments/${relative.replace(/^\/+/, '')}`),
 }

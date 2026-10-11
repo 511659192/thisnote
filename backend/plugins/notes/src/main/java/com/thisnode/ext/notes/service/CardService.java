@@ -1,6 +1,7 @@
 package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -50,13 +51,13 @@ public class CardService {
                               List<String> ids) {
         NoteMeta note = noteService.require(noteId);
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);
-        List<Dtos.CardDto> rows = cardRepository.cards(noteId);
+        List<Card.CardMeta> rows = cardRepository.cards(noteId);
         if (wanted != null) {
-            rows = rows.stream().filter(b -> wanted.contains(b.id())).toList();
+            rows = rows.stream().filter(card -> wanted.contains(card.getId())).toList();
         }
         List<Dtos.CardView> views = new ArrayList<>(rows.size());
-        for (Dtos.CardDto b : rows) {
-            views.add(new Dtos.CardView(b, b.contentMd(), note.getTitle()));
+        for (Card.CardMeta card : rows) {
+            views.add(new Dtos.CardView(card, noteRepository.content(card.getId()), note.getTitle()));
         }
         return new Dtos.CardsDto(note.getId(), note.getTitle(), views,
                                  maxCardsPerNote(), note.getUpdatedAt());
@@ -89,16 +90,17 @@ public class CardService {
                                             req == null ? null : req.color(), null, content, title);
         syncNoteFromCards(noteId);
         NoteMeta fresh = noteService.require(noteId);
-        Dtos.CardDto stored = cardRepository.find(id);
-        return new Dtos.CardView(stored, stored.contentMd(), fresh.getTitle());
+        Card.CardMeta stored = cardRepository.find(id);
+        return new Dtos.CardView(stored, content, fresh.getTitle());
     }
 
     public Dtos.CardView writeContent(String cardId,
                                       String contentMd,
                                       String baseContentMd) {
-        Dtos.CardDto card = requireCard(cardId);
+        requireCard(cardId);
+        String noteId = noteRepository.noteIdOf(cardId);
         cardRepository.setContent(cardId, contentMd, baseContentMd);
-        NoteMeta note = noteService.require(card.noteId());
+        NoteMeta note = noteService.require(noteId);
         syncNoteFromCards(note.getId());
         NoteMeta fresh = noteService.require(note.getId());
         return new Dtos.CardView(cardRepository.find(cardId),
@@ -125,16 +127,16 @@ public class CardService {
         }
     }
 
-    private Dtos.CardDto requireCard(String id) {
-        Dtos.CardDto card = cardRepository.find(id);
+    private Card.CardMeta requireCard(String id) {
+        Card.CardMeta card = cardRepository.find(id);
         if (card == null) {
             throw new NoteService.NotFoundException("card " + id);
         }
         return card;
     }
 
-    public Dtos.CardDto update(String cardId,
-                               Dtos.CardUpdate changes) {
+    public Card.CardMeta update(String cardId,
+                                Dtos.CardUpdate changes) {
         requireCard(cardId);
         cardRepository.update(cardId, changes.title(), changes.x(), changes.y(), changes.w(), changes.h(),
                               changes.z(), changes.color(), changes.status(), changes.collapsed());
@@ -156,24 +158,26 @@ public class CardService {
      * Duplicate a card into a brand-new note (so the copy can diverge from the original).
      * The new note starts with the card's text.
      */
-    public Dtos.CardDto duplicate(String cardId,
-                                  double dx,
-                                  double dy) {
-        Dtos.CardDto src = requireCard(cardId);
+    public Card.CardMeta duplicate(String cardId,
+                                   double dx,
+                                   double dy) {
+        Card.CardMeta src = requireCard(cardId);
+        String content = noteRepository.content(src.getId());
         String newNoteId = noteService.create(new Dtos.CreateNodeRequest(
-                null, src.contentMd() == null ? "" : src.contentMd(), "note", null));
-        String id = cardRepository.create(newNoteId, 0d, 0d, src.w(), src.h(), src.color(), src.status(),
-                                          src.contentMd() == null ? "" : src.contentMd(), src.title());
+                null, content, "note", null));
+        String id = cardRepository.create(newNoteId, 0d, 0d, src.getW(), src.getH(), src.getColor(), src.getStatus(),
+                                          content, src.getTitle());
         return cardRepository.find(id);
     }
 
     public void delete(String cardId,
                        boolean deleteContent) {
-        Dtos.CardDto card = requireCard(cardId);
-        NoteMeta note = noteRepository.getNoteMeta(card.noteId());
-        if (cardRepository.count(card.noteId()) <= 1) {
+        requireCard(cardId);
+        String noteId = noteRepository.noteIdOf(cardId);
+        NoteMeta note = noteRepository.getOne(noteId);
+        if (cardRepository.count(noteId) <= 1) {
             if (deleteContent) {
-                noteService.delete(card.noteId());
+                noteService.delete(noteId);
                 return;
             }
             // Keep the page non-empty: clear the last card rather than leaving nothing.
@@ -192,15 +196,16 @@ public class CardService {
     /**
      * z-order: bring a card to the front or send it back.
      */
-    public Dtos.CardDto zOrder(String cardId,
-                               String op) {
-        Dtos.CardDto card = requireCard(cardId);
+    public Card.CardMeta zOrder(String cardId,
+                                String op) {
+        Card.CardMeta card = requireCard(cardId);
+        String noteId = noteRepository.noteIdOf(cardId);
         Integer z = switch (op == null ? "" : op) {
-            case "top" -> cardRepository.nextZ(card.noteId());
-            case "bottom" -> cardRepository.lowestZ(card.noteId());
-            case "up" -> card.z() + 1;
-            case "down" -> card.z() - 1;
-            default -> card.z();
+            case "top" -> cardRepository.nextZ(noteId);
+            case "bottom" -> cardRepository.lowestZ(noteId);
+            case "up" -> card.getZ() + 1;
+            case "down" -> card.getZ() - 1;
+            default -> card.getZ();
         };
         cardRepository.update(cardId, null, null, null, null, null, z, null, null, null);
         return cardRepository.find(cardId);

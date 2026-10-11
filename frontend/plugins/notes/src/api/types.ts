@@ -17,19 +17,10 @@ export interface Notebook {
 
 export type NoteType = 'note' | 'daily' | 'template'
 
-/**
- * A card on a note's page.
- *
- * `contentMd` is this card's own fragment of the note; the note's markdown is the
- * concatenation of its cards in order, so a card's text never shifts when a neighbouring card
- * grows.
- *
- * `title` is an optional label the *user* gives the card. It is not note content, and when it
- * is empty the card shows no title bar at all.
- */
-export interface NoteCard {
+/** Card metadata returned directly by the backend. The card body is carried by `CardView`. */
+export interface CardMeta {
+  v: number
   id: string
-  noteId: string
   title: string
   x: number
   y: number
@@ -39,18 +30,15 @@ export interface NoteCard {
   color?: string | null
   status?: string | null
   collapsed: boolean
-  contentMd: string
+  ext?: Record<string, unknown> | null
   createdAt: number
   updatedAt: number
 }
 
-/**
- * A card plus the note-level context it renders with, as delivered by the page endpoint.
- * Kept separate from {@link NoteCard} so the card's own text lives in exactly one place.
- */
+/** A card's metadata plus the note-level context delivered by the page endpoint. */
 export interface CardView {
-  card: NoteCard
-  /** Mirror of `card.contentMd`, kept for convenience when rendering. */
+  card: CardMeta
+  /** Card body, stored separately from the card's metadata. */
   contentMd: string
   noteTitle: string
   /** Client-only transient flags. */

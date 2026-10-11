@@ -1,5 +1,5 @@
 import { http } from '@/core/http'
-import type { NoteCard, CardView, NotePageData } from './types'
+import type { CardMeta, CardView, NotePageData } from './types'
 
 export interface CardUpdate {
   id: string
@@ -48,7 +48,7 @@ export const pageApi = {
     http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { cards }),
 
   updateBlock: (cardId: string, changes: CardUpdate) =>
-    http.post<NoteCard>('/api/notes/cards/update', changes, { cardId }),
+    http.post<CardMeta>('/api/notes/cards/update', changes, { cardId }),
 
   /**
    * Write markdown typed inside a card back into the note.
@@ -60,11 +60,11 @@ export const pageApi = {
     http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardId }),
 
   duplicateBlock: (cardId: string, dx = 48, dy = 48) =>
-    http.post<NoteCard>('/api/notes/cards/duplicate', undefined, { cardId, dx, dy }),
+    http.post<CardMeta>('/api/notes/cards/duplicate', undefined, { cardId, dx, dy }),
 
   removeBlock: (cardId: string, deleteContent = false) =>
     http.post<{ ok: boolean }>('/api/notes/cards/delete', undefined, { cardId, deleteContent }),
 
   zOrder: (id: string, op: 'top' | 'bottom' | 'up' | 'down') =>
-    http.post<NoteCard>('/api/notes/cards/z', { id, op }),
+    http.post<CardMeta>('/api/notes/cards/z', { id, op }),
 }

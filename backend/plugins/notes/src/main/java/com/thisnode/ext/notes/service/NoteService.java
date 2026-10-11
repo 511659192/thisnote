@@ -66,7 +66,7 @@ public class NoteService {
 
     public void update(String id,
                        Dtos.UpdateNodeRequest req) {
-        NoteMeta meta = noteRepository.getNoteMeta(id);
+        NoteMeta meta = noteRepository.getOne(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
@@ -112,7 +112,7 @@ public class NoteService {
     // ================================================================= read
 
     public NoteMeta require(String id) {
-        NoteMeta meta = noteRepository.getNoteMeta(id);
+        NoteMeta meta = noteRepository.getOne(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }

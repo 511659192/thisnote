@@ -72,8 +72,8 @@ public class ThisnodeConfig {
 
             /**
              * HTTP 的 JSON 交给 fastjson2（后端统一 JSON 库），并把 Jackson 的转换器从链上摘掉
-             * —— 不让两个库各写一半。其余转换器（String / byte[] / Resource …）原样留着：
-             * 附件上下载靠它们。
+             * —— 不让两个库各写一半。其余转换器（String / byte[] / Resource …）原样留着，
+             * 供非 JSON 响应使用。
              *
              * <p>两处与 Jackson 的旧行为对齐，换库不改响应形状：
              * <ul>

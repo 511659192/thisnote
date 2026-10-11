@@ -16,7 +16,7 @@ public class NotesRegister implements PluginRegister {
 
     @Override
     public String description() {
-        return "笔记 / 卡片 / 搜索 / 标签 / 附件 / 快照 / 导入导出 —— 主体原有的业务领域，以插件形态交付";
+        return "笔记 / 卡片 / 搜索 / 标签 / 快照 / 导入导出 —— 主体原有的业务领域，以插件形态交付";
     }
 
     @Override

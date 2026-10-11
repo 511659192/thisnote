@@ -9,7 +9,6 @@ thisnode:
   # Root of the human-readable Markdown mirror (F-P-03).
   data-root: ${user.home}/.thisnode
   markdown-root: ${user.home}/.thisnode/notes
-  attachment-root: ${user.home}/.thisnode/attachments
   snapshot-root: ${user.home}/.thisnode/snapshots
   snapshot-retention-days: 7
   # Auto-snapshot a running instance once per day.

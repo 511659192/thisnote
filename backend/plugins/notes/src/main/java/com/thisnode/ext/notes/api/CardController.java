@@ -1,6 +1,7 @@
 package com.thisnode.ext.notes.api;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.service.CardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,19 +51,19 @@ public class CardController {
     }
 
     @PostMapping("/update")
-    public Dtos.CardDto update(@RequestParam String cardId, @RequestBody Dtos.CardUpdate changes) {
+    public Card.CardMeta update(@RequestParam String cardId, @RequestBody Dtos.CardUpdate changes) {
         return cardService.update(cardId, changes);
     }
 
     @PostMapping("/duplicate")
-    public Dtos.CardDto duplicate(@RequestParam String cardId,
+    public Card.CardMeta duplicate(@RequestParam String cardId,
                                        @RequestParam(defaultValue = "28") double dx,
                                        @RequestParam(defaultValue = "28") double dy) {
         return cardService.duplicate(cardId, dx, dy);
     }
 
     @PostMapping("/z")
-    public Dtos.CardDto zOrder(@RequestBody Map<String, String> body) {
+    public Card.CardMeta zOrder(@RequestBody Map<String, String> body) {
         return cardService.zOrder(body.getOrDefault("id", ""), body.getOrDefault("op", "top"));
     }
 

@@ -68,7 +68,7 @@ const measure = ref<HTMLElement | null>(null)
 const readBody = ref<HTMLElement | null>(null)
 
 const card = computed(() => props.view.card)
-const content = computed(() => card.value.contentMd ?? '')
+const content = computed(() => props.view.contentMd ?? '')
 /** True while this card shows an editable textarea (source or split). */
 const sourceVisible = computed(() => !card.value.collapsed && contentMode.value !== 'preview')
 

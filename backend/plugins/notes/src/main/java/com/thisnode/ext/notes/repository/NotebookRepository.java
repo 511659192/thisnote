@@ -134,7 +134,7 @@ public class NotebookRepository {
      * <p>界面上的「移到分组」就是它：归属是唯一的，不是累加。
      */
     public void setExclusiveGroup(String nodeId, String notebookId) {
-        NoteMeta meta = noteRepository.getNoteMeta(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta != null) {
             meta.setNotebookId(notebookId);
             meta.setUpdatedAt(System.currentTimeMillis());
@@ -238,7 +238,7 @@ public class NotebookRepository {
     }
 
     public List<Dtos.NotebookDto> notebooksOf(String nodeId) {
-        NoteMeta meta = noteRepository.getNoteMeta(nodeId);
+        NoteMeta meta = noteRepository.getOne(nodeId);
         if (meta == null || meta.getNotebookId() == null) {
             return List.of();
         }
