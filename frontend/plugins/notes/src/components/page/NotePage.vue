@@ -281,10 +281,11 @@ function onPointerMove(e: PointerEvent) {
     const world = page.screenToWorld(p)
     const id = page.selection[0]
     const o = drag.origin[id]
-    if (!o) return
+    const view = page.cards.find((b) => b.card.id === id)
+    if (!o || !view) return
     const x = snap(o.x + (world.x - drag.startWorld.x))
     const y = snap(o.y + (world.y - drag.startWorld.y))
-    page.localMove([{ id, x, y, w: o.w, h: o.h }])
+    page.localMove([{ fileName: view.fileName, x, y, w: o.w, h: o.h }])
     drag.pending.set(id, { x, y, w: o.w, h: o.h })
     return
   }
@@ -292,7 +293,8 @@ function onPointerMove(e: PointerEvent) {
   if (drag.mode === 'resize') {
     const id = Object.keys(drag.origin)[0]
     const o = drag.origin[id]
-    if (!o) return
+    const view = page.cards.find((b) => b.card.id === id)
+    if (!o || !view) return
     const dx = world.x - drag.startWorld.x
     const dy = world.y - drag.startWorld.y
     const h = drag.handle
@@ -310,7 +312,7 @@ function onPointerMove(e: PointerEvent) {
       hh = Math.max(BLOCK_MIN_H, o.h - dy)
       y = o.y + (o.h - hh)
     }
-    page.localMove([{ id, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
+    page.localMove([{ fileName: view.fileName, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
     drag.pending.set(id, { x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) })
   }
 }
@@ -321,13 +323,10 @@ async function onPointerUp() {
   drag.mode = 'none'
   marquee.active = false
   if ((mode === 'move' || mode === 'resize') && moved && drag.pending.size) {
-    const updates: CardUpdate[] = [...drag.pending.entries()].map(([id, g]) => ({
-      id,
-      x: g.x,
-      y: g.y,
-      w: g.w,
-      h: g.h,
-    }))
+    const updates: CardUpdate[] = [...drag.pending.entries()].flatMap(([id, g]) => {
+      const view = page.cards.find((b) => b.card.id === id)
+      return view ? [{ fileName: view.fileName, x: g.x, y: g.y, w: g.w, h: g.h }] : []
+    })
     // 拖过下边框/边角改高度的卡片 → 长度由用户做主，自动贴合不再覆盖（否则会"弹回"）。
     if (mode === 'resize' && drag.handle && /[ns]/.test(drag.handle)) {
       for (const id of drag.pending.keys()) page.markManualHeight(id)
@@ -410,6 +409,12 @@ function onSave(p: { cardId: string; contentMd: string }) {
  * Grow a card downwards to fit text the user just typed. Width is untouched: the card keeps the
  * width and left edge the user chose, and only the height follows the content.
  */
+function onToggleCollapse(cardId: string) {
+  const view = page.cards.find((b) => b.card.id === cardId)
+  if (!view) return
+  void page.commit([{ fileName: view.fileName, collapsed: !view.card.collapsed }])
+}
+
 function onFitHeight(p: { cardId: string; h: number }) {
   const view = page.cards.find((b) => b.card.id === p.cardId)
   if (!view) return
@@ -426,7 +431,7 @@ function onFitHeight(p: { cardId: string; h: number }) {
   const next = Math.min(Math.round(p.h), available)
   if (next === view.card.h) return
   view.card.h = next
-  void page.commit([{ id: p.cardId, h: next }]).catch(() => undefined)
+  void page.commit([{ fileName: view.fileName, h: next }]).catch(() => undefined)
 }
 
 /** Double-click empty space: a card whose top-left corner is the clicked point. */
@@ -540,10 +545,7 @@ defineExpose({ size, beginEdit, finishEditing })
         @save="onSave"
         @fit-height="onFitHeight"
         @end-edit="finishEditing()"
-        @toggle-collapse="
-          (id: string) =>
-            page.commit([{ id, collapsed: !page.cards.find((b) => b.card.id === id)?.card.collapsed }])
-        "
+        @toggle-collapse="onToggleCollapse"
         @focus="(id: string) => page.select([id])"
       />
 

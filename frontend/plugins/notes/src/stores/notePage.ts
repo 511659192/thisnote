@@ -198,7 +198,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   function localMove(updates: CardUpdate[]) {
     for (const p of updates) {
-      const view = cards.value.find((b) => b.card.id === p.id)
+      const view = cards.value.find((b) => b.fileName === p.fileName)
       if (!view) continue
       if (p.x !== undefined && p.x !== null) view.card.x = p.x
       if (p.y !== undefined && p.y !== null) view.card.y = p.y
@@ -244,7 +244,7 @@ export const usePageStore = defineStore('notePage', () => {
     for (const v of cards.value) {
       if (v.card.w > max) {
         v.card.w = max
-        updates.push({ id: v.card.id, w: max })
+        updates.push({ fileName: v.fileName, w: max })
       }
     }
     if (updates.length && noteId.value) {
@@ -323,7 +323,7 @@ export const usePageStore = defineStore('notePage', () => {
     // blur must see the new text so it does not send the same content again.
     view.contentMd = contentMd
     try {
-      const updated = await pageApi.writeContent(cardId, contentMd, baseContentMd)
+      const updated = await pageApi.writeContent(view.fileName, contentMd, baseContentMd)
       if (updated.noteTitle) noteTitle.value = updated.noteTitle
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {

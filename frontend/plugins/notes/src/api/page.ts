@@ -2,7 +2,7 @@ import { http } from '@thisnode/plugin-api'
 import type { CardMeta, CardView, NotePageData } from './types'
 
 export interface CardUpdate {
-  id: string
+  fileName: string
   title?: string | null
   x?: number | null
   y?: number | null
@@ -46,8 +46,8 @@ export const pageApi = {
   updateBlocks: (cards: CardUpdate[]) =>
     http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { cards }),
 
-  updateBlock: (cardId: string, changes: CardUpdate) =>
-    http.post<CardMeta>('/api/notes/cards/update', changes, { cardId }),
+  updateBlock: (fileName: string, changes: CardUpdate) =>
+    http.post<CardMeta>('/api/notes/cards/update', changes, { fileName }),
 
   /**
    * Write markdown typed inside a card back into the note.
@@ -55,8 +55,8 @@ export const pageApi = {
    * <p>`baseContentMd` 是编辑开始时卡片上的正文：磁盘上已经不是那一份时后端回 409，
    * 由调用方提示并重新载入 —— 不覆盖外部编辑器（Obsidian / VS Code）写进去的改动。
    */
-  writeContent: (cardId: string, contentMd: string, baseContentMd: string) =>
-    http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardId }),
+  writeContent: (cardFileName: string, contentMd: string, baseContentMd: string) =>
+    http.post<CardView>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardFileName }),
 
 
 }
