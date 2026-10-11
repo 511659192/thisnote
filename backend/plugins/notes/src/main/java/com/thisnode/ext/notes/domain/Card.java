@@ -10,6 +10,7 @@ import lombok.experimental.Accessors;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 
 @Getter
@@ -80,7 +81,6 @@ public class Card {
 
     @Getter
     @Setter
-    @AllArgsConstructor
     public static class CardMeta {
 
         public static final int SCHEMA = 2;
@@ -91,29 +91,19 @@ public class Card {
         public static final double DEFAULT_W = 720;
         public static final double DEFAULT_H = 260;
 
-        private int v;
+        private int v = SCHEMA;
         private String id;
         private String title;
-        private double x;
-        private double y;
-        private double w;
-        private double h;
-        private int z;
+        private double x = 0d;
+        private double y = 0d;
+        private double w = DEFAULT_W;
+        private double h = DEFAULT_H;
+        private int z = 0;
         private String color;
         private String status;
         private boolean collapsed;
-        private Map<String, Object> ext;
-        private long createdAt;
-        private long updatedAt;
-
-        public static CardMeta newCardMeta(String id,
-                                           double x,
-                                           double y,
-                                           String title,
-                                           String color,
-                                           String status,
-                                           long now) {
-            return new CardMeta(SCHEMA, id, title, x, y, DEFAULT_W, DEFAULT_H, 0, color, status, false, Map.of(), now, now);
-        }
+        private Map<String, Object> ext = new HashMap<>();
+        private long createdAt = System.currentTimeMillis();
+        private long updatedAt = System.currentTimeMillis();
     }
 }

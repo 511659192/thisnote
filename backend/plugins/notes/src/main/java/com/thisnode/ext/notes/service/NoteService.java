@@ -38,7 +38,7 @@ public class NoteService {
         String id = IdUtil.randomUUID();
         String groupId = req.notebookId() == null ? notebookService.ensureDefaultGroup() : req.notebookId();
         NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(groupId);
-        CardMeta firstCard = CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
+        CardMeta firstCard = new CardMeta().setId(IdUtil.randomUUID()).setTitle("");
         String cardFileName = cardRepository.save(firstCard, req.contentMd(), null);
 
         meta.setCardFileNames(List.of(cardFileName));

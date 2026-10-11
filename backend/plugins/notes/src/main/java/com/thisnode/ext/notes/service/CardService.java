@@ -111,8 +111,7 @@ public class CardService {
         List<StoredCard> existing = cards(note);
         int slot = insertionSlot(existing, y, h);
         long now = System.currentTimeMillis();
-        CardMeta card = new CardMeta(CardMeta.SCHEMA, IdUtil.randomUUID(), title, x, y, w, h,
-                                     slot, req.color(), null, false, Map.of(), now, now);
+        CardMeta card = new CardMeta().setId(IdUtil.randomUUID()).setTitle(title).setZ(slot).setColor(req.color());
         String fileName = cardRepository.save(card, content, null);
         List<String> fileNames = new ArrayList<>(cardFileNames(note));
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
