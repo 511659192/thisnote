@@ -32,16 +32,15 @@ public class CardController {
     @PostMapping("/create")
     public Dtos.CardView create(@RequestParam String noteId,
                                      @RequestBody(required = false) Dtos.CreateCardRequest req) {
-        return cardService.create(noteId, req);
+        return cardService.create(noteId, req == null ? new Dtos.CreateCardRequest() : req);
     }
 
     /** Write markdown typed inside a card back into the note. */
     @PostMapping("/content")
     public Dtos.CardView writeContent(@RequestParam String cardId,
                                            @RequestBody(required = false) Dtos.WriteContentRequest req) {
-        return cardService.writeContent(cardId,
-                req == null || req.contentMd() == null ? "" : req.contentMd(),
-                req == null ? null : req.baseContentMd());
+        Dtos.WriteContentRequest request = req == null ? new Dtos.WriteContentRequest() : req;
+        return cardService.writeContent(cardId, request.contentMd(), request.baseContentMd());
     }
 
     @PostMapping("/batch-update")

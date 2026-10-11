@@ -20,8 +20,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CardRepository {
 
-    public static final int DEFAULT_W = 720;
-    public static final int DEFAULT_H = 260;
     public static final int MIN_W = 240;
     public static final int MIN_H = 88;
     public static final int FLOW_GAP = 16;

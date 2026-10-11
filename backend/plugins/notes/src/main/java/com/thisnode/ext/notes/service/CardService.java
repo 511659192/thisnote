@@ -104,18 +104,18 @@ public class CardService {
     public Dtos.CardView create(String noteId, Dtos.CreateCardRequest req) {
         NoteMeta note = noteService.require(noteId);
         requireCapacity(note, 1);
-        String content = req == null || req.contentMd() == null ? "" : req.contentMd();
-        String title = req == null || req.title() == null ? "" : req.title().trim();
+        String content = req.contentMd();
+        String title = req.title();
         double[] flow = nextFlowPosition(note);
-        double x = req != null && req.x() != null ? Math.max(0, req.x()) : flow[0];
-        double y = req != null && req.y() != null ? Math.max(0, req.y()) : flow[1];
-        double w = req == null || req.w() == null ? CardRepository.DEFAULT_W : Math.max(CardRepository.MIN_W, req.w());
-        double h = req == null || req.h() == null ? CardRepository.DEFAULT_H : Math.max(CardRepository.MIN_H, req.h());
+        double x = req.x() == null ? flow[0] : Math.max(0, req.x());
+        double y = req.y() == null ? flow[1] : Math.max(0, req.y());
+        double w = Math.max(CardRepository.MIN_W, req.w());
+        double h = Math.max(CardRepository.MIN_H, req.h());
         List<StoredCard> existing = cards(note);
         int slot = insertionSlot(existing, y, h);
         long now = System.currentTimeMillis();
         CardMeta card = new CardMeta(CardMeta.SCHEMA, IdUtil.randomUUID(), title, x, y, w, h,
-                slot, req == null ? null : req.color(), null, false, Map.of(), now, now);
+                slot, req.color(), null, false, Map.of(), now, now);
         String fileName = cardRepository.save(card, content, null);
         List<String> fileNames = new ArrayList<>(cardFileNames(note));
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
@@ -175,7 +175,7 @@ public class CardService {
     }
 
     public void batchUpdate(Dtos.BatchCardUpdateRequest req) {
-        List<Dtos.CardUpdate> updates = req == null || req.cards() == null ? List.of() : req.cards();
+        List<Dtos.CardUpdate> updates = req.cards();
         for (Dtos.CardUpdate update : updates) {
             if (update != null && update.id() != null) {
                 update(update.id(), update);

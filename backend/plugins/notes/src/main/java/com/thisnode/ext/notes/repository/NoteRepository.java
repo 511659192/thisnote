@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.NoteMeta;
@@ -22,12 +21,6 @@ import java.util.List;
 public class NoteRepository {
 
     private final NotesConfig notesConfig;
-
-    public String insert(String title, String type) {
-        String id = IdUtil.randomUUID();
-        save(new NoteMeta().setId(id).setTitle(title).setType(type));
-        return id;
-    }
 
     public void save(NoteMeta note) {
         if (note == null || StrUtil.isBlank(note.getId())) {

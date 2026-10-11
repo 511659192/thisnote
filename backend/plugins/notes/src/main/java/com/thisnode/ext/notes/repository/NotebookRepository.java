@@ -86,7 +86,7 @@ public class NotebookRepository {
         }
         save(current.with(Notebook.fresh(id,
                                          type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
-                                         title == null || title.isBlank() ? "新建笔记本" : title.trim(),
+                                         title,
                                          parent, icon, max + 1, now)));
         return id;
     }

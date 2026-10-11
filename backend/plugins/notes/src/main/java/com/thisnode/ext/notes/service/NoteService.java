@@ -9,8 +9,6 @@ import com.thisnode.ext.notes.repository.NoteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -27,8 +25,6 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class NoteService {
 
-    private static final DateTimeFormatter TITLE_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     private final NoteRepository noteRepository;
     private final NotebookService notebookService;
     private final CardRepository cardRepository;
@@ -36,27 +32,19 @@ public class NoteService {
     // ================================================================= create
 
     public String create(Dtos.CreateNodeRequest req) {
-        String title = req.title() == null ? "" : req.title().trim();
-        String content = req.contentMd() == null ? "" : req.contentMd();
-        String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
-        String id = noteRepository.insert(titleOf(title), type);
-        NoteMeta meta = noteRepository.getOne(id);
-        String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookService.ensureDefaultGroup();
-        meta.setNotebookId(groupId);
+        String id = IdUtil.randomUUID();
+        String groupId = req.notebookId() == null ? notebookService.ensureDefaultGroup() : req.notebookId();
+        NoteMeta meta = new NoteMeta()
+                .setId(id)
+                .setTitle(req.title())
+                .setType(req.type())
+                .setNotebookId(groupId);
         Card.CardMeta firstCard = Card.CardMeta.newCardMeta(
                 IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-        String cardFileName = cardRepository.save(firstCard, content, null);
+        String cardFileName = cardRepository.save(firstCard, req.contentMd(), null);
         meta.setCardFileNames(List.of(cardFileName));
         noteRepository.save(meta);
         return id;
-    }
-
-    /** 未提供标题时使用当前时间。 */
-    private static String titleOf(String title) {
-        if (title != null && !title.isBlank()) {
-            return title;
-        }
-        return LocalDateTime.now().format(TITLE_TIME_FORMAT);
     }
 
     public void update(String id,
@@ -65,28 +53,14 @@ public class NoteService {
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
-        String content = cardRepository.getJoinedContents(meta.getCardFileNames());
-        boolean contentChanged = false;
-        String oldTitle = meta.getTitle();
-        boolean renamed = req.title() != null && !req.title().equals(oldTitle);
-        String nextTitle = oldTitle;
-        if (renamed) {
-            nextTitle = titleOf(req.title());
-            contentChanged = true;
+        if (req.title() != null) {
+            meta.setTitle(req.title());
         }
-        String nextContent = content;
-        if (req.contentMd() != null && !req.contentMd().equals(content)) {
-            nextContent = req.contentMd();
-            contentChanged = true;
+        if (req.contentMd() != null) {
+            replaceNoteContent(meta, req.contentMd());
         }
-        meta.setTitle(nextTitle);
         meta.setUpdatedAt(System.currentTimeMillis());
         noteRepository.save(meta);
-
-        if (contentChanged) {
-            // 整篇正文替换（写回首卡）。
-            replaceNoteContent(meta, nextContent);
-        }
     }
 
     public void delete(String id) {
@@ -127,6 +101,11 @@ public class NoteService {
     }
 
     public record Query(String notebookId, String type, String text, int limit, int offset) {
+        public Query {
+            limit = Math.max(1, Math.min(limit <= 0 ? 500 : limit, 2000));
+            offset = Math.max(0, offset);
+        }
+
         public static Query defaults() {
             return new Query(null, null, null, 500, 0);
         }
@@ -143,8 +122,8 @@ public class NoteService {
         }
         matched.sort((a, b) -> Long.compare(b.getUpdatedAt(), a.getUpdatedAt()));
 
-        int limit = Math.max(1, Math.min(query.limit() <= 0 ? 500 : query.limit(), 2000));
-        int offset = Math.max(0, query.offset());
+        int limit = query.limit();
+        int offset = query.offset();
         List<NoteMeta> page = new ArrayList<>();
         for (int i = offset; i < matched.size() && page.size() < limit; i++) {
             page.add(matched.get(i));
@@ -153,14 +132,12 @@ public class NoteService {
     }
 
     private void replaceNoteContent(NoteMeta note, String contentMd) {
-        String body = contentMd == null ? "" : contentMd;
         List<String> fileNames = new ArrayList<>(note.getCardFileNames());
         if (fileNames.isEmpty()) {
             Card.CardMeta card = Card.CardMeta.newCardMeta(
                     IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
-            fileNames.add(cardRepository.save(card, body, null));
+            fileNames.add(cardRepository.save(card, contentMd, null));
             note.setCardFileNames(fileNames);
-            noteRepository.save(note);
             return;
         }
         for (int i = 0; i < fileNames.size(); i++) {
@@ -168,7 +145,7 @@ public class NoteService {
             if (card == null || card.getMeta() == null) {
                 continue;
             }
-            cardRepository.save(card.getMeta(), i == 0 ? body : "", fileNames.get(i));
+            cardRepository.save(card.getMeta(), i == 0 ? contentMd : "", fileNames.get(i));
         }
     }
 
