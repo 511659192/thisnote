@@ -36,17 +36,6 @@ public class CardService {
         }
     }
 
-    // ---------------------------------------------------------------- read
-
-    /**
-     * 一篇笔记的卡片：{@code ids} 为空表示整页，给了就只回这几张。
-     *
-     * <p>这是「按需加载」的入口：列表页只带卡片清单（不读卡片文件），打开笔记后按视口分批
-     * 用 {@code ids} 来取——几何与正文一起给，因为它们同在一次读取里（都得打开卡片文件）。
-     *
-     * <p>空页面不再在这里补建卡片：读路径不该写盘。不变量「笔记至少有一张卡」由
-     * {@code NoteService.create} 在新建笔记时建立。
-     */
     public Dtos.CardsDto page(String noteId,
                               List<String> ids) {
         NoteMeta note = noteService.require(noteId);
@@ -59,8 +48,7 @@ public class CardService {
         for (Card.CardMeta card : rows) {
             views.add(new Dtos.CardView(card, noteRepository.content(card.getId()), note.getTitle()));
         }
-        return new Dtos.CardsDto(note.getId(), note.getTitle(), views,
-                                 maxCardsPerNote(), note.getUpdatedAt());
+        return new Dtos.CardsDto(note.getId(), note.getTitle(), views, maxCardsPerNote(), note.getUpdatedAt());
     }
 
     // ---------------------------------------------------------------- write
@@ -85,9 +73,15 @@ public class CardService {
         double[] flow = cardRepository.nextFlowPosition(noteId);
         double x = req != null && req.x() != null ? Math.max(0, req.x()) : flow[0];
         double y = req != null && req.y() != null ? Math.max(0, req.y()) : flow[1];
-        String id = cardRepository.createAt(noteId, x, y,
-                                            req == null ? null : req.w(), req == null ? null : req.h(),
-                                            req == null ? null : req.color(), null, content, title);
+        String id = cardRepository.createAt(noteId,
+                                            x,
+                                            y,
+                                            req == null ? null : req.w(),
+                                            req == null ? null : req.h(),
+                                            req == null ? null : req.color(),
+                                            null,
+                                            content,
+                                            title);
         syncNoteFromCards(noteId);
         NoteMeta fresh = noteService.require(noteId);
         Card.CardMeta stored = cardRepository.find(id);
@@ -103,8 +97,7 @@ public class CardService {
         NoteMeta note = noteService.require(noteId);
         syncNoteFromCards(note.getId());
         NoteMeta fresh = noteService.require(note.getId());
-        return new Dtos.CardView(cardRepository.find(cardId),
-                                 contentMd == null ? "" : contentMd, fresh.getTitle());
+        return new Dtos.CardView(cardRepository.find(cardId), contentMd == null ? "" : contentMd, fresh.getTitle());
     }
 
     private void syncNoteFromCards(String noteId) {
@@ -122,8 +115,7 @@ public class CardService {
         String next = joined.toString();
         String current = noteRepository.text(noteId);
         if (!next.equals(current)) {
-            noteService.update(noteId, new Dtos.UpdateNodeRequest(
-                    null, next, null, null, null, null));
+            noteService.update(noteId, new Dtos.UpdateNodeRequest(null, next, null, null, null, null));
         }
     }
 
@@ -138,8 +130,15 @@ public class CardService {
     public Card.CardMeta update(String cardId,
                                 Dtos.CardUpdate changes) {
         requireCard(cardId);
-        cardRepository.update(cardId, changes.title(), changes.x(), changes.y(), changes.w(), changes.h(),
-                              changes.color(), changes.status(), changes.collapsed());
+        cardRepository.update(cardId,
+                              changes.title(),
+                              changes.x(),
+                              changes.y(),
+                              changes.w(),
+                              changes.h(),
+                              changes.color(),
+                              changes.status(),
+                              changes.collapsed());
         return cardRepository.find(cardId);
     }
 

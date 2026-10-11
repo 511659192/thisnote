@@ -40,11 +40,8 @@ public class NoteService {
         String content = req.contentMd() == null ? "" : req.contentMd();
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
         String id = noteRepository.insert(titleOf(title, content), type);
-        // 编排：首卡落盘（一篇笔记至少一张卡；正文只有一份，在卡片里）。
         cardRepository.putCard(id, Card.CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis()), content);
 
-        // 笔记必须归属一个分组：界面侧在某个分组里新建时会带上当前分组，没带就落默认分组。
-        // 不变量在后端收口，客户端（含脚本、导入）不可能造出无归属的笔记。
         String groupId = req.notebookId() != null && !req.notebookId().isBlank() ? req.notebookId() : notebookRepository.ensureDefaultGroup();
         notebookRepository.addNodeToNotebook(id, groupId);
         return id;
@@ -61,8 +58,6 @@ public class NoteService {
         String fromHeading = MarkdownUtils.firstHeading(contentMd);
         return fromHeading != null ? fromHeading : "无标题笔记";
     }
-
-    // ================================================================= update
 
     public void update(String id,
                        Dtos.UpdateNodeRequest req) {
@@ -100,16 +95,9 @@ public class NoteService {
         }
     }
 
-    // ================================================================= delete
-
-    /**
-     * 硬删除：卡片 md 与笔记 meta 一起消失。
-     */
     public void delete(String id) {
         noteRepository.delete(id);
     }
-
-    // ================================================================= read
 
     public NoteMeta require(String id) {
         NoteMeta meta = noteRepository.getOne(id);
@@ -123,11 +111,15 @@ public class NoteService {
         NoteMeta meta = require(id);
         String content = noteRepository.text(meta);
         List<String> cardIds = noteRepository.cards(id).stream().map(Card.CardMeta::getId).toList();
-        return new Dtos.NoteDetail(meta.getId(), meta.getTitle(), content, meta.getType(),
-                                   cardIds, notebookRepository.notebooksOf(id), meta.getCreatedAt(), meta.getUpdatedAt());
+        return new Dtos.NoteDetail(meta.getId(),
+                                   meta.getTitle(),
+                                   content,
+                                   meta.getType(),
+                                   cardIds,
+                                   notebookRepository.notebooksOf(id),
+                                   meta.getCreatedAt(),
+                                   meta.getUpdatedAt());
     }
-
-    // ================================================================= list
 
     public record Query(String notebookId, String type, String text, int limit, int offset) {
         public static Query defaults() {
@@ -135,12 +127,6 @@ public class NoteService {
         }
     }
 
-    /**
-     * 列表查询。过滤、排序直接在笔记 meta 上做，返回的就是 meta 本身：meta 是为列表准备的
-     * 轻量数据，一次目录遍历即可全部读出（NoteRepository 无状态无缓存，读到的一定是最新文件），
-     * 摘要、标签、别名、归属、卡片清单与计数都是现成字段；唯一的例外是文字过滤按需读那篇的
-     * 卡片正文。
-     */
     public List<NoteMeta> list(Query q) {
         Query query = q == null ? Query.defaults() : q;
 
@@ -171,7 +157,6 @@ public class NoteService {
         }
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
-            // 列表内的文字过滤要真正文 —— 按需加载这篇笔记的卡片，比"为了列表把全库读进内存"划算。
             String body = noteRepository.text(meta).toLowerCase(Locale.ROOT);
             boolean hit = (meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
             if (!hit) {
@@ -189,10 +174,4 @@ public class NoteService {
         }
     }
 
-    public static class ConflictException
-            extends com.thisnode.plugin.api.ConflictException {
-        public ConflictException(String message) {
-            super(message);
-        }
-    }
 }

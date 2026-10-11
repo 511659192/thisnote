@@ -4,12 +4,7 @@ import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.service.NoteService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
@@ -22,12 +17,11 @@ public class NoteController {
     private final NoteService noteService;
 
     @GetMapping
-    public List<NoteMeta> list(
-            @RequestParam(required = false) String notebookId,
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) String text,
-            @RequestParam(defaultValue = "500") int limit,
-            @RequestParam(defaultValue = "0") int offset) {
+    public List<NoteMeta> list(@RequestParam(required = false) String notebookId,
+                               @RequestParam(required = false) String type,
+                               @RequestParam(required = false) String text,
+                               @RequestParam(defaultValue = "500") int limit,
+                               @RequestParam(defaultValue = "0") int offset) {
         return noteService.list(new NoteService.Query(notebookId, type, text, limit, offset));
     }
 
@@ -42,10 +36,10 @@ public class NoteController {
     }
 
     @PostMapping("/update")
-    public Dtos.NoteDetail update(@RequestParam String id, @RequestBody Dtos.UpdateNodeRequest req) {
+    public Dtos.NoteDetail update(@RequestParam String id,
+                                  @RequestBody Dtos.UpdateNodeRequest req) {
         if (req != null && req.contentMd() != null) {
-            throw new IllegalArgumentException(
-                    "整篇正文改写已停用：请在卡片里编辑（POST /api/notes/cards/content）");
+            throw new IllegalArgumentException("整篇正文改写已停用：请在卡片里编辑（POST /api/notes/cards/content）");
         }
         noteService.update(id, req);
         return noteService.detail(id);
