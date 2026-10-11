@@ -1,5 +1,8 @@
 package com.thisnode.ext.notes.domain;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,6 +12,8 @@ import java.util.List;
  * <p>分组只有个位到十位数量级，不值得一份文件一个。笔记的归属记录在各自笔记 meta 的
  * {@code notebookId} 字段中。
  */
+@Getter
+@Setter
 public class NotebookBook {
 
     public static final int SCHEMA = 1;
@@ -18,28 +23,9 @@ public class NotebookBook {
     private int v = SCHEMA;
     private List<Notebook> notebooks = List.of();
 
-    public NotebookBook() {
-    }
-
     public NotebookBook(int v, List<Notebook> notebooks) {
         setV(v);
         setNotebooks(notebooks);
-    }
-
-    public int getV() {
-        return v;
-    }
-
-    public void setV(int v) {
-        this.v = v <= 0 ? SCHEMA : v;
-    }
-
-    public List<Notebook> getNotebooks() {
-        return notebooks;
-    }
-
-    public void setNotebooks(List<Notebook> notebooks) {
-        this.notebooks = notebooks == null ? List.of() : List.copyOf(notebooks);
     }
 
     public static NotebookBook empty() {
@@ -50,29 +36,25 @@ public class NotebookBook {
         if (id == null) {
             return null;
         }
-        for (Notebook notebook : notebooks) {
-            if (notebook.id().equals(id)) {
-                return notebook;
-            }
-        }
-        return null;
+
+        return notebooks.stream().filter(nootbook -> nootbook.id().equals(id)).findFirst().get();
     }
 
     public NotebookBook with(Notebook notebook) {
-        List<Notebook> next = new ArrayList<>();
+        List<Notebook> list = new ArrayList<>();
         boolean replaced = false;
         for (Notebook existing : notebooks) {
             if (existing.id().equals(notebook.id())) {
-                next.add(notebook);
+                list.add(notebook);
                 replaced = true;
             } else {
-                next.add(existing);
+                list.add(existing);
             }
         }
         if (!replaced) {
-            next.add(notebook);
+            list.add(notebook);
         }
-        return new NotebookBook(v, next);
+        return new NotebookBook(v, list);
     }
 
     public NotebookBook without(String id) {

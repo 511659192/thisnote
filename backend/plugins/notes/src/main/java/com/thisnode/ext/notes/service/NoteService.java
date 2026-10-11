@@ -1,10 +1,14 @@
 package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
-import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.api.dto.CreateNodeRequest;
+import com.thisnode.ext.notes.api.dto.NoteDetail;
+import com.thisnode.ext.notes.api.dto.NoteQuery;
+import com.thisnode.ext.notes.api.dto.UpdateNodeRequest;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,9 +34,7 @@ public class NoteService {
     private final NotebookService notebookService;
     private final CardRepository cardRepository;
 
-    // ================================================================= create
-
-    public String create(Dtos.CreateNodeRequest req) {
+    public String create(CreateNodeRequest req) {
         String id = IdUtil.randomUUID();
         String groupId = req.notebookId() == null ? notebookService.ensureDefaultGroup() : req.notebookId();
         NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(groupId);
@@ -45,7 +47,7 @@ public class NoteService {
     }
 
     public void update(String id,
-                       Dtos.UpdateNodeRequest req) {
+                       UpdateNodeRequest req) {
         NoteMeta meta = require(id);
         if (req.title() != null && !req.title().equals(meta.getTitle())) {
             meta.setTitle(req.title());
@@ -70,7 +72,7 @@ public class NoteService {
         return meta;
     }
 
-    public Dtos.NoteDetail detail(String id) {
+    public NoteDetail detail(String id) {
         NoteMeta meta = require(id);
         List<String> cardIds = new ArrayList<>();
         for (String fileName : meta.getCardFileNames()) {
@@ -79,28 +81,17 @@ public class NoteService {
                 cardIds.add(card.getMeta().getId());
             }
         }
-        return new Dtos.NoteDetail(meta.getId(),
-                                   meta.getTitle(),
-                                   meta.getType(),
-                                   cardIds,
-                                   notebookService.notebooksOf(id),
-                                   meta.getCreatedAt(),
-                                   meta.getUpdatedAt());
+        return new NoteDetail(meta.getId(),
+                              meta.getTitle(),
+                              meta.getType(),
+                              cardIds,
+                              notebookService.notebooksOf(id),
+                              meta.getCreatedAt(),
+                              meta.getUpdatedAt());
     }
 
-    public record Query(String notebookId, String type, String text, int limit, int offset) {
-        public Query {
-            limit = Math.max(1, Math.min(limit <= 0 ? 500 : limit, 2000));
-            offset = Math.max(0, offset);
-        }
-
-        public static Query defaults() {
-            return new Query(null, null, null, 500, 0);
-        }
-    }
-
-    public List<NoteMeta> list(Query q) {
-        Query query = q == null ? Query.defaults() : q;
+    public List<NoteMeta> list(NoteQuery q) {
+        NoteQuery query = q == null ? NoteQuery.defaults() : q;
 
         List<NoteMeta> matched = new ArrayList<>();
         for (NoteMeta noteMeta : noteRepository.getAll()) {
@@ -120,7 +111,7 @@ public class NoteService {
     }
 
     private boolean matches(NoteMeta meta,
-                            Query query) {
+                            NoteQuery query) {
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.getType())) {
             return false;
         }
@@ -130,7 +121,8 @@ public class NoteService {
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
             boolean titleHit = meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle);
-            boolean cardHit = !titleHit && cardRepository.getAll(meta.getCardFileNames()).stream()
+            boolean cardHit = !titleHit && cardRepository.getAll(meta.getCardFileNames())
+                                                         .stream()
                                                          .map(Card::getContent)
                                                          .filter(content -> content != null)
                                                          .map(content -> content.toLowerCase(Locale.ROOT))
@@ -140,14 +132,6 @@ public class NoteService {
             }
         }
         return true;
-    }
-
-
-    public static class NotFoundException
-            extends com.thisnode.plugin.api.NotFoundException {
-        public NotFoundException(String what) {
-            super("未找到：" + what);
-        }
     }
 
 }

@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.service;
 
-import com.thisnode.ext.notes.api.dto.Dtos;
+import com.thisnode.ext.notes.api.dto.NotebookDto;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -19,10 +19,10 @@ public class NotebookService {
     private final NotebookRepository notebookRepository;
     private final NoteRepository noteRepository;
 
-    public List<Dtos.NotebookDto> list(String type) {
+    public List<NotebookDto> list(String type) {
         List<Notebook> notebooks = notebookRepository.list(type);
         List<NoteMeta> notes = noteRepository.getAll();
-        List<Dtos.NotebookDto> result = new ArrayList<>(notebooks.size());
+        List<NotebookDto> result = new ArrayList<>(notebooks.size());
         for (Notebook notebook : notebooks) {
             int count = (int) notes.stream()
                     .filter(note -> notebook.id().equals(note.getNotebookId()))
@@ -32,7 +32,7 @@ public class NotebookService {
         return result;
     }
 
-    public Dtos.NotebookDto find(String id) {
+    public NotebookDto find(String id) {
         Notebook notebook = notebookRepository.find(id);
         return notebook == null ? null : dto(notebook, countNotes(id));
     }
@@ -45,7 +45,7 @@ public class NotebookService {
         return notebookRepository.create(title, parentId, icon, type);
     }
 
-    public Dtos.NotebookDto update(String id, String title, String parentId, String icon, Integer sortOrder) {
+    public NotebookDto update(String id, String title, String parentId, String icon, Integer sortOrder) {
         Notebook notebook = notebookRepository.update(id, title, parentId, icon, sortOrder);
         return dto(notebook, countNotes(id));
     }
@@ -68,7 +68,7 @@ public class NotebookService {
         notebookRepository.delete(id);
     }
 
-    public List<Dtos.NotebookDto> notebooksOf(String noteId) {
+    public List<NotebookDto> notebooksOf(String noteId) {
         NoteMeta note = noteRepository.getOne(noteId);
         if (note == null || note.getNotebookId() == null) {
             return List.of();
@@ -87,8 +87,8 @@ public class NotebookService {
         return count;
     }
 
-    private static Dtos.NotebookDto dto(Notebook notebook, Integer count) {
-        return new Dtos.NotebookDto(notebook.id(), notebook.type(), notebook.title(),
+    private static NotebookDto dto(Notebook notebook, Integer count) {
+        return new NotebookDto(notebook.id(), notebook.type(), notebook.title(),
                 notebook.parentId(), notebook.icon(), notebook.sortOrder(), count,
                 notebook.createdAt(), notebook.updatedAt());
     }

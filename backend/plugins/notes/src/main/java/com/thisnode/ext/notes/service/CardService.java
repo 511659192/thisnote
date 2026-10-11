@@ -1,18 +1,28 @@
 package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
+import com.thisnode.ext.notes.api.dto.BatchCardUpdateRequest;
+import com.thisnode.ext.notes.api.dto.CardUpdate;
+import com.thisnode.ext.notes.api.dto.CardView;
+import com.thisnode.ext.notes.api.dto.CardsDto;
+import com.thisnode.ext.notes.api.dto.CreateCardRequest;
+import com.thisnode.ext.notes.api.dto.WriteContentRequest;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.exception.CardLimitException;
+import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-
-import static com.thisnode.ext.notes.api.dto.Dtos.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -22,13 +32,6 @@ public class CardService {
     private final NoteRepository noteRepository;
     private final NoteService noteService;
     private final NotesConfig config;
-
-    public static class CardLimitException
-            extends com.thisnode.plugin.api.CardLimitException {
-        public CardLimitException(int limit) {
-            super("每篇笔记最多 " + limit + " 张卡片，无法继续新增。请新建一篇笔记。", limit);
-        }
-    }
 
     private record StoredCard(NoteMeta note, String fileName, Card card) {
         CardMeta meta() {
@@ -69,7 +72,7 @@ public class CardService {
     private StoredCard requireCard(String cardId) {
         StoredCard card = locate(cardId);
         if (card == null) {
-            throw new NoteService.NotFoundException("card " + cardId);
+            throw new NotFoundException("card " + cardId);
         }
         return card;
     }
