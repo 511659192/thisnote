@@ -1,14 +1,13 @@
 package com.thisnode.ext.notes.repository;
 
+import cn.hutool.core.io.FileUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.CardFile;
+import com.thisnode.ext.notes.domain.CardData;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.plugin.api.ConflictException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -226,23 +225,20 @@ public class CardRepository {
             return null;
         }
         int at = indexOfCard(note, card.id());
-        Path knownFile = at >= 0 ? NoteFilePaths.root().resolve(note.getCardPaths().get(at)) : null;
-        Path file = knownFile != null ? knownFile
-                : resolveContentPath(note.getTitle(), NoteFilePaths.cardSlug(card.title(), contentMd),
-                        card.id());
-        JsonFileUtils.writeText(file, CardFile.compose(card, contentMd));
+        Path knownFile = at >= 0 ? Path.of(noteRepository.getRoot().toString(), "cards", note.getCardPaths().get(at)) : null;
+        Path file = noteRepository.writeCard(note.getTitle(), card, contentMd, knownFile);
         List<String> paths = new ArrayList<>(note.getCardPaths());
-        String relative = NoteFilePaths.relative(file);
+        String cardFileName = file.getFileName().toString();
         if (at >= 0) {
-            paths.set(at, relative);
+            paths.set(at, cardFileName);
         } else if (slot >= 0 && slot < paths.size()) {
-            paths.add(slot, relative);
+            paths.add(slot, cardFileName);
         } else {
-            paths.add(relative);
+            paths.add(cardFileName);
         }
         note.setCardPaths(paths);
         note.touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(note.getId()), note);
+        JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", note.getId() + ".json"), note);
         return card;
     }
 
@@ -263,42 +259,20 @@ public class CardRepository {
         if (owned == null) {
             return;
         }
-        noteRepository.deleteCardFiles(owned.file());
+
+        FileUtil.del(owned.file());
         List<String> paths = new ArrayList<>(owned.note().getCardPaths());
-        paths.remove(NoteFilePaths.relative(owned.file()));
+        paths.remove(owned.file().getFileName().toString());
         owned.note().setCardPaths(paths);
         owned.note().touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(owned.note().getId()), owned.note());
-    }
-
-
-    /**
-     * 决定一张新卡片落在哪个文件：{@code <slug>-<shortId>.md}。同名文件已存在时把短 id 逐段加长，
-     * 实在不行用完整 id 兜底。
-     */
-    private Path resolveContentPath(String noteTitle, String cardSlug, String blockId) {
-        String noteSlug = NoteFilePaths.cardSlug(noteTitle, null);
-        String prefix = NoteFilePaths.cardFilePrefix(noteSlug, cardSlug);
-        Path candidate = NoteFilePaths.cardFilePath(noteSlug, cardSlug, blockId);
-        if (!Files.exists(candidate)) {
-            return candidate;
-        }
-        String hex = blockId.replace("-", "");
-        for (int len = 12; len < hex.length(); len += 4) {
-            Path longer = NoteFilePaths.cardsDir().resolve(prefix + "-" + hex.substring(0, len)
-                    + NoteFilePaths.MD_SUFFIX);
-            if (!Files.exists(longer)) {
-                return longer;
-            }
-        }
-        return NoteFilePaths.cardsDir().resolve(prefix + "-" + blockId + NoteFilePaths.MD_SUFFIX);
+        JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", owned.note().getId() + ".json"), owned.note());
     }
 
 
     private int indexOfCard(NoteMeta note, String cardId) {
         for (int i = 0; i < note.getCardPaths().size(); i++) {
-            Path file = NoteFilePaths.root().resolve(note.getCardPaths().get(i));
-            NoteRepository.CardData data = noteRepository.readCard(file);
+            Path file = Path.of(noteRepository.getRoot().toString(), "cards", note.getCardPaths().get(i));
+            CardData data = noteRepository.readCard(file);
             if (data != null && data.meta() != null && cardId.equals(data.meta().id())) {
                 return i;
             }

@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.service;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.Tag;
 import cn.hutool.core.util.IdUtil;
@@ -12,6 +11,7 @@ import com.thisnode.ext.notes.util.MarkdownUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -118,7 +118,7 @@ public class NoteService {
         }
         meta.setTitle(nextTitle);
         meta.touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(id), meta);
+        JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", id + ".json"), meta);
 
         if (req.tags() != null) {
             setTags(id, req.tags());

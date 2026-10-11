@@ -1,15 +1,17 @@
 package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import com.alibaba.fastjson2.JSONFactory;
-import com.thisnode.ext.notes.domain.*;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
+import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.domain.*;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.ext.notes.util.MarkdownUtils;
-import com.thisnode.ext.notes.util.NoteFilePaths;
-import lombok.NoArgsConstructor;
+import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
@@ -21,12 +23,23 @@ import java.util.stream.Stream;
 
 @Repository
 @Slf4j
-@NoArgsConstructor
 public class NoteRepository {
+
+    @Getter
+    private final Path root;
+
+    @Autowired
+    public NoteRepository(NotesConfig config) {
+        this(config.markdownRoot());
+    }
+
+    public NoteRepository(Path root) {
+        this.root = root.toAbsolutePath().normalize();
+    }
 
     public String insert(String title, String type) {
         String noteMetaId = IdUtil.randomUUID();
-        Path path = NoteFilePaths.noteMetaFilePath(noteMetaId);
+        Path path = Path.of(root.toString(), "meta", noteMetaId + ".json");
         NoteMeta noteMeta = NoteMeta.newNoteMeta(noteMetaId, title, type, null);
         JsonFileUtils.write(path, noteMeta);
         return noteMetaId;
@@ -37,41 +50,23 @@ public class NoteRepository {
         if (note == null) {
             return;
         }
-        for (String cardPath : note.getCardPaths()) {
-            deleteCardFiles(NoteFilePaths.root().resolve(cardPath));
+        for (String cardFileName : note.getCardPaths()) {
+            FileUtil.del(Path.of(root.toString(), "cards", cardFileName));
         }
-        deleteQuietly(NoteFilePaths.noteMetaFilePath(noteMetaId));
+        FileUtil.del((Path.of(root.toString(), "meta", noteMetaId + ".json")));
     }
 
-    public record CardData(CardMeta meta, String content) {
-    }
-
+    @SneakyThrows
     public CardData readCard(Path file) {
-        String raw = readText(file);
+        String raw = Files.readString(file, StandardCharsets.UTF_8);;
         if (raw == null) {
             return null;
         }
         return new CardData(CardFile.metaOf(raw), CardFile.bodyOf(raw));
     }
 
-    /** 以 CardMeta.id 为依据扫描卡片文件，找出对应文件路径。 */
-    private Path cardFileById(String cardId) {
-        if (cardId == null || cardId.isBlank()) {
-            return null;
-        }
-        for (String relative : listCardFiles()) {
-            Path file = NoteFilePaths.root().resolve(relative);
-            CardData data = readCard(file);
-            if (data != null && data.meta() != null && cardId.equals(data.meta().id())) {
-                return file;
-            }
-        }
-        return null;
-    }
-
     private List<Path> cardDirectories() {
-        return List.of(NoteFilePaths.cardsDir(), NoteFilePaths.root().resolve("cards"))
-                .stream().distinct().toList();
+        return List.of(Path.of(root.toString(), "cards"));
     }
 
     /** 扫描当前与旧目录布局下的 Markdown 卡片文件，相对路径供清单保存。 */
@@ -83,19 +78,19 @@ public class NoteRepository {
             }
             try (Stream<Path> stream = Files.walk(cardsDir)) {
                 for (Path file : stream.filter(Files::isRegularFile).toList()) {
-                    if (NoteFilePaths.isContentFile(file)) {
-                        paths.add(NoteFilePaths.relative(file));
+                    if (isContentFile(file)) {
+                        paths.add(relative(file));
                     }
                 }
             } catch (IOException e) {
-                log.warn("卡片目录无法遍历：{}（{}）", NoteFilePaths.relative(cardsDir), e.toString());
+                log.warn("卡片目录无法遍历：{}（{}）", relative(cardsDir), e.toString());
             }
         }
         return paths;
     }
 
     public List<NoteMeta> findAll() {
-        Path metaDir = NoteFilePaths.noteMetaDir();
+        Path metaDir = Path.of(root.toString(), "meta");
         if (!Files.isDirectory(metaDir)) {
             return Collections.emptyList();
         }
@@ -107,20 +102,31 @@ public class NoteRepository {
                 try {
                     meta = JsonFileUtils.read(file, NoteMeta.class);
                 } catch (IOException | RuntimeException e) {
-                    log.warn("元数据无法解析，已跳过：{}（{}）", NoteFilePaths.relative(file), e.toString());
+                    log.warn("元数据无法解析，已跳过：{}（{}）", relative(file), e.toString());
                     continue;
                 }
                 if (meta == null) {
                     continue;
                 }
                 if (meta.getId() == null || meta.getId().isBlank()) {
-                    log.warn("{} 不是笔记元数据（缺 id），已跳过", NoteFilePaths.relative(file));
+                    log.warn("{} 不是笔记元数据（缺 id），已跳过", relative(file));
+                    continue;
+                }
+                Path expectedMeta;
+                try {
+                    expectedMeta = Path.of(metaDir.toString(), meta.getId() + ".json").normalize();
+                } catch (InvalidPathException e) {
+                    log.warn("{} 的 id 不能作为安全文件名，已跳过", relative(file));
+                    continue;
+                }
+                if (!metaDir.equals(expectedMeta.getParent())) {
+                    log.warn("{} 的 id 不能作为安全文件名，已跳过", relative(file));
                     continue;
                 }
                 notes.add(meta);
             }
         } catch (IOException | DirectoryIteratorException e) {
-            log.warn("笔记元数据目录无法读取：{}（{}）", NoteFilePaths.relative(metaDir), e.toString());
+            log.warn("笔记元数据目录无法读取：{}（{}）", relative(metaDir), e.toString());
         }
         return notes;
     }
@@ -132,14 +138,20 @@ public class NoteRepository {
         if (noteMetaId == null || noteMetaId.isBlank()) {
             return null;
         }
-        Path file = NoteFilePaths.noteMetaDir().resolve(noteMetaId + ".json");
-        if (!Files.isRegularFile(file)) {
+        Path metaDir = Path.of(root.toString(), "meta").normalize();
+        Path file;
+        try {
+            file = Path.of(metaDir.toString(), noteMetaId + ".json").normalize();
+        } catch (InvalidPathException e) {
+            return null;
+        }
+        if (!metaDir.equals(file.getParent()) || !Files.isRegularFile(file)) {
             return null;
         }
         try {
             return JsonFileUtils.read(file, NoteMeta.class);
         } catch (IOException | RuntimeException e) {
-            log.warn("元数据无法解析，已跳过：{}（{}）", NoteFilePaths.relative(file), e.toString());
+            log.warn("元数据无法解析，已跳过：{}（{}）", relative(file), e.toString());
             return null;
         }
     }
@@ -169,8 +181,8 @@ public class NoteRepository {
      */
     public String noteMarkdown(String noteId) {
         StringBuilder joined = new StringBuilder();
-        for (String relative : cardsOf(noteId)) {
-            CardData data = readCard(NoteFilePaths.root().resolve(relative));
+        for (String cardFileName : cardsOf(noteId)) {
+            CardData data = readCard(Path.of(root.toString(), "cards", cardFileName));
             String part = data == null ? "" : data.content();
             if (part.isBlank()) {
                 continue;
@@ -194,59 +206,82 @@ public class NoteRepository {
     }
 
     public Path writeCard(String noteTitle, CardMeta card, String contentMd, Path knownFile) {
-        Path file = knownFile != null ? knownFile : resolveContentPath(noteTitle, NoteFilePaths.cardSlug(card.title(), contentMd), card.id());
+        Path file = knownFile != null ? knownFile : resolveContentPath(noteTitle, cardSlug(card.title(), contentMd), card.id());
         JsonFileUtils.writeText(file, CardFile.compose(card, contentMd));
         return file;
     }
 
-    public void deleteCardFiles(Path contentFile) {
-        deleteQuietly(contentFile);
-    }
-
     public void ensureDirs() {
         try {
-            for (Path dir : new Path[]{NoteFilePaths.cardsDir(), NoteFilePaths.noteMetaDir(), NoteFilePaths.ledgersDir()}) {
+            for (Path dir : new Path[]{Path.of(root.toString(), "cards"), Path.of(root.toString(), "meta"), Path.of(root.toString(), "ledgers")}) {
                 Files.createDirectories(dir);
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("无法创建笔记目录结构 " + NoteFilePaths.root(), e);
+            throw new UncheckedIOException("无法创建笔记目录结构 " + root, e);
         }
     }
 
+    private boolean isContentFile(Path file) {
+        return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".md");
+    }
+
+    private String relative(Path file) {
+        Path absolute = file.toAbsolutePath().normalize();
+        return absolute.startsWith(root)
+                ? root.relativize(absolute).toString().replace('\\', '/')
+                : absolute.toString().replace('\\', '/');
+    }
+
+    private static String cardSlug(String cardTitle, String contentMd) {
+        if (cardTitle != null && !cardTitle.isBlank()) {
+            return MarkdownUtils.slug(cardTitle);
+        }
+        String heading = MarkdownUtils.firstHeading(contentMd);
+        if (heading != null && !heading.isBlank()) {
+            return MarkdownUtils.slug(heading);
+        }
+        if (contentMd != null) {
+            for (String line : contentMd.split("\\R")) {
+                if (!line.isBlank()) {
+                    return MarkdownUtils.slug(line.trim());
+                }
+            }
+        }
+        return "untitled";
+    }
+
+    private static String cardFilePrefix(String noteSlug, String cardSlug) {
+        String prefix = noteSlug == null || noteSlug.isBlank() ? "untitled" : noteSlug;
+        if (cardSlug != null && !cardSlug.isBlank() && !cardSlug.equals(prefix)) {
+            prefix += "-" + cardSlug;
+        }
+        return prefix;
+    }
+
+    private static String shortId(String cardId) {
+        String hex = cardId == null ? "" : cardId.replace("-", "");
+        if (hex.length() >= 8) {
+            return hex.substring(0, 8).toLowerCase(Locale.ROOT);
+        }
+        return (hex + "00000000").substring(0, 8).toLowerCase(Locale.ROOT);
+    }
+
     private Path resolveContentPath(String noteTitle, String cardSlug, String cardId) {
-        String noteSlug = NoteFilePaths.cardSlug(noteTitle, null);
-        String prefix = NoteFilePaths.cardFilePrefix(noteSlug, cardSlug);
-        Path candidate = NoteFilePaths.cardFilePath(noteSlug, cardSlug, cardId);
+        String noteSlug = cardSlug(noteTitle, null);
+        String prefix = cardFilePrefix(noteSlug, cardSlug);
+        Path candidate = Path.of(root.toString(), "cards", prefix + "-" + shortId(cardId) + ".md");
         if (!Files.exists(candidate)) {
             return candidate;
         }
         // 笔记名、卡片描述都一样（同名同描述的两张卡）：把随机串逐段加长，直到不撞车。
         String hex = cardId.replace("-", "");
         for (int len = 12; len < hex.length(); len += 4) {
-            Path longer = NoteFilePaths.cardsDir().resolve(prefix + "-" + hex.substring(0, len) + NoteFilePaths.MD_SUFFIX);
+            Path longer = Path.of(root.toString(), "cards", prefix + "-" + hex.substring(0, len) + ".md");
             if (!Files.exists(longer)) {
                 return longer;
             }
         }
-        return NoteFilePaths.cardsDir().resolve(prefix + "-" + cardId + NoteFilePaths.MD_SUFFIX);
-    }
-
-    private String readText(Path file) {
-        try {
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            log.warn("文件无法读取：{}（{}）", NoteFilePaths.relative(file), e.toString());
-            return null;
-        }
-    }
-
-
-    private void deleteQuietly(Path file) {
-        try {
-            Files.deleteIfExists(file);
-        } catch (IOException e) {
-            log.warn("删除失败：{}（{}）", NoteFilePaths.relative(file), e.toString());
-        }
+        return Path.of(root.toString(), "cards", prefix + "-" + cardId + ".md");
     }
 
     // ================================================================ 笔记的标签（归属住在 meta 里）
@@ -274,7 +309,7 @@ public class NoteRepository {
         }
         meta.setTags(Tag.cleanNames(names));
         meta.touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), meta);
+        JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), meta);
     }
 
     public void addNodeTag(String noteId, String name) {
@@ -287,7 +322,7 @@ public class NoteRepository {
         next.add(clean);
         meta.setTags(next);
         meta.touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), meta);
+        JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), meta);
     }
 
     public void removeNodeTag(String noteId, String name) {
@@ -304,7 +339,7 @@ public class NoteRepository {
         }
         meta.setTags(next);
         meta.touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), meta);
+        JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), meta);
     }
 
     /** 改名：把所有笔记 meta 里的归属从 {@code from} 换成 {@code to}（台账那一半由服务层改）。 */
@@ -323,7 +358,7 @@ public class NoteRepository {
             if (changed) {
                 meta.setTags(Tag.cleanNames(next));
                 meta.touch(System.currentTimeMillis());
-                JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(meta.getId()), meta);
+                JsonFileUtils.write(Path.of(root.toString(), "meta", meta.getId() + ".json"), meta);
             }
         }
     }
@@ -346,8 +381,8 @@ public class NoteRepository {
             return null;
         }
         for (NoteMeta note : findAll()) {
-            for (String relative : note.getCardPaths()) {
-                Path file = NoteFilePaths.root().resolve(relative);
+            for (String cardFileName : note.getCardPaths()) {
+                Path file = Path.of(root.toString(), "cards", cardFileName);
                 CardData data = readCard(file);
                 if (data != null && data.meta() != null && cardId.equals(data.meta().id())) {
                     return new Owned(note, cardId, file);
@@ -369,18 +404,6 @@ public class NoteRepository {
         return data == null ? "" : data.content();
     }
 
-    /**
-     * 一篇笔记的 markdown：它的卡片按清单顺序拼接（空白卡跳过，段落之间空一行）。
-     *
-     * <p>正文只有一份（在卡片里），所以笔记正文、搜索结果、导出永远一致。
-     */
-
-    /**
-     * 写一张卡片（正文 + 头部注释）并把它登记进笔记清单。
-     *
-     * <p>{@code slot < 0} 表示追加；清单顺序就是阅读顺序，所以"在两卡之间插一张"只需插进清单，
-     * 不必改动其他卡片。写入后顺带刷新这篇笔记的列表页缓存。
-     */
     public CardMeta writeCard(String noteId, CardMeta card, String contentMd, int slot) {
         NoteMeta note = getOneNoteMeta(noteId);
         if (note == null) {
@@ -388,25 +411,25 @@ public class NoteRepository {
         }
         List<String> paths = new ArrayList<>(note.getCardPaths());
         int at = indexOfCard(note, card.id());
-        Path knownFile = at >= 0 ? NoteFilePaths.root().resolve(paths.get(at)) : null;
+        Path knownFile = at >= 0 ? Path.of(root.toString(), paths.get(at)) : null;
         Path written = writeCard(note.getTitle(), card, contentMd, knownFile);
-        String relative = NoteFilePaths.relative(written);
+        String cardFileName = written.getFileName().toString();
         if (at >= 0) {
-            paths.set(at, relative);
+            paths.set(at, cardFileName);
         } else if (slot >= 0 && slot < paths.size()) {
-            paths.add(slot, relative);
+            paths.add(slot, cardFileName);
         } else {
-            paths.add(relative);
+            paths.add(cardFileName);
         }
         note.setCardPaths(paths);
         note.touch(System.currentTimeMillis());
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), note);
+        JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), note);
         return card;
     }
 
     private int indexOfCard(NoteMeta note, String cardId) {
         for (int i = 0; i < note.getCardPaths().size(); i++) {
-            CardData data = readCard(NoteFilePaths.root().resolve(note.getCardPaths().get(i)));
+            CardData data = readCard(Path.of(root.toString(), "cards", note.getCardPaths().get(i)));
             if (data != null && data.meta() != null && cardId.equals(data.meta().id())) {
                 return i;
             }
@@ -417,8 +440,9 @@ public class NoteRepository {
     /**
      * 只改元数据（重写头部注释，正文原样保留）。
      */
+    @SneakyThrows
     public void writeCardMeta(CardMeta card, Path contentFile) {
-        String current = readText(contentFile);
+        String current = Files.readString(contentFile, StandardCharsets.UTF_8);
         if (current == null) {
             JsonFileUtils.writeText(contentFile, CardFile.compose(card, ""));
             return;
@@ -426,33 +450,6 @@ public class NoteRepository {
         JsonFileUtils.writeText(contentFile, CardFile.compose(card, CardFile.bodyOf(current)));
     }
 
-    /**
-     * 只改元数据（拖动 / 缩放 / 收起 / 插件扩展区）：重写头部注释，正文原样保留。
-     */
-    public CardMeta writeCardMeta(String cardId, CardMeta card) {
-        if (card == null) {
-            return null;
-        }
-        Path contentFile = cardFileById(cardId);
-        if (contentFile == null) {
-            return null;
-        }
-        String current = readText(contentFile);
-        if (current == null) {
-            JsonFileUtils.writeText(contentFile, CardFile.compose(card, ""));
-            return card;
-        }
-        JsonFileUtils.writeText(contentFile, CardFile.compose(card, CardFile.bodyOf(current)));
-        return card;
-    }
-
-    /** 删一张卡片：先摘出笔记清单，再删文件，最后刷新这篇笔记的列表页缓存。 */
-
-    /**
-     * 整篇替换正文：单卡笔记就是替换那张卡；多卡笔记把全文写进第一张卡、**清空其余卡片的内容**。
-     *
-     * <p>写正文的唯一落点（导入 Markdown、脚本改正文都走这里）。
-     */
     public void replaceNoteContent(String noteId, String contentMd) {
         List<String> cards = cardsOf(noteId);
         String body = contentMd == null ? "" : contentMd;
@@ -462,7 +459,7 @@ public class NoteRepository {
             return;
         }
         for (int i = 0; i < cards.size(); i++) {
-            CardData data = readCard(NoteFilePaths.root().resolve(cards.get(i)));
+            CardData data = readCard(Path.of(root.toString(), cards.get(i)));
             if (data == null || data.meta() == null) {
                 continue;
             }
@@ -470,16 +467,11 @@ public class NoteRepository {
         }
     }
 
-    /**
-     * 一篇笔记的卡片数。
-     */
+
     public int cardCount(String noteId) {
         return cardsOf(noteId).size();
     }
 
-    /**
-     * 一张卡片的元数据（找不到给 {@code null}）。
-     */
     public CardMeta card(String cardId) {
         Owned owned = ownerOf(cardId);
         if (owned == null) {
@@ -489,13 +481,10 @@ public class NoteRepository {
         return data == null ? null : data.meta();
     }
 
-    /**
-     * 一篇笔记的全部卡片元数据，按清单顺序。
-     */
     public List<CardMeta> cards(String noteId) {
         List<CardMeta> out = new ArrayList<>();
-        for (String relative : cardsOf(noteId)) {
-            CardData data = readCard(NoteFilePaths.root().resolve(relative));
+        for (String cardFileName : cardsOf(noteId)) {
+            CardData data = readCard(Path.of(root.toString(), "cards", cardFileName));
             if (data != null && data.meta() != null) {
                 out.add(data.meta());
             }
@@ -503,14 +492,11 @@ public class NoteRepository {
         return out;
     }
 
-    /**
-     * 全部卡片元数据（维护/导出用；会读所有卡片文件）。
-     */
     public List<CardMeta> allCards() {
         List<CardMeta> out = new ArrayList<>();
         for (NoteMeta note : findAll()) {
-            for (String relative : note.getCardPaths()) {
-                CardData data = readCard(NoteFilePaths.root().resolve(relative));
+            for (String cardFileName : note.getCardPaths()) {
+                CardData data = readCard(Path.of(root.toString(), "cards", cardFileName));
                 if (data != null && data.meta() != null) {
                     out.add(data.meta());
                 }
@@ -519,17 +505,11 @@ public class NoteRepository {
         return out;
     }
 
-    /**
-     * 卡片文件在磁盘上的路径（找不到给 {@code null}）。
-     */
     public Path fileOf(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? null : owned.file();
     }
 
-    /**
-     * 读卡片上的插件扩展区（没有就给空 map）。
-     */
     public Map<String, Object> extension(String cardId, String pluginId) {
         CardMeta card = card(cardId);
         if (card == null) {
@@ -544,64 +524,27 @@ public class NoteRepository {
         return Map.of();
     }
 
-    /**
-     * 写卡片上的插件扩展区。
-     */
-    public CardMeta putExtension(String cardId, String pluginId, Map<String, Object> value) {
-        CardMeta card = card(cardId);
-        if (card == null) {
-            return null;
-        }
-        return writeCardMeta(cardId, card.withExtension(pluginId, value));
-    }
-
-    // ---- 与拆分前同名的方法（语义一致）：让调用方迁移只改注入类型，减少本批改动面 ----
-
-    /**
-     * 这张卡属于哪篇笔记（找不到给 {@code null}）。
-     */
     public String noteIdOf(String cardId) {
         Owned owned = ownerOf(cardId);
         return owned == null ? null : owned.note().getId();
     }
 
-    /**
-     * 卡片正文；与 {@link #contentOf(String)} 同义。
-     */
     public String content(String cardId) {
         return contentOf(cardId);
     }
 
-    /**
-     * 磁盘上的正文。拆分后正文本来就不常驻，所以它与 {@link #content(String)} 等价 ——
-     * 保留这个名字，是为了让"保存前的冲突基线比对"这类调用点读起来仍然明确"以磁盘为准"。
-     */
     public String contentOnDisk(String cardId) {
         return contentOf(cardId);
     }
 
-    /** 写一张卡片（追加到清单末尾）。 */
-
-    /** 写一张卡片，插进清单第 {@code slot} 位（{@code slot < 0} 表示追加）。 */
-
-    /** 只改元数据；与 {@link #writeCardMeta(String, CardMeta)} 同义。 */
-
-    /**
-     * 磁盘上已经消失的卡片：把它从所属笔记的清单里摘掉（卡片跟着文件走）。
-     *
-     * <p>与认领互为对偶：外部删文件不必通知应用，下一次对账就对齐了。
-     *
-     * @return 摘掉的卡片数
-     */
     public int dropMissingCards() {
         int dropped = 0;
         for (NoteMeta note : findAll()) {
             List<String> kept = new ArrayList<>();
             boolean changed = false;
-            for (String relative : note.getCardPaths()) {
-                Path cardFile = NoteFilePaths.root().resolve(relative);
-                if (java.nio.file.Files.isRegularFile(cardFile)) {
-                    kept.add(relative);
+            for (String cardFileName : note.getCardPaths()) {
+                if (Files.isRegularFile(Path.of(root.toString(), "cards", cardFileName))) {
+                    kept.add(cardFileName);
                 } else {
                     changed = true;
                     dropped++;
@@ -610,19 +553,12 @@ public class NoteRepository {
             if (changed) {
                 note.setCardPaths(kept);
                 note.touch(System.currentTimeMillis());
-                JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(note.getId()), note);
+                JsonFileUtils.write(Path.of(root.toString(), "meta", note.getId() + ".json"), note);
             }
         }
         return dropped;
     }
 
-    /**
-     * 认领不在任何清单里的 md（手拷进来的、外部新建的）：它自己成为一篇单卡笔记。
-     *
-     * <p>按需扫描：每次现算"已知文件集合"，不做文件基线缓存。
-     *
-     * @return 认领的数量
-     */
     public int claimUnmanaged() {
         java.util.Set<String> known = new java.util.HashSet<>();
         for (NoteMeta note : findAll()) {
@@ -630,7 +566,8 @@ public class NoteRepository {
         }
         int claimed = 0;
         for (String relative : listCardFiles()) {
-            if (known.contains(relative)) {
+            String cardFileName = Path.of(relative).getFileName().toString();
+            if (known.contains(cardFileName)) {
                 continue;
             }
             claim(relative);
@@ -639,11 +576,8 @@ public class NoteRepository {
         return claimed;
     }
 
-    /**
-     * 把一个游离的 md 认领成单卡笔记：补上卡片注释、建笔记 meta、算好列表页缓存。
-     */
     private void claim(String relative) {
-        Path file = NoteFilePaths.root().resolve(relative);
+        Path file = Path.of(root.toString(), relative);
         CardData data = noteStoreRead(file);
         long now = System.currentTimeMillis();
         String content = data == null ? "" : data.content();
@@ -652,8 +586,8 @@ public class NoteRepository {
         // 认领的笔记也必须归属一个分组：直接落默认分组（不变量在创建点收口）。
         String noteId = IdUtil.randomUUID();
         NoteMeta note = NoteMeta.newNoteMeta(noteId, title, "note", NotebookBook.DEFAULT_GROUP_ID);
-        note.setCardPaths(List.of(relative));
-        JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), note);
+        note.setCardPaths(List.of(file.getFileName().toString()));
+        JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), note);
         writeCardMeta(card, file);
     }
 
@@ -661,17 +595,14 @@ public class NoteRepository {
         return readCard(file);
     }
 
-    /**
-     * 标题兜底：正文首个标题 → 文件名（去掉 .md 与尾部随机串）→ "无标题笔记"。
-     */
     private static String titleFromContent(String content, Path file) {
         String heading = MarkdownUtils.firstHeading(content);
         if (heading != null && !heading.isBlank()) {
             return heading;
         }
         String name = file.getFileName().toString();
-        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(NoteFilePaths.MD_SUFFIX)) {
-            name = name.substring(0, name.length() - NoteFilePaths.MD_SUFFIX.length());
+        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".md")) {
+            name = name.substring(0, name.length() - ".md".length());
         }
         name = name.replaceFirst("-[0-9a-fA-F]{8,}$", "");
         return name.isBlank() ? "无标题笔记" : name;

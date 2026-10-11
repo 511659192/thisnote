@@ -2,7 +2,6 @@ package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.ext.notes.service.StartupMaintenanceService;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,11 +26,10 @@ class NoteLoadPerfProbe {
     void probe() throws IOException {
         for (int cards : new int[]{1000, 5000, 10000}) {
             Path caseRoot = Files.createTempDirectory("note-perf-" + cards + "-");
-            NoteFilePaths.configure(caseRoot);
-            NoteRepository store = new NoteRepository();
+            NoteRepository store = new NoteRepository(caseRoot);
             seed(store, caseRoot, cards);
 
-                StartupMaintenanceService maintenance = new StartupMaintenanceService(store);
+            StartupMaintenanceService maintenance = new StartupMaintenanceService(store);
 
             long t0 = System.nanoTime();
             maintenance.run();
@@ -74,15 +72,16 @@ class NoteLoadPerfProbe {
             for (int c = 0; c < CARDS_PER_NOTE; c++) {
                 String blockId = java.util.UUID.randomUUID().toString();
                 String slug = "卡片-" + n + "-" + c;
-                Path md = root.resolve(slug + "-" + NoteFilePaths.shortId(blockId) + ".md");
+                Path md = Path.of(root.toString(), "cards", slug + "-" + blockId.replace("-", "").substring(0, 8) + ".md");
+                Files.createDirectories(md.getParent());
                 Files.writeString(md, CardFile.compose(new CardMeta(CardMeta.SCHEMA, blockId,
                         "", 0, c * 300.0, 720, 260, c, null, null, false, Map.of(),
                         now, now), "正文 " + c + "\n" + "x".repeat(200)), StandardCharsets.UTF_8);
-                refs.add(NoteFilePaths.relative(md));
+                refs.add(md.getFileName().toString());
             }
             NoteMeta meta = NoteMeta.newNoteMeta(noteId, "笔记 " + n, "note", "grp-default");
             meta.setCardPaths(refs);
-            com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(noteId), meta);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), meta);
         }
     }
 

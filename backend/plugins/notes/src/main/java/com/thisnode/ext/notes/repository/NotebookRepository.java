@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.api.dto.Dtos;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.domain.NotebookBook;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.util.JsonFileUtils;
@@ -13,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -49,7 +49,7 @@ public class NotebookRepository {
             if (book == null) {
                 NotebookBook loaded;
                 try {
-                    loaded = JsonFileUtils.read(NoteFilePaths.notebooksFilePath(), NotebookBook.class);
+                    loaded = JsonFileUtils.read(Path.of(noteRepository.getRoot().toString(), "ledgers", "notebooks.json"), NotebookBook.class);
                 } catch (IOException | RuntimeException e) {
                     log.warn("分组台账无法读取，按空台账处理：{}", e.toString());
                     loaded = null;
@@ -61,7 +61,7 @@ public class NotebookRepository {
     }
 
     private void save(NotebookBook next) {
-        JsonFileUtils.write(NoteFilePaths.notebooksFilePath(), next);
+        JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "ledgers", "notebooks.json"), next);
         book = next;
     }
 
@@ -138,7 +138,7 @@ public class NotebookRepository {
         if (meta != null) {
             meta.setNotebookId(notebookId);
             meta.touch(System.currentTimeMillis());
-            JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(meta.getId()), meta);
+            JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", meta.getId() + ".json"), meta);
         }
     }
 
@@ -227,7 +227,7 @@ public class NotebookRepository {
             if (id.equals(meta.getNotebookId())) {
                 meta.setNotebookId(DEFAULT_GROUP_ID);
                 meta.touch(System.currentTimeMillis());
-                JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(meta.getId()), meta);
+                JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", meta.getId() + ".json"), meta);
             }
         }
         NotebookBook next = book().without(id);

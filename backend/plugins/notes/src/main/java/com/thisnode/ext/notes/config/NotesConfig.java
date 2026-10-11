@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.config;
 
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
@@ -46,8 +45,6 @@ public class NotesConfig {
 
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() throws IOException {
-        NoteFilePaths.configure(markdownRoot());
-
         for (Path p : new Path[]{dataRoot(), markdownRoot(), attachmentRoot(), Paths.get(dataRoot, "logs")}) {
             Files.createDirectories(p);
         }

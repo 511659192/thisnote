@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.repository;
 
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.Tag;
 import com.thisnode.ext.notes.domain.TagBook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
@@ -25,11 +24,17 @@ public class TagRepository {
 
     private static final Logger log = LoggerFactory.getLogger(TagRepository.class);
 
+    private final NoteRepository noteRepository;
+
+    public TagRepository(NoteRepository noteRepository) {
+        this.noteRepository = noteRepository;
+    }
+
     /** 台账缓存：读一次就够（与分组台账同构）。 */
     private volatile TagBook book;
 
     private Path tagsFile() {
-        return NoteFilePaths.tagsFilePath();
+        return Path.of(noteRepository.getRoot().toString(), "ledgers", "tags.json");
     }
 
     private TagBook book() {
@@ -51,9 +56,14 @@ public class TagRepository {
             TagBook loaded = JsonFileUtils.read(file, TagBook.class);
             return loaded == null ? TagBook.empty() : loaded;
         } catch (IOException | RuntimeException e) {
-            log.warn("标签台账无法读取：{}（{}）", NoteFilePaths.relative(file), e.toString());
+            log.warn("标签台账无法读取：{}（{}）", relative(file), e.toString());
             return TagBook.empty();
         }
+    }
+
+    private String relative(Path file) {
+        return noteRepository.getRoot().relativize(file.toAbsolutePath().normalize())
+                             .toString().replace('\\', '/');
     }
 
     private void save(TagBook next) {

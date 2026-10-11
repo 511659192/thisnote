@@ -2,7 +2,6 @@ package com.thisnode.ext.notes.domain;
 
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,10 +32,9 @@ class ContentAlwaysFreshTest {
 
     @BeforeEach
     void setUp() {
-        NoteFilePaths.configure(root);
-        store = new NoteRepository();
+        store = new NoteRepository(root);
         cardRepository = new CardRepository(store);
-        com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(NOTE),
+        com.thisnode.ext.notes.util.JsonFileUtils.write(Path.of(root.toString(), "meta", NOTE),
                 NoteMeta.newNoteMeta(NOTE, "现读测试", "note", null));
     }
 

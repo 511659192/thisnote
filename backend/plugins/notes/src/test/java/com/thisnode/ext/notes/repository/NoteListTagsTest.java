@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,11 +32,10 @@ class NoteListTagsTest {
 
     @BeforeEach
     void setUp() {
-        NoteFilePaths.configure(root);
-        NoteRepository store = new NoteRepository();
+        NoteRepository store = new NoteRepository(root);
         NoteRepository noteRepository = store;
         CardRepository blockRepository = new CardRepository(store);
-        tagRepository = new TagRepository();
+        tagRepository = new TagRepository(store);
         NotebookRepository notebookRepository = new NotebookRepository(store);
         noteService = new NoteService(noteRepository, tagRepository, notebookRepository, blockRepository);
     }

@@ -1,7 +1,6 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.domain.TagBook;
 import com.thisnode.ext.notes.service.NoteService;
@@ -32,9 +31,8 @@ class TagRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        NoteFilePaths.configure(root);
-        store = new NoteRepository();
-        tags = new TagRepository();
+        store = new NoteRepository(root);
+        tags = new TagRepository(store);
         // 标签的归属在 meta（NoteRepository）、属性在台账（TagRepository）：跨两边的操作由服务编排。
         service = new NoteService(store, tags, new NotebookRepository(store), new CardRepository(store));
     }
@@ -42,11 +40,11 @@ class TagRepositoryTest {
     private void seedNote(String id, String... tagNames) {
         NoteMeta meta = NoteMeta.newNoteMeta(id, "笔记 " + id, "note", null);
         meta.setTags(List.of(tagNames));
-        com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaFilePath(id), meta);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(Path.of(root.toString(), "meta", id + ".json"), meta);
     }
 
     private TagBook ledger() throws IOException {
-        return com.thisnode.ext.notes.util.JsonFileUtils.read(NoteFilePaths.tagsFilePath(), TagBook.class);
+        return com.thisnode.ext.notes.util.JsonFileUtils.read(Path.of(root.toString(), "ledgers", "tags.json"), TagBook.class);
     }
 
     @Test

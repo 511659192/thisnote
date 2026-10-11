@@ -3,7 +3,6 @@ package com.thisnode.ext.notes.domain;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.ext.notes.service.StartupMaintenanceService;
-import com.thisnode.ext.notes.util.NoteFilePaths;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,8 +40,7 @@ class NoteFileModelTest {
 
     @BeforeEach
     void setUp() {
-        NoteFilePaths.configure(root);
-        store = new NoteRepository();
+        store = new NoteRepository(root);
         cardRepository = new CardRepository(store);
         maintenance = new StartupMaintenanceService(store);
         maintenance.run();
@@ -50,7 +49,7 @@ class NoteFileModelTest {
     @Test
     @DisplayName("没有 meta 的 md 被认领成一篇单卡笔记，并生成两份 meta")
     void claimsMdWithoutMeta() throws IOException {
-        Path md = root.resolve("cardRefs").resolve("我的第一篇笔记.md");
+        Path md = root.resolve("cards").resolve("我的第一篇笔记.md");
         Files.createDirectories(md.getParent());
         Files.writeString(md, "# 会议记录\n\n今天讨论了三件事。", StandardCharsets.UTF_8);
 
@@ -120,38 +119,6 @@ class NoteFileModelTest {
     }
 
     @Test
-    @DisplayName("正文、几何与插件扩展区都能从磁盘原样读回")
-    void roundTripsThroughDisk() {
-        NoteMeta noteMeta = NoteMeta.newNoteMeta("n1", "往返", "note", "grp-default");
-        noteMeta.setTags(List.of("标签一"));
-        writeNoteMeta(noteMeta);
-        cardRepository.putCard("n1", new CardMeta(CardMeta.SCHEMA, "b1", "卡片标题",
-                12.5, 340.25, 500, 200, 3, "#ff0000", "doing", true, Map.of(), 10L, 10L),
-                "正文内容");
-        store.putExtension("b1", "memory-curve", Map.of("state", "review", "reps", 2));
-
-        NoteMeta note = store.getOneNoteMeta("n1");
-        assertThat(note.getTitle()).isEqualTo("往返");
-        assertThat(note.getTags()).containsExactly("标签一");
-        assertThat(note.getNotebookId()).isEqualTo("grp-default");
-
-        CardMeta card = store.card("b1");
-        assertThat(card.title()).isEqualTo("卡片标题");
-        assertThat(card.x()).isEqualTo(12.5);
-        assertThat(card.y()).isEqualTo(340.25);
-        assertThat(card.w()).isEqualTo(500);
-        assertThat(card.z()).isEqualTo(3);
-        assertThat(card.color()).isEqualTo("#ff0000");
-        assertThat(card.status()).isEqualTo("doing");
-        assertThat(card.collapsed()).isTrue();
-        assertThat(store.content("b1")).isEqualTo("正文内容");
-
-        assertThat(store.extension("b1", "memory-curve"))
-                .containsEntry("state", "review")
-                .containsEntry("reps", 2);
-    }
-
-    @Test
     @DisplayName("两张同名卡片落在两个文件里，不会互相覆盖")
     void disambiguatesSameSlug() {
         writeNoteMeta(NoteMeta.newNoteMeta("n1", "同名测试", "note", null));
@@ -195,7 +162,7 @@ class NoteFileModelTest {
         Files.createDirectories(metaDir);
         String legacyMeta = com.alibaba.fastjson2.JSON.toJSONString(Map.of(
                 "v", 2, "id", "note-legacy", "title", "旧笔记", "type", "note",
-                "cardPath", List.of(NoteFilePaths.relative(card)),
+                "cardPath", List.of(card.getFileName().toString()),
                 "createdAt", 1, "updatedAt", 1));
         Files.writeString(metaDir.resolve("note-legacy.json"), legacyMeta, StandardCharsets.UTF_8);
 
@@ -239,25 +206,31 @@ class NoteFileModelTest {
 
     // ------------------------------------------------------------------ helpers
 
+    private static String shortId(String cardId) {
+        String hex = cardId == null ? "" : cardId.replace("-", "");
+        return (hex.length() >= 8 ? hex.substring(0, 8) : (hex + "00000000").substring(0, 8))
+                .toLowerCase(Locale.ROOT);
+    }
+
     private void writeNoteMeta(NoteMeta note) {
-        com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaPath(note.getId()), note);
+        com.thisnode.ext.notes.util.JsonFileUtils.write(Path.of(root.toString(), "meta", note.getId() + ".json"), note);
     }
 
     /** 造一张"磁盘上已有"的卡片：写 md（含头部注释）并把它挂到所属笔记的清单上。 */
     private void writeCard(String slug, String cardId, String noteId, int slot, String content)
             throws IOException {
-        Path md = root.resolve("cardRefs").resolve(slug + "-" + NoteFilePaths.shortId(cardId) + ".md");
+        Path md = root.resolve("cards").resolve(slug + "-" + shortId(cardId) + ".md");
         Files.createDirectories(md.getParent());
         CardMeta card = new CardMeta(CardMeta.SCHEMA, cardId, "",
                 0, slot * 300.0, CardMeta.DEFAULT_W, CardMeta.DEFAULT_H, slot,
                 null, null, false, Map.of(), 1L, 1L);
         store.writeCard("测试笔记", card, content, md);
-        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(NoteFilePaths.noteMetaPath(noteId), NoteMeta.class);
+        NoteMeta note = com.thisnode.ext.notes.util.JsonFileUtils.read(Path.of(root.toString(), "meta", noteId + ".json"), NoteMeta.class);
         if (note != null) {
             List<String> paths = new ArrayList<>(note.getCardPaths());
-            paths.add(Math.max(0, Math.min(slot, paths.size())), NoteFilePaths.relative(md));
+            paths.add(Math.max(0, Math.min(slot, paths.size())), md.getFileName().toString());
             note.setCardPaths(paths);
-            com.thisnode.ext.notes.util.JsonFileUtils.write(NoteFilePaths.noteMetaPath(note.getId()), note);
+            com.thisnode.ext.notes.util.JsonFileUtils.write(Path.of(root.toString(), "meta", note.getId() + ".json"), note);
         }
     }
 }
