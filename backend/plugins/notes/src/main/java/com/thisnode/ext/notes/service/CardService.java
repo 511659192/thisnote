@@ -170,7 +170,7 @@ public class CardService {
     public void delete(String cardId,
                        boolean deleteContent) {
         Dtos.CardDto card = requireCard(cardId);
-        NoteMeta note = noteRepository.getOneNoteMeta(card.noteId());
+        NoteMeta note = noteRepository.getNoteMeta(card.noteId());
         if (cardRepository.count(card.noteId()) <= 1) {
             if (deleteContent) {
                 noteService.delete(card.noteId());

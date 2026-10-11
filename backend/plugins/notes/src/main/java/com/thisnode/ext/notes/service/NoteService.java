@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.service;
 
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.domain.CardMeta;
+import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -41,7 +41,7 @@ public class NoteService {
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
         String id = noteRepository.insert(titleOf(title, content), type);
         // 编排：首卡落盘（一篇笔记至少一张卡；正文只有一份，在卡片里）。
-        cardRepository.putCard(id, CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis()), content);
+        cardRepository.putCard(id, Card.CardMeta.newCardMeta(IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis()), content);
 
         // 笔记必须归属一个分组：界面侧在某个分组里新建时会带上当前分组，没带就落默认分组。
         // 不变量在后端收口，客户端（含脚本、导入）不可能造出无归属的笔记。
@@ -66,7 +66,7 @@ public class NoteService {
 
     public void update(String id,
                        Dtos.UpdateNodeRequest req) {
-        NoteMeta meta = noteRepository.getOneNoteMeta(id);
+        NoteMeta meta = noteRepository.getNoteMeta(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
@@ -112,7 +112,7 @@ public class NoteService {
     // ================================================================= read
 
     public NoteMeta require(String id) {
-        NoteMeta meta = noteRepository.getOneNoteMeta(id);
+        NoteMeta meta = noteRepository.getNoteMeta(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
@@ -122,7 +122,7 @@ public class NoteService {
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
         String content = noteRepository.text(meta);
-        List<String> cardIds = noteRepository.cards(id).stream().map(CardMeta::id).toList();
+        List<String> cardIds = noteRepository.cards(id).stream().map(Card.CardMeta::getId).toList();
         return new Dtos.NoteDetail(meta.getId(), meta.getTitle(), content, meta.getType(),
                                    cardIds, notebookRepository.notebooksOf(id), meta.getCreatedAt(), meta.getUpdatedAt());
     }
