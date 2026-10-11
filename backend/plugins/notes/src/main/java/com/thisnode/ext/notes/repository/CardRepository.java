@@ -237,7 +237,7 @@ public class CardRepository {
             paths.add(cardFileName);
         }
         note.setCardPaths(paths);
-        note.touch(System.currentTimeMillis());
+        note.setUpdatedAt(System.currentTimeMillis());
         JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", note.getId() + ".json"), note);
         return card;
     }
@@ -264,7 +264,7 @@ public class CardRepository {
         List<String> paths = new ArrayList<>(owned.note().getCardPaths());
         paths.remove(owned.file().getFileName().toString());
         owned.note().setCardPaths(paths);
-        owned.note().touch(System.currentTimeMillis());
+        owned.note().setUpdatedAt(System.currentTimeMillis());
         JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", owned.note().getId() + ".json"), owned.note());
     }
 

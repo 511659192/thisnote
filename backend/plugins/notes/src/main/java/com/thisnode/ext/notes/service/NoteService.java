@@ -1,17 +1,21 @@
 package com.thisnode.ext.notes.service;
 
+import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.Dtos;
-import com.thisnode.ext.notes.repository.*;
 import com.thisnode.ext.notes.domain.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
-import cn.hutool.core.util.IdUtil;
+import com.thisnode.ext.notes.repository.CardRepository;
+import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.ext.notes.repository.NotebookRepository;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import com.thisnode.ext.notes.util.MarkdownUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Note aggregate: CRUD and list queries.
@@ -49,7 +53,8 @@ public class NoteService {
     /**
      * 标题兜底：没写标题就用正文首个标题，再没有才叫"无标题笔记"。
      */
-    private static String titleOf(String title, String contentMd) {
+    private static String titleOf(String title,
+                                  String contentMd) {
         if (title != null && !title.isBlank()) {
             return title;
         }
@@ -59,12 +64,13 @@ public class NoteService {
 
     // ================================================================= update
 
-    public void update(String id, Dtos.UpdateNodeRequest req) {
+    public void update(String id,
+                       Dtos.UpdateNodeRequest req) {
         NoteMeta meta = noteRepository.getOneNoteMeta(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
-        String content = noteRepository.noteMarkdown(id);
+        String content = noteRepository.text(meta);
         boolean contentChanged = false;
         String oldTitle = meta.getTitle();
         boolean renamed = req.title() != null && !req.title().equals(oldTitle);
@@ -79,7 +85,7 @@ public class NoteService {
             contentChanged = true;
         }
         meta.setTitle(nextTitle);
-        meta.touch(System.currentTimeMillis());
+        meta.setUpdatedAt(System.currentTimeMillis());
         JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", id + ".json"), meta);
 
         if (Boolean.TRUE.equals(req.clearNotebook())) {
@@ -115,10 +121,10 @@ public class NoteService {
 
     public Dtos.NoteDetail detail(String id) {
         NoteMeta meta = require(id);
-        String content = noteRepository.noteMarkdown(id);
+        String content = noteRepository.text(meta);
         List<String> cardIds = noteRepository.cards(id).stream().map(CardMeta::id).toList();
         return new Dtos.NoteDetail(meta.getId(), meta.getTitle(), content, meta.getType(),
-                cardIds, notebookRepository.notebooksOf(id), meta.getCreatedAt(), meta.getUpdatedAt());
+                                   cardIds, notebookRepository.notebooksOf(id), meta.getCreatedAt(), meta.getUpdatedAt());
     }
 
     // ================================================================= list
@@ -139,9 +145,9 @@ public class NoteService {
         Query query = q == null ? Query.defaults() : q;
 
         List<NoteMeta> matched = new ArrayList<>();
-        for (NoteMeta meta : noteRepository.findAll()) {
-            if (matches(meta, query)) {
-                matched.add(meta);
+        for (NoteMeta noteMeta : noteRepository.findAll()) {
+            if (matches(noteMeta, query)) {
+                matched.add(noteMeta);
             }
         }
         matched.sort((a, b) -> Long.compare(b.getUpdatedAt(), a.getUpdatedAt()));
@@ -155,10 +161,8 @@ public class NoteService {
         return page;
     }
 
-    /**
-     * 逐篇判断，条件与旧的 WHERE 子句一一对应。
-     */
-    private boolean matches(NoteMeta meta, Query query) {
+    private boolean matches(NoteMeta meta,
+                            Query query) {
         if (query.type() != null && !query.type().isBlank() && !query.type().equals(meta.getType())) {
             return false;
         }
@@ -168,7 +172,7 @@ public class NoteService {
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
             // 列表内的文字过滤要真正文 —— 按需加载这篇笔记的卡片，比"为了列表把全库读进内存"划算。
-            String body = noteRepository.noteMarkdown(meta.getId()).toLowerCase(Locale.ROOT);
+            String body = noteRepository.text(meta).toLowerCase(Locale.ROOT);
             boolean hit = (meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle)) || body.contains(needle);
             if (!hit) {
                 return false;
@@ -178,13 +182,15 @@ public class NoteService {
     }
 
 
-    public static class NotFoundException extends com.thisnode.plugin.api.NotFoundException {
+    public static class NotFoundException
+            extends com.thisnode.plugin.api.NotFoundException {
         public NotFoundException(String what) {
             super("未找到：" + what);
         }
     }
 
-    public static class ConflictException extends com.thisnode.plugin.api.ConflictException {
+    public static class ConflictException
+            extends com.thisnode.plugin.api.ConflictException {
         public ConflictException(String message) {
             super(message);
         }

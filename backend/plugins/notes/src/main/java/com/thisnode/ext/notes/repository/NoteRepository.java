@@ -10,8 +10,10 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Repository;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -38,7 +40,7 @@ public class NoteRepository {
     public String insert(String title, String type) {
         String noteMetaId = IdUtil.randomUUID();
         Path path = Path.of(root.toString(), "meta", noteMetaId + ".json");
-        NoteMeta noteMeta = NoteMeta.newNoteMeta(noteMetaId, title, type, null);
+        NoteMeta noteMeta = new NoteMeta().setId(noteMetaId).setTitle(title).setType(type);
         JsonFileUtils.write(path, noteMeta);
         return noteMetaId;
     }
@@ -97,6 +99,7 @@ public class NoteRepository {
                     log.warn("元数据无法解析，已跳过：{}（{}）", relative(file), e.toString());
                     continue;
                 }
+
                 if (meta == null) {
                     continue;
                 }
@@ -104,7 +107,7 @@ public class NoteRepository {
                 notes.add(meta);
             }
         } catch (IOException | DirectoryIteratorException e) {
-            log.warn("笔记元数据目录无法读取：{}（{}）", relative(metaDir), e.toString());
+            log.error("笔记元数据目录无法读取：{}（{}）", relative(metaDir), e.toString());
         }
         return notes;
     }
@@ -117,27 +120,42 @@ public class NoteRepository {
             return null;
         }
         Path metaDir = Path.of(root.toString(), "meta").normalize();
-        Path file;
+        Path filePath;
         try {
-            file = Path.of(metaDir.toString(), noteMetaId + ".json").normalize();
+            filePath = Path.of(metaDir.toString(), noteMetaId + ".json").normalize();
         } catch (InvalidPathException e) {
             return null;
         }
-        if (!Files.isRegularFile(file)) {
+
+        return parse(filePath);
+    }
+
+    private NoteMeta parse(Path filePath) {
+        if (!Files.isRegularFile(filePath)) {
             return null;
         }
+
         try {
-            return JsonFileUtils.read(file, NoteMeta.class);
+            return JsonFileUtils.read(filePath, NoteMeta.class);
         } catch (IOException | RuntimeException e) {
-            log.warn("元数据无法解析，已跳过：{}（{}）", relative(file), e.toString());
+            log.warn("元数据无法解析，已跳过：{}（{}）", relative(filePath), e.toString());
             return null;
         }
     }
 
+    public String text(NoteMeta note) {
+        List<String> cardPaths = Optional.of(note.getCardPaths()).orElse(Collections.emptyList());
+        return text(cardPaths);
+    }
 
-    public String noteMarkdown(String noteId) {
+    public String text(String noteId) {
+        List<String> cardPaths = cardPathsOf(noteId);
+        return text(cardPaths);
+    }
+
+    public String text(List<String> cardPaths) {
         StringBuilder joined = new StringBuilder();
-        for (String cardFileName : cardPathsOf(noteId)) {
+        for (String cardFileName : cardPaths) {
             CardData data = readCard(Path.of(root.toString(), "cards", cardFileName));
             String part = data == null ? "" : data.content();
             if (part.isBlank()) {
@@ -289,7 +307,7 @@ public class NoteRepository {
             paths.add(cardFileName);
         }
         note.setCardPaths(paths);
-        note.touch(System.currentTimeMillis());
+        note.setUpdatedAt(System.currentTimeMillis());
         JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), note);
         return card;
     }
@@ -401,7 +419,7 @@ public class NoteRepository {
             }
             if (changed) {
                 note.setCardPaths(kept);
-                note.touch(System.currentTimeMillis());
+                note.setUpdatedAt(System.currentTimeMillis());
                 JsonFileUtils.write(Path.of(root.toString(), "meta", note.getId() + ".json"), note);
             }
         }
@@ -434,7 +452,7 @@ public class NoteRepository {
         String title = titleFromContent(content, file);
         // 认领的笔记也必须归属一个分组：直接落默认分组（不变量在创建点收口）。
         String noteId = IdUtil.randomUUID();
-        NoteMeta note = NoteMeta.newNoteMeta(noteId, title, "note", NotebookBook.DEFAULT_GROUP_ID);
+        NoteMeta note = new NoteMeta().setId(noteId).setTitle(title).setType("note").setNotebookId(NotebookBook.DEFAULT_GROUP_ID);
         note.setCardPaths(List.of(file.getFileName().toString()));
         JsonFileUtils.write(Path.of(root.toString(), "meta", noteId + ".json"), note);
         writeCardMeta(card, file);

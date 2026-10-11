@@ -137,7 +137,7 @@ public class NotebookRepository {
         NoteMeta meta = noteRepository.getOneNoteMeta(nodeId);
         if (meta != null) {
             meta.setNotebookId(notebookId);
-            meta.touch(System.currentTimeMillis());
+            meta.setUpdatedAt(System.currentTimeMillis());
             JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", meta.getId() + ".json"), meta);
         }
     }
@@ -219,7 +219,7 @@ public class NotebookRepository {
         for (NoteMeta meta : noteRepository.findAll()) {
             if (id.equals(meta.getNotebookId())) {
                 meta.setNotebookId(DEFAULT_GROUP_ID);
-                meta.touch(System.currentTimeMillis());
+                meta.setUpdatedAt(System.currentTimeMillis());
                 JsonFileUtils.write(Path.of(noteRepository.getRoot().toString(), "meta", meta.getId() + ".json"), meta);
             }
         }
