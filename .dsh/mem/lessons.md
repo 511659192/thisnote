@@ -22,7 +22,7 @@
   - 全仓编译：在 `backend/` 跑 `mvn -o -B -DskipTests clean compile` → 8 个模块 `BUILD SUCCESS`（本次实测）。
   - 单点行为验证（不新增项目文件）：临时目录写一个单文件源码，用
     `java -cp "backend/app/target/classes;backend/plugin-api/target/classes;<fastjson2 jar>;<slf4j-api jar>" <file>.java` 直接跑。
-- **规则**：改后端优先用上面的编译命令拿硬证据；要验证运行时行为就写临时目录里的一次性程序，别为了验证往项目里塞文件。
+- **规则**：上述编译命令仅在用户明确要求编译时运行；代码修改完成后，未经用户明确要求，不运行测试、不执行部署或编译。运行时验证也仅在用户明确要求时进行。
 
 ## 3. 启动应用的标准姿势（2026-10-10 本机实测）
 

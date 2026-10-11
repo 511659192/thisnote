@@ -101,7 +101,7 @@ function openNotebook(id: string) {
 }
 
 async function createNote() {
-  const detail = await nodes.createAndSelect({ title: '无标题笔记', contentMd: '' })
+  const detail = await nodes.createAndSelect({ contentMd: '' })
   if (detail) void router.push(`/notes/${detail.id}`)
 }
 

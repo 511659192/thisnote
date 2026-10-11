@@ -6,10 +6,11 @@ import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.util.MarkdownUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +27,8 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class NoteService {
 
+    private static final DateTimeFormatter TITLE_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final NoteRepository noteRepository;
     private final NotebookService notebookService;
     private final CardRepository cardRepository;
@@ -36,7 +39,7 @@ public class NoteService {
         String title = req.title() == null ? "" : req.title().trim();
         String content = req.contentMd() == null ? "" : req.contentMd();
         String type = req.type() == null || req.type().isBlank() ? "note" : req.type();
-        String id = noteRepository.insert(titleOf(title, content), type);
+        String id = noteRepository.insert(titleOf(title), type);
         NoteMeta meta = noteRepository.getOne(id);
         Card.CardMeta firstCard = Card.CardMeta.newCardMeta(
                 IdUtil.randomUUID(), 0, 0, "", null, null, System.currentTimeMillis());
@@ -49,16 +52,12 @@ public class NoteService {
         return id;
     }
 
-    /**
-     * 标题兜底：没写标题就用正文首个标题，再没有才叫"无标题笔记"。
-     */
-    private static String titleOf(String title,
-                                  String contentMd) {
+    /** 未提供标题时使用当前时间。 */
+    private static String titleOf(String title) {
         if (title != null && !title.isBlank()) {
             return title;
         }
-        String fromHeading = MarkdownUtils.firstHeading(contentMd);
-        return fromHeading != null ? fromHeading : "无标题笔记";
+        return LocalDateTime.now().format(TITLE_TIME_FORMAT);
     }
 
     public void update(String id,
@@ -73,7 +72,7 @@ public class NoteService {
         boolean renamed = req.title() != null && !req.title().equals(oldTitle);
         String nextTitle = oldTitle;
         if (renamed) {
-            nextTitle = titleOf(req.title(), content);
+            nextTitle = titleOf(req.title());
             contentChanged = true;
         }
         String nextContent = content;

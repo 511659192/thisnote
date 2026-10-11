@@ -5,7 +5,6 @@ import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.util.JsonFileUtils;
-import com.thisnode.ext.notes.util.MarkdownUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -79,7 +78,7 @@ public class CardRepository {
                        String contentMd,
                        String knownFileName) {
         Path file = knownFileName == null
-                ? resolveContentPath(noteTitle, cardSlug(meta.getTitle(), contentMd), meta.getId())
+                ? resolveContentPath(noteTitle, cardSlug(meta.getTitle()), meta.getId())
                 : notesConfig.getCardsDir().resolve(knownFileName);
         JsonFileUtils.writeText(file, Card.compose(meta, contentMd));
         return file.getFileName().toString();
@@ -107,7 +106,7 @@ public class CardRepository {
     private Path resolveContentPath(String noteTitle,
                                     String cardTitle,
                                     String cardId) {
-        String noteSlug = cardSlug(noteTitle, null);
+        String noteSlug = cardSlug(noteTitle);
         String prefix = cardFilePrefix(noteSlug, cardTitle);
         Path candidate = notesConfig.getCardsDir().resolve(prefix + "-" + shortId(cardId) + ".md");
         if (!Files.exists(candidate)) {
@@ -123,23 +122,20 @@ public class CardRepository {
         return notesConfig.getCardsDir().resolve(prefix + "-" + cardId + ".md");
     }
 
-    private static String cardSlug(String title,
-                                   String contentMd) {
-        if (title != null && !title.isBlank()) {
-            return MarkdownUtils.slug(title);
+    private static String cardSlug(String title) {
+        if (title == null || title.isBlank()) {
+            return Long.toString(System.currentTimeMillis());
         }
-        String heading = MarkdownUtils.firstHeading(contentMd);
-        if (heading != null && !heading.isBlank()) {
-            return MarkdownUtils.slug(heading);
+        String slug = title.trim()
+                .replaceAll("[\\\\/:*?\"<>|]", "-")
+                .replaceAll("[\\p{Cntrl}]", "")
+                .replaceAll("\\s+", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^[.\\-]+|[.\\-]+$", "");
+        if (slug.isBlank()) {
+            slug = "untitled";
         }
-        if (contentMd != null) {
-            for (String line : contentMd.split("\\R")) {
-                if (!line.isBlank()) {
-                    return MarkdownUtils.slug(line.trim());
-                }
-            }
-        }
-        return "untitled";
+        return slug.length() > 60 ? slug.substring(0, 60) : slug;
     }
 
     private static String cardFilePrefix(String noteSlug,
