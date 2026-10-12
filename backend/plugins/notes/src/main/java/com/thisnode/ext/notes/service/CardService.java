@@ -24,10 +24,7 @@ public class CardService {
     private final NoteService noteService;
 
     private List<Card> cards(NoteMeta note) {
-        return note.getCardIds().stream()
-                .map(cardRepository::getOne)
-                .filter(card -> card != null && card.getMeta() != null)
-                .toList();
+        return note.getCardIds().stream().map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
     }
 
     public NoteDto cards(String noteId,
@@ -38,11 +35,12 @@ public class CardService {
             cards = cards(noteMeta);
         } else {
             Set<String> wanted = new HashSet<>(cardIds);
-            cards = noteMeta.getCardIds().stream()
-                    .filter(wanted::contains)
-                    .map(cardRepository::getOne)
-                    .filter(card -> card != null && card.getMeta() != null)
-                    .toList();
+            cards = noteMeta.getCardIds()
+                            .stream()
+                            .filter(wanted::contains)
+                            .map(cardRepository::getOne)
+                            .filter(card -> card != null && card.getMeta() != null)
+                            .toList();
         }
         return new NoteDto(noteMeta, cards);
     }
@@ -54,17 +52,16 @@ public class CardService {
         }
         NoteMeta noteMeta = noteService.get(noteId);
         String content = req.content();
-        String title = req.title();
         double x = Math.max(0, req.x());
         double y = Math.max(0, req.y());
         double w = Math.max(CardRepository.MIN_W, req.w());
         double h = Math.max(CardRepository.MIN_H, req.h());
 
-        CardMeta card = new CardMeta().setTitle(title).setX(x).setY(y).setW(w).setH(h).setColor(req.color());
+        CardMeta card = new CardMeta().setX(x).setY(y).setW(w).setH(h).setColor(req.color());
         cardRepository.saveNew(card, content, noteMeta.getTitle());
 
         List<String> cardIds = new ArrayList<>(noteMeta.getCardIds());
-        cardIds.add(card.getId());
+        cardIds.add(card.getCardId());
         noteMeta.setCardIds(cardIds);
         noteRepository.save(noteMeta);
         return new Card(card, content);
@@ -74,7 +71,7 @@ public class CardService {
                              String cardId,
                              String contentMd,
                              String baseContentMd) {
-        NoteMeta note = noteContainingCard(noteId, cardId);
+        NoteMeta noteMeta = noteContainingCard(noteId, cardId);
 
         Card card = cardRepository.getOne(cardId);
         if (card == null || card.getMeta() == null) {
@@ -89,7 +86,7 @@ public class CardService {
         CardMeta cardMeta = card.getMeta();
         String body = contentMd == null ? "" : contentMd;
         cardRepository.save(cardMeta, body, cardId);
-        noteRepository.save(note);
+        noteRepository.save(noteMeta);
         Card saved = cardRepository.getOne(cardId);
         return saved == null ? new Card(cardMeta, body) : saved;
     }
@@ -115,7 +112,6 @@ public class CardService {
         double w = changes.w() == null ? meta.getW() : Math.max(CardRepository.MIN_W, changes.w());
         double h = changes.h() == null ? meta.getH() : Math.max(CardRepository.MIN_H, changes.h());
         meta.setX(x).setY(y).setW(w).setH(h);
-        Optional.ofNullable(changes.title()).ifPresent(meta::setTitle);
         Optional.ofNullable(changes.color()).ifPresent(meta::setColor);
         Optional.ofNullable(changes.status()).ifPresent(meta::setStatus);
         Optional.ofNullable(changes.collapsed()).ifPresent(meta::setCollapsed);
@@ -132,21 +128,22 @@ public class CardService {
         }
     }
 
-    public void delete(String noteId, String cardId) {
+    public void delete(String noteId,
+                       String cardId) {
         NoteMeta note = noteContainingCard(noteId, cardId);
 
         cardRepository.delete(List.of(cardId));
-        note.setCardIds(note.getCardIds().stream()
-                .filter(id -> !id.equals(cardId))
-                .toList());
+        note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
         noteRepository.save(note);
     }
 
-    private NoteMeta noteContainingCard(String noteId, String cardId) {
+    private NoteMeta noteContainingCard(String noteId,
+                                        String cardId) {
         return noteContainingCard(noteService.get(noteId), cardId);
     }
 
-    private NoteMeta noteContainingCard(NoteMeta note, String cardId) {
+    private NoteMeta noteContainingCard(NoteMeta note,
+                                        String cardId) {
         if (!note.getCardIds().contains(cardId)) {
             throw new NotFoundException("card " + cardId);
         }

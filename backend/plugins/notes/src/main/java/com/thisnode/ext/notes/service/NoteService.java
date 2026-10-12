@@ -39,7 +39,8 @@ public class NoteService {
                            UpdateNoteRequest req) {
         NoteMeta meta = get(noteId);
         if (req.title() != null && !req.title().equals(meta.getTitle())) {
-            noteRepository.saveRenamed(meta, req.title());
+            noteRepository.onNewTitle(meta, req.title());
+            cardRepository.renameFiles(meta.getCardIds(), req.title());
         }
         return meta;
     }

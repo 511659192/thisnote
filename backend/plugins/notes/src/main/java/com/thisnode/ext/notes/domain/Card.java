@@ -103,8 +103,7 @@ public class Card {
         public static final double DEFAULT_H = 260;
 
         private int v = SCHEMA;
-        private String id;
-        private String title;
+        private String cardId;
         private double x = 0d;
         private double y = 0d;
         private double w = DEFAULT_W;
@@ -114,7 +113,5 @@ public class Card {
         private String status;
         private boolean collapsed;
         private Map<String, Object> ext = new HashMap<>();
-        private long createdAt = System.currentTimeMillis();
-        private long updatedAt = System.currentTimeMillis();
     }
 }

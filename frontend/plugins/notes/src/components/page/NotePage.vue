@@ -70,7 +70,7 @@ function watchSentinel() {
 // 插件底座：卡片集合变化时，让各插件批量装载自己的每卡片状态（每页一次请求）。
 // 只问仍在运行的插件——被停用的插件其端点会被拒绝，问了也只是白打一串 409。
 watch(
-  () => page.cards.map((b) => b.card.id).join(','),
+  () => page.cards.map((b) => b.card.cardId).join(','),
   (ids) => {
     if (!ids) return
     for (const plugin of activeCardPlugins()) {
@@ -209,11 +209,11 @@ function onBlockPointerDown(p: {
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
-  if (page.editingCardId && page.editingCardId !== view.card.id) {
+  if (page.editingCardId && page.editingCardId !== view.card.cardId) {
     void finishEditing()
   }
 
-  const id = view.card.id
+  const id = view.card.cardId
   const additive = event.shiftKey || event.metaKey || event.ctrlKey
   if (!page.selection.includes(id)) {
     page.select([id], additive)
@@ -230,7 +230,7 @@ function onBlockPointerDown(p: {
   drag.startWorld = page.screenToWorld(drag.startScreen)
   drag.origin = {}
   for (const selId of page.selection) {
-    const v = page.cards.find((b) => b.card.id === selId)
+    const v = page.cards.find((b) => b.card.cardId === selId)
     if (v) drag.origin[selId] = { x: v.card.x, y: v.card.y, w: v.card.w, h: v.card.h }
   }
   drag.moved = false
@@ -270,7 +270,7 @@ function onPointerMove(e: PointerEvent) {
             v.card.x <= b.x &&
             v.card.y <= b.y,
         )
-        .map((v) => v.card.id),
+        .map((v) => v.card.cardId),
     )
     return
   }
@@ -281,11 +281,11 @@ function onPointerMove(e: PointerEvent) {
     const world = page.screenToWorld(p)
     const id = page.selection[0]
     const o = drag.origin[id]
-    const view = page.cards.find((b) => b.card.id === id)
+    const view = page.cards.find((b) => b.card.cardId === id)
     if (!o || !view) return
     const x = snap(o.x + (world.x - drag.startWorld.x))
     const y = snap(o.y + (world.y - drag.startWorld.y))
-    page.localMove([{ cardId: view.card.id, x, y, w: o.w, h: o.h }])
+    page.localMove([{ cardId: view.card.cardId, x, y, w: o.w, h: o.h }])
     drag.pending.set(id, { x, y, w: o.w, h: o.h })
     return
   }
@@ -293,7 +293,7 @@ function onPointerMove(e: PointerEvent) {
   if (drag.mode === 'resize') {
     const id = Object.keys(drag.origin)[0]
     const o = drag.origin[id]
-    const view = page.cards.find((b) => b.card.id === id)
+    const view = page.cards.find((b) => b.card.cardId === id)
     if (!o || !view) return
     const dx = world.x - drag.startWorld.x
     const dy = world.y - drag.startWorld.y
@@ -312,7 +312,7 @@ function onPointerMove(e: PointerEvent) {
       hh = Math.max(BLOCK_MIN_H, o.h - dy)
       y = o.y + (o.h - hh)
     }
-    page.localMove([{ cardId: view.card.id, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
+    page.localMove([{ cardId: view.card.cardId, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
     drag.pending.set(id, { x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) })
   }
 }
@@ -324,8 +324,8 @@ async function onPointerUp() {
   marquee.active = false
   if ((mode === 'move' || mode === 'resize') && moved && drag.pending.size) {
     const updates: CardUpdate[] = [...drag.pending.entries()].flatMap(([id, g]) => {
-      const view = page.cards.find((b) => b.card.id === id)
-      return view ? [{ cardId: view.card.id, x: g.x, y: g.y, w: g.w, h: g.h }] : []
+      const view = page.cards.find((b) => b.card.cardId === id)
+      return view ? [{ cardId: view.card.cardId, x: g.x, y: g.y, w: g.w, h: g.h }] : []
     })
     // 拖过下边框/边角改高度的卡片 → 长度由用户做主，自动贴合不再覆盖（否则会"弹回"）。
     if (mode === 'resize' && drag.handle && /[ns]/.test(drag.handle)) {
@@ -339,8 +339,8 @@ async function onPointerUp() {
 // ---------------------------------------------------------------- editing
 
 async function beginEdit(view: CardView) {
-  page.editingCardId = view.card.id
-  page.select([view.card.id])
+  page.editingCardId = view.card.cardId
+  page.select([view.card.cardId])
 }
 
 /**
@@ -368,7 +368,7 @@ function currentEditorText(cardId: string): string | null {
 async function finishEditing(cardId?: string) {
   const id = cardId ?? page.editingCardId
   if (!id) return
-  const view = page.cards.find((b) => b.card.id === id)
+  const view = page.cards.find((b) => b.card.cardId === id)
   if (!view) {
     page.editingCardId = null
     return
@@ -395,7 +395,7 @@ function onSave(p: { cardId: string; contentMd: string }) {
   // Writing a card's content ends its edit, which unmounts the textarea and fires one last blur
   // carrying the same text. Ignoring a save that would write what the card already holds stops
   // that trailing blur from sending a duplicate request.
-  const view = page.cards.find((b) => b.card.id === p.cardId)
+  const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (view && view.contentMd === p.contentMd) {
     lastSave.set(p.cardId, Promise.resolve())
     return Promise.resolve()
@@ -410,13 +410,13 @@ function onSave(p: { cardId: string; contentMd: string }) {
  * width and left edge the user chose, and only the height follows the content.
  */
 function onToggleCollapse(cardId: string) {
-  const view = page.cards.find((b) => b.card.id === cardId)
+  const view = page.cards.find((b) => b.card.cardId === cardId)
   if (!view) return
-  void page.commit([{ cardId: view.card.id, collapsed: !view.card.collapsed }])
+  void page.commit([{ cardId: view.card.cardId, collapsed: !view.card.collapsed }])
 }
 
 function onFitHeight(p: { cardId: string; h: number }) {
-  const view = page.cards.find((b) => b.card.id === p.cardId)
+  const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (!view) return
   // 用户手动定过长度的卡片不再自动贴合（说了算的是用户，不是内容）。
   if (page.isManualHeight(p.cardId)) return
@@ -431,7 +431,7 @@ function onFitHeight(p: { cardId: string; h: number }) {
   const next = Math.min(Math.round(p.h), available)
   if (next === view.card.h) return
   view.card.h = next
-  void page.commit([{ cardId: view.card.id, h: next }]).catch(() => undefined)
+  void page.commit([{ cardId: view.card.cardId, h: next }]).catch(() => undefined)
 }
 
 /** Double-click empty space: a card whose top-left corner is the clicked point. */
@@ -504,7 +504,7 @@ function onCardFocus(id: string) {
 }
 
 function onBlockContext(p: { event: MouseEvent; view: CardView }) {
-  if (!page.selection.includes(p.view.card.id)) page.select([p.view.card.id])
+  if (!page.selection.includes(p.view.card.cardId)) page.select([p.view.card.cardId])
   emit('context', { x: p.event.clientX, y: p.event.clientY, target: 'card', view: p.view })
 }
 
@@ -529,16 +529,16 @@ defineExpose({ size, beginEdit, finishEditing })
     <div class="world" :style="worldStyle">
       <NoteCard
         v-for="view in page.cards"
-        :key="view.card.id"
+        :key="view.card.cardId"
         :view="view"
-        :selected="page.selection.includes(view.card.id)"
-        :editing="page.editingCardId === view.card.id"
-        :focused="page.selection.includes(view.card.id)"
-        :z-index="page.zIndexFor(view.card.id)"
+        :selected="page.selection.includes(view.card.cardId)"
+        :editing="page.editingCardId === view.card.cardId"
+        :focused="page.selection.includes(view.card.cardId)"
+        :z-index="page.zIndexFor(view.card.cardId)"
         @pointerdown="onBlockPointerDown"
         @request-edit="
           (id: string) => {
-            const v = page.cards.find((b) => b.card.id === id)
+            const v = page.cards.find((b) => b.card.cardId === id)
             if (v) beginEdit(v)
           }
         "

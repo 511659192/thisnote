@@ -19,8 +19,7 @@ export type NoteType = 'note' | 'daily' | 'template'
 /** Card metadata returned by the backend inside the Card domain object. */
 export interface CardMeta {
   v: number
-  id: string
-  title: string
+  cardId: string
   x: number
   y: number
   w: number
@@ -31,8 +30,6 @@ export interface CardMeta {
   status?: string | null
   collapsed: boolean
   ext?: Record<string, unknown> | null
-  createdAt: number
-  updatedAt: number
 }
 
 /** Card domain object returned by the backend. */

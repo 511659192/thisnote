@@ -54,6 +54,18 @@ public class IdFileIndex {
         });
     }
 
+    public synchronized void updateCardFileName(String cardId, String fileName) {
+        change(index -> {
+            if (!index.cardFiles.containsKey(cardId)) {
+                throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
+            }
+            if (fileName == null || fileName.isBlank()) {
+                throw new IllegalArgumentException("卡片文件名不能为空");
+            }
+            index.cardFiles.put(cardId, fileName);
+        });
+    }
+
     private IndexData read() {
         Path indexFile = indexPath();
         if (!Files.isRegularFile(indexFile)) {
@@ -100,8 +112,8 @@ public class IdFileIndex {
                     } catch (IOException e) {
                         throw new java.io.UncheckedIOException("读取卡片头部以建立 ID 索引失败：" + file, e);
                     }
-                    if (meta == null || meta.getId() == null || meta.getId().isBlank()) continue;
-                    putNew(index.cardFiles, meta.getId(), file.getFileName().toString(), "卡片");
+                    if (meta == null || meta.getCardId() == null || meta.getCardId().isBlank()) continue;
+                    putNew(index.cardFiles, meta.getCardId(), file.getFileName().toString(), "卡片");
                 }
             } catch (IOException e) {
                 throw new java.io.UncheckedIOException("扫描卡片文件以建立 ID 索引失败", e);

@@ -51,7 +51,7 @@ const content = computed(() => props.view.contentMd ?? '')
 const sourceVisible = computed(() => !card.value.collapsed && props.editing)
 
 watch(
-  () => [props.editing, card.value.id] as const,
+  () => [props.editing, card.value.cardId] as const,
   async ([editing, id]) => {
     if (!editing) {
       loadedFor.value = null
@@ -69,7 +69,7 @@ watch(
 )
 
 watch(
-  () => card.value.id,
+  () => card.value.cardId,
   () => {
     loadedFor.value = null
     draft.value = ''
@@ -110,7 +110,7 @@ function commit() {
   // Save what is in the DOM right now: an empty card must be recognisable as empty.
   const text = textarea.value ? textarea.value.value : draft.value
   draft.value = text
-  emit('save', { cardId: card.value.id, contentMd: text })
+  emit('save', { cardId: card.value.cardId, contentMd: text })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -149,7 +149,7 @@ function fitHeight() {
   const needed = Math.round(el.scrollHeight) + 24
   const target = Math.max(BLOCK_MIN_H, needed)
   if (Math.abs(target - card.value.h) > 8) {
-    emit('fit-height', { cardId: card.value.id, h: target })
+    emit('fit-height', { cardId: card.value.cardId, h: target })
   }
 }
 
@@ -191,7 +191,7 @@ onBeforeUnmount(() => {
 <template>
   <article
     class="card"
-    :data-card-id="card.id"
+    :data-card-id="card.cardId"
     :class="{ selected, editing, collapsed: card.collapsed, focused }"
     :style="{
       transform: `translate3d(${card.x}px, ${card.y}px, 0)`,
@@ -200,9 +200,9 @@ onBeforeUnmount(() => {
       zIndex: props.zIndex,
     }"
     @pointerdown="onBodyPointerDown"
-    @dblclick.stop="emit('request-edit', card.id)"
+    @dblclick.stop="emit('request-edit', card.cardId)"
     @contextmenu.prevent.stop="emit('context', { event: $event, view })"
-    @click="emit('focus', card.id)"
+    @click="emit('focus', card.cardId)"
   >
     <!-- Card tools: hidden until the card is hovered or selected, so they cost no layout space
          and the content starts right at the top of the card. 插件贡献的开关排在最左。 -->
@@ -212,7 +212,7 @@ onBeforeUnmount(() => {
           :is="plugin.cardComponent"
           v-for="plugin in activeCardPlugins()"
           :key="plugin.id"
-          :card-id="card.id"
+          :card-id="card.cardId"
         />
       </template>
       <button
@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
         :class="{ active: card.collapsed }"
         :title="card.collapsed ? '展开卡片' : '折叠卡片'"
         @pointerdown.stop
-        @click.stop="emit('toggle-collapse', card.id)"
+        @click.stop="emit('toggle-collapse', card.cardId)"
       >
         {{ card.collapsed ? '▸' : '▾' }}
       </button>

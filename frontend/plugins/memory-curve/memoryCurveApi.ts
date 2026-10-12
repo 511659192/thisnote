@@ -42,7 +42,6 @@ export interface DueCard {
 /** 一张卡片的渲染内容（由界面侧自己从核心 API 拼出来） */
 export interface CardContent {
   noteTitle: string
-  cardTitle: string
   contentMd: string
 }
 
@@ -83,7 +82,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     const pages = await Promise.all(batch.map(async (note) => {
       try {
         const page = await http.get<{
-          cards: Array<{ card: { id: string; title: string }; contentMd: string }>
+          cards: Array<{ card: { cardId: string }; contentMd: string }>
         }>('/api/notes/cards', { noteId: note.noteId })
         return { note, page }
       } catch {
@@ -93,10 +92,9 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     for (const item of pages) {
       if (!item) continue
       for (const view of item.page.cards) {
-        if (want.has(view.card.id) && !found.has(view.card.id)) {
-          found.set(view.card.id, {
+        if (want.has(view.card.cardId) && !found.has(view.card.cardId)) {
+          found.set(view.card.cardId, {
             noteTitle: item.note.title,
-            cardTitle: view.card.title,
             contentMd: view.contentMd,
           })
         }

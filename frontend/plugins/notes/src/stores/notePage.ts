@@ -50,7 +50,7 @@ export const usePageStore = defineStore('notePage', () => {
   const snapToGrid = ref(localStorage.getItem('thisnote.page.snap') === 'on')
 
   const selectedBlocks = computed(() =>
-    cards.value.filter((b) => selection.value.includes(b.card.id)),
+    cards.value.filter((b) => selection.value.includes(b.card.cardId)),
   )
   const singleSelected = computed(() =>
     selectedBlocks.value.length === 1 ? selectedBlocks.value[0] : null,
@@ -102,7 +102,7 @@ export const usePageStore = defineStore('notePage', () => {
       noteId.value = page.noteMeta.noteId
       noteTitle.value = page.noteMeta.title
       cards.value = page.cards.map(toCardView)
-      const loaded = new Set(cards.value.map((view) => view.card.id))
+      const loaded = new Set(cards.value.map((view) => view.card.cardId))
       pendingCardIds.value = pendingCardIds.value.filter((cardId) => !loaded.has(cardId))
       selection.value = []
       raisedCardIds.value = []
@@ -124,15 +124,15 @@ export const usePageStore = defineStore('notePage', () => {
     const batch = pendingCardIds.value.slice(0, PAGE_SIZE)
     try {
       const page = await pageApi.get(id, batch)
-      const seen = new Set(cards.value.map((view) => view.card.id))
+      const seen = new Set(cards.value.map((view) => view.card.cardId))
       for (const card of page.cards) {
         const view = toCardView(card)
-        if (!seen.has(view.card.id)) {
+        if (!seen.has(view.card.cardId)) {
           cards.value.push(view)
-          seen.add(view.card.id)
+          seen.add(view.card.cardId)
         }
       }
-      const arrived = new Set(page.cards.map((card) => card.meta.id))
+      const arrived = new Set(page.cards.map((card) => card.meta.cardId))
       pendingCardIds.value = pendingCardIds.value
         .slice(PAGE_SIZE)
         .filter((cardId) => !arrived.has(cardId))
@@ -146,12 +146,12 @@ export const usePageStore = defineStore('notePage', () => {
   /** Re-read the page without disturbing the viewport or the card being edited. */
   async function reload() {
     if (!noteId.value) return
-    const cardIds = cards.value.map((view) => view.card.id)
+    const cardIds = cards.value.map((view) => view.card.cardId)
     if (!cardIds.length && !pendingCardIds.value.length) return
     const cardIdSet = new Set(cardIds)
     const page = await pageApi.get(noteId.value, cardIds.length ? cardIds : undefined)
     const refreshed = page.cards.map(toCardView)
-    const extra = refreshed.filter((view) => !cardIdSet.has(view.card.id))
+    const extra = refreshed.filter((view) => !cardIdSet.has(view.card.cardId))
     cards.value = [...refreshed, ...extra]
     noteTitle.value = page.noteMeta.title
   }
@@ -191,7 +191,7 @@ export const usePageStore = defineStore('notePage', () => {
   }
 
   function selectAll() {
-    selection.value = cards.value.map((b) => b.card.id)
+    selection.value = cards.value.map((b) => b.card.cardId)
   }
 
   function bringToFront(cardId: string) {
@@ -199,7 +199,7 @@ export const usePageStore = defineStore('notePage', () => {
   }
 
   function zIndexFor(cardId: string): number {
-    const view = cards.value.find((item) => item.card.id === cardId)
+    const view = cards.value.find((item) => item.card.cardId === cardId)
     if (!view) return 1
 
     const baseZ = (item: CardView) => Math.max(1, Math.floor(item.card.y + item.card.h / 2) + 1)
@@ -214,7 +214,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   function localMove(updates: CardUpdate[]) {
     for (const p of updates) {
-      const view = cards.value.find((b) => b.card.id === p.cardId)
+      const view = cards.value.find((b) => b.card.cardId === p.cardId)
       if (!view) continue
       if (p.x !== undefined && p.x !== null) view.card.x = p.x
       if (p.y !== undefined && p.y !== null) view.card.y = p.y
@@ -261,7 +261,7 @@ export const usePageStore = defineStore('notePage', () => {
     for (const v of cards.value) {
       if (v.card.w > max) {
         v.card.w = max
-        updates.push({ cardId: v.card.id, w: max })
+        updates.push({ cardId: v.card.cardId, w: max })
       }
     }
     const currentNoteId = noteId.value
@@ -272,7 +272,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   async function addBlock(
     at: { x: number; y: number },
-    opts: { contentMd?: string; title?: string; w?: number; h?: number; surfaceWidth?: number } = {},
+    opts: { contentMd?: string; w?: number; h?: number; surfaceWidth?: number } = {},
   ): Promise<CardView | null> {
     if (!noteId.value) return null
     try {
@@ -282,17 +282,16 @@ export const usePageStore = defineStore('notePage', () => {
         w: opts.w ?? defaultCardWidth(opts.surfaceWidth),
         h: opts.h ?? defaultCardHeight(),
         contentMd: opts.contentMd ?? '',
-        title: opts.title ?? '',
       })
       await reload()
       // reload() 只按已装载的文件名拉；新建的卡可能不在其中，因此补进列表供页面渲染。
       const created = toCardView(createdCard)
-      let fresh = cards.value.find((b) => b.card.id === created.card.id)
+      let fresh = cards.value.find((b) => b.card.cardId === created.card.cardId)
       if (!fresh) {
         cards.value.push(created)
         fresh = created
       }
-      selection.value = [fresh.card.id]
+      selection.value = [fresh.card.cardId]
       return fresh
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -323,13 +322,13 @@ export const usePageStore = defineStore('notePage', () => {
 
   async function deleteBlock(cardId: string): Promise<boolean> {
     const noteIdForDelete = noteId.value
-    const view = cards.value.find((item) => item.card.id === cardId)
+    const view = cards.value.find((item) => item.card.cardId === cardId)
     if (!noteIdForDelete || !view) return false
 
     try {
       await pageApi.deleteBlock(noteIdForDelete, cardId)
       if (noteId.value !== noteIdForDelete) return true
-      cards.value = cards.value.filter((item) => item.card.id !== cardId)
+      cards.value = cards.value.filter((item) => item.card.cardId !== cardId)
       pendingCardIds.value = pendingCardIds.value.filter((id) => id !== cardId)
       selection.value = selection.value.filter((id) => id !== cardId)
       raisedCardIds.value = raisedCardIds.value.filter((id) => id !== cardId)
@@ -355,7 +354,7 @@ export const usePageStore = defineStore('notePage', () => {
   async function writeContent(cardId: string, contentMd: string) {
     const noteIdForWrite = noteId.value
     if (!noteIdForWrite) return
-    const view = cards.value.find((b) => b.card.id === cardId)
+    const view = cards.value.find((b) => b.card.cardId === cardId)
     if (!view) return
     savingContent.value = cardId
     // 基线必须在乐观改写之前取：它就是这次编辑开始时用户看到的正文。
@@ -364,7 +363,7 @@ export const usePageStore = defineStore('notePage', () => {
     // blur must see the new text so it does not send the same content again.
     view.contentMd = contentMd
     try {
-      await pageApi.writeContent(noteIdForWrite, view.card.id, contentMd, baseContentMd)
+      await pageApi.writeContent(noteIdForWrite, view.card.cardId, contentMd, baseContentMd)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
@@ -386,8 +385,8 @@ export const usePageStore = defineStore('notePage', () => {
   async function setColor(color: string | null) {
     if (!selection.value.length) return
     await commit(cards.value
-      .filter((view) => selection.value.includes(view.card.id))
-      .map((view) => ({ cardId: view.card.id, color })))
+      .filter((view) => selection.value.includes(view.card.cardId))
+      .map((view) => ({ cardId: view.card.cardId, color })))
   }
 
   // ---------------------------------------------------------------- viewport

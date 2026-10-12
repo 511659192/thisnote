@@ -1,6 +1,7 @@
 package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.NoteMeta;
@@ -11,6 +12,8 @@ import org.springframework.stereotype.Repository;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,53 +29,49 @@ public class NoteRepository {
 
     @SneakyThrows
     public String saveNew(NoteMeta note) {
-        String noteId = StrUtil.isBlank(note.getNoteId()) ? java.util.UUID.randomUUID().toString() : note.getNoteId();
-        note.setNoteId(noteId);
-
-        String fileName = "draft-" + note.getNoteId() + ".json";
-        Path file = notesConfig.getNoteMetaDir().resolve(fileName);
-        JsonFileUtils.write(file, note);
+        String noteId = IdUtil.randomUUID();
+        String fileName = "tmp-" + noteId + ".json";
+        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(fileName), note.setNoteId(noteId));
         fileIndex.addNote(noteId, fileName);
         return noteId;
     }
 
     /**
-     * Rename only the physical metadata file; the note ID remains stable.
+     * Rename only the physical metadata file; the noteMeta ID remains stable.
      */
     @SneakyThrows
-    public void saveRenamed(NoteMeta note,
-                            String newTitle) {
-        String noteId = note.getNoteId();
+    public void onNewTitle(NoteMeta noteMeta,
+                           String newTitle) {
+        String noteId = noteMeta.getNoteId();
         String oldFileName = fileIndex.noteFileName(noteId);
         if (oldFileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteId);
-        note.setTitle(newTitle).setUpdatedAt(System.currentTimeMillis());
-        Path metaDir = notesConfig.getNoteMetaDir();
-        String newFileName = newTitle + ".json";
-        if (newFileName.equals(oldFileName)) {
-            JsonFileUtils.write(metaDir.resolve(oldFileName), note);
-            return;
-        }
-        JsonFileUtils.move(metaDir.resolve(oldFileName), metaDir.resolve(newFileName));
-        JsonFileUtils.write(metaDir.resolve(newFileName), note);
 
+        noteMeta.setTitle(newTitle).setUpdatedAt(System.currentTimeMillis());
+        String newFileName = newTitle + ".json";
+        JsonFileUtils.move(notesConfig.getNoteMetaDir().resolve(oldFileName), notesConfig.getNoteMetaDir().resolve(newFileName));
+
+        noteMeta.setUpdatedAt(System.currentTimeMillis());
+        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(newFileName), noteMeta);
         fileIndex.updateNoteFileName(noteId, newFileName);
     }
 
-
-    public void save(NoteMeta note) {
-        if (note == null || StrUtil.isBlank(note.getNoteId())) return;
-        note.setUpdatedAt(System.currentTimeMillis());
-        rewrite(note);
+    public void save(NoteMeta noteMeta) {
+        if (noteMeta == null || StrUtil.isBlank(noteMeta.getNoteId())) return;
+        rewrite(noteMeta);
     }
 
     /**
-     * Rewrite the persisted shape without changing the note's updatedAt.
+     * Rewrite the persisted shape without changing the noteMeta's updatedAt.
      */
-    public void rewrite(NoteMeta note) {
-        if (note == null || StrUtil.isBlank(note.getNoteId())) return;
-        String fileName = fileIndex.noteFileName(note.getNoteId());
-        if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + note.getNoteId());
-        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(fileName), note);
+    @SneakyThrows
+    public void rewrite(NoteMeta noteMeta) {
+        if (noteMeta == null || StrUtil.isBlank(noteMeta.getNoteId())) return;
+        String fileName = fileIndex.noteFileName(noteMeta.getNoteId());
+        if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteMeta.getNoteId());
+
+        noteMeta.setUpdatedAt(System.currentTimeMillis());
+        Files.setLastModifiedTime(notesConfig.getNoteMetaDir().resolve(fileName), FileTime.from(Instant.now()));
+        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(fileName), noteMeta);
     }
 
     /**

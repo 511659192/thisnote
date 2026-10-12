@@ -205,11 +205,11 @@ function requestDeleteCard(view: CardView) {
     '删除卡片？',
     '卡片内容将被永久删除，笔记会保留。',
     async () => {
-      await pageRef.value?.finishEditing(view.card.id)
-      const deleted = await page.deleteBlock(view.card.id)
+      await pageRef.value?.finishEditing(view.card.cardId)
+      const deleted = await page.deleteBlock(view.card.cardId)
       const currentNote = nodes.current
       if (deleted && currentNote?.noteId === page.noteId) {
-        currentNote.cardIds = (currentNote.cardIds ?? []).filter((id) => id !== view.card.id)
+        currentNote.cardIds = (currentNote.cardIds ?? []).filter((id) => id !== view.card.cardId)
       }
     },
     '删除卡片',

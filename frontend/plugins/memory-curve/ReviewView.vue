@@ -124,7 +124,7 @@ async function gradeSelected(g: Grade) {
         removeFromView(card.cardId)
       } catch {
         failed++
-        notify(`「${(card.cardTitle || card.noteTitle || '卡片').slice(0, 12)}」评分失败`, 'error')
+        notify(`「${(card.noteTitle || '卡片').slice(0, 12)}」评分失败`, 'error')
       } finally {
         busyIds.value.delete(card.cardId)
       }

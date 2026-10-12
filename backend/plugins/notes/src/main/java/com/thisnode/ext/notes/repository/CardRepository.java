@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -51,11 +50,11 @@ public class CardRepository {
     public String saveNew(CardMeta meta,
                           String content,
                           String title) {
-        String cardId = meta.getId() == null || meta.getId().isBlank() ? UUID.randomUUID().toString() : meta.getId();
-        meta.setId(cardId).setUpdatedAt(System.currentTimeMillis());
+        String cardId = meta.getCardId() == null || meta.getCardId().isBlank() ? UUID.randomUUID().toString() : meta.getCardId();
+        meta.setCardId(cardId);
 
         Path dir = notesConfig.getCardsDir();
-        String prefix = title == null || title.isBlank() ? "draft-" + cardId : title;
+        String prefix = title == null || title.isBlank() ? "tmp-" + cardId : title;
         String cardContent = Card.compose(meta, content);
         for (int number = 1; ; number++) {
             String suffix = "_" + number;
@@ -68,13 +67,37 @@ public class CardRepository {
         }
     }
 
+    @SneakyThrows
+    public void renameFiles(List<String> cardIds,
+                            String noteTitle) {
+        if (cardIds == null || cardIds.isEmpty()) return;
+
+        Path dir = notesConfig.getCardsDir();
+        boolean draftTitle = noteTitle == null || noteTitle.isBlank();
+        for (String cardId : cardIds) {
+            String oldFileName = fileIndex.cardFileName(cardId);
+            if (oldFileName == null) continue;
+
+            String prefix = draftTitle ? "draft-" + cardId : noteTitle;
+            for (int number = 1; ; number++) {
+                String newFileName = prefix + "_" + number + ".md";
+                if (newFileName.equals(oldFileName)) break;
+                Path newFile = dir.resolve(newFileName);
+                if (Files.exists(newFile)) continue;
+
+                Files.move(dir.resolve(oldFileName), newFile);
+                fileIndex.updateCardFileName(cardId, newFileName);
+                break;
+            }
+        }
+    }
+
     /**
      * Rewrite the card content using its stable ID to resolve the physical path.
      */
     public String save(CardMeta meta,
                        String contentMd,
                        String cardId) {
-        meta.setUpdatedAt(System.currentTimeMillis());
         String fileName = fileIndex.cardFileName(cardId);
         if (fileName == null) throw new IllegalStateException("卡片 ID 不在文件索引中：" + cardId);
         JsonFileUtils.writeText(notesConfig.getCardsDir().resolve(fileName), Card.compose(meta, contentMd));

@@ -3,7 +3,6 @@ import type { Card, CardMeta, NoteDto } from './types'
 
 export interface CardUpdate {
   cardId: string
-  title?: string | null
   x?: number | null
   y?: number | null
   w?: number | null
@@ -37,7 +36,6 @@ export const pageApi = {
       w?: number
       h?: number
       contentMd?: string
-      title?: string
       color?: string
     },
   ) => http.post<Card>('/api/notes/cards/create', payload, { noteId }),

@@ -157,7 +157,7 @@ if (!window.__POWERED_BY_QIANKUN__) register()                  // 独立预览�
 NotePage 装载一页卡片时：
    for (plugin of activeCardPlugins()) plugin.loadState(ids)   ← 批量取状态（一张卡一个请求 → 一次请求）
 NoteCard 渲染卡片时：
-   <component :is="plugin.cardComponent" :cardId="card.id" />  ← 插件自己的组件
+   <component :is="plugin.cardComponent" :cardId="card.cardId" />  ← 插件自己的组件
 ```
 
 也就是说：**宿主只认契约，不认记忆曲线**；`activeCardPlugins()` 已按插件启用状态过滤。
