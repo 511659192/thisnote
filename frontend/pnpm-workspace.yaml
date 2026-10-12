@@ -4,8 +4,6 @@ packages:
   - 'plugins/favorite'
   - 'plugins/memory-curve'
   - 'plugins/notes'
-  - 'plugins/search'
-  - 'plugins/fuzzy-search'
 
 allowBuilds:
   esbuild: true

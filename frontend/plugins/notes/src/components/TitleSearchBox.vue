@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { clearActiveListFilter, setActiveListFilter } from '@thisnode/plugin-api'
-import { FILTER_ID, PLUGIN_ID, matchCount, query as queryState, setQuery } from './state'
+import { FILTER_ID, PLUGIN_ID, matchCount, query as queryState, setQuery } from '../stores/titleSearch'
 
 /**
- * 标题搜索框（列表页头部插槽的 UI）。
+ * notes 核心的标题搜索框（列表页头部插槽 UI）。
  *
- * <p>输入即激活本插件的列表筛选（防抖 250ms）—— 筛选的 load() 在 notes 域的
+ * <p>输入即激活 notes 自己登记的列表筛选（防抖 250ms）—— 筛选的 load() 在 notes 域的
  * watch 里被调用，按标题包含匹配返回命中的 id，列表随之收窄；字段右侧实时显示
  * 「命中 N 篇」，Esc 或清空按钮撤掉筛选并复位。
- * 这里不认识笔记列表的任何内部结构，只经注册表的激活指针说话。
  */
 const query = queryState
 const inputEl = ref<HTMLInputElement | null>(null)
