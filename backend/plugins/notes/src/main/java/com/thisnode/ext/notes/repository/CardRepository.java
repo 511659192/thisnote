@@ -22,8 +22,6 @@ public class CardRepository {
 
     public static final int MIN_W = 240;
     public static final int MIN_H = 88;
-    public static final int FLOW_GAP = 16;
-    public static final int FLOW_X = 0;
 
     private final NotesConfig notesConfig;
 

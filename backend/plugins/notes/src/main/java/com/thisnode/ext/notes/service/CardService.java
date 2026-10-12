@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -35,8 +36,8 @@ public class CardService {
         return noteRepository.getAll().stream().filter(note -> note.getCardFileNames().contains(fileName)).findFirst().get();
     }
 
-    public CardsPageDto page(String noteId,
-                             List<String> requestedFileNames) {
+    public CardsPageDto cards(String noteId,
+                              List<String> requestedFileNames) {
         NoteMeta note = noteService.require(noteId);
         List<Card> rows;
         if (requestedFileNames == null) {
@@ -59,43 +60,55 @@ public class CardService {
 
     public Card create(String noteId,
                        CreateCardRequest req) {
+        if (req.x() == null || req.y() == null) {
+            throw new IllegalArgumentException("创建卡片需要 x/y 坐标（页面上的落点）");
+        }
         NoteMeta note = noteService.require(noteId);
         String content = req.content();
         String title = req.title();
-        double[] flow = nextFlowPosition(note);
-        double x = req.x() == null ? flow[0] : Math.max(0, req.x());
-        double y = req.y() == null ? flow[1] : Math.max(0, req.y());
+        double x = Math.max(0, req.x());
+        double y = Math.max(0, req.y());
         double w = Math.max(CardRepository.MIN_W, req.w());
         double h = Math.max(CardRepository.MIN_H, req.h());
 
-        List<Card> existing = cards(note);
-        int slot = insertionSlot(existing, y, h);
-        CardMeta card = new CardMeta().setId(IdUtil.randomUUID()).setTitle(title).setX(x).setY(y).setW(w).setH(h).setZ(slot).setColor(req.color());
+        CardMeta card = new CardMeta().setId(IdUtil.randomUUID()).setTitle(title).setX(x).setY(y).setW(w).setH(h).setZ(0).setColor(req.color());
         String fileName = cardRepository.save(card, content, null);
         List<String> fileNames = new ArrayList<>(note.getCardFileNames());
-        fileNames.add(Math.min(slot, fileNames.size()), fileName);
+        fileNames.add(fileName);
         note.setCardFileNames(fileNames);
-        noteRepository.save(note);
+        resequence(note);
         return new Card(card, content, fileName);
     }
 
-    private double[] nextFlowPosition(NoteMeta note) {
-        double bottom = cards(note).stream().mapToDouble(card -> card.getMeta().getY() + card.getMeta().getH()).max().orElse(0);
-        return new double[]{CardRepository.FLOW_X, bottom <= 0 ? 0 : bottom + CardRepository.FLOW_GAP};
-    }
-
-    private static int insertionSlot(List<Card> cards,
-                                     double y,
-                                     double height) {
-        double center = y + height / 2;
-        int slot = 0;
-        for (Card card : cards) {
-            CardMeta meta = card.getMeta();
-            if (meta.getY() + meta.getH() / 2 < center) {
-                slot++;
+    /**
+     * 按「垂直中心」重排卡片顺序并重算 z（z = 列表序号）。
+     *
+     * <p>顺序即视觉顺序：{@code page()} 按这个顺序返回（前端 DOM 顺序与分页取数都依赖它），
+     * 前端的层叠 zIndex 也直接消费 z。创建与移动（x/y/h 变化）后都走这里，
+     * 任意位置建卡、拖卡都不会让顺序与视觉漂移。
+     *
+     * <p>装载不到的卡片文件名保留在列表尾部，不静默丢弃引用。
+     */
+    private void resequence(NoteMeta note) {
+        List<Card> loaded = cards(note);
+        List<Card> ordered = new ArrayList<>(loaded);
+        ordered.sort(Comparator.comparingDouble(card -> card.getMeta().getY() + card.getMeta().getH() / 2.0));
+        List<String> names = new ArrayList<>(ordered.stream().map(Card::getFileName).toList());
+        Set<String> known = new HashSet<>(names);
+        for (String fileName : note.getCardFileNames()) {
+            if (!known.contains(fileName)) {
+                names.add(fileName);
             }
         }
-        return Math.min(slot, cards.size());
+        note.setCardFileNames(names);
+        for (int i = 0; i < ordered.size(); i++) {
+            CardMeta meta = ordered.get(i).getMeta();
+            if (meta.getZ() != i) {
+                meta.setZ(i);
+                cardRepository.save(ordered.get(i).getFileName(), meta);
+            }
+        }
+        noteRepository.save(note);
     }
 
     public Card writeContent(String cardFileName,
@@ -123,7 +136,8 @@ public class CardService {
 
     public CardMeta update(String fileName,
                            UpdateCardRequest changes) {
-        if (noteForFile(fileName) == null) {
+        NoteMeta note = noteForFile(fileName);
+        if (note == null) {
             throw new NotFoundException("card " + fileName);
         }
         Card card = cardRepository.getOne(fileName);
@@ -135,6 +149,8 @@ public class CardService {
         double y = changes.y() == null ? meta.getY() : changes.y();
         double w = changes.w() == null ? meta.getW() : Math.max(CardRepository.MIN_W, changes.w());
         double h = changes.h() == null ? meta.getH() : Math.max(CardRepository.MIN_H, changes.h());
+        // 位置或高度变了，垂直中心就变了 —— 顺序与 z 需要重排（高度变化也会移动中心点）。
+        boolean moved = x != meta.getX() || y != meta.getY() || h != meta.getH();
         meta.setX(x).setY(y).setW(w).setH(h);
         if (changes.title() != null) meta.setTitle(changes.title());
         if (changes.color() != null) meta.setColor(changes.color());
@@ -142,6 +158,9 @@ public class CardService {
         if (changes.collapsed() != null) meta.setCollapsed(changes.collapsed());
         meta.setUpdatedAt(System.currentTimeMillis());
         cardRepository.save(fileName, meta);
+        if (moved) {
+            resequence(note);
+        }
         return meta;
     }
 

@@ -23,7 +23,7 @@ public class CardController {
     @GetMapping
     public CardsPageDto get(@RequestParam String noteId,
                             @RequestParam(required = false) List<String> cardFileNames) {
-        return cardService.page(noteId, cardFileNames);
+        return cardService.cards(noteId, cardFileNames);
     }
 
     @PostMapping("/create")
