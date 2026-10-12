@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { pluginApi, type PluginInfo } from '@/api/plugins'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import {
   pluginSettings,
   refreshPluginAvailability,
@@ -14,6 +15,12 @@ import { useUiStore } from '@/stores/ui'
 const ui = useUiStore()
 const router = useRouter()
 const busy = ref('')
+const confirmation = ref<{
+  title: string
+  message: string
+  confirmLabel: string
+  action: () => Promise<void>
+} | null>(null)
 
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
@@ -27,11 +34,8 @@ async function refreshPlugins() {
   }
 }
 
-async function togglePlugin(plugin: PluginInfo) {
-  const next = !plugin.active
-  if (!next && !window.confirm(`停用「${plugin.title}」？\n\n停用后它自己的端点会被拒绝（管理面仍可访问，随时可以再启用）。`)) {
-    return
-  }
+async function applyPluginState(plugin: PluginInfo, next: boolean) {
+  busy.value = `${next ? '正在启用' : '正在停用'}「${plugin.title}」`
   try {
     const updated = await pluginApi.setActive(plugin.id, next)
     plugins.value = plugins.value.map((p) => (p.id === updated.id ? updated : p))
@@ -47,20 +51,46 @@ async function togglePlugin(plugin: PluginInfo) {
     ui.toast(`「${plugin.title}」已${next ? '启用' : '停用'}`, 'success')
   } catch (e) {
     ui.toast(`操作失败：${(e as Error).message}`, 'error')
+  } finally {
+    busy.value = ''
   }
+}
+
+function askConfirmation(title: string, message: string, confirmLabel: string, action: () => Promise<void>) {
+  confirmation.value = { title, message, confirmLabel, action }
+}
+
+function cancelConfirmation() {
+  if (!busy.value) confirmation.value = null
+}
+
+async function confirmAction() {
+  const action = confirmation.value?.action
+  if (!action || busy.value) return
+  await action()
+  confirmation.value = null
+}
+
+function togglePlugin(plugin: PluginInfo) {
+  const next = !plugin.active
+  if (next) {
+    void applyPluginState(plugin, true)
+    return
+  }
+  askConfirmation(
+    `停用「${plugin.title}」？`,
+    '停用后该插件自己的端点会被拒绝；管理面仍可访问，之后可以重新启用。',
+    '停用插件',
+    () => applyPluginState(plugin, false),
+  )
 }
 
 /**
  * 重载插件：换了 plugins/ 里的 jar（或开发模式改了插件代码）之后让它生效。
  * SBP 会**重建插件的类加载器与 Spring 子容器**，换掉磁盘上的 jar 当场生效。
  */
-async function reloadPlugin(plugin: PluginInfo) {
-  const hint = plugin.reloadAvailable
-    ? `\n\n磁盘上的版本是 v${plugin.diskVersion}，运行中的是 v${plugin.version}。`
-    : ''
-  if (!window.confirm(`重载「${plugin.title}」？${hint}\n\n它会先停掉再按磁盘上的 jar 重启，进行中的请求会失败。`)) {
-    return
-  }
+async function applyReloadPlugin(plugin: PluginInfo) {
+  busy.value = `正在重载「${plugin.title}」`
   try {
     const updated = await pluginApi.reload(plugin.id)
     plugins.value = plugins.value.map((p) => (p.id === updated.id ? updated : p))
@@ -71,7 +101,21 @@ async function reloadPlugin(plugin: PluginInfo) {
     ui.toast(`「${plugin.title}」已重载（v${updated.version}）`, 'success')
   } catch (e) {
     ui.toast(`重载失败：${(e as Error).message}`, 'error')
+  } finally {
+    busy.value = ''
   }
+}
+
+function reloadPlugin(plugin: PluginInfo) {
+  const hint = plugin.reloadAvailable
+    ? `\n\n磁盘上的版本是 v${plugin.diskVersion}，运行中的是 v${plugin.version}。`
+    : ''
+  askConfirmation(
+    `重载「${plugin.title}」？`,
+    `${hint ? hint.trimStart() + '\n\n' : ''}它会先停掉再按磁盘上的 jar 重启，进行中的请求会失败。`,
+    '重载插件',
+    () => applyReloadPlugin(plugin),
+  )
 }
 
 function togglePluginPanel(plugin: PluginInfo) {
@@ -136,6 +180,7 @@ onMounted(async () => {
             <button
               v-if="!plugin.undeactivatable"
               class="btn sm ghost"
+              :disabled="!!busy"
               :title="plugin.reloadAvailable
                 ? `按磁盘上的 v${plugin.diskVersion} 重建该插件的容器`
                 : '按磁盘上的 jar 重建该插件的容器（改了插件代码/换了 jar 之后用）'"
@@ -150,6 +195,7 @@ onMounted(async () => {
               v-if="!plugin.undeactivatable"
               class="btn sm"
               :class="{ primary: plugin.active }"
+              :disabled="!!busy"
               @click="togglePlugin(plugin)"
             >
               {{ plugin.active ? '已启用' : '已停用' }}
@@ -169,9 +215,18 @@ onMounted(async () => {
           </div>
         </div>
       </section>
-
-
     </div>
+
+    <ConfirmDialog
+      v-if="confirmation"
+      :open="true"
+      :title="confirmation.title"
+      :message="confirmation.message"
+      :confirm-label="confirmation.confirmLabel"
+      :busy="!!busy"
+      @cancel="cancelConfirmation"
+      @confirm="confirmAction"
+    />
   </div>
 </template>
 

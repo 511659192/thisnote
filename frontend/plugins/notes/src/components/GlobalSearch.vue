@@ -15,7 +15,7 @@ import { http } from '@thisnode/plugin-api'
  */
 
 interface NoteMetaLite {
-  id: string
+  noteId: string
   title: string
   summary?: string
   updatedAt?: number
@@ -115,7 +115,7 @@ function onKeydown(e: KeyboardEvent): void {
     active.value = Math.max(active.value - 1, 0)
   } else if (e.key === 'Enter') {
     const r = results.value[active.value]
-    if (r) openNote(r.note.id)
+    if (r) openNote(r.note.noteId)
   }
 }
 
@@ -171,10 +171,10 @@ function summarySnippet(note: NoteMetaLite): string {
       <div v-else-if="!results.length" class="empty small muted">没有匹配的笔记</div>
       <button
         v-for="(r, i) in results"
-        :key="r.note.id"
+        :key="r.note.noteId"
         class="result"
         :class="{ active: i === active }"
-        @click="openNote(r.note.id)"
+        @click="openNote(r.note.noteId)"
         @mousemove="active = i"
       >
         <span class="title">

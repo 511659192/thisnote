@@ -11,21 +11,19 @@ export interface NoteQuery {
 
 export const noteApi = {
   list: (query: NoteQuery = {}) => http.get<NoteMeta[]>('/api/notes', query as never),
-  get: (id: string) => http.get<NoteMeta>('/api/notes/detail', { id }),
+  get: (noteId: string) => http.get<NoteMeta>('/api/notes/detail', { noteId }),
 
   create: (payload: {
-    title?: string
-    contentMd?: string
     type?: string
     notebookId?: string
   }) => http.post<NoteMeta>('/api/notes/create', payload),
 
   update: (
-    id: string,
+    noteId: string,
     payload: {
       title?: string
     },
-  ) => http.post<NoteMeta>('/api/notes/update', payload, { id }),
+  ) => http.post<NoteMeta>('/api/notes/update', payload, { noteId }),
 
   delete: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
 

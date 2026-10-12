@@ -47,8 +47,8 @@ function register(): void {
         setMatchCount(null)
         return []
       }
-      const notes = await http.get<Array<{ id: string; title: string }>>('/api/notes', { limit: 2000 })
-      const ids = notes.filter((note) => note.title.toLowerCase().includes(term)).map((note) => note.id)
+      const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes', { limit: 2000 })
+      const ids = notes.filter((note) => note.title.toLowerCase().includes(term)).map((note) => note.noteId)
       setMatchCount(ids.length)
       return ids
     },

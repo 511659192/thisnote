@@ -102,8 +102,12 @@ function openNotebook(id: string) {
 }
 
 async function createNote() {
-  const detail = await nodes.createAndSelect({ contentMd: '' })
-  if (detail) void router.push(`/notes/${detail.id}`)
+  if (router.currentRoute.value.path !== '/notes') {
+    const failure = await router.push('/notes')
+    if (failure) return
+  }
+  const detail = await nodes.createNode({ notebookId: nodes.activeNotebookId ?? undefined })
+  if (detail) await router.push(`/notes/${detail.noteId}`)
 }
 
 // ---------------------------------------------------------------- 分组列表

@@ -39,12 +39,10 @@ export interface CardMeta {
 export interface Card {
   meta: CardMeta
   content: string
-  fileName: string
 }
 
 /** Frontend presentation shape derived from `Card`; not part of the HTTP contract. */
 export interface CardView {
-  fileName: string
   card: CardMeta
   contentMd: string
   /** Client-only transient flags. */
@@ -61,13 +59,13 @@ export interface NoteDto {
  */
 export interface NoteMeta {
   v: number
-  id: string
+  noteId: string
   title: string
   type: NoteType
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
-  /** 本篇卡片文件名清单（顺序即阅读顺序）。 */
-  cardFileNames: string[]
+  /** 卡片 ID 清单（顺序即阅读顺序）。 */
+  cardIds: string[]
   createdAt: number
   updatedAt: number
 }

@@ -33,15 +33,14 @@ public class NoteController {
     }
 
     @GetMapping("/detail")
-    public NoteMeta detail(@RequestParam String id) {
-        return noteService.get(id);
+    public NoteMeta detail(@RequestParam String noteId) {
+        return noteService.get(noteId);
     }
 
     @PostMapping("/update")
-    public NoteMeta update(@RequestParam String id,
-                                @RequestBody UpdateNoteRequest req) {
-        noteService.update(id, req);
-        return noteService.get(id);
+    public NoteMeta update(@RequestParam String noteId,
+                           @RequestBody UpdateNoteRequest req) {
+        return noteService.update(noteId, req);
     }
 
     @PostMapping("/delete")

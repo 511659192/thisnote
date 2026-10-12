@@ -285,7 +285,7 @@ function onPointerMove(e: PointerEvent) {
     if (!o || !view) return
     const x = snap(o.x + (world.x - drag.startWorld.x))
     const y = snap(o.y + (world.y - drag.startWorld.y))
-    page.localMove([{ fileName: view.fileName, x, y, w: o.w, h: o.h }])
+    page.localMove([{ cardId: view.card.id, x, y, w: o.w, h: o.h }])
     drag.pending.set(id, { x, y, w: o.w, h: o.h })
     return
   }
@@ -312,7 +312,7 @@ function onPointerMove(e: PointerEvent) {
       hh = Math.max(BLOCK_MIN_H, o.h - dy)
       y = o.y + (o.h - hh)
     }
-    page.localMove([{ fileName: view.fileName, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
+    page.localMove([{ cardId: view.card.id, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
     drag.pending.set(id, { x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) })
   }
 }
@@ -325,7 +325,7 @@ async function onPointerUp() {
   if ((mode === 'move' || mode === 'resize') && moved && drag.pending.size) {
     const updates: CardUpdate[] = [...drag.pending.entries()].flatMap(([id, g]) => {
       const view = page.cards.find((b) => b.card.id === id)
-      return view ? [{ fileName: view.fileName, x: g.x, y: g.y, w: g.w, h: g.h }] : []
+      return view ? [{ cardId: view.card.id, x: g.x, y: g.y, w: g.w, h: g.h }] : []
     })
     // 拖过下边框/边角改高度的卡片 → 长度由用户做主，自动贴合不再覆盖（否则会"弹回"）。
     if (mode === 'resize' && drag.handle && /[ns]/.test(drag.handle)) {
@@ -412,7 +412,7 @@ function onSave(p: { cardId: string; contentMd: string }) {
 function onToggleCollapse(cardId: string) {
   const view = page.cards.find((b) => b.card.id === cardId)
   if (!view) return
-  void page.commit([{ fileName: view.fileName, collapsed: !view.card.collapsed }])
+  void page.commit([{ cardId: view.card.id, collapsed: !view.card.collapsed }])
 }
 
 function onFitHeight(p: { cardId: string; h: number }) {
@@ -431,7 +431,7 @@ function onFitHeight(p: { cardId: string; h: number }) {
   const next = Math.min(Math.round(p.h), available)
   if (next === view.card.h) return
   view.card.h = next
-  void page.commit([{ fileName: view.fileName, h: next }]).catch(() => undefined)
+  void page.commit([{ cardId: view.card.id, h: next }]).catch(() => undefined)
 }
 
 /** Double-click empty space: a card whose top-left corner is the clicked point. */

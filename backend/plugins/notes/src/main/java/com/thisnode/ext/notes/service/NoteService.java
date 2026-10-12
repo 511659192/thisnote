@@ -1,25 +1,19 @@
 package com.thisnode.ext.notes.service;
 
-import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.api.dto.CreateNoteRequest;
 import com.thisnode.ext.notes.api.dto.NoteListQuery;
 import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
 import com.thisnode.ext.notes.domain.Card;
-import com.thisnode.ext.notes.domain.Card.CardMeta;
 import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.ext.notes.util.NoteTitleDefaults;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
 
 /**
  * Note aggregate: CRUD and list queries.
@@ -37,69 +31,17 @@ public class NoteService {
     private final CardRepository cardRepository;
 
     public String create(CreateNoteRequest req) {
-        String id = IdUtil.randomUUID();
-        String title = req.title().isBlank() ? generatedTitle(req.content(), null) : req.title();
-        NoteMeta noteMeta = new NoteMeta().setId(id).setTitle(title).setType(req.type()).setNotebookId(req.notebookId());
-        CardMeta firstCardMeta = new CardMeta().setId(IdUtil.randomUUID()).setTitle("");
-        String cardFileName = cardRepository.save(firstCardMeta, req.content(), null);
-
-        noteMeta.setCardFileNames(List.of(cardFileName));
-        noteRepository.save(noteMeta);
-        return id;
+        NoteMeta noteMeta = new NoteMeta().setTitle("").setType(req.type()).setNotebookId(req.notebookId());
+        return noteRepository.saveNew(noteMeta);
     }
 
-    /** Title from the first card with non-blank content; null means all cards are empty. */
-    public String generatedTitleFromCards(NoteMeta note) {
-        String firstLine = cardRepository.getAll(note.getCardFileNames()).stream()
-                .map(Card::getContent)
-                .map(NoteTitleDefaults::firstLine)
-                .filter(line -> !line.isBlank())
-                .findFirst()
-                .orElse(null);
-        return firstLine == null ? null : uniqueGeneratedTitle(firstLine, note.getId(), true);
-    }
-
-    private String generatedTitle(String content, String excludedNoteId) {
-        String firstLine = NoteTitleDefaults.firstLine(content);
-        if (firstLine.isBlank()) {
-            return uniqueGeneratedTitle(NoteTitleDefaults.placeholderTitle(), excludedNoteId, false);
-        }
-        return uniqueGeneratedTitle(firstLine, excludedNoteId, true);
-    }
-
-    private String uniqueGeneratedTitle(String base,
-                                        String excludedNoteId,
-                                        boolean timestampOnDuplicate) {
-        Set<String> existingTitles = new HashSet<>();
-        for (NoteMeta existing : noteRepository.getAll()) {
-            if (!Objects.equals(existing.getId(), excludedNoteId) && existing.getTitle() != null) {
-                existingTitles.add(existing.getTitle());
-            }
-        }
-        if (!existingTitles.contains(base)) {
-            return base;
-        }
-
-        String candidate = timestampOnDuplicate
-                ? base + "-" + NoteTitleDefaults.currentTimeTitle()
-                : base;
-        if (!existingTitles.contains(candidate)) {
-            return candidate;
-        }
-        int suffix = 2;
-        while (existingTitles.contains(candidate + "-" + suffix)) {
-            suffix++;
-        }
-        return candidate + "-" + suffix;
-    }
-
-    public void update(String id,
-                       UpdateNoteRequest req) {
-        NoteMeta meta = get(id);
+    public NoteMeta update(String noteId,
+                           UpdateNoteRequest req) {
+        NoteMeta meta = get(noteId);
         if (req.title() != null && !req.title().equals(meta.getTitle())) {
-            meta.setTitle(req.title());
-            noteRepository.save(meta);
+            noteRepository.saveRenamed(meta, req.title());
         }
+        return meta;
     }
 
     public void delete(String id) {
@@ -107,7 +49,7 @@ public class NoteService {
         if (meta == null) {
             return;
         }
-        cardRepository.delete(meta.getCardFileNames());
+        cardRepository.delete(meta.getCardIds());
         noteRepository.delete(id);
     }
 
@@ -150,7 +92,7 @@ public class NoteService {
         if (query.text() != null && !query.text().isBlank()) {
             String needle = query.text().toLowerCase(Locale.ROOT);
             boolean titleHit = meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle);
-            boolean cardHit = !titleHit && cardRepository.getAll(meta.getCardFileNames())
+            boolean cardHit = !titleHit && cardRepository.getAll(meta.getCardIds())
                                                          .stream()
                                                          .map(Card::getContent)
                                                          .filter(content -> content != null)

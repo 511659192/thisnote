@@ -48,7 +48,7 @@ public final class JsonFileUtils {
         return text.isBlank() ? null : JSON.parseObject(text, type);
     }
 
-    private static void move(Path from, Path to) throws IOException {
+    public static void move(Path from, Path to) throws IOException {
         try {
             Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {

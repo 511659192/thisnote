@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
 import { activeNoteTools, primaryLabel, toast } from '@thisnode/plugin-api'
 import { usePageStore } from '@/stores/notePage'
@@ -29,10 +29,12 @@ const confirmDialog = ref<{
   open: boolean
   title: string
   message: string
+  confirmLabel: string
   action: (() => void | Promise<void>) | null
-}>({ open: false, title: '', message: '', action: null })
+}>({ open: false, title: '', message: '', confirmLabel: '删除', action: null })
 const renaming = ref(false)
 const titleDraft = ref('')
+let titleDraftNoteId: string | null = null
 const titleInput = ref<HTMLInputElement | null>(null)
 /**
  * Set by Escape so the blur that follows cannot persist the abandoned draft.
@@ -42,22 +44,67 @@ const titleInput = ref<HTMLInputElement | null>(null)
  * discarding it. The flag makes "cancel" reach the blur handler.
  */
 let renameCancelled = false
+let pendingTitleCommit: Promise<NoteMeta | null> | null = null
 function openNode(id: string) {
   void router.push(`/notes/${id}`)
 }
+
+async function saveTitle(title: string): Promise<NoteMeta | null> {
+  const pending = nodes.updateCurrent({ title })
+  pendingTitleCommit = pending
+  try {
+    return await pending
+  } finally {
+    if (pendingTitleCommit === pending) pendingTitleCommit = null
+  }
+}
+
+async function ensureTitleBeforeLeaving(): Promise<boolean> {
+  await pageRef.value?.finishEditing()
+  if (pendingTitleCommit) await pendingTitleCommit
+  const note = nodes.current
+  if (!note || note.title.trim()) return true
+
+  let title = titleDraftNoteId === note.noteId ? titleDraft.value.trim() : ''
+  if (!title) {
+    const entered = window.prompt('这篇笔记还没有标题，请输入标题后再离开。', '')
+    if (entered === null) return false
+    title = entered.trim()
+  }
+  if (!title) {
+    toast('笔记标题不能为空', 'error')
+    return false
+  }
+
+  const updated = await saveTitle(title)
+  if (!updated) return false
+  page.noteTitle = updated.title
+  titleDraft.value = updated.title
+  titleDraftNoteId = updated.noteId
+  return true
+}
+
+onBeforeRouteLeave(() => ensureTitleBeforeLeaving())
+onBeforeRouteUpdate((to, from) =>
+  to.params.id === from.params.id ? true : ensureTitleBeforeLeaving(),
+)
 
 async function applyRoute() {
   const id = route.params.id as string | undefined
   if (!id) {
     nodes.current = null
     page.noteId = null
+    titleDraft.value = ''
+    titleDraftNoteId = null
     return
   }
+  if (nodes.current?.noteId === id && page.noteId === id) return
   await nodes.select(id)
   if (nodes.current) {
-    // 卡片文件名清单来自笔记详情，几何与正文由 page.load 按视口分批取。
-    await page.load(id, nodes.current.cardFileNames ?? [])
+    // 卡片 ID 清单来自笔记详情，几何与正文由 page.load 按视口分批取。
+    await page.load(id, nodes.current.cardIds ?? [], nodes.current.title)
     titleDraft.value = nodes.current.title
+    titleDraftNoteId = nodes.current.noteId
   }
 }
 
@@ -70,17 +117,17 @@ watch(
 )
 watch(() => page.noteTitle, (title) => {
   const currentNote = nodes.current
-  if (!title || !currentNote || currentNote.id !== page.noteId) return
+  if (!title || !currentNote || currentNote.noteId !== page.noteId) return
   currentNote.title = title
-  const row = nodes.nodes.find((note) => note.id === currentNote.id)
+  const row = nodes.nodes.find((note) => note.noteId === currentNote.noteId)
   if (row) row.title = title
 })
-
 // ---------------------------------------------------------------- title
 
 /** Open the rename field, seeded with the current title and ready to type in. */
 async function startRename() {
   titleDraft.value = nodes.current?.title ?? ''
+  titleDraftNoteId = nodes.current?.noteId ?? null
   renameCancelled = false
   renaming.value = true
   await nextTick()
@@ -108,15 +155,17 @@ async function commitTitle() {
   if (renameCancelled) {
     renameCancelled = false
     titleDraft.value = nodes.current?.title ?? ''
+    titleDraftNoteId = nodes.current?.noteId ?? null
     return
   }
   if (!nodes.current) return
   const next = titleDraft.value.trim()
   if (!next || next === nodes.current.title) return
-  const detail = await nodes.updateCurrent({ title: next })
+  const detail = await saveTitle(next)
   if (detail) {
     page.noteTitle = detail.title
-    await page.reload()
+    titleDraft.value = detail.title
+    titleDraftNoteId = detail.noteId
   }
 }
 
@@ -131,8 +180,13 @@ async function addCard() {
   if (created) await pageRef.value.beginEdit(created)
 }
 
-function askForConfirmation(title: string, message: string, action: () => void | Promise<void>) {
-  confirmDialog.value = { open: true, title, message, action }
+function askForConfirmation(
+  title: string,
+  message: string,
+  action: () => void | Promise<void>,
+  confirmLabel = '删除',
+) {
+  confirmDialog.value = { open: true, title, message, confirmLabel, action }
 }
 
 function closeConfirmation() {
@@ -148,21 +202,22 @@ async function confirmAction() {
 
 function requestDeleteCard(view: CardView) {
   askForConfirmation(
-    '删除卡片',
-    '卡片内容将被永久删除，无法恢复。',
+    '删除卡片？',
+    '卡片内容将被永久删除，笔记会保留。',
     async () => {
       await pageRef.value?.finishEditing(view.card.id)
-      const deleted = await page.deleteBlock(view.fileName)
+      const deleted = await page.deleteBlock(view.card.id)
       const currentNote = nodes.current
-      if (deleted && currentNote?.id === page.noteId) {
-        currentNote.cardFileNames = (currentNote.cardFileNames ?? []).filter((name) => name !== view.fileName)
+      if (deleted && currentNote?.noteId === page.noteId) {
+        currentNote.cardIds = (currentNote.cardIds ?? []).filter((id) => id !== view.card.id)
       }
     },
+    '删除卡片',
   )
 }
 
 function requestDeleteNote(id: string) {
-  const note = nodes.nodes.find((item) => item.id === id)
+  const note = nodes.nodes.find((item) => item.noteId === id)
   askForConfirmation(
     `彻底删除「${note?.title ?? '这篇笔记'}」？`,
     '卡片文件与笔记一起删除，无法恢复。',
@@ -202,7 +257,7 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
 // ---------------------------------------------------------------- node context menu
 
 function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
-  const entries: MenuEntry[] = [{ label: '打开', action: () => openNode(payload.node.id) }]
+  const entries: MenuEntry[] = [{ label: '打开', action: () => openNode(payload.node.noteId) }]
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
 
@@ -219,13 +274,23 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') menu.value.open = false
 }
 
+function onBeforeUnload(event: BeforeUnloadEvent) {
+  if (!nodes.current || nodes.current.title.trim()) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('beforeunload', onBeforeUnload)
   void applyRoute()
   // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+})
 </script>
 
 <template>
@@ -253,6 +318,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                 ref="titleInput"
                 v-model="titleDraft"
                 class="title-input"
+                placeholder="请输入标题"
                 @keydown.enter.prevent="commitTitle"
                 @keydown.esc.prevent.stop="cancelRename"
                 @blur="commitTitle"
@@ -260,17 +326,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <h2
                 v-else
                 class="title"
-                title="双击重命名"
+                :class="{ placeholder: !nodes.current.title.trim() }"
+                :title="nodes.current.title.trim() ? '双击重命名' : '双击输入标题'"
                 @dblclick="startRename"
               >
-                {{ nodes.current.title }}
+                {{ nodes.current.title || '请输入标题' }}
               </h2>
                               <!-- 实体插件贡献的笔记工具（收藏就是这一类）——核心不认识任何具体插件 -->
                 <component
                   :is="tool.component"
                   v-for="tool in noteToolList"
                   :key="tool.pluginId"
-                  :note-id="nodes.current.id"
+                  :note-id="nodes.current.noteId"
                 />
             </div>
 
@@ -296,6 +363,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       :open="confirmDialog.open"
       :title="confirmDialog.title"
       :message="confirmDialog.message"
+      :confirm-label="confirmDialog.confirmLabel"
       @cancel="closeConfirmation"
       @confirm="confirmAction"
     />
@@ -329,6 +397,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   font-size: 17px;
   font-weight: 700;
   cursor: text;
+}
+.title.placeholder {
+  color: var(--c-text-3);
+  font-weight: 500;
 }
 .title-input {
   font-size: 17px;

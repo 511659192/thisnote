@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.api.dto;
 
 public record UpdateCardRequest(String noteId,
-                                String fileName,
+                                String cardId,
                                 String title,
                                 Double x,
                                 Double y,

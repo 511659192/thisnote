@@ -26,7 +26,7 @@ function onContext(e: MouseEvent, node: NoteMeta) {
 
 /** Ask the parent to confirm before permanently deleting the note and its cards. */
 function askRemove(node: NoteMeta) {
-  emit('remove', node.id)
+  emit('remove', node.noteId)
 }
 </script>
 
@@ -46,11 +46,11 @@ function askRemove(node: NoteMeta) {
 
       <button
         v-for="n in nodes"
-        :key="n.id"
+        :key="n.noteId"
         class="note-row"
-        :class="{ active: n.id === currentId }"
-        :data-node-id="n.id"
-        @click="emit('open', n.id)"
+        :class="{ active: n.noteId === currentId }"
+        :data-node-id="n.noteId"
+        @click="emit('open', n.noteId)"
         @contextmenu="onContext($event, n)"
       >
         <div class="row-1">

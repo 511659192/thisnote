@@ -76,7 +76,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
   const want = new Set(cardIds)
   const found = new Map<string, CardContent>()
   if (!want.size) return found
-  const notes = await http.get<Array<{ id: string; title: string }>>('/api/notes', { limit: 2000 })
+  const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes', { limit: 2000 })
   const batchSize = 8
   for (let i = 0; i < notes.length && found.size < want.size; i += batchSize) {
     const batch = notes.slice(i, i + batchSize)
@@ -84,7 +84,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
       try {
         const page = await http.get<{
           cards: Array<{ card: { id: string; title: string }; contentMd: string }>
-        }>('/api/notes/cards', { noteId: note.id })
+        }>('/api/notes/cards', { noteId: note.noteId })
         return { note, page }
       } catch {
         return null

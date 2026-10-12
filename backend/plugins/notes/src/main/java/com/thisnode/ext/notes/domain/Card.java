@@ -7,6 +7,9 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,7 +27,14 @@ public class Card {
 
     private CardMeta meta;
     private String content;
-    private String fileName;
+
+    public static CardMeta parseMeta(Path file) throws IOException {
+        try (var reader = new BufferedReader(
+                new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8))) {
+            String header = reader.readLine();
+            return header == null ? null : meta(header);
+        }
+    }
 
     @SneakyThrows
     public static Card parse(Path file) {
@@ -35,7 +45,7 @@ public class Card {
 
         CardMeta cardMeta = meta(raw);
         String content = content(raw);
-        return new Card(cardMeta, content, file.getFileName().toString());
+        return new Card(cardMeta, content);
     }
 
     private static String headerLine(String fileContent) {

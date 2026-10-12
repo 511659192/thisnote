@@ -19,11 +19,11 @@ import java.util.List;
 @Slf4j
 public class NoteMeta {
     private int v;
-    private String id;
+    private String noteId;
     private String title;
     private String type;
     private String notebookId;
-    private List<String> cardFileNames = List.of();
+    private List<String> cardIds = List.of();
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
 
@@ -33,11 +33,7 @@ public class NoteMeta {
         }
 
         try {
-            NoteMeta note = JsonFileUtils.read(filePath, NoteMeta.class);
-            if (note != null && note.getCardFileNames() == null) {
-                note.setCardFileNames(List.of());
-            }
-            return note;
+            return JsonFileUtils.read(filePath, NoteMeta.class);
         } catch (IOException | RuntimeException e) {
             log.warn("元数据无法解析，已跳过：{}", filePath, e);
             return null;

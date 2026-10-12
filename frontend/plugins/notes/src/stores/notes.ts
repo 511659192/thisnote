@@ -21,7 +21,7 @@ export const useNoteStore = defineStore('notes', () => {
 
   let detailToken = 0
 
-  const currentId = computed(() => current.value?.id ?? null)
+  const currentId = computed(() => current.value?.noteId ?? null)
 
   async function loadList() {
     loadingList.value = true
@@ -88,7 +88,7 @@ export const useNoteStore = defineStore('notes', () => {
   const notesView = computed(() => {
     const ids = pluginFilterIds.value
     if (!ids) return nodes.value
-    return nodes.value.filter((n) => ids.has(n.id))
+    return nodes.value.filter((n) => ids.has(n.noteId))
   })
   async function countNotesByNotebook(): Promise<Record<string, number>> {
     const counts: Record<string, number> = {}
@@ -173,7 +173,7 @@ export const useNoteStore = defineStore('notes', () => {
       current.value = null
       return
     }
-    if (current.value?.id === id) return
+    if (current.value?.noteId === id) return
     const token = ++detailToken
     loadingNode.value = true
     try {
@@ -189,14 +189,14 @@ export const useNoteStore = defineStore('notes', () => {
 
   async function reloadCurrent() {
     if (!current.value) return
-    const id = current.value.id
+    const id = current.value.noteId
     current.value = await noteApi.get(id)
     await refreshMeta()
   }
 
   async function updateCurrent(changes: { title?: string }): Promise<NoteMeta | null> {
     if (!current.value) return null
-    const id = current.value.id
+    const id = current.value.noteId
     try {
       const detail = await noteApi.update(id, changes)
       current.value = detail
@@ -209,8 +209,6 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   async function createNode(payload: {
-    title?: string
-    contentMd?: string
     type?: string
     notebookId?: string
   }): Promise<NoteMeta | null> {
@@ -222,16 +220,6 @@ export const useNoteStore = defineStore('notes', () => {
       toast((e as Error).message, 'error')
       return null
     }
-  }
-
-  async function createAndSelect(payload: { title?: string; contentMd?: string; type?: string }) {
-    // 「新建时自动带入当前分组」：正看着某个分组时新建，笔记就落在那儿；
-    // 在顶层（全部笔记/最近编辑）新建则不带，由后端放进默认分组。
-    const detail = await createNode({ ...payload, notebookId: activeNotebookId.value ?? undefined })
-    if (detail) {
-      await select(detail.id)
-    }
-    return detail
   }
 
   async function deleteForever(id: string) {
@@ -281,7 +269,6 @@ export const useNoteStore = defineStore('notes', () => {
     reloadCurrent,
     updateCurrent,
     createNode,
-    createAndSelect,
     deleteForever,
     syncFromServer,
   }

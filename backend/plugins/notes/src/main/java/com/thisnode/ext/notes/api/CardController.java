@@ -18,12 +18,12 @@ public class CardController {
     private final CardService cardService;
 
     /**
-     * 这几张卡（{@code cardFileNames} 省略 = 整页）：卡片几何 + 它自己的正文。
+     * 这些卡片 ID 省略表示整页：返回每张卡片的几何与正文。
      */
     @GetMapping
     public NoteDto get(@RequestParam String noteId,
-                       @RequestParam(required = false) List<String> cardFileNames) {
-        return cardService.cards(noteId, cardFileNames);
+                       @RequestParam(required = false) List<String> cardIds) {
+        return cardService.cards(noteId, cardIds);
     }
 
     @PostMapping("/create")
@@ -37,7 +37,7 @@ public class CardController {
      */
     @PostMapping("/content")
     public Card writeContent(@RequestBody WriteCardContentRequest req) {
-        return cardService.writeContent(req.noteId(), req.cardFileName(), req.contentMd(), req.baseContentMd());
+        return cardService.writeContent(req.noteId(), req.cardId(), req.contentMd(), req.baseContentMd());
     }
 
     @PostMapping("/batch-update")
@@ -48,13 +48,13 @@ public class CardController {
 
     @PostMapping("/update")
     public Card.CardMeta update(@RequestBody UpdateCardRequest changes) {
-        return cardService.update(changes.noteId(), changes.fileName(), changes);
+        return cardService.update(changes.noteId(), changes.cardId(), changes);
     }
 
     @PostMapping("/delete")
     public void delete(@RequestParam String noteId,
-                       @RequestParam String fileName) {
-        cardService.delete(noteId, fileName);
+                       @RequestParam String cardId) {
+        cardService.delete(noteId, cardId);
     }
 
 }

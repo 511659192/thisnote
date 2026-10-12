@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { noteApi } from '@/api/note'
 import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError, toast } from '@thisnode/plugin-api'
 import type { Card, CardView } from '@/api/types'
@@ -26,8 +25,6 @@ export const GRID = 24
  * always leaves a clear strip of empty page to aim at.
  */
 const LIMITS = { maxW: 680, defaultH: 260, widthRatio: 0.62, minVisibleGap: 140 }
-const PLACEHOLDER_TITLE = /^请输入标题-\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:-\d+)?$/
-
 /**
  * A note's page: the cards it is made of.
  *
@@ -69,13 +66,13 @@ export const usePageStore = defineStore('notePage', () => {
    */
   const PAGE_SIZE = 8
 
-  const pendingFileNames = ref<string[]>([])
+  const pendingCardIds = ref<string[]>([])
 
   /** 本笔记一共有多少张卡（含尚未取回正文的那部分）。 */
-  const pendingCount = computed(() => pendingFileNames.value.length)
+  const pendingCount = computed(() => pendingCardIds.value.length)
 
   function toCardView(card: Card): CardView {
-    return { fileName: card.fileName, card: card.meta, contentMd: card.content }
+    return { card: card.meta, contentMd: card.content }
   }
 
   /** 下一页的哨兵落在已加载卡片的下方：靠近视口时取下一批（见 NotePage 的观察器）。 */
@@ -85,23 +82,32 @@ export const usePageStore = defineStore('notePage', () => {
     return lowest + 160
   })
 
-  async function load(id: string, cardFileNames?: string[]) {
+  async function load(id: string, cardIds?: string[], emptyNoteTitle = '') {
     loading.value = true
     try {
       cards.value = []
-      const all = cardFileNames ?? []
+      const all = cardIds ?? []
       const first = all.slice(0, PAGE_SIZE)
-      pendingFileNames.value = all.slice(PAGE_SIZE)
+      pendingCardIds.value = all.slice(PAGE_SIZE)
+      if (cardIds?.length === 0) {
+        noteId.value = id
+        noteTitle.value = emptyNoteTitle
+        selection.value = []
+        raisedCardIds.value = []
+        editingCardId.value = null
+        restoreViewport(id)
+        return null
+      }
       const page = await pageApi.get(id, first.length ? first : undefined)
-      noteId.value = page.noteMeta.id
+      noteId.value = page.noteMeta.noteId
       noteTitle.value = page.noteMeta.title
       cards.value = page.cards.map(toCardView)
-      const loaded = new Set(cards.value.map((view) => view.fileName))
-      pendingFileNames.value = pendingFileNames.value.filter((fileName) => !loaded.has(fileName))
+      const loaded = new Set(cards.value.map((view) => view.card.id))
+      pendingCardIds.value = pendingCardIds.value.filter((cardId) => !loaded.has(cardId))
       selection.value = []
       raisedCardIds.value = []
       editingCardId.value = null
-      restoreViewport(page.noteMeta.id)
+      restoreViewport(page.noteMeta.noteId)
       return page
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -114,8 +120,8 @@ export const usePageStore = defineStore('notePage', () => {
   /** 取下一批卡片（视口滚到底时调用）：几何与正文一起回来，追加到页面末尾。 */
   async function loadMore(): Promise<boolean> {
     const id = noteId.value
-    if (!id || !pendingFileNames.value.length || loading.value) return false
-    const batch = pendingFileNames.value.slice(0, PAGE_SIZE)
+    if (!id || !pendingCardIds.value.length || loading.value) return false
+    const batch = pendingCardIds.value.slice(0, PAGE_SIZE)
     try {
       const page = await pageApi.get(id, batch)
       const seen = new Set(cards.value.map((view) => view.card.id))
@@ -126,10 +132,10 @@ export const usePageStore = defineStore('notePage', () => {
           seen.add(view.card.id)
         }
       }
-      const arrived = new Set(page.cards.map((card) => card.fileName))
-      pendingFileNames.value = pendingFileNames.value
+      const arrived = new Set(page.cards.map((card) => card.meta.id))
+      pendingCardIds.value = pendingCardIds.value
         .slice(PAGE_SIZE)
-        .filter((fileName) => !arrived.has(fileName))
+        .filter((cardId) => !arrived.has(cardId))
       return true
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -140,11 +146,12 @@ export const usePageStore = defineStore('notePage', () => {
   /** Re-read the page without disturbing the viewport or the card being edited. */
   async function reload() {
     if (!noteId.value) return
-    const fileNames = cards.value.map((view) => view.fileName)
-    const cardIds = new Set(cards.value.map((view) => view.card.id))
-    const page = await pageApi.get(noteId.value, fileNames.length ? fileNames : undefined)
+    const cardIds = cards.value.map((view) => view.card.id)
+    if (!cardIds.length && !pendingCardIds.value.length) return
+    const cardIdSet = new Set(cardIds)
+    const page = await pageApi.get(noteId.value, cardIds.length ? cardIds : undefined)
     const refreshed = page.cards.map(toCardView)
-    const extra = refreshed.filter((view) => !cardIds.has(view.card.id))
+    const extra = refreshed.filter((view) => !cardIdSet.has(view.card.id))
     cards.value = [...refreshed, ...extra]
     noteTitle.value = page.noteMeta.title
   }
@@ -207,7 +214,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   function localMove(updates: CardUpdate[]) {
     for (const p of updates) {
-      const view = cards.value.find((b) => b.fileName === p.fileName)
+      const view = cards.value.find((b) => b.card.id === p.cardId)
       if (!view) continue
       if (p.x !== undefined && p.x !== null) view.card.x = p.x
       if (p.y !== undefined && p.y !== null) view.card.y = p.y
@@ -254,7 +261,7 @@ export const usePageStore = defineStore('notePage', () => {
     for (const v of cards.value) {
       if (v.card.w > max) {
         v.card.w = max
-        updates.push({ fileName: v.fileName, w: max })
+        updates.push({ cardId: v.card.id, w: max })
       }
     }
     const currentNoteId = noteId.value
@@ -314,17 +321,16 @@ export const usePageStore = defineStore('notePage', () => {
     return addBlock(at, { contentMd: trimmed, w, h })
   }
 
-  async function deleteBlock(fileName: string): Promise<boolean> {
+  async function deleteBlock(cardId: string): Promise<boolean> {
     const noteIdForDelete = noteId.value
-    const view = cards.value.find((item) => item.fileName === fileName)
+    const view = cards.value.find((item) => item.card.id === cardId)
     if (!noteIdForDelete || !view) return false
 
     try {
-      await pageApi.deleteBlock(noteIdForDelete, fileName)
+      await pageApi.deleteBlock(noteIdForDelete, cardId)
       if (noteId.value !== noteIdForDelete) return true
-      const cardId = view.card.id
-      cards.value = cards.value.filter((item) => item.fileName !== fileName)
-      pendingFileNames.value = pendingFileNames.value.filter((name) => name !== fileName)
+      cards.value = cards.value.filter((item) => item.card.id !== cardId)
+      pendingCardIds.value = pendingCardIds.value.filter((id) => id !== cardId)
       selection.value = selection.value.filter((id) => id !== cardId)
       raisedCardIds.value = raisedCardIds.value.filter((id) => id !== cardId)
       if (editingCardId.value === cardId) editingCardId.value = null
@@ -349,7 +355,6 @@ export const usePageStore = defineStore('notePage', () => {
   async function writeContent(cardId: string, contentMd: string) {
     const noteIdForWrite = noteId.value
     if (!noteIdForWrite) return
-    const refreshGeneratedTitle = PLACEHOLDER_TITLE.test(noteTitle.value) && contentMd.trim().length > 0
     const view = cards.value.find((b) => b.card.id === cardId)
     if (!view) return
     savingContent.value = cardId
@@ -359,14 +364,7 @@ export const usePageStore = defineStore('notePage', () => {
     // blur must see the new text so it does not send the same content again.
     view.contentMd = contentMd
     try {
-      await pageApi.writeContent(noteIdForWrite, view.fileName, contentMd, baseContentMd)
-      if (refreshGeneratedTitle && noteId.value === noteIdForWrite) {
-        try {
-          noteTitle.value = (await noteApi.get(noteIdForWrite)).title
-        } catch {
-          /* The card write succeeded; a title refresh is best-effort. */
-        }
-      }
+      await pageApi.writeContent(noteIdForWrite, view.card.id, contentMd, baseContentMd)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
@@ -389,7 +387,7 @@ export const usePageStore = defineStore('notePage', () => {
     if (!selection.value.length) return
     await commit(cards.value
       .filter((view) => selection.value.includes(view.card.id))
-      .map((view) => ({ fileName: view.fileName, color })))
+      .map((view) => ({ cardId: view.card.id, color })))
   }
 
   // ---------------------------------------------------------------- viewport
@@ -445,6 +443,17 @@ export const usePageStore = defineStore('notePage', () => {
 
   function viewportKey(id: string) {
     return `thisnode.page.viewport.${id}`
+  }
+
+  function copyViewport(oldId: string, newId: string) {
+    try {
+      const previous = localStorage.getItem(viewportKey(oldId))
+      if (previous && !localStorage.getItem(viewportKey(newId))) {
+        localStorage.setItem(viewportKey(newId), previous)
+      }
+    } catch {
+      /* Viewport preferences are best-effort when IDs change. */
+    }
   }
 
   let saveViewportTimer: ReturnType<typeof setTimeout> | null = null
