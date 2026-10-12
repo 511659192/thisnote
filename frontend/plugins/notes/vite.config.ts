@@ -33,7 +33,7 @@ export default defineConfig({
       cssFileName: 'plugin',
     },
     // 产物分离：产物落在界面侧自己的 dist/（backend 树里不留任何界面资源），
-    // 构建后由交付脚本送到 backend/plugin-assets/notes/，/plugin-assets 从那里端出。
+    // 构建后由交付脚本送到 frontend/runtime/plugins/notes/，/plugin-assets 从那里端出。
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {

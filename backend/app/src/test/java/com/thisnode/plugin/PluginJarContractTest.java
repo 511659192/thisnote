@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ol>
  *   <li>{@code plugin.properties}（PF4J 的 PropertiesPluginDescriptorFinder 读它）；
  *   <li>{@code plugin.class} 指向的那个类（PF4J 用它做生命周期）；</li>
- *   <li>界面产物**不在 jar 里**（产物分离）：必须已交付到 {@code plugins-dist/assets/<id>/}；</li>
+ *   <li>界面产物**不在 jar 里**（产物分离）：必须已交付到 {@code frontend/runtime/plugins/<id>/}；</li>
  *   <li><b>版本单源</b>：描述符里的版本必须等于这个 jar 的构建版本 —— 手写常量会在这里被抓住。</li>
  * </ol>
  *
@@ -62,7 +62,7 @@ class PluginJarContractTest {
     })
     void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasAssets) throws Exception {
         // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——
-        // 三个插件都有界面产物，全部走 plugins-dist/assets/<id>/ 磁盘交付。
+        // 三个插件都有界面产物，全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
 
         try (ZipFile zip = new ZipFile(jar.toFile())) {

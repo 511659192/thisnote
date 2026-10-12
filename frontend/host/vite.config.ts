@@ -7,10 +7,10 @@ import { fileURLToPath, URL } from 'node:url'
 /**
  * 插件界面资源的 **dev 兜底**：某个插件的 dev server 没起时，宿主会回退到
  * `/plugin-assets/<id>/...`。这个路径不再经后端 —— 直接由本 dev server 从界面侧的
- * 交付目录 `frontend/plugin-assets/` 端出（与部署时静态服务的布局一致）。
+ * 交付目录 `frontend/runtime/plugins/` 端出（与部署时静态服务的布局一致）。
  */
 function pluginAssetsDevServer() {
-  const root = fileURLToPath(new URL('../plugin-assets', import.meta.url))
+  const root = fileURLToPath(new URL('../runtime/plugins', import.meta.url))
   const TYPES: Record<string, string> = {
     '.js': 'text/javascript; charset=utf-8',
     '.mjs': 'text/javascript; charset=utf-8',

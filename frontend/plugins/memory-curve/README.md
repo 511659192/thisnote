@@ -27,7 +27,7 @@
 ### 2.1 装载与生命周期（PF4J / SBP）
 
 ```
-plugins-dist/memory-curve.jar
+backend/runtime/plugins/memory-curve.jar
   ├── plugin.properties          ← PF4J 的 PropertiesPluginDescriptorFinder 读它
   │     plugin.id=memory-curve
   │     plugin.class=com.thisnode.ext.memorycurve.MemoryCurvePlugin
@@ -201,9 +201,9 @@ NoteCard 渲染卡片时：
 
 | 产物 | 位置 | 说明 |
 |---|---|---|
-| 后端 jar | `backend/plugins-dist/memory-curve.jar` | Maven 在 package 阶段从模块 target 拷入 |
-| 界面资源 | `frontend/plugin-assets/memory-curve/` | 由 vite `dist/` 经交付脚本送进界面侧交付目录；`plugin.js` + `plugin.css` + 动态分片 |
-| 运行期提供 | `GET /plugin-assets/memory-curve/plugin.js` | **界面侧静态服务**提供（开发期：宿主 dev server 的中间件从 `frontend/plugin-assets/` 端出）；闸门在装载器（停用即不装载） |
+| 后端 jar | `backend/backend/runtime/plugins/memory-curve.jar` | Maven 在 package 阶段从模块 target 拷入 |
+| 界面资源 | `frontend/runtime/plugins/memory-curve/` | 由 vite `dist/` 经交付脚本送进界面侧交付目录；`plugin.js` + `plugin.css` + 动态分片 |
+| 运行期提供 | `GET /plugin-assets/memory-curve/plugin.js` | **界面侧静态服务**提供（开发期：宿主 dev server 的中间件从 `frontend/runtime/plugins/` 端出）；闸门在装载器（停用即不装载） |
 | 开发期 | `frontend/plugins/memory-curve` dev server: **7112** | 端口约定见 `host/src/plugins/devPorts.ts`；没起则自动回退到交付产物 |
 
 > 排期文件是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-curve/scheduling.meta`。

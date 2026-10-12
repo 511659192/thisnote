@@ -61,9 +61,9 @@
 
   <build>
     <plugins>
-      <!-- 交付：把自己的 jar 拷到 backend/plugins-dist/（界面资源由界面侧自行交付，不经这里）。
+      <!-- 交付：把自己的 jar 拷到 backend/runtime/plugins/（界面资源由界面侧自行交付，不经这里）。
            在插件模块做而非主体 dependency:copy —— 后者从本地仓库解析，可能拿到陈旧构件
-           （踩过：plugins-dist/ 里是 Oct 2 的旧 jar）。 -->
+           （踩过：runtime/plugins/ 里是 Oct 2 的旧 jar）。 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
@@ -78,7 +78,7 @@
             <configuration>
               <target>
                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                      tofile="${project.basedir}/../../plugins-dist/${plugin.id}.jar" overwrite="true"/>
+                      tofile="${project.basedir}/../../runtime/plugins/${plugin.id}.jar" overwrite="true"/>
               </target>
             </configuration>
           </execution>

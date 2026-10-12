@@ -21,7 +21,7 @@ export default defineConfig({
       fileName: () => 'plugin.js',
       cssFileName: 'plugin',
     },
-    // 产物分离：产物落界面侧自己的 dist/，构建后由交付脚本送到 backend/plugin-assets/search/。
+    // 产物分离：产物落界面侧自己的 dist/，构建后由交付脚本送到 frontend/runtime/plugins/search/。
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {

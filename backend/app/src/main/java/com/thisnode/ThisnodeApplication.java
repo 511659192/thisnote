@@ -15,7 +15,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * 同时是 SBP 资源链 500 毒链的护栏）；宿主界面由界面侧独立提供与部署。
  *
  * <p>组件扫描范围显式列举平台包，其中刻意不含 {@code com.thisnode.ext}：插件由 SBP/PF4J
- * 从 plugins-dist/ 目录装载，不靠装配声明。平台包：api（异常映射）、config（Web 装配）、
+ * 从 runtime/plugins/ 目录装载，不靠装配声明。平台包：api（异常映射）、config（Web 装配）、
  * plugin（插件底座：注册表/状态/闸门）。
  */
 @SpringBootApplication(scanBasePackages = {

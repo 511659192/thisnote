@@ -81,8 +81,8 @@
       </plugin>
 
       <!--
-        交付形态是两份东西：应用 jar + backend/plugins-dist/ 目录里的插件 jar。
-        插件 jar 由各自模块产出，这里在 package 阶段把它们拷到 plugins-dist/，
+        交付形态是两份东西：应用 jar + backend/runtime/plugins/ 目录里的插件 jar。
+        插件 jar 由各自模块产出，这里在 package 阶段把它们拷到 runtime/plugins/，
         所以 `mvn package` 之后从 backend/ 直接 `java -jar app/target/thisnode-backend.jar` 就能用，
         不需要手工 cp。destFileName 固定成与 plugin.properties 里 plugin.id 一致的名字。
         单独构建本模块时（-pl app）插件不在反应堆里，用 -am 或先跑整仓构建。
