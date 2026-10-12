@@ -28,7 +28,7 @@ public class CardController {
 
     @PostMapping("/create")
     public Card create(@RequestParam String noteId,
-                              @RequestBody(required = false) CreateCardRequest req) {
+                       @RequestBody(required = false) CreateCardRequest req) {
         return cardService.create(noteId, req == null ? new CreateCardRequest() : req);
     }
 
@@ -36,10 +36,8 @@ public class CardController {
      * Write markdown typed inside a card back into the note.
      */
     @PostMapping("/content")
-    public Card writeContent(@RequestParam String cardFileName,
-                                    @RequestBody(required = false) WriteCardContentRequest req) {
-        WriteCardContentRequest request = req == null ? new WriteCardContentRequest() : req;
-        return cardService.writeContent(cardFileName, request.contentMd(), request.baseContentMd());
+    public Card writeContent(@RequestBody WriteCardContentRequest req) {
+        return cardService.writeContent(req.noteId(), req.cardFileName(), req.contentMd(), req.baseContentMd());
     }
 
     @PostMapping("/batch-update")
@@ -49,9 +47,14 @@ public class CardController {
     }
 
     @PostMapping("/update")
-    public Card.CardMeta update(@RequestParam String fileName,
-                                @RequestBody UpdateCardRequest changes) {
-        return cardService.update(fileName, changes);
+    public Card.CardMeta update(@RequestBody UpdateCardRequest changes) {
+        return cardService.update(changes.noteId(), changes.fileName(), changes);
+    }
+
+    @PostMapping("/delete")
+    public void delete(@RequestParam String noteId,
+                       @RequestParam String fileName) {
+        cardService.delete(noteId, fileName);
     }
 
 }

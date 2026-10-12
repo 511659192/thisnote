@@ -25,7 +25,7 @@ export interface CardMeta {
   y: number
   w: number
   h: number
-  /** Legacy persisted field; visual stacking is derived from geometry. */
+  /** Legacy persisted field; runtime stacking uses geometry plus recent interaction, without persistence. */
   z: number
   color?: string | null
   status?: string | null

@@ -43,11 +43,11 @@ export const pageApi = {
     },
   ) => http.post<Card>('/api/notes/cards/create', payload, { noteId }),
 
-  updateBlocks: (cards: CardUpdate[]) =>
-    http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { cards }),
+  updateBlocks: (noteId: string, cards: CardUpdate[]) =>
+    http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { noteId, cards }),
 
-  updateBlock: (fileName: string, changes: CardUpdate) =>
-    http.post<CardMeta>('/api/notes/cards/update', changes, { fileName }),
+  updateBlock: (noteId: string, fileName: string, changes: CardUpdate) =>
+    http.post<CardMeta>('/api/notes/cards/update', { ...changes, noteId, fileName }),
 
   /**
    * Write markdown typed inside a card back into the note.
@@ -55,8 +55,10 @@ export const pageApi = {
    * <p>`baseContentMd` 是编辑开始时卡片上的正文：磁盘上已经不是那一份时后端回 409，
    * 由调用方提示并重新载入 —— 不覆盖外部编辑器（Obsidian / VS Code）写进去的改动。
    */
-  writeContent: (cardFileName: string, contentMd: string, baseContentMd: string) =>
-    http.post<Card>('/api/notes/cards/content', { contentMd, baseContentMd }, { cardFileName }),
+  writeContent: (noteId: string, cardFileName: string, contentMd: string, baseContentMd: string) =>
+    http.post<Card>('/api/notes/cards/content', { noteId, cardFileName, contentMd, baseContentMd }),
 
-
+  /** Permanently delete a card and remove it from its note's manifest. */
+  deleteBlock: (noteId: string, fileName: string) =>
+    http.post<void>('/api/notes/cards/delete', undefined, { noteId, fileName }),
 }

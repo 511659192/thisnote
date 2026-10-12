@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { noteApi } from '@/api/note'
 import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError, toast } from '@thisnode/plugin-api'
 import type { Card, CardView } from '@/api/types'
@@ -25,6 +26,7 @@ export const GRID = 24
  * always leaves a clear strip of empty page to aim at.
  */
 const LIMITS = { maxW: 680, defaultH: 260, widthRatio: 0.62, minVisibleGap: 140 }
+const PLACEHOLDER_TITLE = /^请输入标题-\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:-\d+)?$/
 
 /**
  * A note's page: the cards it is made of.
@@ -45,6 +47,7 @@ export const usePageStore = defineStore('notePage', () => {
   const savingContent = ref<string | null>(null)
   const editingCardId = ref<string | null>(null)
   const selection = ref<string[]>([])
+  const raisedCardIds = ref<string[]>([])
   const viewport = ref<Viewport>({ x: 0, y: 0, zoom: 1 })
   const gridVisible = ref(localStorage.getItem('thisnote.page.grid') !== 'off')
   const snapToGrid = ref(localStorage.getItem('thisnote.page.snap') === 'on')
@@ -96,6 +99,7 @@ export const usePageStore = defineStore('notePage', () => {
       const loaded = new Set(cards.value.map((view) => view.fileName))
       pendingFileNames.value = pendingFileNames.value.filter((fileName) => !loaded.has(fileName))
       selection.value = []
+      raisedCardIds.value = []
       editingCardId.value = null
       restoreViewport(page.noteMeta.id)
       return page
@@ -183,6 +187,22 @@ export const usePageStore = defineStore('notePage', () => {
     selection.value = cards.value.map((b) => b.card.id)
   }
 
+  function bringToFront(cardId: string) {
+    raisedCardIds.value = [...raisedCardIds.value.filter((id) => id !== cardId), cardId]
+  }
+
+  function zIndexFor(cardId: string): number {
+    const view = cards.value.find((item) => item.card.id === cardId)
+    if (!view) return 1
+
+    const baseZ = (item: CardView) => Math.max(1, Math.floor(item.card.y + item.card.h / 2) + 1)
+    const raisedIndex = raisedCardIds.value.indexOf(cardId)
+    if (raisedIndex < 0) return baseZ(view)
+
+    const highestBaseZ = cards.value.reduce((highest, item) => Math.max(highest, baseZ(item)), 1)
+    return highestBaseZ + raisedIndex + 1
+  }
+
   // ---------------------------------------------------------------- geometry
 
   function localMove(updates: CardUpdate[]) {
@@ -200,10 +220,11 @@ export const usePageStore = defineStore('notePage', () => {
   }
 
   async function commit(updates: CardUpdate[]) {
-    if (!noteId.value || updates.length === 0) return
+    const currentNoteId = noteId.value
+    if (!currentNoteId || updates.length === 0) return
     localMove(updates)
     try {
-      await pageApi.updateBlocks(updates)
+      await pageApi.updateBlocks(currentNoteId, updates)
     } catch (e) {
       toast(`页面保存失败：${(e as Error).message}`, 'error')
       await reload()
@@ -236,8 +257,9 @@ export const usePageStore = defineStore('notePage', () => {
         updates.push({ fileName: v.fileName, w: max })
       }
     }
-    if (updates.length && noteId.value) {
-      void pageApi.updateBlocks(updates).catch(() => undefined)
+    const currentNoteId = noteId.value
+    if (updates.length && currentNoteId) {
+      void pageApi.updateBlocks(currentNoteId, updates).catch(() => undefined)
     }
   }
 
@@ -292,6 +314,32 @@ export const usePageStore = defineStore('notePage', () => {
     return addBlock(at, { contentMd: trimmed, w, h })
   }
 
+  async function deleteBlock(fileName: string): Promise<boolean> {
+    const noteIdForDelete = noteId.value
+    const view = cards.value.find((item) => item.fileName === fileName)
+    if (!noteIdForDelete || !view) return false
+
+    try {
+      await pageApi.deleteBlock(noteIdForDelete, fileName)
+      if (noteId.value !== noteIdForDelete) return true
+      const cardId = view.card.id
+      cards.value = cards.value.filter((item) => item.fileName !== fileName)
+      pendingFileNames.value = pendingFileNames.value.filter((name) => name !== fileName)
+      selection.value = selection.value.filter((id) => id !== cardId)
+      raisedCardIds.value = raisedCardIds.value.filter((id) => id !== cardId)
+      if (editingCardId.value === cardId) editingCardId.value = null
+      if (savingContent.value === cardId) savingContent.value = null
+      const nextManualHeights = new Set(manualHeights.value)
+      nextManualHeights.delete(cardId)
+      manualHeights.value = nextManualHeights
+      toast('卡片已删除', 'success')
+      return true
+    } catch (e) {
+      toast(`删除卡片失败：${(e as Error).message}`, 'error')
+      return false
+    }
+  }
+
   /**
    * Write markdown typed inside a card. The card owns this text; the note follows.
    *
@@ -299,7 +347,9 @@ export const usePageStore = defineStore('notePage', () => {
    * 后端回 409，这里提示并重新载入 —— **磁盘优先**，这次保存不会覆盖外部改动。
    */
   async function writeContent(cardId: string, contentMd: string) {
-    if (!noteId.value) return
+    const noteIdForWrite = noteId.value
+    if (!noteIdForWrite) return
+    const refreshGeneratedTitle = PLACEHOLDER_TITLE.test(noteTitle.value) && contentMd.trim().length > 0
     const view = cards.value.find((b) => b.card.id === cardId)
     if (!view) return
     savingContent.value = cardId
@@ -309,7 +359,14 @@ export const usePageStore = defineStore('notePage', () => {
     // blur must see the new text so it does not send the same content again.
     view.contentMd = contentMd
     try {
-      await pageApi.writeContent(view.fileName, contentMd, baseContentMd)
+      await pageApi.writeContent(noteIdForWrite, view.fileName, contentMd, baseContentMd)
+      if (refreshGeneratedTitle && noteId.value === noteIdForWrite) {
+        try {
+          noteTitle.value = (await noteApi.get(noteIdForWrite)).title
+        } catch {
+          /* The card write succeeded; a title refresh is best-effort. */
+        }
+      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         toast('这张卡片已被外部修改，已重新载入磁盘上的内容', 'error', 5200)
@@ -487,10 +544,13 @@ export const usePageStore = defineStore('notePage', () => {
     select,
     clearSelection,
     selectAll,
+    bringToFront,
+    zIndexFor,
     localMove,
     commit,
     addBlock,
     addBlockFromContent,
+    deleteBlock,
     sizeForContent,
     defaultCardWidth,
     defaultCardHeight,

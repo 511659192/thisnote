@@ -17,15 +17,14 @@ import { BLOCK_MIN_H } from '@/stores/notePage'
  * A card has **no title field**: its label in the outline is the heading written in its own
  * content (`## …`), so there is only ever one place a card's name lives.
  *
- * Each card also remembers how its own content is shown — source, source beside preview, or
- * preview only — because a card holding a table wants a different view from one holding a line
- * of prose.
+ * Cards render Markdown by default and open the source editor in place while being edited.
  */
 const props = defineProps<{
   view: CardView
   selected: boolean
   editing: boolean
   focused: boolean
+  zIndex: number
 }>()
 
 const emit = defineEmits<{
@@ -39,24 +38,6 @@ const emit = defineEmits<{
   (e: 'fit-height', p: { cardId: string; h: number }): void
 }>()
 
-/** How a card's content is displayed. */
-type ContentMode = 'source' | 'split' | 'preview'
-
-const MODES: { mode: ContentMode; label: string; glyph: string }[] = [
-  { mode: 'source', label: '源码', glyph: '≡' },
-  { mode: 'split', label: '双列', glyph: '◫' },
-  { mode: 'preview', label: '预览', glyph: '¶' },
-]
-
-const contentMode = ref<ContentMode>('preview')
-/**
- * Whether the user picked a mode themselves.
- *
- * Leaving a card returns it to the preview unless the user deliberately chose source or split:
- * an explicit choice is a standing preference, whereas merely writing in a card is not.
- */
-const modeChosen = ref(false)
-
 const draft = ref('')
 const loadedFor = ref<string | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
@@ -67,43 +48,15 @@ const readBody = ref<HTMLElement | null>(null)
 
 const card = computed(() => props.view.card)
 const content = computed(() => props.view.contentMd ?? '')
-/** True while this card shows an editable textarea (source or split). */
-const sourceVisible = computed(() => !card.value.collapsed && contentMode.value !== 'preview')
-
-/**
- * Switch how this card shows its content; picking a writing mode starts the write.
- *
- * Choosing preview clears the "explicit choice" flag rather than setting it: preview is the
- * resting state, so writing in the card afterwards should still open the source.
- */
-function setMode(mode: ContentMode) {
-  modeChosen.value = mode !== 'preview'
-  contentMode.value = mode
-  if (mode === 'preview') {
-    // Preview has no textarea: leave the edit, which saves what was typed.
-    if (props.editing) emit('end-edit')
-    return
-  }
-  if (!props.editing) emit('request-edit', card.value.id)
-}
-
-/**
- * What the preview shows. While source and preview sit side by side the preview follows the
- * textarea keystroke by keystroke — that is the point of the split view.
- */
-const showDraftInPreview = computed(() => contentMode.value === 'split' && sourceVisible.value)
-const previewSource = computed(() => (showDraftInPreview.value ? draft.value : content.value))
+const sourceVisible = computed(() => !card.value.collapsed && props.editing)
 
 watch(
   () => [props.editing, card.value.id] as const,
   async ([editing, id]) => {
     if (!editing) {
-      // Leaving the card returns it to the preview, unless the user chose a mode themselves.
-      if (!modeChosen.value) contentMode.value = 'preview'
+      loadedFor.value = null
       return
     }
-    // Writing needs the source: a card showing a preview must reveal its textarea.
-    if (!modeChosen.value) contentMode.value = 'source'
     if (loadedFor.value === id) return
     draft.value = content.value
     loadedFor.value = id
@@ -225,7 +178,7 @@ function armFitObserver() {
   fitObserver.disconnect()
   fitObserver.observe(el)
 }
-watch([() => props.editing, () => contentMode.value, () => card.value.w], () => {
+watch([() => props.editing, () => card.value.w], () => {
   void nextTick(() => fitHeight())
 })
 watch(() => content.value, () => fitHeight())
@@ -244,8 +197,7 @@ onBeforeUnmount(() => {
       transform: `translate3d(${card.x}px, ${card.y}px, 0)`,
       width: `${card.w}px`,
       height: card.collapsed ? '26px' : `${card.h}px`,
-      // 层叠也由当前几何决定，不依赖持久化顺序或分页批次。
-      zIndex: Math.max(1, Math.floor(card.y + card.h / 2) + 1),
+      zIndex: props.zIndex,
     }"
     @pointerdown="onBodyPointerDown"
     @dblclick.stop="emit('request-edit', card.id)"
@@ -263,20 +215,6 @@ onBeforeUnmount(() => {
           :card-id="card.id"
         />
       </template>
-      <div v-if="!card.collapsed" class="modes" role="group" aria-label="卡片显示模式">
-        <button
-          v-for="m in MODES"
-          :key="m.mode"
-          class="mode"
-          :class="{ active: contentMode === m.mode }"
-          :title="`${m.label}模式`"
-          :aria-pressed="contentMode === m.mode"
-          @pointerdown.stop
-          @click.stop="setMode(m.mode)"
-        >
-          {{ m.glyph }}
-        </button>
-      </div>
       <button
         class="collapse"
         :class="{ active: card.collapsed }"
@@ -288,34 +226,9 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- body: source / source-beside-preview / preview -->
-    <div
-      v-if="!card.collapsed && contentMode === 'split'"
-      class="body split"
-    >
-      <textarea
-        ref="textarea"
-        v-model="draft"
-        class="edit pane"
-        spellcheck="false"
-        placeholder="在这里写…（Ctrl+Enter 保存，Esc 退出）"
-        @pointerdown.stop
-        @dblclick.stop
-        @keydown="onKeydown"
-        @blur="commit"
-        @input="fitHeight"
-      ></textarea>
-      <div class="read pane">
-        <component :is="MarkdownView"
-          v-if="previewSource"
-          :content="previewSource"
-        />
-        <div v-else class="preview empty-hint">写点什么，这里会出现预览</div>
-      </div>
-    </div>
-
+    <!-- body: preview by default; editing opens the Markdown source in place. -->
     <textarea
-      v-else-if="!card.collapsed && contentMode === 'source'"
+      v-if="!card.collapsed && editing"
       ref="textarea"
       v-model="draft"
       class="body edit"
@@ -336,14 +249,12 @@ onBeforeUnmount(() => {
       <div v-else class="preview empty-hint">点击写点什么</div>
     </div>
 
-    <!-- Off-screen copy of the draft at the textarea's real text width: measuring this, instead
-         of the textarea, is what makes "grow to fit" report the content height rather than the
-         card's own height. Kept outside the branches above so it exists in every writing mode. -->
+    <!-- Off-screen copy of the draft lets "grow to fit" measure text instead of the textarea's
+         current card-sized box. -->
     <div
       v-if="sourceVisible"
       ref="measure"
-      class="body measure"
-      :class="contentMode === 'split' ? 'measure-pane' : 'measure-full'"
+      class="body measure measure-full"
       aria-hidden="true"
     >{{ draft }}</div>
 
@@ -394,8 +305,7 @@ onBeforeUnmount(() => {
 }
 
 /* --- card tools: an overlay row in the top-right corner ---
-    The container itself never fades: each child owns its own visibility, because the plugin
-    chips (e.g. the memory-curve badge) must stay visible on an enabled card even at rest. */
+    The container itself never fades: plugin chips stay visible on an enabled card even at rest. */
 .card-tools {
   position: absolute;
   top: 4px;
@@ -405,18 +315,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 2px;
 }
-.modes,
 .collapse {
-  /* Hidden by default: these cost no layout space, so the content starts at the top of the
-     card. They fade in on hover, and stay while the card is selected or being written in. */
+  /* Hidden by default; the button fades in on hover and while selected or being written in. */
   opacity: 0;
   transition: opacity 0.12s;
 }
-.card:hover .modes,
-.card.selected .modes,
-.card.focused .modes,
-.card.editing .modes,
-.card.collapsed .modes,
 .card:hover .collapse,
 .card.selected .collapse,
 .card.focused .collapse,
@@ -425,31 +328,6 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-/* --- per-card view mode --- */
-.modes {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-}
-.mode {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--c-text-3);
-  font-size: 12px;
-  line-height: 1;
-}
-.mode:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.mode.active {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
 /* The collapse control shows while expanded too, otherwise there would be no way to fold a
    card back once the strip that used to hold it is gone. */
 .collapse {
@@ -521,15 +399,10 @@ onBeforeUnmount(() => {
   font-family: var(--font-ui);
   color: var(--c-text);
 }
-/* The twin must be as wide as the textarea it stands in for: half the card in split mode,
-   the whole card otherwise. */
+/* The twin matches the editing textarea's full width. */
 .measure-full {
   width: 100%;
 }
-.measure-pane {
-  width: 50%;
-}
-
 .preview {
   white-space: pre-wrap;
   word-break: break-word;
@@ -538,44 +411,6 @@ onBeforeUnmount(() => {
 .preview.empty-hint {
   color: var(--c-text-3);
   font-style: italic;
-}
-
-/* --- split: source on the left, live preview on the right --- */
-.body.split {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-}
-.body.split .pane {
-  flex: 1 1 50%;
-  min-width: 0;
-  min-height: 0;
-  padding: 12px 14px;
-  overflow-y: auto;
-}
-.body.split .edit.pane {
-  border-right: 1px solid var(--c-border);
-  /* Explicit colours: a bare textarea falls back to the UA `field` system colour, which is a
-     dark box that the theme's text colour cannot be read on. */
-  background: transparent;
-  color: var(--c-text);
-  font-family: var(--font-ui);
-  border-top: none;
-  border-bottom: none;
-  border-left: none;
-  outline: none;
-  resize: none;
-}
-.body.split .edit.pane::placeholder {
-  color: var(--c-text-3);
-}
-.body.split .read.pane {
-  user-select: text;
-  overflow-x: hidden;
-  background: transparent;
-  color: var(--c-text);
 }
 
 /* --- edge cursor strips: 只在边缘给出光标提示，判定在 onBodyPointerDown 里按坐标做 --- */

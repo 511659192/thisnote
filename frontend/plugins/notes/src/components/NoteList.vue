@@ -24,9 +24,8 @@ function onContext(e: MouseEvent, node: NoteMeta) {
   emit('context', { node, x: e.clientX, y: e.clientY })
 }
 
-/** 右上角的删除入口：硬删除不可恢复，弹一次确认（与侧栏删分组同一模式）。 */
+/** Ask the parent to confirm before permanently deleting the note and its cards. */
 function askRemove(node: NoteMeta) {
-  if (!window.confirm(`彻底删除「${node.title}」？\n\n卡片文件与笔记一起删除，无法恢复。`)) return
   emit('remove', node.id)
 }
 </script>

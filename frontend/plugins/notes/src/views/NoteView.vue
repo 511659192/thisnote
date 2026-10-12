@@ -2,12 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import { activeNoteTools, primaryLabel } from '@thisnode/plugin-api'
+import { activeNoteTools, primaryLabel, toast } from '@thisnode/plugin-api'
 import { usePageStore } from '@/stores/notePage'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import type { NoteMeta, CardView } from '@/api/types'
 
 const route = useRoute()
@@ -24,6 +25,12 @@ const menu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[] }>(
   y: 0,
   entries: [],
 })
+const confirmDialog = ref<{
+  open: boolean
+  title: string
+  message: string
+  action: (() => void | Promise<void>) | null
+}>({ open: false, title: '', message: '', action: null })
 const renaming = ref(false)
 const titleDraft = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
@@ -61,6 +68,13 @@ watch(
     if (name === 'notes') void applyRoute()
   },
 )
+watch(() => page.noteTitle, (title) => {
+  const currentNote = nodes.current
+  if (!title || !currentNote || currentNote.id !== page.noteId) return
+  currentNote.title = title
+  const row = nodes.nodes.find((note) => note.id === currentNote.id)
+  if (row) row.title = title
+})
 
 // ---------------------------------------------------------------- title
 
@@ -117,13 +131,60 @@ async function addCard() {
   if (created) await pageRef.value.beginEdit(created)
 }
 
+function askForConfirmation(title: string, message: string, action: () => void | Promise<void>) {
+  confirmDialog.value = { open: true, title, message, action }
+}
+
+function closeConfirmation() {
+  confirmDialog.value.open = false
+  confirmDialog.value.action = null
+}
+
+async function confirmAction() {
+  const action = confirmDialog.value.action
+  closeConfirmation()
+  if (action) await action()
+}
+
+function requestDeleteCard(view: CardView) {
+  askForConfirmation(
+    '删除卡片',
+    '卡片内容将被永久删除，无法恢复。',
+    async () => {
+      await pageRef.value?.finishEditing(view.card.id)
+      const deleted = await page.deleteBlock(view.fileName)
+      const currentNote = nodes.current
+      if (deleted && currentNote?.id === page.noteId) {
+        currentNote.cardFileNames = (currentNote.cardFileNames ?? []).filter((name) => name !== view.fileName)
+      }
+    },
+  )
+}
+
+function requestDeleteNote(id: string) {
+  const note = nodes.nodes.find((item) => item.id === id)
+  askForConfirmation(
+    `彻底删除「${note?.title ?? '这篇笔记'}」？`,
+    '卡片文件与笔记一起删除，无法恢复。',
+    async () => {
+      try {
+        await nodes.deleteForever(id)
+      } catch (e) {
+        toast(`删除笔记失败：${(e as Error).message}`, 'error')
+      }
+    },
+  )
+}
+
 function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }) {
   const entries: MenuEntry[] = []
-  if (p.target === 'card') {
-    entries.push({
-      label: '编辑卡片内容',
-      action: () => p.view && void pageRef.value?.beginEdit(p.view),
-    })
+  if (p.target === 'card' && p.view) {
+    const view = p.view
+    entries.push(
+      { label: '编辑卡片内容', action: () => void pageRef.value?.beginEdit(view) },
+      { separator: true },
+      { label: '删除卡片', danger: true, action: () => requestDeleteCard(view) },
+    )
   } else {
     entries.push(
       { label: '新建卡片（或双击页面空白处）', action: addCard },
@@ -178,7 +239,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         :current-id="nodes.currentId"
         @open="openNode"
         @context="onNodeContext"
-        @remove="(id: string) => nodes.deleteForever(id)"
+        @remove="requestDeleteNote"
       />
 
       <template v-if="nodes.current">
@@ -231,6 +292,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </div>
 
     <ContextMenu :open="menu.open" :x="menu.x" :y="menu.y" :entries="menu.entries" @close="menu.open = false" />
+    <ConfirmDialog
+      :open="confirmDialog.open"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      @cancel="closeConfirmation"
+      @confirm="confirmAction"
+    />
     <StatusBar />
   </div>
 </template>

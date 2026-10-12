@@ -11,6 +11,7 @@ import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.ext.notes.util.NoteTitleDefaults;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -64,13 +65,11 @@ public class CardService {
         return new Card(card, content, fileName);
     }
 
-    public Card writeContent(String cardFileName,
+    public Card writeContent(String noteId,
+                             String cardFileName,
                              String contentMd,
                              String baseContentMd) {
-        NoteMeta note = noteService.getByCardFileName(cardFileName);
-        if (note == null) {
-            throw new NotFoundException("card " + cardFileName);
-        }
+        NoteMeta note = noteContainingCard(noteId, cardFileName);
 
         Card card = cardRepository.getOne(cardFileName);
         if (card == null || card.getMeta() == null) {
@@ -85,17 +84,26 @@ public class CardService {
         CardMeta cardMeta = card.getMeta();
         String body = contentMd == null ? "" : contentMd;
         cardRepository.save(cardMeta, body, cardFileName);
+        if (NoteTitleDefaults.isPlaceholderTitle(note.getTitle())) {
+            String generatedTitle = noteService.generatedTitleFromCards(note);
+            if (generatedTitle != null) {
+                note.setTitle(generatedTitle);
+            }
+        }
         noteRepository.save(note);
         return new Card(cardMeta, body, cardFileName);
     }
 
-    public CardMeta update(String fileName,
+    public CardMeta update(String noteId,
+                           String fileName,
                            UpdateCardRequest changes) {
-        NoteMeta noteMeta = noteService.getByCardFileName(fileName);
-        if (noteMeta == null) {
-            throw new NotFoundException("card " + fileName);
-        }
+        return update(noteService.get(noteId), fileName, changes);
+    }
 
+    private CardMeta update(NoteMeta noteMeta,
+                            String fileName,
+                            UpdateCardRequest changes) {
+        noteContainingCard(noteMeta, fileName);
         Card card = cardRepository.getOne(fileName);
         if (card == null || card.getMeta() == null) {
             throw new NotFoundException("card " + fileName);
@@ -116,11 +124,32 @@ public class CardService {
     }
 
     public void batchUpdate(BatchUpdateCardsRequest req) {
-        List<UpdateCardRequest> updates = req.cards();
-        for (UpdateCardRequest update : updates) {
+        NoteMeta note = noteService.get(req.noteId());
+        for (UpdateCardRequest update : req.cards()) {
             if (update != null && update.fileName() != null) {
-                update(update.fileName(), update);
+                update(noteContainingCard(note, update.fileName()), update.fileName(), update);
             }
         }
+    }
+
+    public void delete(String noteId, String fileName) {
+        NoteMeta note = noteContainingCard(noteId, fileName);
+
+        cardRepository.delete(List.of(fileName));
+        note.setCardFileNames(note.getCardFileNames().stream()
+                .filter(name -> !name.equals(fileName))
+                .toList());
+        noteRepository.save(note);
+    }
+
+    private NoteMeta noteContainingCard(String noteId, String fileName) {
+        return noteContainingCard(noteService.get(noteId), fileName);
+    }
+
+    private NoteMeta noteContainingCard(NoteMeta note, String fileName) {
+        if (!note.getCardFileNames().contains(fileName)) {
+            throw new NotFoundException("card " + fileName);
+        }
+        return note;
     }
 }

@@ -15,6 +15,7 @@ import {
   toast,
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import type { Notebook } from '@/api/types'
 
 /**
@@ -116,6 +117,12 @@ const groupMenu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[
   y: 0,
   entries: [],
 })
+const confirmDialog = ref<{
+  open: boolean
+  title: string
+  message: string
+  action: (() => void | Promise<void>) | null
+}>({ open: false, title: '', message: '', action: null })
 
 async function promptNewGroup() {
   const title = window.prompt('新建分组名称')
@@ -134,14 +141,33 @@ async function renameGroup(id: string, current: string) {
   await nodes.renameGroup(id, title.trim())
 }
 
-async function removeGroup(id: string, title: string) {
-  if (!window.confirm(`删除分组「${title}」？\n\n分组里的笔记不会被删除，只是不再属于这个分组。`)) return
+async function removeGroup(id: string) {
   try {
     await nodes.deleteGroup(id)
     toast('分组已删除', 'success')
   } catch (e) {
     toast(`删除失败：${(e as Error).message}`, 'error')
   }
+}
+
+function requestRemoveGroup(id: string, title: string) {
+  confirmDialog.value = {
+    open: true,
+    title: `删除分组「${title}」？`,
+    message: '分组里的笔记不会被删除，只是不再属于这个分组。',
+    action: () => removeGroup(id),
+  }
+}
+
+function closeConfirmation() {
+  confirmDialog.value.open = false
+  confirmDialog.value.action = null
+}
+
+async function confirmAction() {
+  const action = confirmDialog.value.action
+  closeConfirmation()
+  if (action) await action()
 }
 
 function onGroupContext(e: MouseEvent, group: Notebook) {
@@ -153,7 +179,7 @@ function onGroupContext(e: MouseEvent, group: Notebook) {
       label: '删除分组',
       danger: true,
       disabled: group.id === DEFAULT_GROUP_ID,
-      action: () => void removeGroup(group.id, group.title),
+      action: () => requestRemoveGroup(group.id, group.title),
     },
   ]
   groupMenu.value = { open: true, x: e.clientX, y: e.clientY, entries }
@@ -251,6 +277,13 @@ watch(
     :y="groupMenu.y"
     :entries="groupMenu.entries"
     @close="groupMenu.open = false"
+  />
+  <ConfirmDialog
+    :open="confirmDialog.open"
+    :title="confirmDialog.title"
+    :message="confirmDialog.message"
+    @cancel="closeConfirmation"
+    @confirm="confirmAction"
   />
 </template>
 

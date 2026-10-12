@@ -10,12 +10,16 @@ import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.ext.notes.util.NoteTitleDefaults;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Note aggregate: CRUD and list queries.
@@ -34,13 +38,59 @@ public class NoteService {
 
     public String create(CreateNoteRequest req) {
         String id = IdUtil.randomUUID();
-        NoteMeta noteMeta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(req.notebookId());
+        String title = req.title().isBlank() ? generatedTitle(req.content(), null) : req.title();
+        NoteMeta noteMeta = new NoteMeta().setId(id).setTitle(title).setType(req.type()).setNotebookId(req.notebookId());
         CardMeta firstCardMeta = new CardMeta().setId(IdUtil.randomUUID()).setTitle("");
         String cardFileName = cardRepository.save(firstCardMeta, req.content(), null);
 
         noteMeta.setCardFileNames(List.of(cardFileName));
         noteRepository.save(noteMeta);
         return id;
+    }
+
+    /** Title from the first card with non-blank content; null means all cards are empty. */
+    public String generatedTitleFromCards(NoteMeta note) {
+        String firstLine = cardRepository.getAll(note.getCardFileNames()).stream()
+                .map(Card::getContent)
+                .map(NoteTitleDefaults::firstLine)
+                .filter(line -> !line.isBlank())
+                .findFirst()
+                .orElse(null);
+        return firstLine == null ? null : uniqueGeneratedTitle(firstLine, note.getId(), true);
+    }
+
+    private String generatedTitle(String content, String excludedNoteId) {
+        String firstLine = NoteTitleDefaults.firstLine(content);
+        if (firstLine.isBlank()) {
+            return uniqueGeneratedTitle(NoteTitleDefaults.placeholderTitle(), excludedNoteId, false);
+        }
+        return uniqueGeneratedTitle(firstLine, excludedNoteId, true);
+    }
+
+    private String uniqueGeneratedTitle(String base,
+                                        String excludedNoteId,
+                                        boolean timestampOnDuplicate) {
+        Set<String> existingTitles = new HashSet<>();
+        for (NoteMeta existing : noteRepository.getAll()) {
+            if (!Objects.equals(existing.getId(), excludedNoteId) && existing.getTitle() != null) {
+                existingTitles.add(existing.getTitle());
+            }
+        }
+        if (!existingTitles.contains(base)) {
+            return base;
+        }
+
+        String candidate = timestampOnDuplicate
+                ? base + "-" + NoteTitleDefaults.currentTimeTitle()
+                : base;
+        if (!existingTitles.contains(candidate)) {
+            return candidate;
+        }
+        int suffix = 2;
+        while (existingTitles.contains(candidate + "-" + suffix)) {
+            suffix++;
+        }
+        return candidate + "-" + suffix;
     }
 
     public void update(String id,
@@ -67,13 +117,6 @@ public class NoteService {
             throw new NotFoundException("node " + id);
         }
         return meta;
-    }
-
-    NoteMeta getByCardFileName(String fileName) {
-        return noteRepository.getAll().stream()
-                             .filter(note -> note.getCardFileNames().contains(fileName))
-                             .findFirst()
-                             .get();
     }
 
     public List<NoteMeta> list(NoteListQuery q) {

@@ -14,7 +14,7 @@ import type { CardUpdate } from '@/api/page'
  *     the clicked point becomes the card's top-left corner
  *   * Ctrl+V                          → the clipboard becomes a card
  *   * type in a card                  → written straight into the note
- *   * empty cards remain until their note is deleted
+ *   * empty cards remain until explicitly deleted or their note is deleted
  *
  * There is no dot grid, no groups, no connectors, no board concept.
  */
@@ -498,6 +498,11 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+function onCardFocus(id: string) {
+  page.select([id])
+  page.bringToFront(id)
+}
+
 function onBlockContext(p: { event: MouseEvent; view: CardView }) {
   if (!page.selection.includes(p.view.card.id)) page.select([p.view.card.id])
   emit('context', { x: p.event.clientX, y: p.event.clientY, target: 'card', view: p.view })
@@ -529,6 +534,7 @@ defineExpose({ size, beginEdit, finishEditing })
         :selected="page.selection.includes(view.card.id)"
         :editing="page.editingCardId === view.card.id"
         :focused="page.selection.includes(view.card.id)"
+        :z-index="page.zIndexFor(view.card.id)"
         @pointerdown="onBlockPointerDown"
         @request-edit="
           (id: string) => {
@@ -541,7 +547,7 @@ defineExpose({ size, beginEdit, finishEditing })
         @fit-height="onFitHeight"
         @end-edit="finishEditing()"
         @toggle-collapse="onToggleCollapse"
-        @focus="(id: string) => page.select([id])"
+        @focus="onCardFocus"
       />
 
       <!-- 「进入视口才拉」的哨兵：还有没取回来的卡片时存在，靠近它即取下一批 -->
