@@ -25,6 +25,7 @@ export interface CardMeta {
   y: number
   w: number
   h: number
+  /** Legacy persisted field; visual stacking is derived from geometry. */
   z: number
   color?: string | null
   status?: string | null
@@ -50,11 +51,9 @@ export interface CardView {
   selected?: boolean
 }
 
-export interface NotePageData {
-  noteId: string
-  noteTitle: string
+export interface NoteDto {
+  noteMeta: NoteMeta
   cards: Card[]
-  updatedAt: number
 }
 
 /**

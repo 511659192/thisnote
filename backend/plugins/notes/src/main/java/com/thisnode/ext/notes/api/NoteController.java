@@ -29,19 +29,19 @@ public class NoteController {
 
     @PostMapping("/create")
     public NoteMeta create(@RequestBody CreateNoteRequest req) {
-        return noteService.detail(noteService.create(req));
+        return noteService.get(noteService.create(req));
     }
 
     @GetMapping("/detail")
     public NoteMeta detail(@RequestParam String id) {
-        return noteService.detail(id);
+        return noteService.get(id);
     }
 
     @PostMapping("/update")
     public NoteMeta update(@RequestParam String id,
                                 @RequestBody UpdateNoteRequest req) {
         noteService.update(id, req);
-        return noteService.detail(id);
+        return noteService.get(id);
     }
 
     @PostMapping("/delete")

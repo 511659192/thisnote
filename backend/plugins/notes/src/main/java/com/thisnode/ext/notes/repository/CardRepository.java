@@ -52,9 +52,9 @@ public class CardRepository {
      */
     public String save(CardMeta meta,
                        String contentMd,
-                       String knownFileName) {
-        String fileName = knownFileName == null ? meta.getId() + ".md" : knownFileName;
-        Path file = notesConfig.getCardsDir().resolve(fileName);
+                       String fileName) {
+        meta.setUpdatedAt(System.currentTimeMillis());
+        Path file = notesConfig.getCardsDir().resolve(fileName == null ? meta.getId() + ".md" : fileName);
         JsonFileUtils.writeText(file, Card.compose(meta, contentMd));
         return file.getFileName().toString();
     }
@@ -62,11 +62,11 @@ public class CardRepository {
     /**
      * Rewrite only a card header while preserving its body.
      */
-    public void save(String fileName,
-                     CardMeta meta) {
+    public void save(CardMeta meta,
+                     String fileName) {
         Card card = getOne(fileName);
         String body = card == null ? "" : card.getContent();
-        JsonFileUtils.writeText(notesConfig.getCardsDir().resolve(fileName), Card.compose(meta, body));
+        this.save(meta, body, fileName);
     }
 
     public void delete(List<String> fileNames) {

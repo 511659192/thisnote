@@ -34,18 +34,18 @@ public class NoteService {
 
     public String create(CreateNoteRequest req) {
         String id = IdUtil.randomUUID();
-        NoteMeta meta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(req.notebookId());
-        CardMeta firstCard = new CardMeta().setId(IdUtil.randomUUID()).setTitle("");
-        String cardFileName = cardRepository.save(firstCard, req.content(), null);
+        NoteMeta noteMeta = new NoteMeta().setId(id).setTitle(req.title()).setType(req.type()).setNotebookId(req.notebookId());
+        CardMeta firstCardMeta = new CardMeta().setId(IdUtil.randomUUID()).setTitle("");
+        String cardFileName = cardRepository.save(firstCardMeta, req.content(), null);
 
-        meta.setCardFileNames(List.of(cardFileName));
-        noteRepository.save(meta);
+        noteMeta.setCardFileNames(List.of(cardFileName));
+        noteRepository.save(noteMeta);
         return id;
     }
 
     public void update(String id,
                        UpdateNoteRequest req) {
-        NoteMeta meta = require(id);
+        NoteMeta meta = get(id);
         if (req.title() != null && !req.title().equals(meta.getTitle())) {
             meta.setTitle(req.title());
             noteRepository.save(meta);
@@ -61,7 +61,7 @@ public class NoteService {
         noteRepository.delete(id);
     }
 
-    public NoteMeta require(String id) {
+    public NoteMeta get(String id) {
         NoteMeta meta = noteRepository.getOne(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
@@ -69,8 +69,11 @@ public class NoteService {
         return meta;
     }
 
-    public NoteMeta detail(String id) {
-        return require(id);
+    NoteMeta getByCardFileName(String fileName) {
+        return noteRepository.getAll().stream()
+                             .filter(note -> note.getCardFileNames().contains(fileName))
+                             .findFirst()
+                             .get();
     }
 
     public List<NoteMeta> list(NoteListQuery q) {

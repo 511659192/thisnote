@@ -1,30 +1,27 @@
 package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.util.IdUtil;
-import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Notebook;
 import com.thisnode.ext.notes.util.JsonFileUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/** Persists the flat notebook list; note membership belongs to NotebookService. */
+/**
+ * Persists the flat notebook list; note membership belongs to NotebookService.
+ */
 @Repository
 @RequiredArgsConstructor
+@Slf4j
 public class NotebookRepository {
-
-    private static final Logger log = LoggerFactory.getLogger(NotebookRepository.class);
 
     private final NotesConfig notesConfig;
 
@@ -32,46 +29,30 @@ public class NotebookRepository {
     private void initializeDefaultGroup() {
         List<Notebook> notebooks = getAll();
         if (getOne(notebooks, Notebook.DEFAULT_GROUP_ID) == null) {
-            long now = System.currentTimeMillis();
-            notebooks.add(Notebook.fresh(Notebook.DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK,
-                    Notebook.DEFAULT_GROUP_TITLE, "📥", 0, now));
+            notebooks.add(Notebook.newNotebook(Notebook.DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK, Notebook.DEFAULT_GROUP_TITLE, "📥", 0, System.currentTimeMillis()));
             save(notebooks);
         }
     }
 
-    private Path ledgerPath() {
-        return notesConfig.getNotebookDir().resolve("notebooks.json");
-    }
-
     private List<Notebook> getAll() {
-        Path file = ledgerPath();
+        Path file = notesConfig.getNotebookDir().resolve("notebooks.json");
         if (!Files.isRegularFile(file)) {
             return new ArrayList<>();
         }
-        try {
-            String json = Files.readString(file, StandardCharsets.UTF_8);
-            if (json.isBlank()) {
-                return new ArrayList<>();
-            }
-            List<Notebook> loaded = JSON.parseArray(json, Notebook.class);
-            return loaded == null ? new ArrayList<>() : new ArrayList<>(loaded);
-        } catch (IOException | RuntimeException e) {
-            log.warn("分组清单无法读取，按空清单处理：{}", e.toString());
-            return new ArrayList<>();
-        }
+
+        return Notebook.parse(file);
     }
 
     private void save(List<Notebook> notebooks) {
-        JsonFileUtils.write(ledgerPath(), notebooks);
+        JsonFileUtils.write(notesConfig.getNotebookDir().resolve("notebooks.json"), notebooks);
     }
 
     public List<Notebook> getAll(String type) {
         String wantedType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
         return getAll().stream()
-                .filter(notebook -> notebook.type().equals(wantedType))
-                .sorted(Comparator.comparingInt(Notebook::sortOrder)
-                        .thenComparing(Notebook::title, String.CASE_INSENSITIVE_ORDER))
-                .toList();
+                       .filter(notebook -> notebook.getType().equals(wantedType))
+                       .sorted(Comparator.comparingInt(Notebook::getSortOrder).thenComparing(Notebook::getTitle, String.CASE_INSENSITIVE_ORDER))
+                       .toList();
     }
 
     public Notebook getOne(String id) {
@@ -86,11 +67,9 @@ public class NotebookRepository {
         long now = System.currentTimeMillis();
         int max = 0;
         for (Notebook notebook : notebooks) {
-            max = Math.max(max, notebook.sortOrder());
+            max = Math.max(max, notebook.getSortOrder());
         }
-        notebooks.add(Notebook.fresh(id,
-                type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type,
-                title, icon, max + 1, now));
+        notebooks.add(Notebook.newNotebook(id, type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type, title, icon, max + 1, now));
         save(notebooks);
         return id;
     }
@@ -104,13 +83,16 @@ public class NotebookRepository {
         if (current == null) {
             throw new IllegalArgumentException("分组不存在：" + id);
         }
-        Notebook updated = new Notebook(current.v(), id, current.type(),
-                title == null || title.isBlank() ? current.title() : title.trim(),
-                icon == null ? current.icon() : icon,
-                sortOrder == null ? current.sortOrder() : sortOrder,
-                current.createdAt(), System.currentTimeMillis());
+        Notebook updated = new Notebook(current.getV(),
+                                        id,
+                                        current.getType(),
+                                        title == null || title.isBlank() ? current.getTitle() : title.trim(),
+                                        icon == null ? current.getIcon() : icon,
+                                        sortOrder == null ? current.getSortOrder() : sortOrder,
+                                        current.getCreatedAt(),
+                                        System.currentTimeMillis());
         for (int i = 0; i < notebooks.size(); i++) {
-            if (id.equals(notebooks.get(i).id())) {
+            if (id.equals(notebooks.get(i).getId())) {
                 notebooks.set(i, updated);
                 break;
             }
@@ -124,7 +106,7 @@ public class NotebookRepository {
             return;
         }
         List<Notebook> notebooks = getAll();
-        notebooks.removeIf(notebook -> id.equals(notebook.id()));
+        notebooks.removeIf(notebook -> id.equals(notebook.getId()));
         save(notebooks);
     }
 
@@ -134,7 +116,7 @@ public class NotebookRepository {
             return null;
         }
         for (Notebook notebook : notebooks) {
-            if (id.equals(notebook.id())) {
+            if (id.equals(notebook.getId())) {
                 return notebook;
             }
         }

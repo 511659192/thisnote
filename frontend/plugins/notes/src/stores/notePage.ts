@@ -90,14 +90,14 @@ export const usePageStore = defineStore('notePage', () => {
       const first = all.slice(0, PAGE_SIZE)
       pendingFileNames.value = all.slice(PAGE_SIZE)
       const page = await pageApi.get(id, first.length ? first : undefined)
-      noteId.value = page.noteId
-      noteTitle.value = page.noteTitle
+      noteId.value = page.noteMeta.id
+      noteTitle.value = page.noteMeta.title
       cards.value = page.cards.map(toCardView)
       const loaded = new Set(cards.value.map((view) => view.fileName))
       pendingFileNames.value = pendingFileNames.value.filter((fileName) => !loaded.has(fileName))
       selection.value = []
       editingCardId.value = null
-      restoreViewport(page.noteId)
+      restoreViewport(page.noteMeta.id)
       return page
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -142,7 +142,7 @@ export const usePageStore = defineStore('notePage', () => {
     const refreshed = page.cards.map(toCardView)
     const extra = refreshed.filter((view) => !cardIds.has(view.card.id))
     cards.value = [...refreshed, ...extra]
-    noteTitle.value = page.noteTitle
+    noteTitle.value = page.noteMeta.title
   }
 
   // ---------------------------------------------------------------- selection

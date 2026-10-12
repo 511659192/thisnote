@@ -99,6 +99,7 @@ public class Card {
         private double y = 0d;
         private double w = DEFAULT_W;
         private double h = DEFAULT_H;
+        /** Legacy metadata retained for card-file compatibility; visual stacking is derived from geometry. */
         private int z = 0;
         private String color;
         private String status;

@@ -21,8 +21,8 @@ public class CardController {
      * 这几张卡（{@code cardFileNames} 省略 = 整页）：卡片几何 + 它自己的正文。
      */
     @GetMapping
-    public CardsPageDto get(@RequestParam String noteId,
-                            @RequestParam(required = false) List<String> cardFileNames) {
+    public NoteDto get(@RequestParam String noteId,
+                       @RequestParam(required = false) List<String> cardFileNames) {
         return cardService.cards(noteId, cardFileNames);
     }
 

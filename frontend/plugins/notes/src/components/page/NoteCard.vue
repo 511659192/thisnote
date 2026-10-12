@@ -244,7 +244,8 @@ onBeforeUnmount(() => {
       transform: `translate3d(${card.x}px, ${card.y}px, 0)`,
       width: `${card.w}px`,
       height: card.collapsed ? '26px' : `${card.h}px`,
-      zIndex: card.z + 1,
+      // 层叠也由当前几何决定，不依赖持久化顺序或分页批次。
+      zIndex: Math.max(1, Math.floor(card.y + card.h / 2) + 1),
     }"
     @pointerdown="onBodyPointerDown"
     @dblclick.stop="emit('request-edit', card.id)"

@@ -27,12 +27,12 @@ public class NoteRepository {
             return;
         }
         note.setUpdatedAt(System.currentTimeMillis());
-        JsonFileUtils.write(metaPath(note.getId()), note);
+        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(note.getId() + ".json"), note);
     }
 
     /** Delete only the note meta; CardService removes its card files first. */
     public void delete(String id) {
-        FileUtil.del(metaPath(id));
+        FileUtil.del(notesConfig.getNoteMetaDir().resolve(id + ".json"));
     }
 
     @SneakyThrows
@@ -41,6 +41,7 @@ public class NoteRepository {
         if (!Files.isDirectory(metaDir)) {
             return List.of();
         }
+
         List<NoteMeta> notes = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(metaDir, "*.json")) {
             for (Path file : stream) {
@@ -58,10 +59,7 @@ public class NoteRepository {
         if (StrUtil.isBlank(id)) {
             return null;
         }
-        return NoteMeta.parse(metaPath(id));
+        return NoteMeta.parse(notesConfig.getNoteMetaDir().resolve(id + ".json"));
     }
 
-    private Path metaPath(String id) {
-        return notesConfig.getNoteMetaDir().resolve(id + ".json");
-    }
 }
