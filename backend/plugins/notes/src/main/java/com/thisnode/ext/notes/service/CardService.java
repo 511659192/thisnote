@@ -28,23 +28,11 @@ public class CardService {
     private final NoteService noteService;
 
     private List<Card> cards(NoteMeta note) {
-        List<Card> result = new ArrayList<>();
-        for (String fileName : note.getCardFileNames()) {
-            Card card = cardRepository.getOne(fileName);
-            if (card != null && card.getMeta() != null) {
-                result.add(card);
-            }
-        }
-        return result;
+        return note.getCardFileNames().stream().map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
     }
 
     private NoteMeta noteForFile(String fileName) {
-        for (NoteMeta note : noteRepository.getAll()) {
-            if (note.getCardFileNames().contains(fileName)) {
-                return note;
-            }
-        }
-        return null;
+        return noteRepository.getAll().stream().filter(note -> note.getCardFileNames().contains(fileName)).findFirst().get();
     }
 
     public CardsPageDto page(String noteId,
@@ -72,18 +60,17 @@ public class CardService {
     public Card create(String noteId,
                        CreateCardRequest req) {
         NoteMeta note = noteService.require(noteId);
-        String content = req.contentMd();
+        String content = req.content();
         String title = req.title();
         double[] flow = nextFlowPosition(note);
         double x = req.x() == null ? flow[0] : Math.max(0, req.x());
         double y = req.y() == null ? flow[1] : Math.max(0, req.y());
         double w = Math.max(CardRepository.MIN_W, req.w());
         double h = Math.max(CardRepository.MIN_H, req.h());
+
         List<Card> existing = cards(note);
         int slot = insertionSlot(existing, y, h);
-        long now = System.currentTimeMillis();
-        CardMeta card = new CardMeta().setId(IdUtil.randomUUID()).setTitle(title)
-                .setX(x).setY(y).setW(w).setH(h).setZ(slot).setColor(req.color());
+        CardMeta card = new CardMeta().setId(IdUtil.randomUUID()).setTitle(title).setX(x).setY(y).setW(w).setH(h).setZ(slot).setColor(req.color());
         String fileName = cardRepository.save(card, content, null);
         List<String> fileNames = new ArrayList<>(note.getCardFileNames());
         fileNames.add(Math.min(slot, fileNames.size()), fileName);
@@ -93,10 +80,7 @@ public class CardService {
     }
 
     private double[] nextFlowPosition(NoteMeta note) {
-        double bottom = cards(note).stream()
-                                   .mapToDouble(card -> card.getMeta().getY() + card.getMeta().getH())
-                                   .max()
-                                   .orElse(0);
+        double bottom = cards(note).stream().mapToDouble(card -> card.getMeta().getY() + card.getMeta().getH()).max().orElse(0);
         return new double[]{CardRepository.FLOW_X, bottom <= 0 ? 0 : bottom + CardRepository.FLOW_GAP};
     }
 
@@ -127,8 +111,7 @@ public class CardService {
         }
         String current = card.getContent();
         if (baseContentMd != null && !baseContentMd.equals(current)) {
-            throw new com.thisnode.plugin.api.ConflictException(
-                    "这张卡片已被外部修改（磁盘上的内容与你打开时的不一样），已停止保存");
+            throw new com.thisnode.plugin.api.ConflictException("这张卡片已被外部修改（磁盘上的内容与你打开时的不一样），已停止保存");
         }
         CardMeta meta = card.getMeta().setUpdatedAt(System.currentTimeMillis());
         String body = contentMd == null ? "" : contentMd;
