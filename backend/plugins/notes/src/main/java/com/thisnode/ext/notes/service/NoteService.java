@@ -38,9 +38,15 @@ public class NoteService {
     public NoteMeta update(String noteId,
                            UpdateNoteRequest req) {
         NoteMeta meta = get(noteId);
-        if (req.title() != null && !req.title().equals(meta.getTitle())) {
-            noteRepository.onNewTitle(meta, req.title());
-            cardRepository.renameFiles(meta.getCardIds(), req.title());
+        String title = req.title();
+        if (title != null && !title.equals(meta.getTitle())) {
+            boolean duplicateTitle = !title.isBlank() && noteRepository.getAll()
+                    .stream()
+                    .anyMatch(other -> !noteId.equals(other.getNoteId()) && title.equalsIgnoreCase(other.getTitle()));
+            if (duplicateTitle) throw new IllegalArgumentException("笔记标题已存在：" + title);
+
+            noteRepository.onNewTitle(meta, title);
+            cardRepository.renameFiles(meta.getCardIds(), title);
         }
         return meta;
     }
@@ -92,11 +98,11 @@ public class NoteService {
             String needle = query.text().toLowerCase(Locale.ROOT);
             boolean titleHit = meta.getTitle() != null && meta.getTitle().toLowerCase(Locale.ROOT).contains(needle);
             boolean cardHit = !titleHit && cardRepository.getAll(meta.getCardIds())
-                                                         .stream()
-                                                         .map(Card::getContent)
-                                                         .filter(content -> content != null)
-                                                         .map(content -> content.toLowerCase(Locale.ROOT))
-                                                         .anyMatch(content -> content.contains(needle));
+                    .stream()
+                    .map(Card::getContent)
+                    .filter(content -> content != null)
+                    .map(content -> content.toLowerCase(Locale.ROOT))
+                    .anyMatch(content -> content.contains(needle));
             if (!titleHit && !cardHit) {
                 return false;
             }

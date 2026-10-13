@@ -355,6 +355,7 @@ watch(
   padding: 0 2px;
 }
 .group-item {
+  padding-left: calc(var(--space-2) + 22px);
   font-size: 12.5px;
 }
 .ico-swap {
