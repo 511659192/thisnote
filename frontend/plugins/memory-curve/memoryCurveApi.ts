@@ -17,6 +17,7 @@ export interface ScheduleView {
 export interface MemoryCurveCardState {
   cardId: string
   enabled: boolean
+  learningStep: number
   schedule: ScheduleView
   /** 按评分 1..4 预览的下一次复习时间（epoch 毫秒），与真实调度共用同一套计算 */
   gradePreview?: Record<string, number>
@@ -45,6 +46,11 @@ export interface CardContent {
   contentMd: string
 }
 
+export interface EnabledMemoryCard extends CardContent {
+  cardId: string
+  schedule: ScheduleView
+}
+
 export const memoryCurveApi = {
   cards: (ids: string[]) =>
     http.get<MemoryCurveCardState[]>(
@@ -55,7 +61,7 @@ export const memoryCurveApi = {
       `/api/plugins/memory-curve/state`, {}, { cardId, value },
     ),
   review: (cardId: string, grade: Grade) =>
-    http.post<{ enabled: boolean; schedule: ScheduleView }>(
+    http.post<MemoryCurveCardState>(
       `/api/plugins/memory-curve/review`, { grade }, { cardId },
     ),
   due: (limit = 50) =>
@@ -107,6 +113,62 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     }
   }
   return found
+}
+
+export async function loadEnabledCards(): Promise<EnabledMemoryCard[]> {
+  const enabledCards: EnabledMemoryCard[] = []
+  const contentById = new Map<string, CardContent>()
+  const notePageSize = 500
+  const noteBatchSize = 8
+  const stateBatchSize = 100
+  let offset = 0
+
+  const collectEnabled = async (cardIds: string[]) => {
+    const states = await memoryCurveApi.cards(cardIds)
+    for (const state of states) {
+      const content = contentById.get(state.cardId)
+      if (state.enabled && content) {
+        enabledCards.push({ cardId: state.cardId, ...content, schedule: state.schedule })
+      }
+    }
+    for (const cardId of cardIds) contentById.delete(cardId)
+  }
+
+  while (true) {
+    const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes', {
+      limit: notePageSize,
+      offset,
+    })
+    if (!notes.length) break
+
+    for (let i = 0; i < notes.length; i += noteBatchSize) {
+      const batch = notes.slice(i, i + noteBatchSize)
+      const pages = await Promise.all(batch.map(async (note) => ({
+        note,
+        page: await http.get<{
+          cards: Array<{ meta: { cardId: string }; content: string }>
+        }>('/api/notes/cards', { noteId: note.noteId }),
+      })))
+      for (const { note, page } of pages) {
+        for (const card of page.cards) {
+          const cardId = card.meta.cardId
+          if (!contentById.has(cardId)) {
+            contentById.set(cardId, { noteTitle: note.title, contentMd: card.content })
+          }
+        }
+      }
+
+      while (contentById.size >= stateBatchSize) {
+        await collectEnabled([...contentById.keys()].slice(0, stateBatchSize))
+      }
+    }
+
+    offset += notes.length
+    if (notes.length < notePageSize) break
+  }
+
+  if (contentById.size) await collectEnabled([...contentById.keys()])
+  return enabledCards.sort((a, b) => a.schedule.dueAt - b.schedule.dueAt)
 }
 
 /** 间隔人话文案：毫秒差 → 「N 分钟 / N 小时 / N 天」。 */

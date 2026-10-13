@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { listHeaders_ } from '@thisnode/plugin-api'
+import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { listHeaders_, toast } from '@thisnode/plugin-api'
+import { noteApi } from '@/api/note'
 import { useNoteStore } from '@/stores/notes'
+import { usePageStore } from '@/stores/notePage'
 import type { NoteMeta } from '@/api/types'
 
 defineProps<{ nodes: NoteMeta[]; loading?: boolean; currentId?: string | null }>()
@@ -11,6 +14,87 @@ const emit = defineEmits<{
 }>()
 
 const store = useNoteStore()
+const page = usePageStore()
+const renamingId = ref<string | null>(null)
+const titleDraft = ref('')
+const titleInput = ref<HTMLInputElement | null>(null)
+let titleOpenTimer: number | null = null
+let savingNoteId: string | null = null
+
+function clearTitleOpenTimer() {
+  if (titleOpenTimer === null) return
+  window.clearTimeout(titleOpenTimer)
+  titleOpenTimer = null
+}
+
+function openNote(noteId: string) {
+  clearTitleOpenTimer()
+  emit('open', noteId)
+}
+
+function onTitleClick(event: MouseEvent, note: NoteMeta) {
+  event.stopPropagation()
+  if (event.detail > 1) {
+    clearTitleOpenTimer()
+    return
+  }
+  clearTitleOpenTimer()
+  titleOpenTimer = window.setTimeout(() => {
+    titleOpenTimer = null
+    emit('open', note.noteId)
+  }, 250)
+}
+
+async function startRename(event: MouseEvent, note: NoteMeta) {
+  event.stopPropagation()
+  clearTitleOpenTimer()
+  renamingId.value = note.noteId
+  titleDraft.value = note.title
+  await nextTick()
+  titleInput.value?.focus()
+  titleInput.value?.select()
+}
+
+function cancelRename(noteId: string) {
+  if (savingNoteId === noteId) return
+  renamingId.value = null
+  titleDraft.value = ''
+}
+
+async function commitRename(note: NoteMeta) {
+  if (renamingId.value !== note.noteId || savingNoteId === note.noteId) return
+  const title = titleDraft.value.trim()
+  if (!title) {
+    toast('笔记标题不能为空', 'error')
+    await nextTick()
+    titleInput.value?.focus()
+    return
+  }
+  if (title === note.title) {
+    renamingId.value = null
+    return
+  }
+
+  savingNoteId = note.noteId
+  try {
+    const updated = await noteApi.update(note.noteId, { title })
+    note.title = updated.title
+    if (store.current?.noteId === note.noteId) store.current.title = updated.title
+    if (page.noteId === note.noteId) page.noteTitle = updated.title
+    renamingId.value = null
+    await store.loadList()
+  } catch (e) {
+    toast(`重命名失败：${(e as Error).message}`, 'error')
+    await nextTick()
+    titleInput.value?.focus()
+    titleInput.value?.select()
+  } finally {
+    savingNoteId = null
+  }
+}
+
+onBeforeUnmount(clearTitleOpenTimer)
+
 // 列表接口的 notebooks 只带归属 id（笔记 meta 里的字段），标题用这里已加载的台账解析。
 const notebookTitle = (id: string) => store.notebooks.find((nb) => nb.id === id)?.title ?? id
 
@@ -44,17 +128,37 @@ function askRemove(node: NoteMeta) {
         <p class="small muted">{{ emptyState }}</p>
       </div>
 
-      <button
+      <div
         v-for="n in nodes"
         :key="n.noteId"
         class="note-row"
         :class="{ active: n.noteId === currentId }"
         :data-node-id="n.noteId"
-        @click="emit('open', n.noteId)"
+        role="button"
+        tabindex="0"
+        @click="openNote(n.noteId)"
+        @keydown.enter.self.prevent="openNote(n.noteId)"
         @contextmenu="onContext($event, n)"
       >
         <div class="row-1">
-          <span class="title">{{ n.title }}</span>
+          <input
+            v-if="renamingId === n.noteId"
+            ref="titleInput"
+            v-model="titleDraft"
+            class="title title-edit"
+            aria-label="笔记标题"
+            @click.stop
+            @dblclick.stop
+            @keydown.enter.stop.prevent="commitRename(n)"
+            @keydown.esc.stop.prevent="cancelRename(n.noteId)"
+            @blur="commitRename(n)"
+          />
+          <span
+            v-else
+            class="title"
+            @click="onTitleClick($event, n)"
+            @dblclick.stop.prevent="startRename($event, n)"
+          >{{ n.title }}</span>
           <span
             class="row-del"
             role="button"
@@ -68,7 +172,7 @@ function askRemove(node: NoteMeta) {
         <div v-if="n.notebookId" class="row-2 groups">
           <span class="chip group-chip" title="所属分组">▣ {{ notebookTitle(n.notebookId) }}</span>
         </div>
-      </button>
+      </div>
     </div>
   </div>
 </template>
@@ -113,6 +217,8 @@ function askRemove(node: NoteMeta) {
   padding: 8px 10px;
   border-radius: var(--radius);
   text-align: left;
+  color: var(--c-text-2);
+  cursor: pointer;
   border: 1px solid transparent;
 }
 .note-row:hover {  background: var(--c-surface-3);
@@ -129,11 +235,21 @@ function askRemove(node: NoteMeta) {
 }
 .row-1 .title {
   flex: 1;
+  min-width: 0;
   font-size: 13.5px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.row-1 .title-edit {
+  padding: 1px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--accent);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
 }
 .row-1 .fav {
   font-size: 11px;

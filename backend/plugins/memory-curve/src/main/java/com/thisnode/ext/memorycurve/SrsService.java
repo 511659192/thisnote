@@ -15,32 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-/**
- * Spaced repetition after Anki, tuned for <em>notes</em> rather than exam flashcards.
- *
- * <p>The lifecycle is Anki's: a card starts {@code new}; answering it walks short
- * <em>learning steps</em> (1 min, 10 min — the "slightly dense" beginning); graduating puts it
- * into {@code review}. From there the cadence is deliberately flat: as long as the card is not
- * forgotten, it comes back <em>once a day</em> — for a living note, a daily touch is enough, and
- * the exploding SM-2 intervals (2d → 6d → 15d…) would mean cards you never see again.
- *
- * <p>What the grades still shape is the <em>curve</em>, not the calendar: 忘记 drops the ease
- * steeply (decay bites sooner within the day), 简单 raises it (retention stays high), and ease
- * remains visible in the stats and the drawn curve. Four grades: 忘记(1) / 困难(2) / 良好(3) /
- * 简单(4).
- *
- * <p>Simplifications versus Anki, on purpose: the learning steps are the two defaults; there are
- * no decks; and after graduation the interval is a constant one day instead of Anki's growing
- * multiplier — that flattening is the point of the tuning.
- */
 @org.springframework.stereotype.Service
 public class SrsService {
-
-    /** Short steps a card walks before graduating into day-scale review (Anki's 1m/10m). */
-    private static final long[] LEARNING_STEPS_MS = {60_000L, 600_000L};
-
-    /** Relearning walks a single step (Anki's default 10m) before returning to review. */
-    private static final long[] RELEARNING_STEPS_MS = {600_000L};
 
     private static final double EASE_INIT = 2.5;
     private static final double EASE_MIN = 1.3;
@@ -49,8 +25,9 @@ public class SrsService {
     private static final double EASE_DOWN_HARD = 0.15;
     private static final double EASE_UP_EASY = 0.15;
 
-    /** 毕业后的固定节奏：非忘记，一天一次。 */
-    private static final double DAILY_INTERVAL_DAYS = 1.0;
+    private static final int HARD_INTERVAL_DAYS = 1;
+    private static final int GOOD_INTERVAL_DAYS = 2;
+    private static final int EASY_INTERVAL_DAYS = 3;
 
     private static final long DAY_MS = 86_400_000L;
 
@@ -78,6 +55,10 @@ public class SrsService {
         return enabledCards.isEnabled(cardId);
     }
 
+    private static boolean isShortPhase(String state) {
+        return "new".equals(state) || "learning".equals(state) || "relearning".equals(state);
+    }
+
     /** Enabled + schedule for one card. Schedule is {@code null} until the first review. */
     public Map<String, Object> cardState(String cardId) {
         CardSchedule s = load(cardId);
@@ -86,6 +67,7 @@ public class SrsService {
                 "cardId", cardId,
                 "enabled", enabled(cardId),
                 "schedule", s == null ? emptySchedule(cardId) : scheduleView(s),
+                "learningStep", basis.getLearningStep(),
                 "gradePreview", previewDue(basis, System.currentTimeMillis()));
     }
 
@@ -160,67 +142,45 @@ public class SrsService {
     }
 
     private void apply(CardSchedule s, int grade, long now) {
-        boolean learning = "new".equals(s.getState()) || "learning".equals(s.getState());
-        boolean relearning = "relearning".equals(s.getState());
+        boolean hadGraduated = "review".equals(s.getState());
 
         if (grade == 1) {
-            // Forgot: back to the start of the (re)learning steps, ease punished.
+            // Forgot: repeat in the review queue and punish ease.
             s.setEase(clampEase(s.getEase() - EASE_DOWN_AGAIN));
-            boolean hadGraduated = "review".equals(s.getState());
             if (hadGraduated) {
                 s.setLapses(s.getLapses() + 1);
             }
             s.setState(hadGraduated ? "relearning" : "learning");
             s.setLearningStep(0);
-            s.setDueAt(now + LEARNING_STEPS_MS[0]);
+            s.setDueAt(now);
             return;
         }
 
-        if (learning || relearning) {
-            // Name the state explicitly: a fresh card must become "learning" the moment it is
-            // answered, otherwise every later decision (graduate, lapse) reads the wrong phase.
-            s.setState(relearning ? "relearning" : "learning");
-            long[] steps = relearning ? RELEARNING_STEPS_MS : LEARNING_STEPS_MS;
-            int step = Math.min(s.getLearningStep(), steps.length - 1);
-            if (grade == 2) {
-                // Hard: repeat the current step.
-                s.setDueAt(now + steps[step]);
-                return;
-            }
-            if (grade == 3) {
-                step++;
-                if (step < steps.length) {
-                    s.setLearningStep(step);
-                    s.setDueAt(now + steps[step]);
-                    return;
-                }
-                graduate(s, now);
-                return;
-            }
-            // Easy: graduate straight away — and take the ease reward, which Anki grants on the
-            // easy button in every phase.
-            s.setEase(clampEase(s.getEase() + EASE_UP_EASY));
-            graduate(s, now);
-            return;
-        }
-
-        // 毕业后：非忘记，一天一次。ease 不再放大间隔（那是应试闪卡的节奏），
-        // 只塑造曲线的陡峭程度——难卡的衰减更快，易卡的保持率更高。
         switch (grade) {
-            case 2 -> s.setEase(clampEase(s.getEase() - EASE_DOWN_HARD));
+            case 2 -> {
+                if (hadGraduated) {
+                    s.setEase(clampEase(s.getEase() - EASE_DOWN_HARD));
+                }
+            }
             case 4 -> s.setEase(clampEase(s.getEase() + EASE_UP_EASY));
             default -> {
             }
         }
-        s.setIntervalDays(DAILY_INTERVAL_DAYS);
-        s.setDueAt(now + DAY_MS);
+
+        int intervalDays = switch (grade) {
+            case 2 -> HARD_INTERVAL_DAYS;
+            case 3 -> GOOD_INTERVAL_DAYS;
+            case 4 -> EASY_INTERVAL_DAYS;
+            default -> throw new IllegalArgumentException("评分必须是 1..4");
+        };
+        graduate(s, now, intervalDays);
     }
 
-    private void graduate(CardSchedule s, long now) {
+    private void graduate(CardSchedule s, long now, int intervalDays) {
         s.setState("review");
         s.setLearningStep(0);
-        s.setIntervalDays(DAILY_INTERVAL_DAYS);
-        s.setDueAt(now + DAY_MS);
+        s.setIntervalDays(intervalDays);
+        s.setDueAt(now + intervalDays * DAY_MS);
     }
 
     private double clampEase(double ease) {
@@ -237,12 +197,13 @@ public class SrsService {
         int cap = Math.max(1, Math.min(limit, 200));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (CardSchedule s : schedules().values()) {
-            if (!enabled(s.getCardId()) || s.getDueAt() > now) {
+            boolean shortPhase = isShortPhase(s.getState());
+            if (!enabled(s.getCardId()) || (!shortPhase && s.getDueAt() > now)) {
                 continue;
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("cardId", s.getCardId());
-            row.put("dueAt", s.getDueAt());
+            row.put("dueAt", shortPhase ? now : s.getDueAt());
             row.put("state", s.getState());
             row.put("learningStep", s.getLearningStep());
             row.put("gradePreview", previewDue(s, now));
@@ -395,9 +356,10 @@ public class SrsService {
     }
 
     private ScheduleView scheduleView(CardSchedule schedule) {
+        long now = System.currentTimeMillis();
+        long dueAt = isShortPhase(schedule.getState()) ? now : schedule.getDueAt();
         return new ScheduleView(schedule.getCardId(), schedule.getState(), schedule.getEase(), schedule.getIntervalDays(),
-                schedule.getDueAt(), schedule.getLastReviewedAt(), schedule.getReps(), schedule.getLapses(),
-                schedule.getDueAt() <= System.currentTimeMillis());
+                dueAt, schedule.getLastReviewedAt(), schedule.getReps(), schedule.getLapses(), dueAt <= now);
     }
 
     /**

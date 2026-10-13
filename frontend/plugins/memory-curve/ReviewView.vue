@@ -1,27 +1,45 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { formatInterval, loadCardContent, memoryCurveApi, type CardContent, type DueCard, type Grade } from './memoryCurveApi'
+import {
+  formatInterval,
+  loadCardContent,
+  loadEnabledCards,
+  memoryCurveApi,
+  type CardContent,
+  type DueCard,
+  type EnabledMemoryCard,
+  type Grade,
+  type MemoryCurveCardState,
+} from './memoryCurveApi'
+import { memoryCurve } from './index'
 import { host, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
 
 const PLUGIN_ID = 'memory-curve'
 
 /**
- * 复习页：一次性展示全部到期卡片——完整内容直接呈现，每张卡下面是四档评分，
- * 按钮上标注这一次评分后的下一次复习间隔（与真实调度同一套计算）。
+ * 复习页：逐张呈现到期卡片，完整内容独立展示；四档评分固定在屏幕下方，
+ * 按钮标注下次出现方式（由真实排期预览生成）。
  *
- * 布局为多列瀑布流（列宽自适应），屏幕内尽可能多地展示卡片。
- * 评分两条路：单张（面板下方按钮）或勾选多张批量评分——每张卡各自进入自己的时间周期，
- * 评分成功后从视图移除。键盘 1-4 作用于列表最上方的卡片。
+ * 单卡面板居中显示，宽度占可用区域的三分之二。
+ * 卡片逐张评分；长周期评分后从视图移除，短周期评分后在队列中随机重排。
+ * 键盘 1-4 作用于最前卡片。
  */
 const router = useRouter()
-const { notify, MarkdownView } = host()
+const { MarkdownView } = host()
 const queue = ref<Array<DueCard & Partial<CardContent>>>([])
+const currentCard = computed(() => queue.value[0])
+const activeTab = ref<'review' | 'enabled'>('review')
+const enabledCards = ref<EnabledMemoryCard[]>([])
+const previewCard = ref<EnabledMemoryCard | null>(null)
+const enabledCardsLoading = ref(false)
+const enabledCardsLoaded = ref(false)
+const enabledCardsError = ref('')
 const loading = ref(true)
 const reviewedCount = ref(0)
+const deferredShortCount = ref(0)
 const busyIds = ref(new Set<string>())
-const selected = ref(new Set<string>())
-const batchBusy = ref(false)
+const reviewedStates = new Map<string, MemoryCurveCardState>()
 
 const stateLabel = (state: string) => {
   switch (state) {
@@ -32,26 +50,22 @@ const stateLabel = (state: string) => {
   }
 }
 
+function reminderLabel(card: EnabledMemoryCard) {
+  const { dueAt, due } = card.schedule
+  if (!dueAt) return '未安排'
+  if (due || dueAt <= Date.now()) return '已到期'
+  return `下次 ${formatInterval(dueAt)}后`
+}
+
 const intervalOf = (card: DueCard, g: Grade) => {
   const at = card.gradePreview?.[String(g)]
-  return at ? formatInterval(at) : ''
+  if (!at) return ''
+  return at - Date.now() <= 5_000 ? '轮询' : formatInterval(at)
 }
 
-const allSelected = computed(() =>
-  queue.value.length > 0 && queue.value.every((c) => selected.value.has(c.cardId)),
-)
-
-function toggleSelect(cardId: string) {
-  const next = new Set(selected.value)
-  if (next.has(cardId)) next.delete(cardId)
-  else next.add(cardId)
-  selected.value = next
-}
-
-function toggleSelectAll() {
-  selected.value = allSelected.value
-    ? new Set()
-    : new Set(queue.value.map((c) => c.cardId))
+function intervalHint(card: DueCard, grade: Grade) {
+  const interval = intervalOf(card, grade)
+  return interval === '轮询' ? '评分后会在本页队列中轮询重现' : `评分后 ${interval} 再次复习`
 }
 
 /** 拼不出内容的排期条数（卡片已被删、排期还在的孤儿）。 */
@@ -59,6 +73,8 @@ const orphanCount = ref(0)
 
 async function loadQueue() {
   loading.value = true
+  reviewedCount.value = 0
+  deferredShortCount.value = 0
   try {
     const due = await memoryCurveApi.due(50)
     // 正文要自己去核心取：due 只给排期（复习插件不读笔记数据，也就不依赖笔记插件）
@@ -73,10 +89,41 @@ async function loadQueue() {
       void memoryCurveApi.forget(gone.cardId).catch(() => {})
     }
     queue.value = live.map((c) => ({ ...c, ...content.get(c.cardId) }))
-    selected.value = new Set()
   } finally {
     loading.value = false
   }
+}
+
+async function loadEnabledCardList() {
+  if (enabledCardsLoading.value) return
+  enabledCardsLoading.value = true
+  enabledCardsError.value = ''
+  try {
+    const loadedCards = await loadEnabledCards()
+    for (const card of loadedCards) {
+      const reviewed = reviewedStates.get(card.cardId)
+      if (reviewed) card.schedule = reviewed.schedule
+    }
+    enabledCards.value = loadedCards.sort((a, b) => a.schedule.dueAt - b.schedule.dueAt)
+    enabledCardsLoaded.value = true
+  } catch (error) {
+    enabledCardsError.value = error instanceof Error ? error.message : '加载失败，请重试'
+  } finally {
+    enabledCardsLoading.value = false
+  }
+}
+
+function selectTab(tab: 'review' | 'enabled') {
+  activeTab.value = tab
+  if (tab === 'enabled' && !enabledCardsLoaded.value) void loadEnabledCardList()
+}
+
+function openPreview(card: EnabledMemoryCard) {
+  previewCard.value = card
+}
+
+function closePreview() {
+  previewCard.value = null
 }
 
 /**
@@ -90,50 +137,56 @@ async function openPluginSettings() {
   await router.push({ path: '/settings', query: { tab: 'plugins' } })
 }
 
-/** 评分成功后把它从视图里移除：它已进入自己的时间周期（最快 1 分钟后重现）。 */
+/** 长周期评分完成后从本次队列移除。 */
 function removeFromView(cardId: string) {
   queue.value = queue.value.filter((c) => c.cardId !== cardId)
-  const next = new Set(selected.value)
-  next.delete(cardId)
-  selected.value = next
   reviewedCount.value++
+}
+
+function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCurveCardState) {
+  const remaining = queue.value.filter((item) => item.cardId !== card.cardId)
+  const remainingCount = remaining.length
+  if (remainingCount === 0) {
+    queue.value = remaining
+    reviewedCount.value++
+    deferredShortCount.value++
+    return
+  }
+
+  const minPosition = Math.floor(remainingCount / 5) + 1
+  const position = minPosition + Math.floor(Math.random() * (remainingCount - minPosition + 1))
+  remaining.splice(position, 0, {
+    ...card,
+    state: updated.schedule.state,
+    dueAt: updated.schedule.dueAt,
+    learningStep: updated.learningStep,
+    gradePreview: updated.gradePreview ?? card.gradePreview,
+  })
+  queue.value = remaining
+}
+
+function settleGrade(card: DueCard & Partial<CardContent>, updated: MemoryCurveCardState) {
+  reviewedStates.set(card.cardId, updated)
+  const enabledCard = enabledCards.value.find((item) => item.cardId === card.cardId)
+  if (enabledCard) {
+    enabledCard.schedule = updated.schedule
+    enabledCards.value.sort((a, b) => a.schedule.dueAt - b.schedule.dueAt)
+  }
+  if (updated.schedule.state === 'learning' || updated.schedule.state === 'relearning') {
+    requeueShort(card, updated)
+  } else {
+    removeFromView(card.cardId)
+  }
 }
 
 async function grade(card: DueCard, g: Grade) {
   if (busyIds.value.has(card.cardId)) return
   busyIds.value.add(card.cardId)
   try {
-    await memoryCurveApi.review(card.cardId, g)
-    removeFromView(card.cardId)
+    const updated = await memoryCurve.review(card.cardId, g)
+    settleGrade(card, updated)
   } finally {
     busyIds.value.delete(card.cardId)
-  }
-}
-
-/** 批量评分：逐张独立走 SM-2，各自进入自己的时间周期；失败的卡片留在列表里。 */
-async function gradeSelected(g: Grade) {
-  const cards = queue.value.filter((c) => selected.value.has(c.cardId))
-  if (!cards.length || batchBusy.value) return
-  batchBusy.value = true
-  let failed = 0
-  try {
-    for (const card of cards) {
-      busyIds.value.add(card.cardId)
-      try {
-        await memoryCurveApi.review(card.cardId, g)
-        removeFromView(card.cardId)
-      } catch {
-        failed++
-        notify(`「${(card.noteTitle || '卡片').slice(0, 12)}」评分失败`, 'error')
-      } finally {
-        busyIds.value.delete(card.cardId)
-      }
-    }
-  } finally {
-    batchBusy.value = false
-  }
-  if (!failed && cards.length > 1) {
-    notify(`已批量评分 ${cards.length} 张`, 'success')
   }
 }
 
@@ -141,11 +194,15 @@ function onKeydown(e: KeyboardEvent) {
   const t = e.target as HTMLElement
   if (t && ['INPUT', 'TEXTAREA'].includes(t.tagName)) return
   if (e.key === 'Escape') {
+    if (previewCard.value) {
+      closePreview()
+      return
+    }
     void router.push('/notes')
     return
   }
-  const first = queue.value[0]
-  if (first && ['1', '2', '3', '4'].includes(e.key) && !batchBusy.value) {
+  const first = activeTab.value === 'review' ? currentCard.value : undefined
+  if (first && ['1', '2', '3', '4'].includes(e.key)) {
     e.preventDefault()
     void grade(first, Number(e.key) as Grade)
   }
@@ -156,6 +213,7 @@ onMounted(async () => {
   await refreshPluginAvailability()
   if (isPluginActive(PLUGIN_ID)) {
     void loadQueue()
+    void loadEnabledCardList()
   } else {
     loading.value = false
   }
@@ -175,7 +233,9 @@ const GRADES: { grade: Grade; label: string }[] = [
   <div class="review-view">
     <header class="rv-head">
       <h2>复习</h2>
-      <span v-if="queue.length" class="rv-progress">{{ queue.length }} 张待复习</span>
+      <span v-if="activeTab === 'review' && queue.length" class="rv-progress">{{ queue.length }} 张待复习</span>
+      <span v-else-if="activeTab === 'enabled' && enabledCardsLoaded" class="rv-progress">{{ enabledCards.length }} 张已开启</span>
+      <span v-else-if="activeTab === 'enabled' && (enabledCardsLoading || loading)" class="rv-progress">统计中…</span>
       <div class="spacer"></div>
       <button class="btn sm ghost" @click="router.push('/notes')">返回笔记</button>
     </header>
@@ -190,96 +250,139 @@ const GRADES: { grade: Grade; label: string }[] = [
       <button class="btn primary" @click="openPluginSettings">去设置里启用</button>
     </div>
 
-    <div v-else-if="loading" class="rv-state small muted">加载到期卡片…</div>
+    <div v-if="!pluginDisabled" class="rv-tabs" role="tablist" aria-label="复习内容">
+      <button
+        class="rv-tab"
+        :class="{ active: activeTab === 'review' }"
+        role="tab"
+        :aria-selected="activeTab === 'review'"
+        @click="selectTab('review')"
+      >
+        卡片复习 <span v-if="queue.length" class="rv-tab-count">{{ queue.length }}</span>
+      </button>
+      <button
+        class="rv-tab"
+        :class="{ active: activeTab === 'enabled' }"
+        role="tab"
+        :aria-selected="activeTab === 'enabled'"
+        @click="selectTab('enabled')"
+      >
+        已开启卡片
+        <span v-if="enabledCardsLoaded" class="rv-tab-count">{{ enabledCards.length }}</span>
+        <span v-else-if="enabledCardsLoading || loading" class="rv-tab-count">…</span>
+      </button>
+    </div>
 
-    <div v-else-if="!queue.length" class="rv-state rv-done">
+    <div v-if="!pluginDisabled && activeTab === 'review' && loading" class="rv-state small muted">加载到期卡片…</div>
+
+    <div v-else-if="!pluginDisabled && activeTab === 'review' && !queue.length" class="rv-state rv-done">
       <div class="rv-done-icon">🎉</div>
-      <h3>没有到期的卡片</h3>
+      <h3>{{ deferredShortCount ? '短周期卡片留待下次继续' : '没有到期的卡片' }}</h3>
       <p class="small muted">
-        <template v-if="reviewedCount">本次已复习 {{ reviewedCount }} 张，每张都按自己的记忆曲线安排了下一次。</template>
+        <template v-if="deferredShortCount">本页没有剩余卡片可用于错开重现；{{ deferredShortCount }} 张短周期卡片将在下次打开时继续。</template>
+        <template v-else-if="reviewedCount">本次已复习 {{ reviewedCount }} 张，每张都按自己的记忆曲线安排了下一次。</template>
         <template v-else>开启记忆曲线的卡片到期后会出现在这里。</template>
       </p>
       <button class="btn primary" @click="router.push('/notes')">去浏览笔记</button>
     </div>
 
-    <template v-else>
+    <template v-else-if="!pluginDisabled && activeTab === 'review'">
       <p class="small muted rv-tip-top">
-        逐张自测后单张评分，或勾选多张批量评分——每张卡各自进入自己的时间周期。按钮上标示评分后的下次复习间隔；键盘 <span class="kbd">1</span>-<span class="kbd">4</span> 作用于最上方的卡片。
+        逐张自测并单张评分。短周期卡片会在队列中稍后随机重现；按钮显示下次出现方式；键盘 <span class="kbd">1</span>-<span class="kbd">4</span> 作用于当前卡片。
       </p>
       <p v-if="orphanCount" class="small muted rv-tip-orphan">
         另有 {{ orphanCount }} 张卡片的笔记已被删除，已跳过（它们不会再出现在这里）。
       </p>
 
-      <!-- 多列瀑布流：列宽自适应，屏幕内尽可能多地展示卡片 -->
-      <div class="rv-grid">
+      <div class="rv-review-stage">
         <div
-          v-for="(card, i) in queue"
+          v-for="card in queue.slice(0, 1)"
           :key="card.cardId"
-          class="rv-card"
-          :class="{ 'rv-first': i === 0, 'rv-selected': selected.has(card.cardId) }"
+          class="rv-card rv-first"
         >
-          <div class="rv-meta small muted">
-            <input
-              type="checkbox"
-              class="rv-check"
-              :checked="selected.has(card.cardId)"
-              aria-label="选中这张卡片"
-              @click.stop
-              @pointerdown.stop
-              @change="toggleSelect(card.cardId)"
-            />
-            <span class="rv-note-title">{{ card.noteTitle || '' }}</span>
-            <span class="rv-state-chip">{{ stateLabel(card.state) }}</span>
-          </div>
-
           <div class="rv-content">
             <component :is="MarkdownView" :content="card.contentMd || ''" />
           </div>
 
-          <div class="rv-actions">
-            <button
-              v-for="g in GRADES"
-              :key="g.grade"
-              class="btn rv-grade-btn"
-              :class="{ 'rv-good': g.grade === 3 }"
-              :disabled="busyIds.has(card.cardId)"
-              :title="`评分后 ${intervalOf(card, g.grade)} 内再次复习`"
-              @click="grade(card, g.grade)"
-            >
-              <span class="rv-grade-label">{{ g.label }}</span>
-              <span class="rv-grade-interval">{{ intervalOf(card, g.grade) }}</span>
-            </button>
-            <span v-if="i === 0" class="small muted rv-kbd-hint">← 键盘 1-4</span>
-          </div>
+        </div>
+        <div v-if="currentCard" class="rv-actions rv-review-actions">
+          <button
+            v-for="g in GRADES"
+            :key="g.grade"
+            class="btn rv-grade-btn"
+            :class="{ 'rv-good': g.grade === 3 }"
+            :disabled="busyIds.has(currentCard.cardId)"
+            :title="intervalHint(currentCard, g.grade)"
+            @click="grade(currentCard, g.grade)"
+          >
+            <span class="rv-grade-label">{{ g.label }}</span>
+            <span class="rv-grade-interval">{{ intervalOf(currentCard, g.grade) }}</span>
+          </button>
         </div>
       </div>
 
-      <!-- 批量评分条：勾选后出现，吸底常驻 -->
-      <div class="rv-batch" :class="{ active: selected.size > 0 }">
-        <label class="rv-batch-select small">
-          <input
-            type="checkbox"
-            :checked="allSelected"
-            :disabled="batchBusy"
-            @change="toggleSelectAll"
-          />
-          全选
-        </label>
-        <span class="small">{{ selected.size ? `已选 ${selected.size} 张` : '勾选卡片后可批量评分' }}</span>
-        <div class="spacer"></div>
-        <button
-          v-for="g in GRADES"
-          :key="g.grade"
-          class="btn sm"
-          :class="{ 'rv-good': g.grade === 3 }"
-          :disabled="selected.size === 0 || batchBusy"
-          :title="`批量「${g.label}」：${selected.size || 0} 张各自进入自己的时间周期`"
-          @click="gradeSelected(g.grade)"
-        >
-          {{ g.label }}
+    </template>
+
+    <section v-else-if="!pluginDisabled && activeTab === 'enabled'" class="rv-enabled-panel">
+      <div class="rv-enabled-header">
+        <p class="small muted">已开启记忆周期的卡片（包含未到期卡片）</p>
+        <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
+          {{ enabledCardsLoading ? '加载中…' : '刷新' }}
         </button>
       </div>
-    </template>
+      <div v-if="enabledCardsLoading" class="rv-state small muted">加载已开启卡片…</div>
+      <div v-else-if="enabledCardsError" class="rv-state rv-done">
+        <p class="small muted">加载失败：{{ enabledCardsError }}</p>
+        <button class="btn primary" @click="loadEnabledCardList">重试</button>
+      </div>
+      <div v-else-if="!enabledCardsLoaded" class="rv-state small muted">正在准备卡片列表…</div>
+      <div v-else-if="!enabledCards.length" class="rv-state rv-done">
+        <h3>没有开启记忆周期的卡片</h3>
+      </div>
+      <div v-else class="rv-enabled-list">
+        <article
+          v-for="card in enabledCards"
+          :key="card.cardId"
+          class="rv-enabled-card"
+        >
+          <div class="rv-enabled-content">
+            <button
+              class="btn sm ghost rv-preview-trigger"
+              aria-label="预览卡片"
+              title="预览卡片"
+              @click.stop="openPreview(card)"
+            >
+              <svg class="rv-preview-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+            <component :is="MarkdownView" :content="card.contentMd" />
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div v-if="previewCard" class="rv-preview-overlay" @click.self="closePreview">
+      <section
+        class="rv-preview-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="卡片预览"
+      >
+        <header class="rv-preview-header">
+          <div class="rv-preview-info">
+            <span class="small muted">
+              {{ stateLabel(previewCard.schedule.state) }} · {{ reminderLabel(previewCard) }}
+            </span>
+          </div>
+          <button class="btn sm ghost" aria-label="关闭预览" @click="closePreview">×</button>
+        </header>
+        <div class="rv-preview-content">
+          <component :is="MarkdownView" :content="previewCard.contentMd" />
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -289,7 +392,7 @@ const GRADES: { grade: Grade; label: string }[] = [
   display: flex;
   flex-direction: column;
   padding: var(--space-4);
-  padding-bottom: 64px; /* 给吸底批条留出空间 */
+  padding-bottom: var(--space-4);
   gap: var(--space-3);
   overflow-y: auto;
 }
@@ -301,6 +404,37 @@ const GRADES: { grade: Grade; label: string }[] = [
 .rv-head h2 {
   margin: 0;
   font-size: 18px;
+}
+.rv-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.rv-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.rv-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+.rv-tab-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.rv-enabled-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
 }
 .rv-progress {
   color: var(--c-text-3);
@@ -323,18 +457,81 @@ const GRADES: { grade: Grade; label: string }[] = [
 .rv-done-icon {
   font-size: 42px;
 }
-
-/* 多列瀑布流：列宽 320px 自适应，屏幕越宽同屏卡片越多 */
-.rv-grid {
-  columns: 320px;
+.rv-enabled-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.rv-enabled-header p {
+  flex: 1;
+  margin: 0;
+}
+.rv-enabled-list {
+  columns: 3;
   column-gap: var(--space-3);
 }
-.rv-card {
+.rv-enabled-card {
+  position: relative;
   display: inline-flex;
+  box-sizing: border-box;
   width: 100%;
+  max-height: 50vh;
   margin: 0 0 var(--space-3);
   break-inside: avoid;
   flex-direction: column;
+  gap: var(--space-2);
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-sm);
+}
+.rv-preview-trigger {
+  position: absolute;
+  top: var(--space-2);
+  right: calc(var(--space-2) + 16px);
+  z-index: 1;
+}
+.rv-preview-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rv-enabled-content {
+  padding-right: 64px;
+  overflow-x: hidden;
+}
+@media (max-width: 900px) {
+  .rv-enabled-list {
+    columns: 2;
+  }
+}
+@media (max-width: 600px) {
+  .rv-enabled-list {
+    columns: 1;
+  }
+}
+
+.rv-review-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: 66.666%;
+  margin-inline: auto;
+}
+.rv-card {
+  display: flex;
+  width: 100%;
+  max-height: 90%;
+  margin: 0;
+  flex-direction: column;
+  overflow-y: auto;
   gap: var(--space-2);
   background: var(--c-surface);
   border: 1px solid var(--c-border);
@@ -342,45 +539,37 @@ const GRADES: { grade: Grade; label: string }[] = [
   padding: var(--space-3);
   box-shadow: var(--shadow-sm);
 }
+@media (max-width: 700px) {
+  .rv-review-stage {
+    width: 100%;
+  }
+}
 .rv-card.rv-first {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
-.rv-card.rv-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.rv-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.rv-note-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rv-check {
-  cursor: pointer;
-}
-.rv-state-chip {
-  margin-left: auto;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--c-surface-2);
-  white-space: nowrap;
-}
 .rv-content {
-  border-top: 1px solid var(--c-border);
-  padding-top: var(--space-2);
   min-height: 24px;
   overflow-x: hidden;
 }
 .rv-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-2);
   align-items: stretch;
   padding-top: var(--space-1);
+}
+.rv-review-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  width: 75%;
+  align-self: center;
+  box-sizing: border-box;
+  margin-top: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-lg);
 }
 /* 评分按钮：两行——档位 + 下次间隔 */
 .rv-grade-btn {
@@ -403,31 +592,45 @@ const GRADES: { grade: Grade; label: string }[] = [
 .rv-grade-btn.rv-good .rv-grade-interval {
   color: var(--accent);
 }
-.rv-kbd-hint {
-  margin-left: auto;
-  align-self: center;
-  white-space: nowrap;
-}
-.rv-batch {
-  position: sticky;
-  bottom: 0;
-  width: 100%;
+.rv-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 10px var(--space-4);
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 48%);
+  overscroll-behavior: contain;
+}
+.rv-preview-dialog {
+  display: flex;
+  width: fit-content;
+  min-width: min(480px, 90vw);
+  max-width: 90vw;
+  max-height: 80vh;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
   border-radius: 12px;
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
   box-shadow: var(--shadow-lg);
 }
-.rv-batch.active {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.rv-batch-select {
+.rv-preview-header {
   display: flex;
   align-items: center;
-  gap: 5px;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--c-border);
+}
+.rv-preview-info {
+  min-width: 0;
+}
+.rv-preview-content {
+  min-width: 0;
+  max-height: calc(80vh - 64px);
+  overflow: auto;
+  padding: var(--space-4);
 }
 </style>

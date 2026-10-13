@@ -28,6 +28,7 @@ function blank(cardId: string): MemoryCurveCardState {
   return {
     cardId,
     enabled: false,
+    learningStep: 0,
     schedule: {
       cardId: null, state: 'new', ease: 2.5, intervalDays: 0,
       dueAt: 0, lastReviewedAt: null, reps: 0, lapses: 0, due: false,
@@ -75,13 +76,19 @@ export const memoryCurve = {
     }
   },
 
-  async review(cardId: string, grade: Grade): Promise<void> {
+  async review(cardId: string, grade: Grade): Promise<MemoryCurveCardState> {
     const version = advanceStateVersion(cardId)
-    const r = await memoryCurveApi.review(cardId, grade)
-    if (stateVersions.get(cardId) !== version) return
-    const updated = this.stateOf(cardId)
-    updated.enabled = r.enabled
-    updated.schedule = { ...r.schedule, due: r.schedule.dueAt <= Date.now() }
+    const result = await memoryCurveApi.review(cardId, grade)
+    const current = this.stateOf(cardId)
+    const updated: MemoryCurveCardState = {
+      ...current,
+      ...result,
+      schedule: { ...result.schedule, due: result.schedule.dueAt <= Date.now() },
+    }
+    if (stateVersions.get(cardId) === version) {
+      Object.assign(current, updated)
+    }
+    return updated
   },
 }
 

@@ -1,7 +1,6 @@
 package com.thisnode.ext.memorycurve;
 
 import com.thisnode.ext.memorycurve.api.dto.ReviewRequest;
-import com.thisnode.ext.memorycurve.api.dto.ScheduleView;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,8 +49,8 @@ public class MemoryCurveController {
         if (request == null || request.grade() == null) {
             throw new IllegalArgumentException("缺少 grade");
         }
-        ScheduleView updated = srs.review(cardId, request.grade());
-        return Map.of("enabled", true, "schedule", updated);
+        srs.review(cardId, request.grade());
+        return srs.cardState(cardId);
     }
 
     /** Due cards across all notes (memory curve enabled only). */
