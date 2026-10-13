@@ -19,6 +19,8 @@ public class FavoritePlugin extends SpringBootPlugin {
     /** 端点前缀；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "favorite";
 
+    private FavoriteNoteCleanupListener noteCleanupListener;
+
     public FavoritePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
         super(wrapper, new IPluginConfigurer[0]);
@@ -27,6 +29,22 @@ public class FavoritePlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, FavoriteStarter.class);
+    }
+
+    @Override
+    public void afterPluginBootstrap(SpringBootstrap bootstrap,
+                                     org.springframework.context.support.GenericApplicationContext ctx) {
+        noteCleanupListener = new FavoriteNoteCleanupListener(ctx.getBean(FavoriteStore.class));
+        getMainApplicationContext().addApplicationListener(noteCleanupListener);
+    }
+
+    @Override
+    public void stop() {
+        if (noteCleanupListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteCleanupListener);
+            noteCleanupListener = null;
+        }
+        super.stop();
     }
 
 }

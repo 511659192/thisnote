@@ -65,6 +65,19 @@ public class FavoriteStore {
         }
     }
 
+    public boolean removeFavorite(String noteId) {
+        requireNoteId(noteId);
+        synchronized (lock) {
+            Properties properties = read();
+            if (!properties.containsKey(noteId)) {
+                return false;
+            }
+            properties.remove(noteId);
+            write(properties);
+            return true;
+        }
+    }
+
     private Properties read() {
         try {
             return PropertiesFileUtils.read(file);

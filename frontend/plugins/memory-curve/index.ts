@@ -73,6 +73,10 @@ export const memoryCurve = {
     if (result.enabled && !updated.schedule.cardId) {
       // 后端在启用钩子里建了"立即到期"的调度行；本地同步为该形态。
       updated.schedule = { ...updated.schedule, cardId, state: 'new', due: true, dueAt: Date.now() }
+    } else if (!result.enabled) {
+      const reset = blank(cardId)
+      updated.schedule = reset.schedule
+      updated.learningStep = reset.learningStep
     }
   },
 

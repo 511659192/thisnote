@@ -11,7 +11,7 @@ import org.pf4j.PluginWrapper;
  * <p>它的状态全在本插件自己的文件里：排期写在 {@code plugins/memory-curve/scheduling.meta}，
  * 卡片开关写在 {@code plugins/memory-curve/enabled-cards.properties}。它**不依赖核心插件**，也不读笔记内容 ——
  * 核心插件缺位时它照样能独立启动。开启某张卡片会立刻建一条到期记录，于是马上可复习；
- * 停用保留记录，历史不丢。
+ * 关闭卡片的记忆周期时会删除对应排期。
  *
  * <p>id 与版本来自 {@code plugin.properties}（由 {@code descriptor()} 从 PF4J 描述符取），不在这里硬编码。
  */
@@ -22,6 +22,8 @@ public class MemoryCurvePlugin extends SpringBootPlugin {
 
     /** 注册到主容器的排期清理器（停止时要摘掉，见 {@link #stop()}）。 */
     private SchedulingListener listener;
+    private NoteDeletionListener noteDeletionListener;
+    private MemoryCurveStateListener stateListener;
 
     public MemoryCurvePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -61,10 +63,14 @@ public class MemoryCurvePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        if (listener == null) {
-            listener = new SchedulingListener(ctx.getBean(SrsService.class));
-        }
+        SrsService srs = ctx.getBean(SrsService.class);
+        srs.setMainEventPublisher(getMainApplicationContext());
+        listener = new SchedulingListener(srs);
+        noteDeletionListener = new NoteDeletionListener(srs);
+        stateListener = new MemoryCurveStateListener(srs);
         getMainApplicationContext().addApplicationListener(listener);
+        getMainApplicationContext().addApplicationListener(noteDeletionListener);
+        getMainApplicationContext().addApplicationListener(stateListener);
     }
 
     /**
@@ -75,6 +81,15 @@ public class MemoryCurvePlugin extends SpringBootPlugin {
     public void stop() {
         if (listener != null) {
             getMainApplicationContext().removeApplicationListener(listener);
+            listener = null;
+        }
+        if (noteDeletionListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteDeletionListener);
+            noteDeletionListener = null;
+        }
+        if (stateListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateListener);
+            stateListener = null;
         }
         super.stop();
     }

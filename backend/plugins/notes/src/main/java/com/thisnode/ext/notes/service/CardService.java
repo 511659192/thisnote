@@ -10,7 +10,9 @@ import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.plugin.api.CardChangedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -23,6 +25,11 @@ public class CardService {
     private final NoteRepository noteRepository;
     private final NoteService noteService;
     private final AttachmentService attachmentService;
+    private ApplicationEventPublisher mainEventPublisher;
+
+    public void setMainEventPublisher(ApplicationEventPublisher publisher) {
+        this.mainEventPublisher = publisher;
+    }
 
     private List<Card> cards(NoteMeta note) {
         return note.getCardIds().stream().map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
@@ -136,12 +143,18 @@ public class CardService {
                        String cardId) {
         NoteMeta note = noteContainingCard(noteId, cardId);
         Card card = cardRepository.getOne(cardId);
+
+        ApplicationEventPublisher publisher = mainEventPublisher;
+        if (publisher == null) {
+            throw new IllegalStateException("主容器事件发布器尚未就绪");
+        }
+
         Set<String> removedAttachments = AttachmentService.referencedFileNames(card == null ? "" : card.getContent());
 
         cardRepository.delete(List.of(cardId));
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
         noteRepository.save(note);
-        attachmentService.deleteIfUnreferenced(removedAttachments);
+        publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED, removedAttachments));
     }
 
     private NoteMeta noteContainingCard(String noteId,

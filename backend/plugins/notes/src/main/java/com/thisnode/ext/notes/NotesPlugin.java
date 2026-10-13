@@ -1,5 +1,9 @@
 package com.thisnode.ext.notes;
 
+import com.thisnode.ext.notes.service.AttachmentService;
+import com.thisnode.ext.notes.service.CardAttachmentCleanupListener;
+import com.thisnode.ext.notes.service.CardService;
+import com.thisnode.ext.notes.service.NoteService;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -20,6 +24,8 @@ import org.pf4j.PluginWrapper;
  */
 public class NotesPlugin extends SpringBootPlugin {
 
+    private CardAttachmentCleanupListener attachmentCleanupListener;
+
     public NotesPlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
         super(wrapper, new IPluginConfigurer[0]);
@@ -28,6 +34,24 @@ public class NotesPlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, NotesStarter.class);
+    }
+
+    @Override
+    public void afterPluginBootstrap(SpringBootstrap bootstrap,
+                                     org.springframework.context.support.GenericApplicationContext ctx) {
+        ctx.getBean(CardService.class).setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(NoteService.class).setMainEventPublisher(getMainApplicationContext());
+        attachmentCleanupListener = new CardAttachmentCleanupListener(ctx.getBean(AttachmentService.class));
+        getMainApplicationContext().addApplicationListener(attachmentCleanupListener);
+    }
+
+    @Override
+    public void stop() {
+        if (attachmentCleanupListener != null) {
+            getMainApplicationContext().removeApplicationListener(attachmentCleanupListener);
+            attachmentCleanupListener = null;
+        }
+        super.stop();
     }
 
 }

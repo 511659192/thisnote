@@ -1,5 +1,7 @@
 package com.thisnode.plugin.api;
 
+import java.util.Set;
+
 /**
  * 卡片变更事件：核心插件（notes）发布，兄弟插件可订阅。
  *
@@ -16,7 +18,17 @@ package com.thisnode.plugin.api;
  * （{@code publishEvent(Object)} ↔ {@code ApplicationListener<PayloadApplicationEvent<CardChangedEvent>>}），
  * 不必让事件类继承 {@code ApplicationEvent}。
  */
-public record CardChangedEvent(String cardId, Kind kind) {
+public record CardChangedEvent(String cardId, Kind kind, Set<String> removedAttachmentFileNames) {
+
+    public CardChangedEvent {
+        removedAttachmentFileNames = removedAttachmentFileNames == null
+                ? Set.of()
+                : Set.copyOf(removedAttachmentFileNames);
+    }
+
+    public CardChangedEvent(String cardId, Kind kind) {
+        this(cardId, kind, Set.of());
+    }
 
     public enum Kind {
         /** 新建了一张卡片。 */

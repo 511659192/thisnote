@@ -60,7 +60,14 @@ async function refreshPlugins() {
  *   注册表本身就是本窗口的权威；跨窗口/脚本/后端侧的外部变化，由「切回窗口」的焦点事件兜底。
  * - <b>徽标</b>：切路由时刷新（从复习页回来，due 数就该变），有 3 秒在飞合并兜底。
  */
-watch(() => route.fullPath, () => void refreshPluginBadges())
+watch(
+  () => route.path,
+  (path, previousPath) => {
+    const leftPluginPage = pluginNav.value.some((entry) => entry.to === previousPath)
+    const enteredPluginPage = pluginNav.value.some((entry) => entry.to === path)
+    if (leftPluginPage && !enteredPluginPage) void refreshPluginBadges()
+  },
+)
 onMounted(async () => {
   // 原 App.vue 的启动加载随域迁入：列表在应用启动时装好（面板跨路由常驻，
   // 设置页等非笔记路由的侧栏也得有行可点）。

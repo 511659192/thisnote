@@ -8,7 +8,9 @@ import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.plugin.api.NoteChangedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -32,10 +34,18 @@ public class NoteService {
     private final NoteRepository noteRepository;
     private final CardRepository cardRepository;
     private final AttachmentService attachmentService;
+    private ApplicationEventPublisher mainEventPublisher;
+
+    public void setMainEventPublisher(ApplicationEventPublisher publisher) {
+        this.mainEventPublisher = publisher;
+    }
 
     public String create(CreateNoteRequest req) {
+        ApplicationEventPublisher publisher = requireMainEventPublisher();
         NoteMeta noteMeta = new NoteMeta().setTitle("").setType(req.type()).setNotebookId(req.notebookId());
-        return noteRepository.saveNew(noteMeta);
+        String noteId = noteRepository.saveNew(noteMeta);
+        publisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, noteMeta.getTitle(), List.of()));
+        return noteId;
     }
 
     public NoteMeta update(String noteId,
@@ -43,6 +53,7 @@ public class NoteService {
         NoteMeta meta = get(noteId);
         String title = req.title();
         if (title != null && !title.equals(meta.getTitle())) {
+            ApplicationEventPublisher publisher = requireMainEventPublisher();
             boolean duplicateTitle = !title.isBlank() && noteRepository.getAll()
                     .stream()
                     .anyMatch(other -> !noteId.equals(other.getNoteId()) && title.equalsIgnoreCase(other.getTitle()));
@@ -50,6 +61,7 @@ public class NoteService {
 
             noteRepository.onNewTitle(meta, title);
             cardRepository.renameFiles(meta.getCardIds(), title);
+            publisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TITLE_CHANGED, title, List.of()));
         }
         return meta;
     }
@@ -59,13 +71,19 @@ public class NoteService {
         if (meta == null) {
             return;
         }
+        ApplicationEventPublisher publisher = requireMainEventPublisher();
+        List<String> deletedCardIds = List.copyOf(meta.getCardIds());
         Set<String> removedAttachments = new HashSet<>();
-        for (Card card : cardRepository.getAll(meta.getCardIds())) {
+        for (Card card : cardRepository.getAll(deletedCardIds)) {
             removedAttachments.addAll(AttachmentService.referencedFileNames(card.getContent()));
         }
-        cardRepository.delete(meta.getCardIds());
+        cardRepository.delete(deletedCardIds);
         noteRepository.delete(id);
-        attachmentService.deleteIfUnreferenced(removedAttachments);
+        try {
+            publisher.publishEvent(new NoteChangedEvent(id, NoteChangedEvent.Kind.DELETED, meta.getTitle(), deletedCardIds));
+        } finally {
+            attachmentService.deleteIfUnreferenced(removedAttachments);
+        }
     }
 
     public NoteMeta get(String id) {
@@ -92,6 +110,14 @@ public class NoteService {
             page.add(matched.get(i));
         }
         return page;
+    }
+
+    private ApplicationEventPublisher requireMainEventPublisher() {
+        ApplicationEventPublisher publisher = mainEventPublisher;
+        if (publisher == null) {
+            throw new IllegalStateException("主容器事件发布器尚未就绪");
+        }
+        return publisher;
     }
 
     private boolean matches(NoteMeta meta,

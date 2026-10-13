@@ -3,8 +3,10 @@ package com.thisnode.ext.memorycurve;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import com.thisnode.ext.memorycurve.api.dto.ScheduleView;
+import com.thisnode.plugin.api.MemoryCurveStateChangedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -57,6 +59,7 @@ public class SrsService {
     private final EnabledCardsStore enabledCards;
     private final Path file;
     private Map<String, CardSchedule> schedules;
+    private ApplicationEventPublisher mainEventPublisher;
 
     public SrsService(EnabledCardsStore enabledCards,
                       @org.springframework.beans.factory.annotation.Value(
@@ -104,11 +107,25 @@ public class SrsService {
         return s;
     }
 
-    /** Enable or disable a card; disabling preserves its schedule history. */
+    public void setMainEventPublisher(ApplicationEventPublisher publisher) {
+        this.mainEventPublisher = publisher;
+    }
+
+    /** Enable a card with a fresh schedule, or publish the state change for listeners to handle. */
     public void setEnabled(String cardId, boolean enabled) {
+        boolean wasEnabled = enabledCards.isEnabled(cardId);
+        boolean changed = wasEnabled != enabled;
+        ApplicationEventPublisher publisher = mainEventPublisher;
+        if (changed && publisher == null) {
+            throw new IllegalStateException("主容器事件发布器尚未就绪");
+        }
+
         enabledCards.setEnabled(cardId, enabled);
         if (enabled) {
             createIfAbsent(cardId);
+        }
+        if (changed) {
+            publisher.publishEvent(new MemoryCurveStateChangedEvent(cardId, enabled));
         }
     }
 
@@ -263,6 +280,12 @@ public class SrsService {
         }
         saveAll();
         return true;
+    }
+
+    public boolean forgetDeletedCard(String cardId) {
+        boolean wasEnabled = enabledCards.isEnabled(cardId);
+        enabledCards.setEnabled(cardId, false);
+        return forget(cardId) || wasEnabled;
     }
 
     /** 读取并按需迁移排期文件。 */
