@@ -24,8 +24,6 @@ public class NoteMeta {
     private String type;
     private String notebookId;
     private List<String> cardIds = List.of();
-    private long createdAt = System.currentTimeMillis();
-    private long updatedAt = System.currentTimeMillis();
 
     public static NoteMeta parse(Path filePath) {
         if (!Files.isRegularFile(filePath)) {

@@ -283,7 +283,12 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
-  void applyRoute()
+  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  if (route.params.id && navigation?.type === 'reload') {
+    void router.replace('/notes')
+  } else {
+    void applyRoute()
+  }
   // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })

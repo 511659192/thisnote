@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDate, listHeaders_ } from '@thisnode/plugin-api'
+import { listHeaders_ } from '@thisnode/plugin-api'
 import { useNoteStore } from '@/stores/notes'
 import type { NoteMeta } from '@/api/types'
 
@@ -67,9 +67,6 @@ function askRemove(node: NoteMeta) {
         -->
         <div v-if="n.notebookId" class="row-2 groups">
           <span class="chip group-chip" title="所属分组">▣ {{ notebookTitle(n.notebookId) }}</span>
-        </div>
-        <div class="row-3">
-          <span class="date small muted">{{ formatDate(n.updatedAt) }}</span>
         </div>
       </button>
     </div>
@@ -184,12 +181,5 @@ function askRemove(node: NoteMeta) {
 }
 .fav {
   color: var(--warning);
-}
-.row-3 {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 1px;
-  flex-wrap: wrap;
 }
 </style>

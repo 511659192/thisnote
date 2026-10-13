@@ -63,7 +63,5 @@ export interface NoteMeta {
   notebookId?: string | null
   /** 卡片 ID 清单（顺序即阅读顺序）。 */
   cardIds: string[]
-  createdAt: number
-  updatedAt: number
 }
 

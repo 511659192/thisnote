@@ -71,8 +71,6 @@ public class NoteService {
                 matched.add(noteMeta);
             }
         }
-        matched.sort((a, b) -> Long.compare(b.getUpdatedAt(), a.getUpdatedAt()));
-
         int limit = query.limit();
         int offset = query.offset();
         List<NoteMeta> page = new ArrayList<>();

@@ -13,9 +13,11 @@ import org.springframework.stereotype.Repository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Persists note metadata only. Card files and card-content operations belong to CardRepository.
@@ -27,11 +29,11 @@ public class NoteRepository {
     private final NotesConfig notesConfig;
     private final IdFileIndex fileIndex;
 
-    @SneakyThrows
     public String saveNew(NoteMeta note) {
         String noteId = IdUtil.randomUUID();
         String fileName = "tmp-" + noteId + ".json";
-        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(fileName), note.setNoteId(noteId));
+        Path file = notesConfig.getNoteMetaDir().resolve(fileName);
+        JsonFileUtils.write(file, note.setNoteId(noteId));
         fileIndex.addNote(noteId, fileName);
         return noteId;
     }
@@ -46,12 +48,10 @@ public class NoteRepository {
         String oldFileName = fileIndex.noteFileName(noteId);
         if (oldFileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteId);
 
-        noteMeta.setTitle(newTitle).setUpdatedAt(System.currentTimeMillis());
+        noteMeta.setTitle(newTitle);
         String newFileName = newTitle + ".json";
-        JsonFileUtils.move(notesConfig.getNoteMetaDir().resolve(oldFileName), notesConfig.getNoteMetaDir().resolve(newFileName));
-
-        noteMeta.setUpdatedAt(System.currentTimeMillis());
-        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(newFileName), noteMeta);
+        Path newFile = Files.move(notesConfig.getNoteMetaDir().resolve(oldFileName), notesConfig.getNoteMetaDir().resolve(newFileName));
+        JsonFileUtils.write(newFile, noteMeta);
         fileIndex.updateNoteFileName(noteId, newFileName);
     }
 
@@ -60,18 +60,14 @@ public class NoteRepository {
         rewrite(noteMeta);
     }
 
-    /**
-     * Rewrite the persisted shape without changing the noteMeta's updatedAt.
-     */
-    @SneakyThrows
+    /** Rewrite note metadata and refresh its filesystem modification time. */
     public void rewrite(NoteMeta noteMeta) {
         if (noteMeta == null || StrUtil.isBlank(noteMeta.getNoteId())) return;
         String fileName = fileIndex.noteFileName(noteMeta.getNoteId());
         if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteMeta.getNoteId());
 
-        noteMeta.setUpdatedAt(System.currentTimeMillis());
-        Files.setLastModifiedTime(notesConfig.getNoteMetaDir().resolve(fileName), FileTime.from(Instant.now()));
-        JsonFileUtils.write(notesConfig.getNoteMetaDir().resolve(fileName), noteMeta);
+        Path file = notesConfig.getNoteMetaDir().resolve(fileName);
+        JsonFileUtils.write(file, noteMeta);
     }
 
     /**
@@ -84,11 +80,22 @@ public class NoteRepository {
         FileUtil.del(notesConfig.getNoteMetaDir().resolve(fileName));
     }
 
+    @SneakyThrows
     public List<NoteMeta> getAll() {
-        List<NoteMeta> notes = new ArrayList<>();
         Path metaDir = notesConfig.getNoteMetaDir();
+        List<Path> files = new ArrayList<>();
+        Map<Path, FileTime> modifiedTimes = new HashMap<>();
         for (String fileName : fileIndex.noteFiles().values()) {
-            NoteMeta note = NoteMeta.parse(metaDir.resolve(fileName));
+            Path file = metaDir.resolve(fileName);
+            if (!Files.isRegularFile(file)) continue;
+            files.add(file);
+            modifiedTimes.put(file, Files.getLastModifiedTime(file));
+        }
+        files.sort(Comparator.comparing(modifiedTimes::get).reversed());
+
+        List<NoteMeta> notes = new ArrayList<>();
+        for (Path file : files) {
+            NoteMeta note = NoteMeta.parse(file);
             if (note != null) notes.add(note);
         }
         return notes;

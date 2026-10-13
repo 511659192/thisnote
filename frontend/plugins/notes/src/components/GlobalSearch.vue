@@ -18,7 +18,6 @@ interface NoteMetaLite {
   noteId: string
   title: string
   summary?: string
-  updatedAt?: number
 }
 
 const router = useRouter()
