@@ -17,7 +17,7 @@
     笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 快照 / IO / Vault 同步）。
     按 sbp 最佳实践，主体应用是纯平台（插件生命周期管理 + 共享 DataSource），业务领域以插件形态交付。
     兄弟插件（favorite / memory-curve）**不依赖**本插件：各自的状态写在自己的文件里，
-    要展示的卡片内容由界面侧用本插件的公开 API（/api/nodes、/api/notes/{id}/page）现拼。
+    要展示的卡片内容由界面侧用本插件的公开 API（/api/notes/get、/api/notes/cards/get）现拼。
   </description>
 
   <properties>

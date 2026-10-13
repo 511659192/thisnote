@@ -23,7 +23,7 @@ export interface CardUpdate {
 export const pageApi = {
   /** cardIds 省略 = 整页：卡片几何 + 它自己的正文。 */
   get: (noteId: string, cardIds?: string[]) =>
-    http.get<NoteDto>('/api/notes/cards', {
+    http.get<NoteDto>('/api/notes/cards/get', {
       noteId,
       cardIds: cardIds && cardIds.length ? cardIds.join(',') : undefined,
     }),
@@ -35,7 +35,7 @@ export const pageApi = {
       y?: number
       w?: number
       h?: number
-      contentMd?: string
+      content?: string
       color?: string
     },
   ) => http.post<Card>('/api/notes/cards/create', payload, { noteId }),
@@ -53,7 +53,7 @@ export const pageApi = {
    * 由调用方提示并重新载入 —— 不覆盖外部编辑器（Obsidian / VS Code）写进去的改动。
    */
   writeContent: (noteId: string, cardId: string, contentMd: string, baseContentMd: string) =>
-    http.post<Card>('/api/notes/cards/content', { noteId, cardId, contentMd, baseContentMd }),
+    http.post<Card>('/api/notes/cards/update-content', { noteId, cardId, contentMd, baseContentMd }),
 
   /** Permanently delete the identified card and remove it from its note's manifest. */
   deleteBlock: (noteId: string, cardId: string) =>

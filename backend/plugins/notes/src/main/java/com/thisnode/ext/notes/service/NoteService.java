@@ -12,8 +12,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Note aggregate: CRUD and list queries.
@@ -29,6 +31,7 @@ public class NoteService {
 
     private final NoteRepository noteRepository;
     private final CardRepository cardRepository;
+    private final AttachmentService attachmentService;
 
     public String create(CreateNoteRequest req) {
         NoteMeta noteMeta = new NoteMeta().setTitle("").setType(req.type()).setNotebookId(req.notebookId());
@@ -56,8 +59,13 @@ public class NoteService {
         if (meta == null) {
             return;
         }
+        Set<String> removedAttachments = new HashSet<>();
+        for (Card card : cardRepository.getAll(meta.getCardIds())) {
+            removedAttachments.addAll(AttachmentService.referencedFileNames(card.getContent()));
+        }
         cardRepository.delete(meta.getCardIds());
         noteRepository.delete(id);
+        attachmentService.deleteIfUnreferenced(removedAttachments);
     }
 
     public NoteMeta get(String id) {

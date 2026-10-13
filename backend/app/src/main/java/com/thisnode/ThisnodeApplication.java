@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * thisnode 平台主体 —— 按 sbp 最佳实践（参考 sbp-demo）它是**纯平台**：插件生命周期管理
- * （发现 / 契约校验 / 激活 / 健康检查）与插件管理面（/api/plugins）。
+ * （发现 / 契约校验 / 激活 / 健康检查）与插件管理面（/api/plugins/get 等动作接口）。
  * 业务领域全部以插件交付（核心业务在 plugin-notes，功能插件 favorite / memory-curve 各自独立）。
  *
  * <p><b>不连数据库</b>：笔记数据以本地 md 文件为权威，插件状态也在文件里 —— 平台没有任何表。

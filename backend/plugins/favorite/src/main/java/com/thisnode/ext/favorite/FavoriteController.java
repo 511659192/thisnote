@@ -1,7 +1,7 @@
 package com.thisnode.ext.favorite;
 
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,7 +31,7 @@ public class FavoriteController {
      * <p>标题与预览不在这里拼：本插件不读笔记数据（因此不依赖核心插件），调用方拿这份 id 列表
      * 与它已有的笔记列表做交集即可。
      */
-    @GetMapping("/notes")
+    @GetMapping("/get-notes")
     public List<Map<String, Object>> notes() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (String id : favorites.favoriteNoteIds()) {
@@ -40,12 +40,12 @@ public class FavoriteController {
         return out;
     }
 
-    @GetMapping("/state")
+    @GetMapping("/get-state")
     public Map<String, Boolean> state(@RequestParam String noteId) {
         return Map.of("favorite", favorites.isFavorite(noteId));
     }
 
-    @PostMapping("/state")
+    @PostMapping("/update-state")
     public Map<String, Boolean> setState(@RequestParam String noteId,
                                          @RequestParam boolean value) {
         favorites.setFavorite(noteId, value);

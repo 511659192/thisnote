@@ -4,7 +4,7 @@ import type { Notebook } from './types'
 /** Notes-domain clients. */
 
 export const notebookApi = {
-  list: () => http.get<Notebook[]>('/api/notebooks'),
+  list: () => http.get<Notebook[]>('/api/notebooks/get'),
 
   /** 新建分组时始终创建在顶层。 */
   create: (title: string, icon?: string | null) =>

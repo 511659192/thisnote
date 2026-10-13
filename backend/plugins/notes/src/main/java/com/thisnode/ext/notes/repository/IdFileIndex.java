@@ -30,6 +30,7 @@ public class IdFileIndex {
     public synchronized String noteFileName(String noteId) { return read().noteFiles.get(noteId); }
     public synchronized String cardFileName(String cardId) { return read().cardFiles.get(cardId); }
     public synchronized Map<String, String> noteFiles() { return new LinkedHashMap<>(read().noteFiles); }
+    public synchronized Map<String, String> cardFiles() { return new LinkedHashMap<>(read().cardFiles); }
 
     public synchronized void addNote(String noteId, String fileName) {
         change(index -> putNew(index.noteFiles, noteId, fileName, "笔记"));

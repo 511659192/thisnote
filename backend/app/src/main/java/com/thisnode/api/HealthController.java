@@ -14,7 +14,7 @@ import java.util.Map;
  * ({@code pid}/{@code port}/{@code jvm}/{@code uptimeMs}…) 全是平台自己的信息，却要等业务插件的
  * Spring 子容器起来才答得上 —— 平台探活因此绑在插件上。移到平台侧后，Tomcat 一开始接流量就能答。
  *
- * <p>路径与响应字段保持与原实现一致，调用方（界面侧 {@code waitForBackend}、脚本、桌面壳）零改动。
+ * <p>调用方通过 GET /api/health/get 确认服务已就绪。
  */
 @RestController
 @RequestMapping("/api")
@@ -25,7 +25,7 @@ public class HealthController {
 
     private final long startedAt = System.currentTimeMillis();
 
-    @GetMapping("/health")
+    @GetMapping("/health/get")
     public Map<String, Object> health() {
         return Map.of(
                 "status", "ok",

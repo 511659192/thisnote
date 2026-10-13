@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { listHeaders_, toast } from '@thisnode/plugin-api'
 import { noteApi } from '@/api/note'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
 import type { NoteMeta } from '@/api/types'
 
-defineProps<{ nodes: NoteMeta[]; loading?: boolean; currentId?: string | null }>()
+const props = withDefaults(defineProps<{
+  nodes: NoteMeta[]
+  loading?: boolean
+  currentId?: string | null
+  allowNoteManagement?: boolean
+}>(), { allowNoteManagement: true })
+type NoteManagementHeader = ReturnType<typeof listHeaders_>[number] & { noteManagement?: boolean }
+const visibleListHeaders = computed(() =>
+  (listHeaders_() as NoteManagementHeader[]).filter(
+    (header) => props.allowNoteManagement || !header.noteManagement,
+  ),
+)
 const emit = defineEmits<{
   (e: 'open', id: string): void
   (e: 'context', payload: { node: NoteMeta; x: number; y: number }): void
@@ -45,7 +56,19 @@ function onTitleClick(event: MouseEvent, note: NoteMeta) {
   }, 250)
 }
 
+function onTitleDoubleClick(event: MouseEvent, note: NoteMeta) {
+  event.stopPropagation()
+  event.preventDefault()
+  if (props.allowNoteManagement) {
+    void startRename(note)
+    return
+  }
+  clearTitleOpenTimer()
+  emit('open', note.noteId)
+}
+
 async function startRename(note: NoteMeta) {
+  if (!props.allowNoteManagement) return
   clearTitleOpenTimer()
   renamingId.value = note.noteId
   titleDraft.value = note.title
@@ -63,6 +86,11 @@ function cancelRename(noteId: string) {
 }
 
 async function commitRename(note: NoteMeta) {
+  if (!props.allowNoteManagement) {
+    renamingId.value = null
+    titleDraft.value = ''
+    return
+  }
   if (renamingId.value !== note.noteId || savingNoteId === note.noteId) return
   const title = titleDraft.value.trim()
   if (!title) {
@@ -111,6 +139,7 @@ function onContext(e: MouseEvent, node: NoteMeta) {
 
 /** Ask the parent to confirm before permanently deleting the note and its cards. */
 function askRemove(node: NoteMeta) {
+  if (!props.allowNoteManagement) return
   emit('remove', node.noteId)
 }
 </script>
@@ -118,8 +147,8 @@ function askRemove(node: NoteMeta) {
 <template>
   <div class="note-list">
     <!-- 列表页头部插槽：插件贡献的顶部工具（如标题搜索框）渲染在列表行上方 -->
-    <div v-if="listHeaders_().length" class="list-headers">
-      <template v-for="h in listHeaders_()" :key="h.pluginId">
+    <div v-if="visibleListHeaders.length" class="list-headers">
+      <template v-for="h in visibleListHeaders" :key="h.pluginId">
         <component :is="h.component" />
       </template>
     </div>
@@ -143,7 +172,7 @@ function askRemove(node: NoteMeta) {
       >
         <div class="row-1">
           <input
-            v-if="renamingId === n.noteId"
+            v-if="renamingId === n.noteId && allowNoteManagement"
             ref="titleInput"
             v-model="titleDraft"
             class="title title-edit"
@@ -158,11 +187,12 @@ function askRemove(node: NoteMeta) {
             v-else
             class="title"
             :class="{ placeholder: !n.title.trim() }"
-            :title="n.title.trim() ? '双击重命名' : '双击输入标题'"
+            :title="allowNoteManagement ? (n.title.trim() ? '双击重命名' : '双击输入标题') : undefined"
             @click="onTitleClick($event, n)"
-            @dblclick.stop.prevent="startRename(n)"
+            @dblclick="onTitleDoubleClick($event, n)"
           >{{ n.title.trim() ? n.title : '请输入标题' }}</span>
           <span
+            v-if="allowNoteManagement"
             class="row-del"
             role="button"
             title="彻底删除"

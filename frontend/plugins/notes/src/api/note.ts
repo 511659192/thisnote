@@ -10,8 +10,8 @@ export interface NoteQuery {
 }
 
 export const noteApi = {
-  list: (query: NoteQuery = {}) => http.get<NoteMeta[]>('/api/notes', query as never),
-  get: (noteId: string) => http.get<NoteMeta>('/api/notes/detail', { noteId }),
+  list: (query: NoteQuery = {}) => http.get<NoteMeta[]>('/api/notes/get', query as never),
+  get: (noteId: string) => http.get<NoteMeta>('/api/notes/get-detail', { noteId }),
 
   create: (payload: {
     type?: string

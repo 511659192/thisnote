@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
 import { activeCardPlugins, toast } from '@thisnode/plugin-api'
+import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
 import type { CardView } from '@/api/types'
 import type { CardUpdate } from '@/api/page'
 
@@ -21,7 +22,7 @@ import type { CardUpdate } from '@/api/page'
 const page = usePageStore()
 
 const emit = defineEmits<{
-  (e: 'context', p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }): void
+  (e: 'context', p: { x: number; y: number; target: 'page' | 'card'; view?: CardView; imageSrc?: string }): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -459,6 +460,30 @@ async function onPaste(e: ClipboardEvent) {
   if (target.closest('textarea, input, .cm-editor')) return
   if (page.editingCardId) return
 
+  const image = getClipboardImage(e.clipboardData)
+  if (image) {
+    e.preventDefault()
+    const noteId = page.noteId
+    if (!noteId) return
+    const world = page.screenToWorld(lastPointer.value)
+    const at = { x: Math.round(world.x), y: Math.round(world.y) }
+    let markdown: string | null = null
+    try {
+      markdown = await uploadImageAttachment(image)
+      if (page.noteId !== noteId) {
+        await deleteUnreferencedImageAttachment(markdown)
+        return
+      }
+      const created = await page.addBlockFromContent(markdown, at)
+      if (created) toast('已粘贴图片为卡片', 'success')
+      else await deleteUnreferencedImageAttachment(markdown)
+    } catch (error) {
+      if (markdown) void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
+      toast(`粘贴图片失败：${error instanceof Error ? error.message : '上传图片失败'}`, 'error')
+    }
+    return
+  }
+
   const text = e.clipboardData?.getData('text/plain') ?? ''
   if (!text.trim()) return
   e.preventDefault()
@@ -508,9 +533,15 @@ function onCardFocus(id: string) {
   page.bringToFront(id)
 }
 
-function onBlockContext(p: { event: MouseEvent; view: CardView }) {
+function onBlockContext(p: { event: MouseEvent; view: CardView; imageSrc?: string }) {
   if (!page.selection.includes(p.view.card.cardId)) page.select([p.view.card.cardId])
-  emit('context', { x: p.event.clientX, y: p.event.clientY, target: 'card', view: p.view })
+  emit('context', {
+    x: p.event.clientX,
+    y: p.event.clientY,
+    target: 'card',
+    view: p.view,
+    imageSrc: p.imageSrc,
+  })
 }
 
 function onSurfaceContext(e: MouseEvent) {

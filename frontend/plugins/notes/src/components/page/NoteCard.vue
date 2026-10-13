@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CardView } from '@/api/types'
-import { host } from '@thisnode/plugin-api'
+import { activeCardPlugins, host, toast } from '@thisnode/plugin-api'
+import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
 
 /** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
 const MarkdownView = host().MarkdownView
-import { activeCardPlugins } from '@thisnode/plugin-api'
 import { BLOCK_MIN_H } from '@/stores/notePage'
 
 /**
@@ -30,7 +30,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'pointerdown', p: { event: PointerEvent; view: CardView; mode: 'move' | 'resize'; handle?: string }): void
   (e: 'request-edit', id: string): void
-  (e: 'context', p: { event: MouseEvent; view: CardView }): void
+  (e: 'context', p: { event: MouseEvent; view: CardView; imageSrc?: string }): void
   (e: 'save', p: { cardId: string; contentMd: string }): void
   (e: 'end-edit'): void
   (e: 'toggle-collapse', id: string): void
@@ -39,6 +39,9 @@ const emit = defineEmits<{
 }>()
 
 const draft = ref('')
+const pastingImage = ref(false)
+let blurAfterImagePaste = false
+const pendingImageAttachments = new Set<string>()
 const loadedFor = ref<string | null>(null)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 /** Off-screen copy of the draft, used only to measure how tall the text really is. */
@@ -110,12 +113,81 @@ function commit() {
   // Save what is in the DOM right now: an empty card must be recognisable as empty.
   const text = textarea.value ? textarea.value.value : draft.value
   draft.value = text
+  for (const markdown of pendingImageAttachments) {
+    if (!text.includes(markdown)) void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
+    pendingImageAttachments.delete(markdown)
+  }
   emit('save', { cardId: card.value.cardId, contentMd: text })
 }
 
+async function onPasteImage(e: ClipboardEvent) {
+  const image = getClipboardImage(e.clipboardData)
+  if (!image) return
+  e.preventDefault()
+  if (pastingImage.value) return
+
+  const input = e.currentTarget as HTMLTextAreaElement
+  const start = input.selectionStart
+  const end = input.selectionEnd
+  const cardId = card.value.cardId
+  pastingImage.value = true
+  try {
+    const markdown = await uploadImageAttachment(image)
+    if (card.value.cardId !== cardId || !props.editing || textarea.value !== input) {
+      await deleteUnreferencedImageAttachment(markdown)
+      return
+    }
+
+    pendingImageAttachments.add(markdown)
+    const text = input.value
+    const from = Math.min(start, text.length)
+    const to = Math.min(Math.max(end, from), text.length)
+    draft.value = text.slice(0, from) + markdown + text.slice(to)
+    await nextTick()
+    input.setSelectionRange(from + markdown.length, from + markdown.length)
+    fitHeight()
+    if (blurAfterImagePaste) {
+      blurAfterImagePaste = false
+      commit()
+    }
+  } catch (error) {
+    toast(`粘贴图片失败：${error instanceof Error ? error.message : '上传图片失败'}`, 'error')
+    if (blurAfterImagePaste) {
+      blurAfterImagePaste = false
+      commit()
+    }
+  } finally {
+    pastingImage.value = false
+  }
+}
+
+function onBlur() {
+  if (pastingImage.value) {
+    blurAfterImagePaste = true
+    return
+  }
+  commit()
+}
+
+function onContextMenu(e: MouseEvent) {
+  const target = e.target
+  const image = target instanceof Element ? target.closest('img') : null
+  const imageSrc = image instanceof HTMLImageElement ? image.currentSrc || image.src : undefined
+  emit('context', { event: e, view: props.view, imageSrc })
+}
+
 function onKeydown(e: KeyboardEvent) {
+  if (pastingImage.value) {
+    e.preventDefault()
+    e.stopPropagation()
+    return
+  }
   if (e.key === 'Escape') {
     e.preventDefault()
+    for (const markdown of pendingImageAttachments) {
+      void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
+    }
+    pendingImageAttachments.clear()
     emit('end-edit')
     return
   }
@@ -183,6 +255,10 @@ watch([() => props.editing, () => card.value.w], () => {
 })
 watch(() => content.value, () => fitHeight())
 onBeforeUnmount(() => {
+  for (const markdown of pendingImageAttachments) {
+    void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
+  }
+  pendingImageAttachments.clear()
   fitObserver?.disconnect()
   observedEl = null
 })
@@ -201,7 +277,7 @@ onBeforeUnmount(() => {
     }"
     @pointerdown="onBodyPointerDown"
     @dblclick.stop="emit('request-edit', card.cardId)"
-    @contextmenu.prevent.stop="emit('context', { event: $event, view })"
+    @contextmenu.prevent.stop="onContextMenu"
     @click="emit('focus', card.cardId)"
   >
     <!-- Card tools are overlaid in the top-right corner so they cost no layout space. -->
@@ -231,12 +307,14 @@ onBeforeUnmount(() => {
       ref="textarea"
       v-model="draft"
       class="body edit"
+      :readonly="pastingImage"
       spellcheck="false"
       placeholder="在这里写…（Ctrl+Enter 保存，Esc 退出）"
       @pointerdown.stop
       @dblclick.stop
       @keydown="onKeydown"
-      @blur="commit"
+      @paste="onPasteImage"
+      @blur="onBlur"
       @input="fitHeight"
     ></textarea>
 

@@ -4,7 +4,7 @@ import { backendOnline, backendMessage, waitForBackend } from '@thisnode/plugin-
 import ToastHost from '@/components/ToastHost.vue'
 
 onMounted(async () => {
-  // main.ts 在挂载应用之前已经等过一次后端；已经连上就别再等 —— 否则会白打一次 /api/health
+  // main.ts 在挂载应用之前已经等过一次后端；已经连上就别再等 —— 否则会白打一次 /api/health/get
   if (!backendOnline.value) await waitForBackend(20000)
 })
 </script>

@@ -54,11 +54,11 @@ export interface EnabledMemoryCard extends CardContent {
 export const memoryCurveApi = {
   cards: (ids: string[]) =>
     http.get<MemoryCurveCardState[]>(
-      `/api/plugins/memory-curve/cards?ids=${ids.join(',')}`,
+      '/api/plugins/memory-curve/get-cards', { ids: ids.join(',') },
     ),
   setEnabled: (cardId: string, value: boolean) =>
     http.post<{ enabled: boolean }>(
-      `/api/plugins/memory-curve/state`, {}, { cardId, value },
+      `/api/plugins/memory-curve/update-state`, {}, { cardId, value },
     ),
   review: (cardId: string, grade: Grade) =>
     http.post<MemoryCurveCardState>(
@@ -66,12 +66,12 @@ export const memoryCurveApi = {
     ),
   due: (limit = 50) =>
     http.get<DueCard[]>(
-      `/api/plugins/memory-curve/due?limit=${limit}`,
+      '/api/plugins/memory-curve/get-due', { limit },
     ),
   /** 删掉一条排期（复习页发现它是孤儿时调用）。 */
   forget: (cardId: string) =>
     http.post<{ cardId: string; removed: boolean }>(
-      `/api/plugins/memory-curve/forget`, undefined, { cardId },
+      `/api/plugins/memory-curve/delete-schedule`, undefined, { cardId },
     ),
 }
 
@@ -85,7 +85,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
   const want = new Set(cardIds)
   const found = new Map<string, CardContent>()
   if (!want.size) return found
-  const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes', { limit: 2000 })
+  const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes/get', { limit: 2000 })
   const batchSize = 8
   for (let i = 0; i < notes.length && found.size < want.size; i += batchSize) {
     const batch = notes.slice(i, i + batchSize)
@@ -93,7 +93,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
       try {
         const page = await http.get<{
           cards: Array<{ meta: { cardId: string }; content: string }>
-        }>('/api/notes/cards', { noteId: note.noteId })
+        }>('/api/notes/cards/get', { noteId: note.noteId })
         return { note, page }
       } catch {
         return null
@@ -135,7 +135,7 @@ export async function loadEnabledCards(): Promise<EnabledMemoryCard[]> {
   }
 
   while (true) {
-    const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes', {
+    const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes/get', {
       limit: notePageSize,
       offset,
     })
@@ -147,7 +147,7 @@ export async function loadEnabledCards(): Promise<EnabledMemoryCard[]> {
         note,
         page: await http.get<{
           cards: Array<{ meta: { cardId: string }; content: string }>
-        }>('/api/notes/cards', { noteId: note.noteId }),
+        }>('/api/notes/cards/get', { noteId: note.noteId }),
       })))
       for (const { note, page } of pages) {
         for (const card of page.cards) {

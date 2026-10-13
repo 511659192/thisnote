@@ -80,16 +80,16 @@ new ──评分──► learning（页面内短周期重现）──毕业─�
 
 JSON 中的 `dueAt`、`lastReviewedAt`、`createdAt`、`updatedAt` 按应用运行环境时区保存为 `yyyy年MM月dd日 HH:mm:ss`；读入后仍转换为毫秒值参与调度计算。旧数字 JSON 首次读入时会先备份为 `scheduling.meta.json.bak`（同名备份已存在时追加序号），再迁移为日期字符串。格式精确到秒，毫秒部分会舍弃，备份保留原精度。
 
-### 2.4 端点面（6 个，全 GET/POST + `@RequestParam`）
+### 2.4 端点面（6 个，查询 GET、写入 POST + `@RequestParam`）
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| GET | `/api/plugins/memory-curve/cards?ids=a,b,c` | 一页卡片一次批量取状态（开关 + 排期 + 各评分预览） |
-| GET | `/api/plugins/memory-curve/card?cardId=` | 单张卡片状态 |
-| POST | `/api/plugins/memory-curve/state?cardId=&value=` | 插件内开启/关闭卡片记忆曲线 |
+| GET | `/api/plugins/memory-curve/get-cards?ids=a,b,c` | 一页卡片一次批量取状态（开关 + 排期 + 各评分预览） |
+| GET | `/api/plugins/memory-curve/get-card?cardId=` | 单张卡片状态 |
+| POST | `/api/plugins/memory-curve/update-state?cardId=&value=` | 插件内开启/关闭卡片记忆曲线 |
 | POST | `/api/plugins/memory-curve/review?cardId=` + body `{grade}` | 评分（1..4），返回新排期 |
-| GET | `/api/plugins/memory-curve/due?limit=` | 到期卡片（只含排期与预览，**不含正文**） |
-| POST | `/api/plugins/memory-curve/forget?cardId=` | 删一条排期（孤儿清理兜底） |
+| GET | `/api/plugins/memory-curve/get-due?limit=` | 到期卡片（只含排期与预览，**不含正文**） |
+| POST | `/api/plugins/memory-curve/delete-schedule?cardId=` | 删一条排期（孤儿清理兜底） |
 
 `MemoryCurveController` 挂在 `@RequestMapping("/api/plugins/memory-curve")` 下 ——
 **插件自有端点的固定命名空间**，平台据此把它与插件管理端点区分开，
@@ -124,7 +124,7 @@ notes 插件：删掉卡片
 
 - 收获：核心插件（notes）缺位时它照样能独立启动；两端之间**没有任何契约**；
 - 代价：它不知道卡片属于哪篇笔记、正文是什么。所以 `due` 只返回排期，
-  正文由**界面侧**经核心的公开 API（`/api/notes`、`/api/notes/cards`）现拼。
+  正文由**界面侧**经核心的公开 API（`/api/notes/get`、`/api/notes/cards/get`）现拼。
 
 ---
 
@@ -169,9 +169,9 @@ NoteCard 渲染卡片时：
 
 | 用户动作 | 路径 | 说明 |
 |---|---|---|
-| 点右上图标或右键卡片菜单切换 | `POST /api/plugins/memory-curve/state?cardId=&value=` | 插件写入自己的开关文件；启用时创建「立即到期」排期，界面侧同步本地形态 |
+| 点右上图标或右键卡片菜单切换 | `POST /api/plugins/memory-curve/update-state?cardId=&value=` | 插件写入自己的开关文件；启用时创建「立即到期」排期，界面侧同步本地形态 |
 | 评分 | `POST /api/plugins/memory-curve/review` | 用返回的最新排期覆盖本地 |
-| 复习页发现孤儿 | `POST /forget` | 兜底清理（见 3.5） |
+| 复习页发现孤儿 | `POST /delete-schedule` | 兜底清理（见 3.5） |
 
 `toggle` 与排期操作都走记忆曲线自己的端点；平台只负责插件级启停与端点闸门，不参与卡片状态存储。
 
@@ -184,7 +184,7 @@ NoteCard 渲染卡片时：
 - **孤儿处理**：`due` 里那些在核心查不到卡片的排期，一律跳过渲染（渲染成空白卡会让人以为复习坏了），
   并顺手 `forget` 掉；界面上如果有孤儿会明确提示；
 - 卡片逐张评分（四档按钮标注下次出现方式）；
-  短周期卡按队列规则随机插回；无其他卡可错开时留待下次打开复习页；毕业卡移出视图；
+  短周期卡按队列规则随机插回；只有一张时在当前队列中立即重现；毕业卡移出视图；
 - 键盘 `1-4` 作用于最上方卡片；
 - **插件被全局停用时**不假装「没有到期的卡片」，而是说明原因并给出到设置页的入口 ——
   这类"安静的误导"比报错更糟。
@@ -212,13 +212,13 @@ NoteCard 渲染卡片时：
 
 ```
 ① 用户右键卡片并选「开启记忆周期」（或点灰色图标）
-   POST /api/plugins/memory-curve/state?cardId=id&value=true
+   POST /api/plugins/memory-curve/update-state?cardId=id&value=true
      → EnabledCardsStore 写入 enabled-cards.properties
      → SrsService.createIfAbsent(id)：写一条 dueAt=now 的排期
    → 卡片徽标变「已到期」，侧栏「复习」徽标 +1
 
 ② 用户打开 /review（插件登记的路由）
-   GET due → 得到排期 → loadCardContent 拼正文（核心公开 API）→ 瀑布流渲染
+   GET get-due → 得到排期 → loadCardContent 拼正文（核心公开 API）→ 瀑布流渲染
 
 ③ 用户点「良好」
    POST /review?cardId=… {grade:3} → SrsService.apply() 推进状态机 → 全量重写 scheduling.meta
@@ -260,6 +260,6 @@ NoteCard 渲染卡片时：
 1. **DTO 键名改名不同步**：`block → card` 全量改名时，`loadCardContent` 仍在读 `view.block.id`
    （响应类型已写成 `card`），运行期 `TypeError` → 复习页取不到正文（页面显示空白卡）。
    教训：改 DTO 组件名/JSON 键之后，必须 grep **所有消费点的属性访问**，不只 grep 类型声明。
-2. **HTTP 动词统一后的消费方遗漏**：`forget` 由 `DELETE` 改为 `POST`（平台约定：读 GET、写 POST+动作路径）后，
+2. **HTTP 动词统一后的消费方遗漏**：`forget` 由 `DELETE` 改为 `POST /delete-schedule`（平台约定：纯查询使用 GET，写操作使用带动作路径的 POST）后，
    界面侧仍用 `http.del` → 405，孤儿清理静默失效（被 `.catch(() => {})` 吞掉）。
    教训：批量改端点形态时，`tools/*.mjs` 与各 `*Api.ts` 要一起过一遍；**静默 catch 会掩盖契约漂移**。

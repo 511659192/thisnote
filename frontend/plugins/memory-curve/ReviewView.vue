@@ -37,7 +37,6 @@ const enabledCardsLoaded = ref(false)
 const enabledCardsError = ref('')
 const loading = ref(true)
 const reviewedCount = ref(0)
-const deferredShortCount = ref(0)
 const busyIds = ref(new Set<string>())
 const reviewedStates = new Map<string, MemoryCurveCardState>()
 
@@ -74,7 +73,6 @@ const orphanCount = ref(0)
 async function loadQueue() {
   loading.value = true
   reviewedCount.value = 0
-  deferredShortCount.value = 0
   try {
     const due = await memoryCurveApi.due(50)
     // 正文要自己去核心取：due 只给排期（复习插件不读笔记数据，也就不依赖笔记插件）
@@ -147,9 +145,13 @@ function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCurve
   const remaining = queue.value.filter((item) => item.cardId !== card.cardId)
   const remainingCount = remaining.length
   if (remainingCount === 0) {
-    queue.value = remaining
-    reviewedCount.value++
-    deferredShortCount.value++
+    queue.value = [{
+      ...card,
+      state: updated.schedule.state,
+      dueAt: updated.schedule.dueAt,
+      learningStep: updated.learningStep,
+      gradePreview: updated.gradePreview ?? card.gradePreview,
+    }]
     return
   }
 
@@ -277,10 +279,9 @@ const GRADES: { grade: Grade; label: string }[] = [
 
     <div v-else-if="!pluginDisabled && activeTab === 'review' && !queue.length" class="rv-state rv-done">
       <div class="rv-done-icon">🎉</div>
-      <h3>{{ deferredShortCount ? '短周期卡片留待下次继续' : '没有到期的卡片' }}</h3>
+      <h3>没有到期的卡片</h3>
       <p class="small muted">
-        <template v-if="deferredShortCount">本页没有剩余卡片可用于错开重现；{{ deferredShortCount }} 张短周期卡片将在下次打开时继续。</template>
-        <template v-else-if="reviewedCount">本次已复习 {{ reviewedCount }} 张，每张都按自己的记忆曲线安排了下一次。</template>
+        <template v-if="reviewedCount">本次已复习 {{ reviewedCount }} 张，每张都按自己的记忆曲线安排了下一次。</template>
         <template v-else>开启记忆曲线的卡片到期后会出现在这里。</template>
       </p>
       <button class="btn primary" @click="router.push('/notes')">去浏览笔记</button>

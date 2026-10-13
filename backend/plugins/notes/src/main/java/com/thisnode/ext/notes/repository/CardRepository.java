@@ -43,6 +43,10 @@ public class CardRepository {
         return cards;
     }
 
+    public List<Card> getAllIndexed() {
+        return getAll(new ArrayList<>(fileIndex.cardFiles().keySet()));
+    }
+
     /**
      * Create a card with a stable ID and a human-readable, title-derived filename.
      */
@@ -54,6 +58,7 @@ public class CardRepository {
         meta.setCardId(cardId);
 
         Path dir = notesConfig.getCardsDir();
+        Files.createDirectories(dir);
         String prefix = title == null || title.isBlank() ? "tmp-" + cardId : title;
         String cardContent = Card.compose(meta, content);
         for (int number = 1; ; number++) {

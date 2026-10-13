@@ -22,6 +22,7 @@ public class CardService {
     private final CardRepository cardRepository;
     private final NoteRepository noteRepository;
     private final NoteService noteService;
+    private final AttachmentService attachmentService;
 
     private List<Card> cards(NoteMeta note) {
         return note.getCardIds().stream().map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
@@ -85,8 +86,11 @@ public class CardService {
 
         CardMeta cardMeta = card.getMeta();
         String body = contentMd == null ? "" : contentMd;
+        Set<String> removedAttachments = new HashSet<>(AttachmentService.referencedFileNames(current));
+        removedAttachments.removeAll(AttachmentService.referencedFileNames(body));
         cardRepository.save(cardMeta, body, cardId);
         noteRepository.save(noteMeta);
+        attachmentService.deleteIfUnreferenced(removedAttachments);
         Card saved = cardRepository.getOne(cardId);
         return saved == null ? new Card(cardMeta, body) : saved;
     }
@@ -131,10 +135,13 @@ public class CardService {
     public void delete(String noteId,
                        String cardId) {
         NoteMeta note = noteContainingCard(noteId, cardId);
+        Card card = cardRepository.getOne(cardId);
+        Set<String> removedAttachments = AttachmentService.referencedFileNames(card == null ? "" : card.getContent());
 
         cardRepository.delete(List.of(cardId));
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
         noteRepository.save(note);
+        attachmentService.deleteIfUnreferenced(removedAttachments);
     }
 
     private NoteMeta noteContainingCard(String noteId,

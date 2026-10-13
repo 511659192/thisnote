@@ -25,17 +25,17 @@ public class MemoryCurveController {
     }
 
     /** State for many cards at once, so a page of cards costs one request. */
-    @GetMapping("/cards")
+    @GetMapping("/get-cards")
     public List<Map<String, Object>> cards(@RequestParam List<String> ids) {
         return srs.cardStates(ids);
     }
 
-    @GetMapping("/card")
+    @GetMapping("/get-card")
     public Map<String, Object> card(@RequestParam String cardId) {
         return srs.cardState(cardId);
     }
 
-    @PostMapping("/state")
+    @PostMapping("/update-state")
     public Map<String, Object> setState(@RequestParam String cardId,
                                        @RequestParam boolean value) {
         srs.setEnabled(cardId, value);
@@ -54,7 +54,7 @@ public class MemoryCurveController {
     }
 
     /** Due cards across all notes (memory curve enabled only). */
-    @GetMapping("/due")
+    @GetMapping("/get-due")
     public List<Map<String, Object>> due(@RequestParam(defaultValue = "50") int limit) {
         return srs.due(limit);
     }
@@ -66,7 +66,7 @@ public class MemoryCurveController {
      * 重建过），就顺手调这里清掉。本插件不读笔记数据，自己没有别的办法判断卡片还在不在 ——
      * 正常删除路径由主容器的 {@code CardChangedEvent} 负责，这里是兜底。
      */
-    @PostMapping("/forget")
+    @PostMapping("/delete-schedule")
     public Map<String, Object> forget(@RequestParam String cardId) {
         return Map.of("cardId", cardId, "removed", srs.forget(cardId));
     }

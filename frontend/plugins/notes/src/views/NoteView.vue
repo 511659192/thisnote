@@ -2,7 +2,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import { activeCardPlugins, activeNoteTools, primaryLabel, toast } from '@thisnode/plugin-api'
+import {
+  activeCardPlugins,
+  activeListFilter_,
+  activeNoteListFilters,
+  activeNoteTools,
+  primaryLabel,
+  toast,
+} from '@thisnode/plugin-api'
 import { usePageStore } from '@/stores/notePage'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
@@ -10,6 +17,7 @@ import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import type { NoteMeta, CardView } from '@/api/types'
+import { copyImageToClipboard } from '@/components/page/clipboardImage'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +28,15 @@ const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
 const noteListRef = ref<InstanceType<typeof NoteList> | null>(null)
 /** 插件贡献的笔记工具（按插件启用状态过滤）。 */
 const noteToolList = computed(() => activeNoteTools())
+type NoteManagementFilter = ReturnType<typeof activeNoteListFilters>[number] & { hideNoteManagement?: boolean }
+const allowNoteManagement = computed(() => {
+  const active = activeListFilter_()
+  if (!active) return true
+  const filter = (activeNoteListFilters() as NoteManagementFilter[]).find(
+    (item) => item.pluginId === active.pluginId && item.id === active.filterId,
+  )
+  return !filter?.hideNoteManagement
+})
 const menu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[] }>({
   open: false,
   x: 0,
@@ -169,6 +186,7 @@ async function deleteUntitledNoteAndLeave() {
 async function ensureTitleBeforeLeaving(): Promise<boolean> {
   await pageRef.value?.finishEditing()
   if (pendingTitleCommit) await pendingTitleCommit
+  if (!allowNoteManagement.value) return true
   const note = nodes.current
   if (!note || note.title.trim()) return true
 
@@ -225,6 +243,7 @@ watch(() => page.noteTitle, (title) => {
 
 /** Open the rename field, seeded with the current title and ready to type in. */
 async function startRename() {
+  if (!allowNoteManagement.value) return
   titleDraft.value = nodes.current?.title ?? ''
   titleDraftNoteId = nodes.current?.noteId ?? null
   renameCancelled = false
@@ -251,6 +270,11 @@ function cancelRename() {
 
 async function commitTitle() {
   renaming.value = false
+  if (!allowNoteManagement.value) {
+    titleDraft.value = nodes.current?.title ?? ''
+    titleDraftNoteId = nodes.current?.noteId ?? null
+    return
+  }
   if (renameCancelled) {
     renameCancelled = false
     titleDraft.value = nodes.current?.title ?? ''
@@ -316,6 +340,7 @@ function requestDeleteCard(view: CardView) {
 }
 
 function requestDeleteNote(id: string) {
+  if (!allowNoteManagement.value) return
   const note = nodes.nodes.find((item) => item.noteId === id)
   askForConfirmation(
     `彻底删除「${note?.title ?? '这篇笔记'}」？`,
@@ -330,11 +355,23 @@ function requestDeleteNote(id: string) {
   )
 }
 
-function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?: CardView }) {
+function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?: CardView; imageSrc?: string }) {
   const entries: MenuEntry[] = []
   if (p.target === 'card' && p.view) {
     const view = p.view
     const cardId = view.card.cardId
+    if (p.imageSrc) {
+      const imageSrc = p.imageSrc
+      entries.push({
+        label: '复制图片',
+        action: () => {
+          void copyImageToClipboard(imageSrc)
+            .then(() => toast('图片已复制', 'success'))
+            .catch((e: unknown) => toast(`复制图片失败：${(e as Error).message}`, 'error'))
+        },
+      })
+      entries.push({ separator: true })
+    }
     entries.push({ label: '编辑卡片内容', action: () => void pageRef.value?.beginEdit(view) })
     const cardPlugins = activeCardPlugins()
     if (cardPlugins.length) {
@@ -372,10 +409,14 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
 function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
   const entries: MenuEntry[] = [
     { label: '打开', action: () => openNode(payload.node.noteId) },
-    { label: '修改标题', action: () => void noteListRef.value?.startRename(payload.node) },
-    { separator: true },
-    { label: '删除笔记', danger: true, action: () => requestDeleteNote(payload.node.noteId) },
   ]
+  if (allowNoteManagement.value) {
+    entries.push(
+      { label: '修改标题', action: () => void noteListRef.value?.startRename(payload.node) },
+      { separator: true },
+      { label: '删除笔记', danger: true, action: () => requestDeleteNote(payload.node.noteId) },
+    )
+  }
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
 
@@ -426,6 +467,7 @@ onBeforeUnmount(() => {
         :nodes="nodes.notesView"
         :loading="nodes.loadingList"
         :current-id="nodes.currentId"
+        :allow-note-management="allowNoteManagement"
         @open="openNode"
         @context="onNodeContext"
         @remove="requestDeleteNote"
@@ -438,7 +480,7 @@ onBeforeUnmount(() => {
           <header class="note-head">
             <div class="head-main">
               <input
-                v-if="renaming"
+                v-if="renaming && allowNoteManagement"
                 ref="titleInput"
                 v-model="titleDraft"
                 class="title-input"
@@ -451,8 +493,8 @@ onBeforeUnmount(() => {
                 v-else
                 class="title"
                 :class="{ placeholder: !nodes.current.title.trim() }"
-                :title="nodes.current.title.trim() ? '双击重命名' : '双击输入标题'"
-                @dblclick="startRename"
+                :title="allowNoteManagement ? (nodes.current.title.trim() ? '双击重命名' : '双击输入标题') : undefined"
+                @dblclick="allowNoteManagement && startRename()"
               >
                 {{ nodes.current.title || '请输入标题' }}
               </h2>
@@ -476,7 +518,7 @@ onBeforeUnmount(() => {
 
       <div v-else class="empty">
         <h3>选择一篇笔记开始</h3>
-        <p class="small">
+        <p v-if="allowNoteManagement" class="small">
           或按 <span class="kbd">{{ primaryLabel() }}</span> <span class="kbd">N</span> 新建一篇。
         </p>
       </div>

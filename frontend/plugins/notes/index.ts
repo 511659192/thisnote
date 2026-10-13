@@ -34,7 +34,8 @@ import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stor
  */
 function register(): void {
   registerSidebarPanel({ pluginId: PLUGIN_ID, component: NotesSidebarPanel })
-  registerListHeader({ pluginId: PLUGIN_ID, component: TitleSearchBox })
+  const titleSearchHeader = { pluginId: PLUGIN_ID, component: TitleSearchBox, noteManagement: true }
+  registerListHeader(titleSearchHeader)
   registerNoteListFilter({
     pluginId: PLUGIN_ID,
     id: FILTER_ID,
@@ -47,7 +48,7 @@ function register(): void {
         setMatchCount(null)
         return []
       }
-      const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes', { limit: 2000 })
+      const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes/get', { limit: 2000 })
       const ids = notes.filter((note) => note.title.toLowerCase().includes(term)).map((note) => note.noteId)
       setMatchCount(ids.length)
       return ids

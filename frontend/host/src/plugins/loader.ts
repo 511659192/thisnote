@@ -8,7 +8,7 @@ import { PLUGIN_DEV_PORTS } from './devPorts'
  * 插件界面的 **qiankun 微应用装载器** —— 主应用侧的装配车间。
  *
  * <p>架构：每个插件界面是一个 qiankun 微应用（独立 dev server / 独立产物 / 生命周期），
- * 主应用按后端 `/api/plugins` 的启用列表逐个 `loadMicroApp`，装进 index.html 里的
+ * 主应用按后端 `/api/plugins/get` 的启用列表逐个 `loadMicroApp`，装进 index.html 里的
  * 隐藏容器。微应用的 `mount()` 里完成六个插槽的注册（卡片工具 / 笔记工具 / 设置面板 /
  * 侧栏入口 / 插件路由 / 列表筛选），`unmount()` 里注销 —— 于是「停用 / 重载插件」
  * 第一次成为界面侧的真实生命周期事件，不再依赖整页刷新。

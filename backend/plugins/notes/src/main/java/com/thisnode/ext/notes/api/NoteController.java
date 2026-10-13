@@ -18,7 +18,7 @@ public class NoteController {
 
     private final NoteService noteService;
 
-    @GetMapping
+    @GetMapping("/get")
     public List<NoteMeta> list(@RequestParam(required = false) String notebookId,
                                @RequestParam(required = false) String type,
                                @RequestParam(required = false) String text,
@@ -32,7 +32,7 @@ public class NoteController {
         return noteService.get(noteService.create(req));
     }
 
-    @GetMapping("/detail")
+    @GetMapping("/get-detail")
     public NoteMeta detail(@RequestParam String noteId) {
         return noteService.get(noteId);
     }

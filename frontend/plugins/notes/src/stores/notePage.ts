@@ -281,7 +281,7 @@ export const usePageStore = defineStore('notePage', () => {
         y: Math.round(at.y),
         w: opts.w ?? defaultCardWidth(opts.surfaceWidth),
         h: opts.h ?? defaultCardHeight(),
-        contentMd: opts.contentMd ?? '',
+        content: opts.contentMd ?? '',
       })
       await reload()
       // reload() 只按已装载的文件名拉；新建的卡可能不在其中，因此补进列表供页面渲染。

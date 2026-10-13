@@ -20,7 +20,7 @@ public class CardController {
     /**
      * 这些卡片 ID 省略表示整页：返回每张卡片的几何与正文。
      */
-    @GetMapping
+    @GetMapping("/get")
     public NoteDto get(@RequestParam String noteId,
                        @RequestParam(required = false) List<String> cardIds) {
         return cardService.cards(noteId, cardIds);
@@ -35,7 +35,7 @@ public class CardController {
     /**
      * Write markdown typed inside a card back into the note.
      */
-    @PostMapping("/content")
+    @PostMapping("/update-content")
     public Card writeContent(@RequestBody WriteCardContentRequest req) {
         return cardService.writeContent(req.noteId(), req.cardId(), req.contentMd(), req.baseContentMd());
     }

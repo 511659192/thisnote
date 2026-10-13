@@ -29,14 +29,16 @@ function register(): void {
     component: FavoriteTool,
   })
 
-  registerNoteListFilter({
+  const favoritesFilter = {
     pluginId: FAVORITE_PLUGIN_ID,
     id: 'favorites',
     label: '收藏',
     icon: '★',
+    hideNoteManagement: true,
     /** 核心据此过滤自己的列表：插件只回答"哪些笔记被收藏了"。 */
     load: async () => (await favoriteApi.notes()).map((note) => note.id),
-  })
+  }
+  registerNoteListFilter(favoritesFilter)
 }
 
 export async function bootstrap() {}

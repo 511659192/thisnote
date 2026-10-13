@@ -22,7 +22,7 @@ public class NotebookController {
 
     private final NotebookService notebookService;
 
-    @GetMapping
+    @GetMapping("/get")
     public List<Notebook> list() {
         return notebookService.list("notebook");
     }

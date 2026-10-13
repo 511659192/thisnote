@@ -24,4 +24,7 @@ public class NotesConfig {
 
     @Value("${thisnode.notebook-dir}")
     private Path notebookDir;
+
+    @Value("${thisnode.attachments-dir}")
+    private Path attachmentsDir;
 }

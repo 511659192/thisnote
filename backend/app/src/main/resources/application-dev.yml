@@ -4,7 +4,7 @@
 #
 # 与生产（默认）的差别只有一个：**插件从 target/classes 直接加载，而不是从 runtime/plugins/*.jar**。
 # 于是改插件代码只要重新编译那个模块（IDE 里 Build，或 `mvn -pl plugin-<id> compile`），
-# 再在设置 → 插件里点「重载」（或调 POST /api/plugins/<id>/reload）就生效，不用打包也不用重启应用。
+# 再在设置 → 插件里点「重载」（或调 POST /api/plugins/reload?pluginId=<id>）就生效，不用打包也不用重启应用。
 #
 # 目录约定（由 backend/tools/dev_plugins.ps1 建立，应用从 backend/ 启动 → plugins-dev 在 backend/ 下）：
 #

@@ -35,7 +35,7 @@ async function allNotes(): Promise<NoteMetaLite[]> {
   if (notesCache && Date.now() - notesCache.at < CACHE_TTL) return notesCache.data
   loading.value = true
   try {
-    const data = await http.get<NoteMetaLite[]>('/api/notes', { limit: 2000 })
+    const data = await http.get<NoteMetaLite[]>('/api/notes/get', { limit: 2000 })
     notesCache = { at: Date.now(), data }
     return data
   } finally {
