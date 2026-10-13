@@ -355,7 +355,6 @@ watch(
   padding: 0 2px;
 }
 .group-item {
-  padding-left: calc(var(--space-2) + 22px);
   font-size: 12.5px;
 }
 .ico-swap {
@@ -388,6 +387,9 @@ watch(
   color: var(--c-text-2);
   font-size: 13px;
   text-align: left;
+}
+.nav-item.group-item {
+  padding-left: calc(var(--space-2) + 22px);
 }
 .nav-item:hover {
   background: var(--c-surface-3);
