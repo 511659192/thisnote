@@ -13,7 +13,7 @@
 
   <artifactId>plugin-api</artifactId>
   <name>thisnode-plugin-api</name>
-  <description>插件契约：描述符、生命周期、配置、状态存储、以及访问笔记的门面</description>
+  <description>插件通用契约与工具：生命周期扩展点、文件工具、通用异常与跨插件消息</description>
 
   <!--
     依赖刻意压到最小：只有 Spring 的注解（@Component）与 PF4J 的契约类型。

@@ -204,8 +204,7 @@ onBeforeUnmount(() => {
     @contextmenu.prevent.stop="emit('context', { event: $event, view })"
     @click="emit('focus', card.cardId)"
   >
-    <!-- Card tools: hidden until the card is hovered or selected, so they cost no layout space
-         and the content starts right at the top of the card. 插件贡献的开关排在最左。 -->
+    <!-- Card tools are overlaid in the top-right corner so they cost no layout space. -->
     <div class="card-tools">
       <template v-if="!card.collapsed">
         <component

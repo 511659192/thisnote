@@ -1,10 +1,9 @@
 # memory-curve 插件实现分析（后端 + 界面侧）
 
-> 本文分析 thisnode 插件平台里 **最完整的一个参考实现**：记忆曲线（Anki 式 SM-2 间隔重复）。
-> 读它 = 读「一个功能完整的插件该怎么写」。它同时用到了平台提供的几乎所有插件能力：
-> 自有端点、自有状态文件、自有页面、per-entity 开关、跨插件事件、卡片工具插槽、侧栏入口与徽标。
+> 本文分析 thisnode 插件平台里一个完整的参考实现：记忆曲线（Anki 式 SM-2 间隔重复）。
+> 读它 = 读「一个插件如何独立管理自己的状态、通过消息事件协作并贡献界面插槽」。
 >
-> 代码位置：后端 `backend/plugins/memory-curve/`（5 个 Java 文件，752 行）·
+> 代码位置：后端 `backend/plugins/memory-curve/` ·
 > 界面侧 `frontend/plugins/memory-curve/`（index.ts / memoryCurveApi.ts / MemoryCurveTool.vue / ReviewView.vue，约 990 行）
 
 ---
@@ -16,7 +15,7 @@
 
 | 关注点 | 归属 | 存放位置 |
 |---|---|---|
-| 卡片是否开启记忆曲线（开关） | **平台通用状态面**（per-entity 状态） | `<data-root>/plugin-data.json`（平台 KV） |
+| 卡片是否开启记忆曲线（开关） | **插件自己** | `<data-root>/plugins/memory-curve/enabled-cards.properties` |
 | 排期（状态/难度/间隔/到期时间…） | **插件自己** | `<data-root>/plugins/memory-curve/scheduling.meta` |
 | 卡片正文与标题 | **不归它管**（不读笔记数据） | 由界面侧经核心的公开 API 现拼 |
 
@@ -38,22 +37,22 @@ backend/runtime/plugins/memory-curve.jar
 - `MemoryCurvePlugin extends SpringBootPlugin`（PF4J/SBP 的插件基类）；身份/版本在 `plugin.properties`，代码里不出现：
 - 它是**可停用插件**（描述符里 `undeactivatable=false`）：工具渲染在卡片工具行里（见 3.3），
   可随时停用/重载 —— 分类标签不靠声明，能力由它调用的 `register*` 决定；
-- `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class).importBean(PluginDataRepository.class)`：
+- `createSpringBootstrap()` 返回 `new SpringBootstrap(this, MemoryCurveStarter.class)`：
   插件有**自己的 Spring 子容器**（`MemoryCurveStarter` 是空 `@SpringBootApplication`，只负责扫描本包），
-  平台只把 `PluginDataRepository`（状态 KV）显式搭桥进来 —— 插件与平台之间只有 `plugin-api` 这层契约；
+  不导入平台共享状态存储；状态文件由插件自己读写，跨插件协作只通过通用契约与消息事件；
 - 依赖面刻意保持最小：`plugin-api` / `sbp-core` / spring-context / spring-web / slf4j /
   spring-boot-autoconfigure。**没有数据库、没有 MyBatis、没有核心插件的任何依赖。**
 
-### 2.2 状态为什么分两处存
+### 2.2 插件如何独立管理状态
 
-这是本插件最有意思的设计决策：
+开关和排期都由记忆曲线插件拥有，平台不解释也不持有 per-entity 状态：
 
 | 状态 | 存放 | 为什么 |
 |---|---|---|
-| 「这张卡开了记忆曲线吗」 | 平台 KV（`plugin-data.json`，分层 JSON），经通用状态面读写（键只有 pluginId + 卡片 id，没有 entityType 那一层） | 这是**平台级的 per-entity 状态**：平台要据此做批量查询、停用闸门、以及「状态变化时通知插件」；所有插件共用一套，无需各自造轮子 |
-| 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（Properties 格式 `cardId|字段 = 值`（键就是卡片 id，与 entityType 无关）） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
+| 「这张卡开了记忆曲线吗」 | 插件自己的 `enabled-cards.properties` | 开关由插件专属 API 读写，不与其他插件共享文件或存储契约 |
+| 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（Properties 格式 `cardId|字段 = 值`） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
-`SrsService` 里有一处很讲究的细节：**「是否开启」直接读 `PluginDataRepository`，而不是注入 `PluginStateService`**。原因是后者在状态翻转时会回调插件的 `onEntityStateChanged` —— 插件正是订阅方，形成字段级循环依赖，Spring 装配不出来。直接读 KV（同一份底座数据的插件侧半边）绕开了这个环。
+`SrsService` 通过同容器内的 `EnabledCardsStore` 查询开关，并在启用卡片时创建初始排期；控制器通过本插件端点调用它，不需要平台状态服务回调，也没有跨容器的存储依赖。
 
 ### 2.3 调度算法：为「笔记」调过的 SM-2
 
@@ -79,19 +78,19 @@ new ──评分──► learning（学习步 1 分钟 → 10 分钟）──�
 写入方式：内存 `Map` + 每次变更全量重写 `scheduling.meta`（单文件、小体量，本地工具足够；
 坏文件按空库处理并告警，不让插件起不来）。
 
-### 2.4 端点面（5 个，全 GET/POST + `@RequestParam`）
+### 2.4 端点面（6 个，全 GET/POST + `@RequestParam`）
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/plugins/memory-curve/cards?ids=a,b,c` | 一页卡片一次批量取状态（开关 + 排期 + 各评分预览） |
 | GET | `/api/plugins/memory-curve/card?cardId=` | 单张卡片状态 |
+| POST | `/api/plugins/memory-curve/state?cardId=&value=` | 插件内开启/关闭卡片记忆曲线 |
 | POST | `/api/plugins/memory-curve/review?cardId=` + body `{grade}` | 评分（1..4），返回新排期 |
 | GET | `/api/plugins/memory-curve/due?limit=` | 到期卡片（只含排期与预览，**不含正文**） |
 | POST | `/api/plugins/memory-curve/forget?cardId=` | 删一条排期（孤儿清理兜底） |
 
 `MemoryCurveController` 挂在 `@RequestMapping("/api/plugins/memory-curve")` 下 ——
-**插件自有端点的固定命名空间**，平台据此把它与管理面
-（`/api/plugins/detail|states|state|entities|health|active|reload`）区分开，
+**插件自有端点的固定命名空间**，平台据此把它与插件管理端点区分开，
 停用插件时只拦前者（`PluginEndpointHandlerInterceptor`）。
 
 ### 2.5 跨插件协作：`CardChangedEvent`（唯一一处「知道隔壁发生了什么」）
@@ -168,12 +167,11 @@ NoteCard 渲染卡片时：
 
 | 用户动作 | 路径 | 说明 |
 |---|---|---|
-| 点 🧠 开启/关闭 | `pluginApi.setState('memory-curve','block',id,next)` → 平台通用状态面 | 平台落盘后回调插件的 `onEntityStateChanged` → 后端建「立即到期」排期；界面侧同步本地形态 |
+| 点右上图标或右键卡片菜单切换 | `POST /api/plugins/memory-curve/state?cardId=&value=` | 插件写入自己的开关文件；启用时创建「立即到期」排期，界面侧同步本地形态 |
 | 评分 | `POST /api/plugins/memory-curve/review` | 用返回的最新排期覆盖本地 |
 | 复习页发现孤儿 | `POST /forget` | 兜底清理（见 3.5） |
 
-注意 `toggle` 用的是**平台通用状态面**而不是插件自己的端点 —— 于是「开关」这件事在平台上
-对所有插件是同构的（批量查询、停用闸门、状态通知都复用同一套），插件不用自己实现一遍。
+`toggle` 与排期操作都走记忆曲线自己的端点；平台只负责插件级启停与端点闸门，不参与卡片状态存储。
 
 ### 3.5 复习页（`ReviewView.vue`，440 行）
 
@@ -189,11 +187,9 @@ NoteCard 渲染卡片时：
 - **插件被全局停用时**不假装「没有到期的卡片」，而是说明原因并给出到设置页的入口 ——
   这类"安静的误导"比报错更糟。
 
-### 3.6 卡片徽标（`MemoryCurveTool.vue`，302 行）
+### 3.6 卡片状态图标（`MemoryCurveTool.vue`）
 
-三种形态一眼可辨：未开启 → 悬停才淡入的 🧠 占位；已开启 → **常驻徽标**
-（`已到期` 高亮 / `N 天后` / `N 分钟后` 倒计时）；点击 → 复习浮层
-（四档评分 + 各档间隔预览 + 难度 ease + 遗忘曲线 `R(t)=e^(-t/S)` 的 SVG，S 取当前间隔天数）。
+右上角始终只显示一个状态图标：灰色表示未开启，红色表示已开启。点击图标或右键菜单都可开启/关闭记忆周期；评分与复习操作在「复习」页面完成，卡片图标不再打开浮层。
 
 ---
 
@@ -206,18 +202,17 @@ NoteCard 渲染卡片时：
 | 运行期提供 | `GET /plugin-assets/memory-curve/plugin.js` | **界面侧静态服务**提供（开发期：宿主 dev server 的中间件从 `frontend/runtime/plugins/` 端出）；闸门在装载器（停用即不装载） |
 | 开发期 | `frontend/plugins/memory-curve` dev server: **7112** | 端口约定见 `host/src/plugins/devPorts.ts`；没起则自动回退到交付产物 |
 
-> 排期文件是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-curve/scheduling.meta`。
+> 排期与卡片开关文件都是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-curve/scheduling.meta` 和 `enabled-cards.properties`。
 
 ---
 
 ## 5. 一次完整流程（把上面的机制串起来）
 
 ```
-① 用户点某张卡片的 🧠
-   pluginApi.setState(memory-curve, block, id, true)
-     → 平台写 plugin-data.json
-     → 平台回调 MemoryCurvePlugin.onEntityStateChanged(block, id, true)
-        → SrsService.createIfAbsent(id)：写一条 dueAt=now 的排期
+① 用户右键卡片并选「开启记忆周期」（或点灰色图标）
+   POST /api/plugins/memory-curve/state?cardId=id&value=true
+     → EnabledCardsStore 写入 enabled-cards.properties
+     → SrsService.createIfAbsent(id)：写一条 dueAt=now 的排期
    → 卡片徽标变「已到期」，侧栏「复习」徽标 +1
 
 ② 用户打开 /review（插件登记的路由）
@@ -239,8 +234,7 @@ NoteCard 渲染卡片时：
 
 ## 6. 这套模式的取舍（给插件作者的结论）
 
-1. **开关放平台、领域状态放自己**：per-entity 开关是平台能力（批量、闸门、通知都复用），
-   领域数据是插件隐私（算法演进不惊动平台）。
+1. **业务状态由插件自己管理**：开关和领域数据都写入插件自己的文件；平台只管理插件级启停并拦截停用插件的端点。
 2. **不依赖别的插件**要用「界面侧自己拼数据」来换：代价是最坏 N 个请求，收益是两端零契约、
    核心插件缺位也能启动。选择它的前提是数据量小（本地工具）。
 3. **跨插件事件必须走主容器**，并且**停止时摘监听器** —— 这两条是踩出来的，不是文档里读来的。
@@ -251,12 +245,11 @@ NoteCard 渲染卡片时：
 
 ## 7. 它用到的 plugin-api 契约清单
 
-后端（唯一的 PF4J 扩展点，见 `plugin-api`）：`PluginRegister`（显示名/说明/健康/状态回调都在它一个接口上）·
-`PluginDataRepository`（状态 KV）·
-`CardChangedEvent`（跨插件事件）· `PluginDataRepository.importBean` 搭桥
+后端（唯一的 PF4J 扩展点，见 `plugin-api`）：`PluginRegister`（显示名/说明/健康）·
+`PropertiesFileUtils`（通用文件工具）· `CardChangedEvent`（跨插件消息）
 
 界面侧：`registerCardPlugin` · `registerNavEntry` · `registerPluginRoute` · `unregisterPlugin` ·
-`pluginApi.setState` · `host()`（`notify` / `MarkdownView`）· `http` · `isPluginActive` · `refreshPluginAvailability`
+插件自己的 `memoryCurveApi` · `host()`（`notify` / `MarkdownView`）· `http` · `isPluginActive` · `refreshPluginAvailability`
 
 ---
 

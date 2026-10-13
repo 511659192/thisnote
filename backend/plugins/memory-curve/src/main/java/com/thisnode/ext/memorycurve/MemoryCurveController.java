@@ -36,6 +36,13 @@ public class MemoryCurveController {
         return srs.cardState(cardId);
     }
 
+    @PostMapping("/state")
+    public Map<String, Object> setState(@RequestParam String cardId,
+                                       @RequestParam boolean value) {
+        srs.setEnabled(cardId, value);
+        return Map.of("enabled", value);
+    }
+
     /** Grade a card: 1=忘记 2=困难 3=良好 4=简单. */
     @PostMapping("/review")
     public Map<String, Object> review(@RequestParam String cardId,

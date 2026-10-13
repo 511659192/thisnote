@@ -1,8 +1,9 @@
 package com.thisnode.ext.favorite;
 
-import com.thisnode.plugin.api.PluginDataRepository;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
@@ -12,19 +13,16 @@ import java.util.Map;
 /**
  * 收藏插件自己的端点：{@code /api/plugins/favorite/…}。
  *
- * <p>只有读——「收藏了哪些笔记」的开关本身走底座的通用 per-entity 面
- * （{@code POST /api/plugins/state/set?pluginId=favorite&entityId=…&value=…}），插件不必自己写一遍。
- *
- * <p>端点只回 id 列表：本插件不读笔记数据（因此不依赖核心插件），标题与预览由调用方拼。
+ * <p>收藏状态由本插件自己的文件与端点管理；这里只回 id，不读取笔记内容，因此不依赖核心插件。
  */
 @RestController
 @RequestMapping("/api/plugins/" + FavoritePlugin.PLUGIN_ID)
 public class FavoriteController {
 
-    private final PluginDataRepository pluginDataStore;
+    private final FavoriteStore favorites;
 
-    public FavoriteController(PluginDataRepository pluginDataStore) {
-        this.pluginDataStore = pluginDataStore;
+    public FavoriteController(FavoriteStore favorites) {
+        this.favorites = favorites;
     }
 
     /**
@@ -36,9 +34,21 @@ public class FavoriteController {
     @GetMapping("/notes")
     public List<Map<String, Object>> notes() {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (String id : pluginDataStore.enabledEntityIds(FavoritePlugin.PLUGIN_ID)) {
+        for (String id : favorites.favoriteNoteIds()) {
             out.add(Map.of("id", id));
         }
         return out;
+    }
+
+    @GetMapping("/state")
+    public Map<String, Boolean> state(@RequestParam String noteId) {
+        return Map.of("favorite", favorites.isFavorite(noteId));
+    }
+
+    @PostMapping("/state")
+    public Map<String, Boolean> setState(@RequestParam String noteId,
+                                         @RequestParam boolean value) {
+        favorites.setFavorite(noteId, value);
+        return Map.of("favorite", value);
     }
 }

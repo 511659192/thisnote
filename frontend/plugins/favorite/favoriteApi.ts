@@ -1,12 +1,9 @@
 import { http } from '@thisnode/plugin-api'
-import { pluginApi } from '@thisnode/plugin-api'
 
-/** 收藏插件自己的 API（开关本身走底座的通用 per-entity 面）。 */
+/** 收藏插件自己的 API 与状态。 */
 
 export interface FavoriteNote {
   id: string
-  title: string
-  preview: string
 }
 
 export const FAVORITE_PLUGIN_ID = 'favorite'
@@ -17,11 +14,15 @@ export const favoriteApi = {
 
   /** 某篇笔记是否被收藏。 */
   isFavorite: async (noteId: string): Promise<boolean> => {
-    const map = await pluginApi.states(FAVORITE_PLUGIN_ID, [noteId])
-    return map[noteId] === true
+    const state = await http.get<{ favorite: boolean }>(
+      `/api/plugins/${FAVORITE_PLUGIN_ID}/state`, { noteId },
+    )
+    return state.favorite
   },
 
   /** 收藏 / 取消收藏。 */
   setFavorite: (noteId: string, value: boolean) =>
-    pluginApi.setState(FAVORITE_PLUGIN_ID, noteId, value),
+    http.post<{ favorite: boolean }>(
+      `/api/plugins/${FAVORITE_PLUGIN_ID}/state`, {}, { noteId, value },
+    ),
 }

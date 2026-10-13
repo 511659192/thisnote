@@ -4,9 +4,7 @@ import com.alibaba.fastjson2.JSONFactory;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.support.config.FastJsonConfig;
 import com.alibaba.fastjson2.support.spring6.http.converter.FastJsonHttpMessageConverter;
-import com.thisnode.plugin.PluginDataRepository;
 import com.thisnode.plugin.PluginEndpointHandlerInterceptor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -16,7 +14,6 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -30,28 +27,6 @@ import java.util.List;
 @Configuration
 public class ThisnodeConfig {
 
-    /**
-     * 插件状态与配置：**一个 JSON 文件**（{@code <data-root>/plugin-data.json}）。
-     *
-     * <p>它的前身是 {@code plugin_data} 表 —— 笔记数据文件化之后，这是平台里最后一张被
-     * 真正读写的表，换成文件之后数据库里不再有任何被应用读写的表。文件只有两级
-     * （{@code pluginId → entityId → true}）：平台不解释实体是什么，也没有键名，可手工查看与修改，
-     * 改了下次请求即生效。
-     * 文件路径默认与保险库同级（{@code ~/.thisnode/}）：它不是笔记数据，不该混进保险库目录。
-     *
-     * <p>实现（{@link PluginDataRepository}）放在平台侧：契约模块保持零实现依赖。
-     *
-     * <p>Bean 的类型写成实现类而不是契约接口：平台内部（如 {com.thisnode.plugin.PluginStateService}）
-     * 注入的是这个文件存储本身，而插件拿到的仍是契约接口（实例可赋值给两者）。
-     * 两者同名不同包（{@code com.thisnode.plugin} / {@code …plugin.api}），写 import 时别选错。
-     */
-    @Bean
-    public PluginDataRepository pluginDataRepository(
-            @Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        return new PluginDataRepository(
-                Paths.get(dataRoot, "plugin-data.json"));
-    }
-
     @Bean
     public WebMvcConfigurer corsConfigurer(PluginEndpointHandlerInterceptor pluginGate) {
         return new WebMvcConfigurer() {
@@ -64,7 +39,7 @@ public class ThisnodeConfig {
                         .maxAge(3600);
             }
 
-            /** 停用的插件，其自有端点在这里被拦下；管理面（states/config/health/active）放行。 */
+            /** 停用的插件，其自有端点在这里被拦下；插件管理端点放行。 */
             @Override
             public void addInterceptors(InterceptorRegistry registry) {
                 registry.addInterceptor(pluginGate).addPathPatterns("/api/plugins/**");

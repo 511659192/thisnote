@@ -5,68 +5,30 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * 插件状态与配置的门面。
+ * 插件全局启停与管理信息的门面。
  *
  * <p><b>全局启停的真相源是 PF4J/SBP</b>，不是数据库：插件 jar 在不在、有没有被管理上停用，
  * 由 PF4J 的插件状态（以及它自己的停用名单 {@code plugins/disabled.txt}）决定。
  * 这里只做转发与通知，不再另存一份标记 —— 两份真相源迟早会打架。
  *
- * <p>插件自己的数据都在 {@link PluginDataRepository}（一个文件）：只有两级，「某插件记着哪些实体开着」。
- * 平台不解释实体是什么，也没有配置项这一层（早先的 {@code config} 分区已删——没有插件用过）。
- *
- * <p>状态翻转一律在这里通知插件，而不是在 REST 层：任何调用方（控制器、测试、将来的服务）都得到
- * 同一个生命周期——插件恰好在状态落定之后、且只被通知一次。
+ * <p>插件业务状态由插件自己的 API 与存储管理；平台只负责插件级启停与管理视图。
  */
 @Service
 public class PluginStateService {
 
     private static final Logger log = LoggerFactory.getLogger(PluginStateService.class);
 
-    private final PluginDataRepository store;
     private final PluginRegistry registry;
-
     private final org.springframework.beans.factory.ObjectProvider<org.pf4j.PluginManager> pluginManager;
-    public PluginStateService(PluginDataRepository store, PluginRegistry registry,
+
+    public PluginStateService(PluginRegistry registry,
                               org.springframework.beans.factory.ObjectProvider<org.pf4j.PluginManager> pluginManager) {
         this.pluginManager = pluginManager;
-        this.store = store;
         this.registry = registry;
-    }
-
-    // ------------------------------------------------------------------ per-entity
-
-    public boolean isEnabled(String pluginId, String entityId) {
-        return store.isEnabled(pluginId, entityId);
-    }
-
-    /**
-     * Enabled-ness for many entities at once, so a page of cards costs one query instead of one
-     * per card. Untouched ids come back {@code false}.
-     */
-    public Map<String, Boolean> enabledMap(String pluginId, List<String> entityIds) {
-        return store.enabledMap(pluginId, entityIds);
-    }
-
-    /**
-     * 某插件在某类实体上「开着」的全部 id。
-     *
-     * <p>方向与 {@link #enabledMap} 相反：那个问「这些实体里哪些开着」，这个问「开着的都有谁」——
-     * 插件画自己的列表（收藏页之类）用后者。
-     */
-    public List<String> enabledEntityIds(String pluginId) {
-        return store.enabledEntityIds(pluginId);
-    }
-
-    public void setEnabled(String pluginId, String entityId, boolean enabled) {
-        store.setEnabled(pluginId, entityId, enabled);
-        // Fired after the persist, so the hook's own reads observe the new state.
-        registry.entityStateChanged(pluginId, entityId, enabled);
     }
 
     // ------------------------------------------------------------------ 全局启停

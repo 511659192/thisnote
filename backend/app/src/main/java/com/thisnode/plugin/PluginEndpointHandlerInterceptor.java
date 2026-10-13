@@ -9,8 +9,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 停用插件的闸门。
  *
  * <p>「停用」如果只是把标志位置成 false、端点照样能调，那它就是个装饰。这个拦截器把
- * {@code /api/plugins/{id}/…} 里<b>插件自有</b>的请求挡在控制器之前；管理面
- * （{@code states} / {@code config} / {@code health} / {@code active}）必须放行，
+ * {@code /api/plugins/{id}/…} 里<b>插件自有</b>的请求挡在控制器之前；插件管理路径必须放行，
  * 否则用户停用之后再也点不回来。
  *
  * <p>未注册的插件 id 不拦——那种请求本来就该由控制器给出「未知插件」的答复，
@@ -61,7 +60,7 @@ public class PluginEndpointHandlerInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 允许的路径是「管理面」：状态、配置、健康、启停本身。
+     * 允许插件命名空间中保留给管理面的路径。
      */
     private boolean isManagementPath(String remainder) {
         if (remainder.isEmpty()) {

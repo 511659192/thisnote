@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes;
 
-import com.thisnode.plugin.api.PluginDataRepository;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -22,15 +21,13 @@ import org.pf4j.PluginWrapper;
 public class NotesPlugin extends SpringBootPlugin {
 
     public NotesPlugin(PluginWrapper wrapper) {
-        // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的
-        // configurer（要共享的东西走 SpringBootstrap.importBean），所以传空数组。
+        // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
         super(wrapper, new IPluginConfigurer[0]);
     }
 
     @Override
     protected SpringBootstrap createSpringBootstrap() {
-        return new SpringBootstrap(this, NotesStarter.class)
-                .importBean(PluginDataRepository.class);
+        return new SpringBootstrap(this, NotesStarter.class);
     }
 
 }

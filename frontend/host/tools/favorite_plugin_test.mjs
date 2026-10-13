@@ -56,8 +56,8 @@ const legacy = await api('POST', `/api/notes/${list.body[0].id}/favorite?value=t
 check('核心的收藏端点已移除', !legacy.ok, `HTTP ${legacy.status}`)
 
 // 挑一篇没被收藏的笔记来测
-const before = await api('GET', `/api/plugins/${PLUGIN}/entities?entityType=note`)
-const favorited = new Set(before.body ?? [])
+const before = await api('GET', `/api/plugins/${PLUGIN}/notes`)
+const favorited = new Set((before.body ?? []).map((note) => note.id))
 const all = await api('GET', '/api/notes?limit=50')
 const target = all.body.find((n) => !favorited.has(n.id)) ?? all.body[0]
 

@@ -177,13 +177,6 @@ const GRADES: { grade: Grade; label: string }[] = [
       <h2>复习</h2>
       <span v-if="queue.length" class="rv-progress">{{ queue.length }} 张待复习</span>
       <div class="spacer"></div>
-      <button
-        v-if="queue.length"
-        class="btn sm ghost"
-        @click="toggleSelectAll"
-      >
-        {{ allSelected ? '取消全选' : '全选' }}
-      </button>
       <button class="btn sm ghost" @click="router.push('/notes')">返回笔记</button>
     </header>
 

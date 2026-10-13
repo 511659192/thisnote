@@ -67,14 +67,19 @@ function watchSentinel() {
   sentinelObserver.observe(el)
 }
 
-// 插件底座：卡片集合变化时，让各插件批量装载自己的每卡片状态（每页一次请求）。
+// 插件底座：卡片集合或插件注册变化时，批量装载对应状态（每页一次请求）。
+// 插件微应用可能晚于笔记页挂载；也要监听插件实例替换，避免热重载后状态没补拉。
 // 只问仍在运行的插件——被停用的插件其端点会被拒绝，问了也只是白打一串 409。
 watch(
-  () => page.cards.map((b) => b.card.cardId).join(','),
-  (ids) => {
+  [
+    () => page.cards.map((b) => b.card.cardId).join(','),
+    () => activeCardPlugins(),
+  ],
+  ([ids]) => {
     if (!ids) return
+    const cardIds = ids.split(',')
     for (const plugin of activeCardPlugins()) {
-      void plugin.loadState(ids.split(',')).catch(() => undefined)
+      void plugin.loadState(cardIds).catch(() => undefined)
     }
   },
   { immediate: true },

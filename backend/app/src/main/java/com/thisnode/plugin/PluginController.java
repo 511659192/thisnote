@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 插件管理面：列表、全局启停、健康，以及通用的 per-entity 状态。
+ * 插件管理面：列表、全局启停与健康；各插件的业务状态由各自端点负责。
  *
  * <p>URL 约定：<b>非 RESTful</b> —— 只有 GET（读）与 POST（写 + 动作路径），没有任何路径
  * 变量，标识一律走 {@code @RequestParam}（插件 id 用 {@code pluginId}）。
@@ -26,7 +26,7 @@ public class PluginController {
 
     /** 管理面用到的子路径；插件自有端点不得占用这些名字。 */
     static final List<String> MANAGEMENT_SEGMENTS =
-            List.of("detail", "states", "state", "entities", "health", "active", "reload");
+            List.of("detail", "health", "active", "reload");
 
     private final PluginRegistry registry;
     private final PluginStateService states;
@@ -75,54 +75,5 @@ public class PluginController {
     public PluginHealth health(@RequestParam String pluginId) {
         registry.get(pluginId);
         return states.healthOf(pluginId);
-    }
-
-    // ------------------------------------------------------------------ per-entity 状态
-
-    /** Enabled-ness for a batch of entities, so a page of cards costs one request. */
-    @GetMapping("/states")
-    public Map<String, Boolean> states(@RequestParam String pluginId,
-                                       @RequestParam List<String> ids) {
-        registry.get(pluginId);
-        return states.enabledMap(pluginId, ids);
-    }
-
-    /**
-     * 「开着这个插件的实体都有谁」——方向与 /states 相反。
-     *
-     * <p>插件画自己的列表时用（收藏页要知道收藏了哪些笔记）：状态只存 id，
-     * 具体内容由插件通过门面回核心取。
-     */
-    @GetMapping("/entities")
-    public List<String> entities(@RequestParam String pluginId) {
-        registry.get(pluginId);
-        return states.enabledEntityIds(pluginId);
-    }
-
-    /**
-     * 单个实体的开关状态。
-     *
-     * <p>与上面两个「批量」面互补：这里问一个，{@code /states} 问一批。
-     */
-    @GetMapping("/state")
-    public Map<String, Object> state(@RequestParam String pluginId,
-                                     @RequestParam String entityId) {
-        registry.get(pluginId);
-        return Map.of("enabled", states.isEnabled(pluginId, entityId), "active",
-                states.isActive(pluginId));
-    }
-
-    /**
-     * 翻转一个实体的开关（卡片上的 🧠、笔记上的 ★ 都走这里）。
-     *
-     * <p>钩子在状态服务内部触发，所以「落盘」与「通知插件」不会各自漂移；这里只校验插件存在。
-     */
-    @PostMapping("/state/set")
-    public Map<String, Object> setState(@RequestParam String pluginId,
-                                        @RequestParam String entityId,
-                                        @RequestParam boolean value) {
-        registry.get(pluginId);
-        states.setEnabled(pluginId, entityId, value);
-        return Map.of("enabled", value);
     }
 }

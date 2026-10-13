@@ -50,6 +50,10 @@ export const memoryCurveApi = {
     http.get<MemoryCurveCardState[]>(
       `/api/plugins/memory-curve/cards?ids=${ids.join(',')}`,
     ),
+  setEnabled: (cardId: string, value: boolean) =>
+    http.post<{ enabled: boolean }>(
+      `/api/plugins/memory-curve/state`, {}, { cardId, value },
+    ),
   review: (cardId: string, grade: Grade) =>
     http.post<{ enabled: boolean; schedule: ScheduleView }>(
       `/api/plugins/memory-curve/review`, { grade }, { cardId },
@@ -82,7 +86,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     const pages = await Promise.all(batch.map(async (note) => {
       try {
         const page = await http.get<{
-          cards: Array<{ card: { cardId: string }; contentMd: string }>
+          cards: Array<{ meta: { cardId: string }; content: string }>
         }>('/api/notes/cards', { noteId: note.noteId })
         return { note, page }
       } catch {
@@ -91,11 +95,12 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     }))
     for (const item of pages) {
       if (!item) continue
-      for (const view of item.page.cards) {
-        if (want.has(view.card.cardId) && !found.has(view.card.cardId)) {
-          found.set(view.card.cardId, {
+      for (const card of item.page.cards) {
+        const cardId = card.meta.cardId
+        if (want.has(cardId) && !found.has(cardId)) {
+          found.set(cardId, {
             noteTitle: item.note.title,
-            contentMd: view.contentMd,
+            contentMd: card.content,
           })
         }
       }

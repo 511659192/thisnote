@@ -1,7 +1,6 @@
 package com.thisnode.ext.memorycurve;
 
 import com.thisnode.ext.memorycurve.api.dto.ScheduleView;
-import com.thisnode.plugin.api.PluginDataRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,8 +36,6 @@ import java.util.Properties;
 @org.springframework.stereotype.Service
 public class SrsService {
 
-    public static final String PLUGIN_ID = "memory-curve";
-
     /** Short steps a card walks before graduating into day-scale review (Anki's 1m/10m). */
     private static final long[] LEARNING_STEPS_MS = {60_000L, 600_000L};
 
@@ -60,30 +57,25 @@ public class SrsService {
     private static final Logger log = LoggerFactory.getLogger(SrsService.class);
 
     /**
-     * 排期存放在**本插件自己的 meta 文件**里（{@code <data-root>/plugins/memory-curve/scheduling.meta}，
-     * Properties 格式：{@code cardId|字段 = 值}）。
+     * 排期存放在本插件自己的 {@code scheduling.meta}，卡片开关存放在 {@code enabled-cards.properties}。
      *
      * <p>本插件因此是「纯状态管理器」：只管排期与开关，**不读笔记内容**，也不依赖核心插件 ——
      * 核心插件缺位时它照样能独立启动。代价是卡片被删后条目会残留（没有通知机制能感知），
      * 所以 due 列表把它们原样返回，由界面侧跳过（卡片内容由界面侧自己取）。
      */
-    private final PluginDataRepository store;
+    private final EnabledCardsStore enabledCards;
     private final Path file;
     private Map<String, CardSchedule> schedules;
 
-    public SrsService(PluginDataRepository store,
+    public SrsService(EnabledCardsStore enabledCards,
                       @org.springframework.beans.factory.annotation.Value(
                               "${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.store = store;
+        this.enabledCards = enabledCards;
         this.file = Paths.get(dataRoot, "plugins", "memory-curve", "scheduling.meta");
     }
 
-    /**
-     * 直接问插件数据，而不是走 {@code PluginStateService}：那个服务负责把状态翻转通知给插件，
-     * 而本插件正是被通知的一方 —— 直接注入就是 Spring 装不出来的环。所以读它的另一半（面向插件的读写面）。
-     */
     private boolean enabled(String cardId) {
-        return store.isEnabled(PLUGIN_ID, cardId);
+        return enabledCards.isEnabled(cardId);
     }
 
     /** Enabled + schedule for one card. Schedule is {@code null} until the first review. */
@@ -116,8 +108,16 @@ public class SrsService {
         return s;
     }
 
+    /** Enable or disable a card; disabling preserves its schedule history. */
+    public void setEnabled(String cardId, boolean enabled) {
+        enabledCards.setEnabled(cardId, enabled);
+        if (enabled) {
+            createIfAbsent(cardId);
+        }
+    }
+
     /** First grade on a freshly enabled card: a new schedule due immediately. */
-    public void createIfAbsent(String cardId) {
+    private void createIfAbsent(String cardId) {
         if (load(cardId) != null) {
             return;
         }

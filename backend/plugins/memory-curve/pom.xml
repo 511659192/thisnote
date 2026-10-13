@@ -17,7 +17,7 @@
     <plugin.id>memory-curve</plugin.id>
   </properties>
 
-  <description>记忆曲线插件：参考 Anki 的 SM-2 间隔重复，按卡片安排复习</description>
+  <description>记忆曲线插件：独立存储卡片开关与排期，参考 Anki 的 SM-2 间隔重复</description>
 
   <!--
     依赖面 = 契约 + 插件侧共享支持 + SBP —— 这就是「独立构件」的全部含义：本模块的 classpath 里

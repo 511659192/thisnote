@@ -9,7 +9,7 @@ import org.pf4j.PluginWrapper;
  * 记忆曲线插件：thisnote 的**卡片插件**参考实现（参考 Anki 的 SM-2 间隔重复）。
  *
  * <p>它的状态全在本插件自己的文件里：排期写在 {@code plugins/memory-curve/scheduling.meta}，
- * 开关用的是底座的 per-entity 状态（同样是文件）。它**不依赖核心插件**，也不读笔记内容 ——
+ * 卡片开关写在 {@code plugins/memory-curve/enabled-cards.properties}。它**不依赖核心插件**，也不读笔记内容 ——
  * 核心插件缺位时它照样能独立启动。开启某张卡片会立刻建一条到期记录，于是马上可复习；
  * 停用保留记录，历史不丢。
  *
@@ -17,28 +17,26 @@ import org.pf4j.PluginWrapper;
  */
 public class MemoryCurvePlugin extends SpringBootPlugin {
 
-    /** 端点前缀与数据分区用的 id；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
+    /** 端点前缀；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "memory-curve";
 
     /** 注册到主容器的排期清理器（停止时要摘掉，见 {@link #stop()}）。 */
     private SchedulingListener listener;
 
     public MemoryCurvePlugin(PluginWrapper wrapper) {
-        // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的
-        // configurer（要共享的东西走 SpringBootstrap.importBean），所以传空数组。
+        // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
         super(wrapper, new IPluginConfigurer[0]);
     }
 
     /**
-     * 插件自己的 Spring 引导：扫描本包（控制器/服务），并把平台的状态存储与数据源共享进插件容器
-     * —— 插件与平台之间只有 plugin-api 这层契约，容器之间由 SBP 显式搭桥。
+     * 插件自己的 Spring 引导：扫描本包（控制器/服务）；业务状态由本插件管理，
+     * 与平台之间仅通过必要的插件契约和事件协作。
      *
      * <p>这里**不再**导入 {@code NoteGateway}：本插件不读笔记数据，也就不依赖核心插件。
      */
     @Override
     protected SpringBootstrap createSpringBootstrap() {
-        return new SpringBootstrap(this, MemoryCurveStarter.class)
-                .importBean(com.thisnode.plugin.api.PluginDataRepository.class);
+        return new SpringBootstrap(this, MemoryCurveStarter.class);
     }
 
     /**

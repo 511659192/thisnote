@@ -83,8 +83,16 @@ function onVisibility() {
 /** 插件提供的列表筛选（例如「收藏」）：和核心的「全部笔记」同级，只是给同一份列表加一个条件。 */
 /** 侧栏只渲染可见筛选：hidden 的筛选（如搜索框）由插件自己的 UI 激活，不占侧栏行。 */
 const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters().filter((f) => !f.hidden))
+const activePluginFilter = computed<NoteListFilter | null>(() => {
+  const active = activeListFilter_()
+  if (!active) return null
+  return pluginFilters.value.find(
+    (filter) => filter.pluginId === active.pluginId && filter.id === active.filterId,
+  ) ?? null
+})
 
 function openPluginFilter(filter: NoteListFilter) {
+  nodes.showAll()
   setActiveListFilter(filter.pluginId, filter.id)
   void router.push('/notes')
 }
@@ -99,15 +107,6 @@ function openNotebook(id: string) {
   clearActiveListFilter()
   nodes.openGroup(id)
   void router.push('/notes')
-}
-
-async function createNote() {
-  if (router.currentRoute.value.path !== '/notes') {
-    const failure = await router.push('/notes')
-    if (failure) return
-  }
-  const detail = await nodes.createNode({ notebookId: nodes.activeNotebookId ?? undefined })
-  if (detail) await router.push(`/notes/${detail.noteId}`)
 }
 
 // ---------------------------------------------------------------- 分组列表
@@ -200,17 +199,11 @@ watch(
 
 <template>
   <aside class="sidebar-panel">
-    <div class="section">
-      <button class="new-note" @click="createNote">
-        <span class="plus">＋</span>
-        <span>新建笔记</span>
-      </button>
-    </div>
     <nav class="section scroll">
       <div class="group-title">笔记</div>
       <button
         class="nav-item"
-        :class="{ active: !isPluginPage && !nodes.activeNotebookId }"
+        :class="{ active: !isPluginPage && !nodes.activeNotebookId && !activePluginFilter }"
         @click="openAll()"
       >
         <!-- 图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
@@ -247,7 +240,7 @@ watch(
         v-for="pf in pluginFilters"
         :key="pf.id"
         class="nav-item"
-        :class="{ active: !isPluginPage && activeListFilter_()?.filterId === pf.id }"
+        :class="{ active: !isPluginPage && activePluginFilter?.pluginId === pf.pluginId && activePluginFilter?.id === pf.id }"
         @click="openPluginFilter(pf)"
       >
         <span class="ico">{{ pf.icon || '★' }}</span>
@@ -308,25 +301,6 @@ watch(
   overflow-y: auto;
   min-height: 0;
   padding-bottom: var(--space-3);
-}
-
-.new-note {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 7px 10px;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 500;
-}
-.new-note:hover {
-  filter: brightness(1.07);
-}
-.new-note .plus {
-  font-size: 15px;
 }
 
 .group-title {

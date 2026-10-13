@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import { activeNoteTools, primaryLabel, toast } from '@thisnode/plugin-api'
+import { activeCardPlugins, activeNoteTools, primaryLabel, toast } from '@thisnode/plugin-api'
 import { usePageStore } from '@/stores/notePage'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
@@ -235,8 +235,22 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
   const entries: MenuEntry[] = []
   if (p.target === 'card' && p.view) {
     const view = p.view
+    const cardId = view.card.cardId
+    entries.push({ label: '编辑卡片内容', action: () => void pageRef.value?.beginEdit(view) })
+    const cardPlugins = activeCardPlugins()
+    if (cardPlugins.length) {
+      entries.push({ separator: true })
+      for (const plugin of cardPlugins) {
+        const enabled = plugin.isEnabled(cardId)
+        entries.push({
+          label: `${enabled ? '关闭' : '开启'}${plugin.title}`,
+          action: () => {
+            void plugin.toggle(cardId).catch((e) => toast((e as Error).message, 'error'))
+          },
+        })
+      }
+    }
     entries.push(
-      { label: '编辑卡片内容', action: () => void pageRef.value?.beginEdit(view) },
       { separator: true },
       { label: '删除卡片', danger: true, action: () => requestDeleteCard(view) },
     )

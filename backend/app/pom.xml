@@ -46,7 +46,7 @@
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- fastjson2：平台自己的 JSON（插件状态文件的读写 + HTTP 的 JSON）。 -->
+    <!-- fastjson2：HTTP JSON 转换器所需的平台 JSON 库。 -->
     <dependency>
       <groupId>com.alibaba.fastjson2</groupId>
       <artifactId>fastjson2</artifactId>

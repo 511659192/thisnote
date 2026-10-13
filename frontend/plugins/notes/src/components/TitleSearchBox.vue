@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { clearActiveListFilter, setActiveListFilter } from '@thisnode/plugin-api'
+import { useNoteStore } from '@/stores/notes'
 import { FILTER_ID, PLUGIN_ID, matchCount, query as queryState, setQuery } from '../stores/titleSearch'
 
 /**
@@ -12,6 +14,8 @@ import { FILTER_ID, PLUGIN_ID, matchCount, query as queryState, setQuery } from 
  */
 const query = queryState
 const inputEl = ref<HTMLInputElement | null>(null)
+const nodes = useNoteStore()
+const router = useRouter()
 let timer: number | null = null
 
 watch(query, (q) => {
@@ -27,6 +31,15 @@ watch(query, (q) => {
   }, 250)
 })
 
+async function createNote() {
+  if (router.currentRoute.value.path !== '/notes') {
+    const failure = await router.push('/notes')
+    if (failure) return
+  }
+  const detail = await nodes.createNode({ notebookId: nodes.activeNotebookId ?? undefined })
+  if (detail) await router.push(`/notes/${detail.noteId}`)
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     query.value = ''
@@ -36,24 +49,37 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="title-search" :class="{ filled: !!query }">
-    <span class="ico">🔍</span>
-    <input
-      ref="inputEl"
-      v-model="query"
-      class="input"
-      type="text"
-      placeholder="按标题搜索…"
-      spellcheck="false"
-      @keydown.esc="onKeydown"
-    />
-    <span v-if="query && matchCount !== null" class="count">{{ matchCount }} 篇</span>
-    <button v-if="query" class="clear" title="清空 (Esc)" @click="query = ''">×</button>
+  <div class="title-search-row">
+    <div class="title-search" :class="{ filled: !!query }">
+      <span class="ico">🔍</span>
+      <input
+        ref="inputEl"
+        v-model="query"
+        class="input"
+        type="text"
+        placeholder="按标题搜索…"
+        spellcheck="false"
+        @keydown.esc="onKeydown"
+      />
+      <span v-if="query && matchCount !== null" class="count">{{ matchCount }} 篇</span>
+      <button v-if="query" class="clear" title="清空 (Esc)" @click="query = ''">×</button>
+    </div>
+    <button class="new-note" type="button" title="新建笔记" @click="createNote">
+      <span class="plus">＋</span>
+      <span>新建笔记</span>
+    </button>
   </div>
 </template>
 
 <style scoped>
+.title-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .title-search {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -71,6 +97,27 @@ function onKeydown(e: KeyboardEvent) {
   border-color: var(--accent);
   background: var(--c-surface);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.new-note {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.new-note:hover {
+  filter: brightness(1.07);
+}
+.new-note .plus {
+  font-size: 15px;
+  line-height: 1;
 }
 .title-search .ico {
   flex: 0 0 auto;

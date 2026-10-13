@@ -5,7 +5,7 @@ import com.thisnode.plugin.api.PluginRegister;
 import org.pf4j.Extension;
 
 /**
- * 插件向平台贡献的全部能力（唯一的 PF4J 扩展点）：显示名/说明/健康 + 可选的状态回调。
+ * 插件向平台贡献的管理信息（唯一的 PF4J 扩展点）：显示名、说明与健康状态。
  *
  * <p>只需 {@code @Extension}：PF4J 的注解处理器把它写进 {@code META-INF/extensions.idx}，
  * SBP 的扩展工厂反射实例化（需要无参构造）。**要注入插件自己的服务时才加** {@code @Component}
@@ -21,7 +21,7 @@ public class FavoriteRegister implements PluginRegister {
 
     @Override
     public PluginHealth health() {
-        return PluginHealth.ok("收藏状态存于插件数据，可随插件启停");
+        return PluginHealth.ok("收藏状态存于本插件的独立文件");
     }
 
     @Override

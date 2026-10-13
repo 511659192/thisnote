@@ -20,9 +20,7 @@
   <description>收藏插件：笔记级的 ★ 收藏（实体插件参考实现）</description>
 
   <!--
-    依赖面 = 契约 + 插件侧共享支持（插件基类）+ SBP。它没有自己的表 —— 收藏是纯 per-entity 状态，
-    落在盆底的 plugin_data 里；唯一的一次性迁移负责把核心原来的 nodes.favorite 搬过来并删掉那一列。
-    没有 mapper，所以不需要 MyBatis。依赖版本一律由父 pom 锁，运行期由主应用提供。
+    收藏状态由插件自己写入独立文件；没有 mapper，所以不需要 MyBatis。依赖版本一律由父 pom 锁，运行期由主应用提供。
   -->
   <dependencies>
     <dependency>

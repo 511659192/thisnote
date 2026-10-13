@@ -182,12 +182,4 @@ public class PluginRegistry {
             register.onGlobalStateChanged(enabled);
         }
     }
-
-    /** 通知插件的 per-entity 状态翻转（没有提供扩展就跳过）。 */
-    public void entityStateChanged(String pluginId, String entityId, boolean enabled) {
-        PluginRegister register = register(pluginId);
-        if (register != null) {
-            register.onEntityStateChanged(entityId, enabled);
-        }
-    }
 }
