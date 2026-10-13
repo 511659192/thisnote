@@ -8,6 +8,7 @@ import com.thisnode.ext.notes.domain.NoteMeta;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
+import com.thisnode.plugin.api.CardChangedEvent;
 import com.thisnode.plugin.api.NoteChangedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -61,6 +62,9 @@ public class NoteService {
 
             noteRepository.onNewTitle(meta, title);
             cardRepository.renameFiles(meta.getCardIds(), title);
+            for (String cardId : meta.getCardIds()) {
+                publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
+            }
             publisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TITLE_CHANGED, title, List.of()));
         }
         return meta;
@@ -80,6 +84,9 @@ public class NoteService {
         cardRepository.delete(deletedCardIds);
         noteRepository.delete(id);
         try {
+            for (String cardId : deletedCardIds) {
+                publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED));
+            }
             publisher.publishEvent(new NoteChangedEvent(id, NoteChangedEvent.Kind.DELETED, meta.getTitle(), deletedCardIds));
         } finally {
             attachmentService.deleteIfUnreferenced(removedAttachments);

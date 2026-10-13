@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-14 — 硬规则：插件改名需覆盖契约和模块身份
+- **纠正来源：** 用户在 MemoryCurve 改名为 MemoryCycle 时补充指出，除业务类和显示文案外，还需同步 module 名称与 plugin-api 事件类型。
+- **可核验事实：** 本次改名前，Maven 坐标和 workspace 包名仍为 `plugin-memory-curve` / `@thisnode/plugin-memory-curve`，跨插件事件仍定义为 `MemoryCurveStateChangedEvent` 并被插件监听器引用。
+- **下次执行规则：** 插件全量改名必须搜索并处理插件 ID、API、资源与数据路径、Maven/PNPM module 名、plugin-api 公共事件类型及其所有消费者；同步检查物理目录、workspace 与 lockfile，并在交付前搜索旧命名。
+
 ## 2026-10-13 — 核对创建请求正文契约
 - **纠正来源：** 用户反馈笔记明细页粘贴只创建空白卡片，剪贴板文字和图片未写入卡片。
 - **可核验事实：** 前端 `notePage.ts` 创建卡片请求此前发送 `contentMd`；后端 `CreateCardRequest` 的 JSON 字段是 `content`，构造器会把未提供的正文设为空字符串。

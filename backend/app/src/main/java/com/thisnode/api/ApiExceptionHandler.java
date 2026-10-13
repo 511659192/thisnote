@@ -65,7 +65,7 @@ public class ApiExceptionHandler {
         return body(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
-    /** "资源在，但状态不对"（如给未开启记忆曲线的卡片评分）：客户端可自行纠正。 */
+    /** "资源在，但状态不对"（如给未开启记忆周期的卡片评分）：客户端可自行纠正。 */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, Object>> conflict(IllegalStateException e) {
         return body(HttpStatus.CONFLICT, e.getMessage());

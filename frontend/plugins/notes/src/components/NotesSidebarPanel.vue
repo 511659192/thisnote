@@ -30,7 +30,7 @@ const router = useRouter()
 const route = useRoute()
 
 /**
- * 侧栏的插件入口（原来是硬编码的「复习」按钮 —— 那等于让核心认识记忆曲线插件）。
+ * 侧栏的插件入口（原来是硬编码的「复习」按钮 —— 那等于让核心认识记忆周期插件）。
  * 现在只面向注册器：入口由插件登记，徽标数量由插件自己算，这里一个具体插件都不认识。
  */
 const pluginNav = computed(() => activeNavEntries())

@@ -24,7 +24,7 @@
 
   <modules>
     <module>plugin-api</module>
-    <module>plugins/memory-curve</module>
+    <module>plugins/memory-cycle</module>
     <module>plugins/notes</module>
     <module>plugins/favorite</module>
     <module>app</module>
@@ -49,7 +49,7 @@
       </dependency>
       <dependency>
         <groupId>com.thisnode</groupId>
-        <artifactId>plugin-memory-curve</artifactId>
+        <artifactId>plugin-memory-cycle</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

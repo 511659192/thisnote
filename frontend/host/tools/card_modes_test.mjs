@@ -46,9 +46,9 @@ async function api(method, path, body) {
 const RUN = Date.now().toString().slice(-6)
 const created = []
 
-// 工具行元素计数包含记忆曲线的卡片徽标，所以先确保该插件处于启用状态
+// 工具行元素计数包含记忆周期的卡片徽标，所以先确保该插件处于启用状态
 // （插件被停用时徽标会被界面侧隐藏，元素数就少一个 —— 那是另一个测试的情形）。
-await api('PUT', '/api/plugins/memory-curve/active?value=true').catch(() => undefined)
+await api('PUT', '/api/plugins/memory-cycle/active?value=true').catch(() => undefined)
 
 async function newNote(title, contentMd = '') {
   const note = await api('POST', '/api/notes', { title: `${title}-${RUN}`, contentMd: '' })
@@ -203,7 +203,7 @@ try {
         bodyTopGap: bodyBox ? Math.round(bodyBox.top - cardBox.top) : null,
       }
     })
-    check('工具行元素齐全（3 个模式按钮 + 折叠按钮 + 记忆曲线徽标）', overlap.count === 5, `${overlap.count} 个`)
+    check('工具行元素齐全（3 个模式按钮 + 折叠按钮 + 记忆周期徽标）', overlap.count === 5, `${overlap.count} 个`)
     check('工具行元素互不重叠', overlap.hits.length === 0, overlap.hits.join(', ') || '无重叠')
     check('工具行都在卡片范围内', overlap.out === 0, `${overlap.out} 个溢出`)
     check('卡片内已无标题框（标题来自内容的 ## ）', overlap.cardTitleInputs === 0,
@@ -215,7 +215,7 @@ try {
     check('内容贴近卡片顶部（无过大间隔）',
       overlap.bodyTopGap !== null && overlap.bodyTopGap <= 12, `间隔 ${overlap.bodyTopGap}px`)
 
-    // 模式按钮/折叠按钮是隐藏式覆盖层；记忆曲线徽标在启用后必须**常驻**可见——
+    // 模式按钮/折叠按钮是隐藏式覆盖层；记忆周期徽标在启用后必须**常驻**可见——
     // 这就是开启与未开启肉眼可见的差异。透明度检查针对 .modes（容器本身不再淡入淡出）。
     const toolsOpacity = (sel) =>
       win.evaluate((s) => {

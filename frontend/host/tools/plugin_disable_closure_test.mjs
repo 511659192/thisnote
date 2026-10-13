@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 
 const API = process.env.THISNODE_API ?? 'http://127.0.0.1:45917'
 const APP = process.env.THISNODE_APP ?? 'http://localhost:5173'
-const PLUGIN = 'memory-curve'
+const PLUGIN = 'memory-cycle'
 const CANDIDATES = [
   (process.env.LOCALAPPDATA ?? '') + '\\ms-playwright\\chromium-1208\\chrome-win64\\chrome.exe',
 ]
@@ -90,7 +90,7 @@ async function reviewText() {
 await setActive(true)
 const on = await snapshot(false)
 check('启用时：侧栏有插件入口', on.nav === 1, `${on.nav} 个`)
-check('启用时：卡片有记忆曲线徽标', on.chip === 1, `${on.chip} 个`)
+check('启用时：卡片有记忆周期徽标', on.chip === 1, `${on.chip} 个`)
 
 // ---------------------------------------------------------------- 停用
 // 界面资源的请求计数：停用后装载器不该再拉这个插件（dev server 入口或 /plugin-assets 都算）

@@ -63,7 +63,7 @@ public class ThisnodeConfig {
                 converters.removeIf(c -> c instanceof MappingJackson2HttpMessageConverter);
                 JSONFactory.setDefaultWriterAlphabetic(false);
                 FastJsonConfig config = new FastJsonConfig();
-                // Map 的非字符串键（如记忆曲线的 gradePreview<1..4, 时间>）：fastjson2 默认写成 {1:…} 这种
+                // Map 的非字符串键（如记忆周期的 gradePreview<1..4, 时间>）：fastjson2 默认写成 {1:…} 这种
                 // **不带引号的裸键**（不是合法 JSON，前端 JSON.parse 直接报错），Jackson 一直是 "1"。
                 config.setWriterFeatures(JSONWriter.Feature.WriteNonStringKeyAsString);
                 FastJsonHttpMessageConverter fastjson = new FastJsonHttpMessageConverter();

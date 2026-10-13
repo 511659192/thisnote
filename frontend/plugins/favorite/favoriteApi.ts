@@ -10,7 +10,7 @@ export const FAVORITE_PLUGIN_ID = 'favorite'
 
 export const favoriteApi = {
   /** 收藏了哪些笔记（插件端点：状态只有 id，标题与预览由插件回核心取）。 */
-  notes: () => http.get<FavoriteNote[]>(`/api/plugins/${FAVORITE_PLUGIN_ID}/get-notes`),
+  notes: () => http.get<FavoriteNote[]>(`/api/plugins/${FAVORITE_PLUGIN_ID}/get-favorites`),
 
   /** 某篇笔记是否被收藏。 */
   isFavorite: async (noteId: string): Promise<boolean> => {

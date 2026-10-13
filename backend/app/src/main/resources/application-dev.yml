@@ -8,9 +8,9 @@
 #
 # 目录约定（由 backend/tools/dev_plugins.ps1 建立，应用从 backend/ 启动 → plugins-dev 在 backend/ 下）：
 #
-#   plugins-dev/memory-curve/
+#   plugins-dev/memory-cycle/
 #     ├── plugin.properties     <- 从 target/classes/plugin.properties 拷贝（描述符在插件目录根）
-#     └── classes -> plugin-memory-curve/target/classes   （目录联接）
+#     └── classes -> plugin-memory-cycle/target/classes   （目录联接）
 #
 # classes 直接联接到 Maven 的 target/classes，正好是 PF4J 开发模式的默认布局（`classes/`），
 # 所以这里**不需要** classes-directories / lib-directories（插件没有只属于自己 jar 的依赖）。

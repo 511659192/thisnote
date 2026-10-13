@@ -85,7 +85,7 @@ importers:
         specifier: ^6.2.6
         version: 6.4.3(@types/node@22.20.4)
 
-  plugins/memory-curve:
+  plugins/memory-cycle:
     dependencies:
       '@thisnode/plugin-api':
         specifier: workspace:*

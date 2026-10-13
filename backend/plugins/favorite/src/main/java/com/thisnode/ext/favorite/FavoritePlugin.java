@@ -34,7 +34,7 @@ public class FavoritePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        noteCleanupListener = new FavoriteNoteCleanupListener(ctx.getBean(FavoriteStore.class));
+        noteCleanupListener = new FavoriteNoteCleanupListener(ctx.getBean(FavoriteService.class));
         getMainApplicationContext().addApplicationListener(noteCleanupListener);
     }
 

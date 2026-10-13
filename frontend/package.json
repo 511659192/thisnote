@@ -5,6 +5,6 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "dev:host": "pnpm --filter thisnode-frontend dev",
-    "dev:plugins": "pnpm --filter @thisnode/plugin-favorite --filter @thisnode/plugin-memory-curve --parallel dev"
+    "dev:plugins": "pnpm --filter @thisnode/plugin-favorite --filter @thisnode/plugin-memory-cycle --parallel dev"
   }
 }

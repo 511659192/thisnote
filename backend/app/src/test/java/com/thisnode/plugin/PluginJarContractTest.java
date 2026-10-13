@@ -56,7 +56,7 @@ class PluginJarContractTest {
     @CsvSource({
             "notes,plugin-notes,notes,true",
             "favorite,plugin-favorite,favorite,true",
-            "memory-curve,plugin-memory-curve,memory-curve,true"
+            "memory-cycle,plugin-memory-cycle,memory-cycle,true"
     })
     void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasAssets) throws Exception {
         // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——

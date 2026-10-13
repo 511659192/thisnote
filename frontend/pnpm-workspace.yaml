@@ -2,7 +2,7 @@ packages:
   - 'host'
   - 'plugin-api'
   - 'plugins/favorite'
-  - 'plugins/memory-curve'
+  - 'plugins/memory-cycle'
   - 'plugins/notes'
 
 allowBuilds:

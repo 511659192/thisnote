@@ -26,7 +26,7 @@ import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stor
  *   <li><b>模糊搜索</b>：顶栏跨标题/摘要查询。两者随 notes 核心微应用一起装载。</li>
  * </ol>
  *
- * <p>favorite ★ 与 memory-curve 🧠 通过卡片工具/笔记工具/列表筛选插槽插进本域的视图 ——
+ * <p>favorite ★ 与 memory-cycle 🧠 通过卡片工具/笔记工具/列表筛选插槽插进本域的视图 ——
  * 注册表在共享的 @thisnode/plugin-api 实例里（shallowReactive），装载顺序无关。
  *
  * <p>本模块是一个 **qiankun 微应用**：注册动作放进 mount()（宿主停用/重载时 unmount()

@@ -19,7 +19,7 @@
     "paths": {
       "@/*": ["src/*"],
       "@thisnode/plugin-api": ["../../frontend-plugin-api/src/index.ts"],
-      "@plugin/memory-curve": ["../../plugin-memory-curve/frontend/index.ts"],
+      "@plugin/memory-cycle": ["../plugins/memory-cycle/index.ts"],
       "@plugin/favorite": ["../../plugin-favorite/frontend/index.ts"]
     }
   },

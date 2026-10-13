@@ -26,7 +26,7 @@ function collect(dir: string): string[] {
 describe('插件界面边界', () => {
   it('插件界面只依赖 @thisnode/plugin-api，不得引用核心内部路径', () => {
     const offenders: string[] = []
-    for (const plugin of ['memory-curve', 'favorite']) {
+    for (const plugin of ['memory-cycle', 'favorite']) {
       const dir = join(repoRoot, 'frontend', 'plugins', plugin)
       for (const file of collect(dir)) {
         const text = readFileSync(file, 'utf8')

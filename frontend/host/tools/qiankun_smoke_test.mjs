@@ -1,7 +1,7 @@
 /**
  * qiankun 微前端改造的冒烟测试：
  *  1. 宿主 5173 打开，无致命控制台错误；
- *  2. 记忆曲线微应用挂载 → 侧栏出现「🧠 复习」入口；
+ *  2. 记忆周期微应用挂载 → 侧栏出现「🧠 复习」入口；
  *  3. 深链接 #/review 渲染出插件页面（共享 vue-router 生效）；
  *  4. 收藏微应用挂载 → 新建笔记标题旁出现「☆ 收藏」工具；
  *  5. 停用/启用闭环走界面生命周期（不刷新页面）。
@@ -34,10 +34,10 @@ await page.waitForTimeout(3500) // 等后端探活 + 微应用 mount
 
 const qkMounts = await page.evaluate(() => document.querySelectorAll('#plugin-microapps [data-name], #plugin-microapps div').length)
 
-// 2. 侧栏「复习」入口（记忆曲线微应用注册）
+// 2. 侧栏「复习」入口（记忆周期微应用注册）
 const navReview = await page.locator('a:has-text("复习"), button:has-text("复习"), [title*="复习"]').count()
-if (navReview > 0) ok('记忆曲线微应用已挂载：侧栏出现「复习」入口')
-else failed('侧栏缺少「复习」入口（memory-curve 微应用未注册？）')
+if (navReview > 0) ok('记忆周期微应用已挂载：侧栏出现「复习」入口')
+else failed('侧栏缺少「复习」入口（memory-cycle 微应用未注册？）')
 
 // 3. 深链接 #/review（共享 vue-router + 插件路由）
 await page.goto(`${BASE}/#/review`, { waitUntil: 'domcontentloaded' })
@@ -66,7 +66,7 @@ await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1500)
 await page.locator('button:has-text("插件")').first().click()
 await page.waitForTimeout(1500)
-const mcToggle = page.locator('.plugin-card:has-text("记忆曲线") button:has-text("已启用"), .plugin-card:has-text("记忆曲线") button:has-text("已停用")').first()
+const mcToggle = page.locator('.plugin-card:has-text("记忆周期") button:has-text("已启用"), .plugin-card:has-text("记忆周期") button:has-text("已停用")').first()
 if (await mcToggle.isVisible().catch(() => false)) {
   const labelBefore = (await mcToggle.textContent())?.trim()
   page.once('dialog', (d) => d.accept()) // 停用有 window.confirm
@@ -80,7 +80,7 @@ if (await mcToggle.isVisible().catch(() => false)) {
   if (navGone && navBack && labelRestored) ok('停用/启用闭环：卸载撤走入口，再装载恢复（无整页刷新）')
   else failed('停用/启用闭环失败', `停用后入口消失=${navGone} 启用后恢复=${navBack} 状态恢复=${labelRestored}`)
 } else {
-  console.log('  （设置页找不到记忆曲线开关，跳过闭环检查）')
+  console.log('  （设置页找不到记忆周期开关，跳过闭环检查）')
 }
 
 // 6. 控制台错误（过滤插件 dev server 探活的正常 404/失败）

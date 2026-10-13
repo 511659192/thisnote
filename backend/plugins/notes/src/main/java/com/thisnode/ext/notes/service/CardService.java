@@ -55,6 +55,7 @@ public class CardService {
 
     public Card create(String noteId,
                        CreateCardRequest req) {
+        ApplicationEventPublisher publisher = requireMainEventPublisher();
         if (req.x() == null || req.y() == null) {
             throw new IllegalArgumentException("创建卡片需要 x/y 坐标（页面上的落点）");
         }
@@ -72,13 +73,16 @@ public class CardService {
         cardIds.add(card.getCardId());
         noteMeta.setCardIds(cardIds);
         noteRepository.save(noteMeta);
+        publisher.publishEvent(new CardChangedEvent(card.getCardId(), CardChangedEvent.Kind.CREATED));
         return new Card(card, content);
     }
 
-    public Card writeContent(String noteId,
-                             String cardId,
-                             String contentMd,
-                             String baseContentMd) {
+    // Card metadata and body share one Markdown file, so serialize their read-modify-write paths.
+    public synchronized Card writeContent(String noteId,
+                                          String cardId,
+                                          String contentMd,
+                                          String baseContentMd) {
+        ApplicationEventPublisher publisher = requireMainEventPublisher();
         NoteMeta noteMeta = noteContainingCard(noteId, cardId);
 
         Card card = cardRepository.getOne(cardId);
@@ -98,19 +102,21 @@ public class CardService {
         cardRepository.save(cardMeta, body, cardId);
         noteRepository.save(noteMeta);
         attachmentService.deleteIfUnreferenced(removedAttachments);
+        publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         Card saved = cardRepository.getOne(cardId);
         return saved == null ? new Card(cardMeta, body) : saved;
     }
 
-    public CardMeta update(String noteId,
-                           String cardId,
-                           UpdateCardRequest changes) {
+    public synchronized CardMeta update(String noteId,
+                                        String cardId,
+                                        UpdateCardRequest changes) {
         return update(noteService.get(noteId), cardId, changes);
     }
 
     private CardMeta update(NoteMeta noteMeta,
                             String cardId,
                             UpdateCardRequest changes) {
+        ApplicationEventPublisher publisher = requireMainEventPublisher();
         noteContainingCard(noteMeta, cardId);
         Card card = cardRepository.getOne(cardId);
         if (card == null || card.getMeta() == null) {
@@ -127,10 +133,11 @@ public class CardService {
         Optional.ofNullable(changes.status()).ifPresent(meta::setStatus);
         Optional.ofNullable(changes.collapsed()).ifPresent(meta::setCollapsed);
         cardRepository.save(meta, cardId);
+        publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         return meta;
     }
 
-    public void batchUpdate(BatchUpdateCardsRequest req) {
+    public synchronized void batchUpdate(BatchUpdateCardsRequest req) {
         NoteMeta note = noteService.get(req.noteId());
         for (UpdateCardRequest update : req.cards()) {
             if (update != null && update.cardId() != null) {
@@ -144,10 +151,7 @@ public class CardService {
         NoteMeta note = noteContainingCard(noteId, cardId);
         Card card = cardRepository.getOne(cardId);
 
-        ApplicationEventPublisher publisher = mainEventPublisher;
-        if (publisher == null) {
-            throw new IllegalStateException("主容器事件发布器尚未就绪");
-        }
+        ApplicationEventPublisher publisher = requireMainEventPublisher();
 
         Set<String> removedAttachments = AttachmentService.referencedFileNames(card == null ? "" : card.getContent());
 
@@ -155,6 +159,14 @@ public class CardService {
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
         noteRepository.save(note);
         publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED, removedAttachments));
+    }
+
+    private ApplicationEventPublisher requireMainEventPublisher() {
+        ApplicationEventPublisher publisher = mainEventPublisher;
+        if (publisher == null) {
+            throw new IllegalStateException("主容器事件发布器尚未就绪");
+        }
+        return publisher;
     }
 
     private NoteMeta noteContainingCard(String noteId,

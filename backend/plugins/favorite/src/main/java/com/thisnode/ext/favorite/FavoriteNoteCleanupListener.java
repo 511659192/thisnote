@@ -11,16 +11,16 @@ public class FavoriteNoteCleanupListener
 
     private static final Logger log = LoggerFactory.getLogger(FavoriteNoteCleanupListener.class);
 
-    private final FavoriteStore favorites;
+    private final FavoriteService favoriteService;
 
-    public FavoriteNoteCleanupListener(FavoriteStore favorites) {
-        this.favorites = favorites;
+    public FavoriteNoteCleanupListener(FavoriteService favoriteService) {
+        this.favoriteService = favoriteService;
     }
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<NoteChangedEvent> event) {
         NoteChangedEvent change = event.getPayload();
-        if (change.kind() == NoteChangedEvent.Kind.DELETED && favorites.removeFavorite(change.noteId())) {
+        if (change.kind() == NoteChangedEvent.Kind.DELETED && favoriteService.removeFavorite(change.noteId())) {
             log.info("笔记已删除，收藏记录一并清除：{}", change.noteId());
         }
     }

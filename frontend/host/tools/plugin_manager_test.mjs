@@ -19,7 +19,7 @@ const executablePath = CANDIDATES.find((p) => p && existsSync(p))
 let initialActive = true
 try {
   const plugins = await (await fetch(`${API}/api/plugins`)).json()
-  initialActive = plugins.find((p) => p.id === 'memory-curve')?.active ?? true
+  initialActive = plugins.find((p) => p.id === 'memory-cycle')?.active ?? true
 } catch (e) {
   console.log(`跳过：后端不可达（${e.message}）`)
   process.exit(0)
@@ -58,7 +58,7 @@ async function waitPluginActive(id, expected, timeoutMs = 20000) {
  * 就会把插件留在停用态并让后续套件连锁拿到 409 —— 所以必须无条件收尾。
  */
 async function ensureAllEnabled() {
-  for (const id of ['favorite', 'memory-curve']) {
+  for (const id of ['favorite', 'memory-cycle']) {
     try {
       const info = await (await fetch(`${API}/api/plugins/${id}`)).json()
       if (info.active !== true) {
@@ -93,52 +93,52 @@ const cards = panel.locator('.plugin-card')
 check('插件列表渲染了两个内置插件', (await cards.count()) >= 2, `${await cards.count()} 个`)
 
 const card = (title) => panel.locator('.plugin-card', { hasText: title })
-check('记忆曲线标为卡片插件',
-  (await card('记忆曲线').locator('.kind', { hasText: '卡片' }).count()) === 1)
+check('记忆周期标为卡片插件',
+  (await card('记忆周期').locator('.kind', { hasText: '卡片' }).count()) === 1)
 // 版本号不写死在测试里：它现在是**一处来源**（Maven 版本 → plugin.properties），
 // 所以断言"卡片显示的版本 == /api/plugins 报的版本"。
 const pluginsInfo = await (await fetch(`${API}/api/plugins`)).json()
 const versionOf = (id) => pluginsInfo.find((p) => p.id === id)?.version
 check('显示版本号（与 /api/plugins 一致）',
-  (await card('记忆曲线').locator('.mono', { hasText: `v${versionOf('memory-curve')}` }).count()) === 1,
-  `memory-curve=v${versionOf('memory-curve')}`)
+  (await card('记忆周期').locator('.mono', { hasText: `v${versionOf('memory-cycle')}` }).count()) === 1,
+  `memory-cycle=v${versionOf('memory-cycle')}`)
 check('显示健康状态与说明',
-  (await card('记忆曲线').locator('.health-ok').count()) === 1,
-  (await card('记忆曲线').locator('.health-ok').textContent())?.trim())
+  (await card('记忆周期').locator('.health-ok').count()) === 1,
+  (await card('记忆周期').locator('.health-ok').textContent())?.trim())
 
 // 通用配置表单暂时没有测试对象：剩下两个插件都没声明配置项（带配置的百度网盘插件已暂时移除）。
-await card('记忆曲线').locator('button', { hasText: '设置' }).click()
+await card('记忆周期').locator('button', { hasText: '设置' }).click()
 await win.waitForTimeout(600)
 check('无配置项的插件给出说明',
-  (await card('记忆曲线').locator('p', { hasText: '没有可配置项' }).count()) === 1)
+  (await card('记忆周期').locator('p', { hasText: '没有可配置项' }).count()) === 1)
 // 迁移目录只在卡片展开后渲染（v-if openPlugin === plugin.id）
 check('展示自带迁移目录',
-  (await card('记忆曲线').locator('.plugin-migration', { hasText: 'plugin/memory-curve/migration' })
+  (await card('记忆周期').locator('.plugin-migration', { hasText: 'plugin/memory-cycle/migration' })
     .count()) === 1)
 
 // 重载：SBP 会重建插件的类加载器与 Spring 子容器（换了 jar / 开发模式改完代码就靠它）
-const reloadBtn = card('记忆曲线').locator('.plugin-head button', { hasText: '重载' })
+const reloadBtn = card('记忆周期').locator('.plugin-head button', { hasText: '重载' })
 check('插件卡片有「重载」按钮', (await reloadBtn.count()) === 1)
 await reloadBtn.click()
-check('重载后插件仍在服务', await waitPluginActive('memory-curve', true))
-const dueAfterReload = await fetch(`${API}/api/plugins/memory-curve/due`)
+check('重载后插件仍在服务', await waitPluginActive('memory-cycle', true))
+const dueAfterReload = await fetch(`${API}/api/plugins/memory-cycle/due`)
 check('重载后插件自有端点仍可用', dueAfterReload.status === 200, `HTTP ${dueAfterReload.status}`)
 
 // 停用 → 按钮与插件状态都变；再启用恢复
-const toggle = card('记忆曲线').locator('.plugin-head button').last()
+const toggle = card('记忆周期').locator('.plugin-head button').last()
 try {
   stopWindowFrom = Date.now()
   await toggle.click()
-  check('停用后后端状态为 false', await waitPluginActive('memory-curve', false))
+  check('停用后后端状态为 false', await waitPluginActive('memory-cycle', false))
   const toggleText = (await toggle.textContent())?.trim()
   check('按钮文案变为「已停用」', (toggleText ?? '').includes('已停用'), `实际「${toggleText}」`)
 
   // 停用期间插件自有端点应被拦（说明「停用」是真的拦住了，而不是只改了个标记位）
-  const blocked = await fetch(`${API}/api/plugins/memory-curve/due`)
+  const blocked = await fetch(`${API}/api/plugins/memory-cycle/due`)
   check('停用期间自有端点被拦（409）', blocked.status === 409, `HTTP ${blocked.status}`)
 
   await toggle.click()
-  check('重新启用成功', await waitPluginActive('memory-curve', true), `initialActive=${initialActive}`)
+  check('重新启用成功', await waitPluginActive('memory-cycle', true), `initialActive=${initialActive}`)
 } finally {
   // 无论上面成败，都要把插件放回启用态，否则后续套件全部连锁 409
   await ensureAllEnabled()

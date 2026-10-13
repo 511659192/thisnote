@@ -19,10 +19,10 @@ import java.util.Map;
 @RequestMapping("/api/plugins/" + FavoritePlugin.PLUGIN_ID)
 public class FavoriteController {
 
-    private final FavoriteStore favorites;
+    private final FavoriteService favoriteService;
 
-    public FavoriteController(FavoriteStore favorites) {
-        this.favorites = favorites;
+    public FavoriteController(FavoriteService favoriteService) {
+        this.favoriteService = favoriteService;
     }
 
     /**
@@ -31,10 +31,10 @@ public class FavoriteController {
      * <p>标题与预览不在这里拼：本插件不读笔记数据（因此不依赖核心插件），调用方拿这份 id 列表
      * 与它已有的笔记列表做交集即可。
      */
-    @GetMapping("/get-notes")
-    public List<Map<String, Object>> notes() {
+    @GetMapping("/get-favorites")
+    public List<Map<String, Object>> favoriteNoteIds() {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (String id : favorites.favoriteNoteIds()) {
+        for (String id : favoriteService.favoriteNoteIds()) {
             out.add(Map.of("id", id));
         }
         return out;
@@ -42,13 +42,13 @@ public class FavoriteController {
 
     @GetMapping("/get-state")
     public Map<String, Boolean> state(@RequestParam String noteId) {
-        return Map.of("favorite", favorites.isFavorite(noteId));
+        return Map.of("favorite", favoriteService.isFavorite(noteId));
     }
 
     @PostMapping("/update-state")
     public Map<String, Boolean> setState(@RequestParam String noteId,
                                          @RequestParam boolean value) {
-        favorites.setFavorite(noteId, value);
+        favoriteService.setFavorite(noteId, value);
         return Map.of("favorite", value);
     }
 }
