@@ -50,7 +50,7 @@ backend/runtime/plugins/memory-curve.jar
 | 状态 | 存放 | 为什么 |
 |---|---|---|
 | 「这张卡开了记忆曲线吗」 | 插件自己的 `enabled-cards.properties` | 开关由插件专属 API 读写，不与其他插件共享文件或存储契约 |
-| 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（Properties 格式 `cardId|字段 = 值`） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
+| 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
 `SrsService` 通过同容器内的 `EnabledCardsStore` 查询开关，并在启用卡片时创建初始排期；控制器通过本插件端点调用它，不需要平台状态服务回调，也没有跨容器的存储依赖。
 
@@ -75,8 +75,10 @@ new ──评分──► learning（页面内短周期重现）──毕业─�
 一个防漂移技巧：**`previewDue()` 在副本上重放 `apply()`** 来算「这次评分后何时再见」，
 而不是另写一份间隔公式 —— 预览与真实调度永远一致（分别实现迟早会漂）。
 
-写入方式：内存 `Map` + 每次变更全量重写 `scheduling.meta`（单文件、小体量，本地工具足够；
-坏文件按空库处理并告警，不让插件起不来）。
+写入方式：内存 `Map` + 每次变更以 JSON 全量重写 `scheduling.meta`。旧 Properties 文件首次读取时会先备份为
+`scheduling.meta.properties.bak`（同名备份已存在时追加序号），再迁移为 JSON；JSON 文件无法解析时会保留原文件并报错，避免后续写入覆盖数据。
+
+JSON 中的 `dueAt`、`lastReviewedAt`、`createdAt`、`updatedAt` 按应用运行环境时区保存为 `yyyy年MM月dd日 HH:mm:ss`；读入后仍转换为毫秒值参与调度计算。旧数字 JSON 首次读入时会先备份为 `scheduling.meta.json.bak`（同名备份已存在时追加序号），再迁移为日期字符串。格式精确到秒，毫秒部分会舍弃，备份保留原精度。
 
 ### 2.4 端点面（6 个，全 GET/POST + `@RequestParam`）
 

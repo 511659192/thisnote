@@ -31,6 +31,11 @@
     </dependency>
 
     <dependency>
+      <groupId>com.alibaba.fastjson2</groupId>
+      <artifactId>fastjson2</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>org.laxture</groupId>
       <artifactId>sbp-core</artifactId>
     </dependency>

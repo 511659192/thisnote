@@ -24,10 +24,14 @@ const state = shellState
 <style scoped>
 .toast-host {
   position: fixed;
-  bottom: 38px;
-  right: 18px;
+  top: 14px;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-2);
   z-index: 200;
   pointer-events: none;
@@ -63,6 +67,6 @@ const state = shellState
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(16px);
+  transform: translateY(-8px);
 }
 </style>

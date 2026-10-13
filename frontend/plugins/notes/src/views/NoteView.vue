@@ -17,6 +17,7 @@ const nodes = useNoteStore()
 const page = usePageStore()
 
 const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
+const noteListRef = ref<InstanceType<typeof NoteList> | null>(null)
 /** 插件贡献的笔记工具（按插件启用状态过滤）。 */
 const noteToolList = computed(() => activeNoteTools())
 const menu = ref<{ open: boolean; x: number; y: number; entries: MenuEntry[] }>({
@@ -36,6 +37,14 @@ const renaming = ref(false)
 const titleDraft = ref('')
 let titleDraftNoteId: string | null = null
 const titleInput = ref<HTMLInputElement | null>(null)
+const titlePromptOpen = ref(false)
+const titlePromptDraft = ref('')
+const titlePromptInput = ref<HTMLInputElement | null>(null)
+const titlePromptSaveButton = ref<HTMLButtonElement | null>(null)
+const titlePromptBusy = ref(false)
+let titlePromptNoteId: string | null = null
+let titlePromptPromise: Promise<boolean> | null = null
+let resolveTitlePrompt: ((canLeave: boolean) => void) | null = null
 /**
  * Set by Escape so the blur that follows cannot persist the abandoned draft.
  *
@@ -59,6 +68,104 @@ async function saveTitle(title: string): Promise<NoteMeta | null> {
   }
 }
 
+function requestTitlePrompt(note: NoteMeta): Promise<boolean> {
+  if (titlePromptPromise) return titlePromptPromise
+
+  titlePromptNoteId = note.noteId
+  titlePromptDraft.value = titleDraftNoteId === note.noteId ? titleDraft.value : note.title
+  titlePromptBusy.value = false
+  titlePromptOpen.value = true
+  const pending = new Promise<boolean>((resolve) => {
+    resolveTitlePrompt = resolve
+  })
+  titlePromptPromise = pending
+  void nextTick(() => titlePromptInput.value?.focus())
+  return pending
+}
+
+function finishTitlePrompt(canLeave: boolean) {
+  const resolve = resolveTitlePrompt
+  resolveTitlePrompt = null
+  titlePromptPromise = null
+  titlePromptNoteId = null
+  titlePromptOpen.value = false
+  titlePromptBusy.value = false
+  resolve?.(canLeave)
+}
+
+function dismissTitlePrompt() {
+  if (titlePromptBusy.value) return
+  finishTitlePrompt(false)
+}
+
+function onTitlePromptKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    dismissTitlePrompt()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const first = titlePromptInput.value
+  const last = titlePromptSaveButton.value
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
+}
+
+async function saveTitleAndLeave() {
+  if (titlePromptBusy.value) return
+  const title = titlePromptDraft.value.trim()
+  if (!title) {
+    toast('笔记标题不能为空', 'error')
+    titlePromptInput.value?.focus()
+    return
+  }
+
+  const noteId = titlePromptNoteId
+  if (!noteId || nodes.current?.noteId !== noteId) {
+    finishTitlePrompt(false)
+    return
+  }
+
+  titlePromptBusy.value = true
+  try {
+    const updated = await saveTitle(title)
+    if (!updated) return
+    page.noteTitle = updated.title
+    titleDraft.value = updated.title
+    titleDraftNoteId = updated.noteId
+    finishTitlePrompt(true)
+  } finally {
+    titlePromptBusy.value = false
+  }
+}
+
+async function deleteUntitledNoteAndLeave() {
+  if (titlePromptBusy.value) return
+  const noteId = titlePromptNoteId
+  const note = nodes.current
+  if (!noteId || note?.noteId !== noteId || note.title.trim()) {
+    finishTitlePrompt(false)
+    return
+  }
+
+  titlePromptBusy.value = true
+  try {
+    await nodes.deleteForever(noteId)
+    finishTitlePrompt(true)
+  } catch (e) {
+    toast(`删除无标题笔记失败：${(e as Error).message}`, 'error')
+  } finally {
+    titlePromptBusy.value = false
+  }
+}
+
 async function ensureTitleBeforeLeaving(): Promise<boolean> {
   await pageRef.value?.finishEditing()
   if (pendingTitleCommit) await pendingTitleCommit
@@ -66,15 +173,7 @@ async function ensureTitleBeforeLeaving(): Promise<boolean> {
   if (!note || note.title.trim()) return true
 
   let title = titleDraftNoteId === note.noteId ? titleDraft.value.trim() : ''
-  if (!title) {
-    const entered = window.prompt('这篇笔记还没有标题，请输入标题后再离开。', '')
-    if (entered === null) return false
-    title = entered.trim()
-  }
-  if (!title) {
-    toast('笔记标题不能为空', 'error')
-    return false
-  }
+  if (!title) return requestTitlePrompt(note)
 
   const updated = await saveTitle(title)
   if (!updated) return false
@@ -271,7 +370,12 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
 // ---------------------------------------------------------------- node context menu
 
 function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
-  const entries: MenuEntry[] = [{ label: '打开', action: () => openNode(payload.node.noteId) }]
+  const entries: MenuEntry[] = [
+    { label: '打开', action: () => openNode(payload.node.noteId) },
+    { label: '修改标题', action: () => void noteListRef.value?.startRename(payload.node) },
+    { separator: true },
+    { label: '删除笔记', danger: true, action: () => requestDeleteNote(payload.node.noteId) },
+  ]
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
 
@@ -318,6 +422,7 @@ onBeforeUnmount(() => {
       <!-- The list stays put next to the page: opening a note must not take the list away,
            or getting back to a neighbour means going through the sidebar again. -->
       <NoteList
+        ref="noteListRef"
         :nodes="nodes.notesView"
         :loading="nodes.loadingList"
         :current-id="nodes.currentId"
@@ -386,6 +491,59 @@ onBeforeUnmount(() => {
       @cancel="closeConfirmation"
       @confirm="confirmAction"
     />
+    <Teleport to="body">
+      <div v-if="titlePromptOpen" class="title-prompt-overlay" @click.self="dismissTitlePrompt">
+        <section
+          class="title-prompt pop-in"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="title-prompt-heading"
+          aria-describedby="title-prompt-description"
+          tabindex="-1"
+          @keydown="onTitlePromptKeydown"
+        >
+          <div class="title-prompt-mark" aria-hidden="true">✎</div>
+          <div class="title-prompt-copy">
+            <h3 id="title-prompt-heading">这篇笔记还没有标题</h3>
+            <p id="title-prompt-description">
+              设置标题后即可离开；选择“取消并删除”会永久删除这篇笔记及其卡片。
+            </p>
+          </div>
+          <label class="title-prompt-label" for="required-note-title">笔记标题</label>
+          <input
+            id="required-note-title"
+            ref="titlePromptInput"
+            v-model="titlePromptDraft"
+            class="title-prompt-input"
+            type="text"
+            placeholder="请输入标题"
+            :disabled="titlePromptBusy"
+            @keydown.enter.stop.prevent="saveTitleAndLeave"
+          />
+          <div class="title-prompt-actions">
+            <button
+              type="button"
+              class="title-prompt-button continue"
+              :disabled="titlePromptBusy"
+              @click="dismissTitlePrompt"
+            >继续编辑</button>
+            <button
+              type="button"
+              class="title-prompt-button delete"
+              :disabled="titlePromptBusy"
+              @click="deleteUntitledNoteAndLeave"
+            >取消并删除</button>
+            <button
+              ref="titlePromptSaveButton"
+              type="button"
+              class="title-prompt-button save"
+              :disabled="titlePromptBusy"
+              @click="saveTitleAndLeave"
+            >保存并离开</button>
+          </div>
+        </section>
+      </div>
+    </Teleport>
     <StatusBar />
   </div>
 </template>
@@ -447,5 +605,115 @@ onBeforeUnmount(() => {
   padding: 5px var(--space-4);
   border-top: 1px solid var(--c-border);
   background: var(--c-surface);
+}
+.title-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 44%);
+  backdrop-filter: blur(2px);
+}
+.title-prompt {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px 12px;
+  box-sizing: border-box;
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+}
+.title-prompt-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 18px;
+}
+.title-prompt-copy h3 {
+  margin: 2px 0 7px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.title-prompt-copy p {
+  margin: 0;
+  color: var(--c-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.title-prompt-label,
+.title-prompt-input,
+.title-prompt-actions {
+  grid-column: 1 / -1;
+}
+.title-prompt-label {
+  margin-top: 5px;
+  color: var(--c-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.title-prompt-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font: inherit;
+  outline: none;
+}
+.title-prompt-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.title-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.title-prompt-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.title-prompt-button.continue {
+  margin-right: auto;
+  background: transparent;
+  color: var(--c-text-2);
+}
+.title-prompt-button.delete {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--c-border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--c-surface));
+  color: var(--danger);
+}
+.title-prompt-button.save {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.title-prompt-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.title-prompt-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 </style>

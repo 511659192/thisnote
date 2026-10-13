@@ -561,7 +561,7 @@ const GRADES: { grade: Grade; label: string }[] = [
   position: sticky;
   bottom: 0;
   z-index: 100;
-  width: 75%;
+  width: min(75%, 760px);
   align-self: center;
   box-sizing: border-box;
   margin-top: auto;

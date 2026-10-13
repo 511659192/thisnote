@@ -45,8 +45,7 @@ function onTitleClick(event: MouseEvent, note: NoteMeta) {
   }, 250)
 }
 
-async function startRename(event: MouseEvent, note: NoteMeta) {
-  event.stopPropagation()
+async function startRename(note: NoteMeta) {
   clearTitleOpenTimer()
   renamingId.value = note.noteId
   titleDraft.value = note.title
@@ -54,6 +53,8 @@ async function startRename(event: MouseEvent, note: NoteMeta) {
   titleInput.value?.focus()
   titleInput.value?.select()
 }
+
+defineExpose({ startRename })
 
 function cancelRename(noteId: string) {
   if (savingNoteId === noteId) return
@@ -156,9 +157,11 @@ function askRemove(node: NoteMeta) {
           <span
             v-else
             class="title"
+            :class="{ placeholder: !n.title.trim() }"
+            :title="n.title.trim() ? '双击重命名' : '双击输入标题'"
             @click="onTitleClick($event, n)"
-            @dblclick.stop.prevent="startRename($event, n)"
-          >{{ n.title }}</span>
+            @dblclick.stop.prevent="startRename(n)"
+          >{{ n.title.trim() ? n.title : '请输入标题' }}</span>
           <span
             class="row-del"
             role="button"
@@ -241,6 +244,10 @@ function askRemove(node: NoteMeta) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.row-1 .title.placeholder {
+  color: var(--c-text-3);
+  font-weight: 400;
 }
 .row-1 .title-edit {
   padding: 1px 2px;

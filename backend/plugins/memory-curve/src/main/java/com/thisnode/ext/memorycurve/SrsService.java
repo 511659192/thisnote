@@ -1,13 +1,25 @@
 package com.thisnode.ext.memorycurve;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
 import com.thisnode.ext.memorycurve.api.dto.ScheduleView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -32,6 +44,8 @@ public class SrsService {
     private static final long DAY_MS = 86_400_000L;
 
     private static final Logger log = LoggerFactory.getLogger(SrsService.class);
+    private static final DateTimeFormatter STORED_TIMESTAMP_FORMAT =
+            DateTimeFormatter.ofPattern("uuuu年MM月dd日 HH:mm:ss");
 
     /**
      * 排期存放在本插件自己的 {@code scheduling.meta}，卡片开关存放在 {@code enabled-cards.properties}。
@@ -251,18 +265,62 @@ public class SrsService {
         return true;
     }
 
-    /** 把排期条目落成 {@code cardId|key = value} 的 Properties 行。 */
+    /** 读取并按需迁移排期文件。 */
     private Map<String, CardSchedule> loadAll() {
         Map<String, CardSchedule> out = new LinkedHashMap<>();
-        if (!java.nio.file.Files.isRegularFile(file)) {
+        if (!Files.isRegularFile(file)) {
             return out;
         }
-        java.util.Properties props = new java.util.Properties();
-        try (var in = java.nio.file.Files.newInputStream(file, java.nio.file.StandardOpenOption.READ)) {
-            props.load(in);
-        } catch (IOException | RuntimeException e) {
-            log.warn("排期文件无法读取，按空库处理：{}（{}）", file, e.toString());
+        try {
+            String content = Files.readString(file, StandardCharsets.UTF_8);
+            if (content.isBlank()) {
+                writeJson(out);
+                return out;
+            }
+
+            String trimmed = content.stripLeading();
+            if (trimmed.startsWith("{")) {
+                Map<String, Object> loaded = JSON.parseObject(content);
+                if (loaded == null) {
+                    throw new IllegalArgumentException("排期 JSON 根节点必须是对象");
+                }
+                boolean needsTimestampMigration = false;
+                for (Map.Entry<String, Object> entry : loaded.entrySet()) {
+                    if (!(entry.getValue() instanceof Map<?, ?> row)
+                            || entry.getKey() == null
+                            || !entry.getKey().equals(String.valueOf(row.get("cardId")))) {
+                        throw new IllegalArgumentException("排期 JSON 中的 cardId 与对象字段不匹配");
+                    }
+                    needsTimestampMigration |= hasNumericTimestamp(row);
+                    out.put(entry.getKey(), scheduleFromJson(entry.getKey(), row));
+                }
+                if (needsTimestampMigration) {
+                    Path backup = backupJsonFile();
+                    writeJson(out);
+                    log.info("排期时间戳已迁移为日期字符串，原 JSON 备份位于 {}", backup);
+                }
+                return out;
+            }
+            if (!looksLikeLegacyProperties(trimmed)) {
+                throw new IllegalArgumentException("排期文件格式无法识别");
+            }
+
+            out = loadLegacyProperties();
+            Path backup = backupLegacyFile();
+            writeJson(out);
+            log.info("旧排期文件已迁移为 JSON，备份位于 {}", backup);
             return out;
+        } catch (IOException | RuntimeException e) {
+            log.warn("排期文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
+            throw new IllegalStateException("排期文件无法读取 " + file, e);
+        }
+    }
+
+    private Map<String, CardSchedule> loadLegacyProperties() throws IOException {
+        Map<String, CardSchedule> out = new LinkedHashMap<>();
+        java.util.Properties props = new java.util.Properties();
+        try (var in = Files.newInputStream(file, StandardOpenOption.READ)) {
+            props.load(in);
         }
         for (String name : props.stringPropertyNames()) {
             int sep = name.indexOf('|');
@@ -281,40 +339,68 @@ public class SrsService {
         return out;
     }
 
-    private void saveAll() {
-        java.util.Properties props = new java.util.Properties();
-        for (CardSchedule s : schedules.values()) {
-            for (Map.Entry<String, String> kv : scheduleFields(s).entrySet()) {
-                props.setProperty(s.getCardId() + "|" + kv.getKey(), kv.getValue());
-            }
+    private static boolean looksLikeLegacyProperties(String content) {
+        if (content.startsWith("#") || content.startsWith("!")) {
+            return true;
         }
+        String firstLine = content.lines().findFirst().orElse("").stripLeading();
+        int delimiter = firstLine.indexOf('=');
+        if (delimiter < 0) {
+            delimiter = firstLine.indexOf(':');
+        }
+        return delimiter > 0 && firstLine.substring(0, delimiter).contains("|");
+    }
+
+    private Path backupLegacyFile() throws IOException {
+        String baseName = file.getFileName() + ".properties";
+        Path backup = file.resolveSibling(baseName + ".bak");
+        for (int suffix = 1; Files.exists(backup); suffix++) {
+            backup = file.resolveSibling(baseName + "-" + suffix + ".bak");
+        }
+        return Files.copy(file, backup);
+    }
+
+    private Path backupJsonFile() throws IOException {
+        String baseName = file.getFileName() + ".json";
+        Path backup = file.resolveSibling(baseName + ".bak");
+        for (int suffix = 1; Files.exists(backup); suffix++) {
+            backup = file.resolveSibling(baseName + "-" + suffix + ".bak");
+        }
+        return Files.copy(file, backup);
+    }
+
+    private void saveAll() {
+        writeJson(schedules);
+    }
+
+    private void writeJson(Map<String, CardSchedule> values) {
+        Path tempFile = null;
         try {
-            java.nio.file.Files.createDirectories(file.getParent());
-            try (var out = java.nio.file.Files.newOutputStream(file,
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
-                    java.nio.file.StandardOpenOption.WRITE)) {
-                props.store(out, "memory-curve schedules: cardId|key = value");
+            Files.createDirectories(file.getParent());
+            Map<String, Object> jsonValues = new LinkedHashMap<>();
+            for (Map.Entry<String, CardSchedule> entry : values.entrySet()) {
+                jsonValues.put(entry.getKey(), scheduleToJson(entry.getValue()));
+            }
+            String json = JSON.toJSONString(jsonValues, JSONWriter.Feature.PrettyFormat);
+            tempFile = Files.createTempFile(file.getParent(), "scheduling.meta.", ".tmp");
+            Files.writeString(tempFile, json, StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            try {
+                Files.move(tempFile, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
             throw new UncheckedIOException("排期写入失败 " + file, e);
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException e) {
+                    log.warn("无法清理排期临时文件：{}（{}）", tempFile, e.toString());
+                }
+            }
         }
-    }
-
-    /** 排期条目的键值投影（键名与旧表列名一一对应，便于人工核对）。 */
-    private static Map<String, String> scheduleFields(CardSchedule s) {
-        Map<String, String> out = new LinkedHashMap<>();
-        out.put("state", s.getState());
-        out.put("ease", String.valueOf(s.getEase()));
-        out.put("intervalDays", String.valueOf(s.getIntervalDays()));
-        out.put("dueAt", String.valueOf(s.getDueAt()));
-        out.put("lastReviewedAt", s.getLastReviewedAt() == null ? "" : String.valueOf(s.getLastReviewedAt()));
-        out.put("reps", String.valueOf(s.getReps()));
-        out.put("lapses", String.valueOf(s.getLapses()));
-        out.put("learningStep", String.valueOf(s.getLearningStep()));
-        out.put("createdAt", String.valueOf(s.getCreatedAt()));
-        out.put("updatedAt", String.valueOf(s.getUpdatedAt()));
-        return out;
     }
 
     private static void applyProperty(CardSchedule s, String key, String value) {
@@ -322,14 +408,14 @@ public class SrsService {
             case "state" -> s.setState(value);
             case "ease" -> s.setEase(parseNumber(value, EASE_INIT));
             case "intervalDays" -> s.setIntervalDays(parseNumber(value, 0));
-            case "dueAt" -> s.setDueAt((long) parseNumber(value, 0));
+            case "dueAt" -> s.setDueAt(parseLegacyTimestamp(value, 0));
             case "lastReviewedAt" -> s.setLastReviewedAt(value == null || value.isBlank()
-                    ? null : (long) parseNumber(value, 0));
+                    ? null : parseLegacyTimestamp(value, 0));
             case "reps" -> s.setReps((int) parseNumber(value, 0));
             case "lapses" -> s.setLapses((int) parseNumber(value, 0));
             case "learningStep" -> s.setLearningStep((int) parseNumber(value, 0));
-            case "createdAt" -> s.setCreatedAt((long) parseNumber(value, 0));
-            case "updatedAt" -> s.setUpdatedAt((long) parseNumber(value, 0));
+            case "createdAt" -> s.setCreatedAt(parseLegacyTimestamp(value, 0));
+            case "updatedAt" -> s.setUpdatedAt(parseLegacyTimestamp(value, 0));
             default -> {
             }
         }
@@ -343,12 +429,93 @@ public class SrsService {
         }
     }
 
+    private static long parseLegacyTimestamp(String raw, long fallback) {
+        return normalizeTimestamp((long) parseNumber(raw, fallback));
+    }
+
     private static String text(Object raw, String fallback) {
         return raw == null ? fallback : String.valueOf(raw);
     }
 
     private static double number(Object raw, double fallback) {
         return raw instanceof Number n ? n.doubleValue() : fallback;
+    }
+
+    private static boolean hasNumericTimestamp(Map<?, ?> row) {
+        return row.get("dueAt") instanceof Number
+                || row.get("lastReviewedAt") instanceof Number
+                || row.get("createdAt") instanceof Number
+                || row.get("updatedAt") instanceof Number;
+    }
+
+    private static CardSchedule scheduleFromJson(String cardId, Map<?, ?> row) {
+        CardSchedule schedule = new CardSchedule();
+        schedule.setCardId(cardId);
+        schedule.setState(text(row.get("state"), "new"));
+        schedule.setEase(number(row.get("ease"), EASE_INIT));
+        schedule.setIntervalDays(number(row.get("intervalDays"), 0));
+        schedule.setDueAt(parseTimestamp(row.get("dueAt"), 0L));
+        schedule.setLastReviewedAt(parseTimestamp(row.get("lastReviewedAt"), null));
+        schedule.setReps((int) number(row.get("reps"), 0));
+        schedule.setLapses((int) number(row.get("lapses"), 0));
+        schedule.setLearningStep((int) number(row.get("learningStep"), 0));
+        schedule.setCreatedAt(parseTimestamp(row.get("createdAt"), 0L));
+        schedule.setUpdatedAt(parseTimestamp(row.get("updatedAt"), 0L));
+        return schedule;
+    }
+
+    private static Map<String, Object> scheduleToJson(CardSchedule schedule) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("cardId", schedule.getCardId());
+        row.put("state", schedule.getState());
+        row.put("ease", schedule.getEase());
+        row.put("intervalDays", schedule.getIntervalDays());
+        row.put("dueAt", formatTimestamp(schedule.getDueAt()));
+        row.put("lastReviewedAt", schedule.getLastReviewedAt() == null
+                ? null : formatTimestamp(schedule.getLastReviewedAt()));
+        row.put("reps", schedule.getReps());
+        row.put("lapses", schedule.getLapses());
+        row.put("learningStep", schedule.getLearningStep());
+        row.put("createdAt", formatTimestamp(schedule.getCreatedAt()));
+        row.put("updatedAt", formatTimestamp(schedule.getUpdatedAt()));
+        return row;
+    }
+
+    private static String formatTimestamp(long epochMillis) {
+        return Instant.ofEpochMilli(epochMillis)
+                .atZone(ZoneId.systemDefault())
+                .format(STORED_TIMESTAMP_FORMAT);
+    }
+
+    private static Long parseTimestamp(Object raw, Long fallback) {
+        if (raw == null) {
+            return fallback;
+        }
+        if (raw instanceof Number number) {
+            return normalizeTimestamp(number.longValue());
+        }
+        if (raw instanceof String value) {
+            if (value.isBlank()) {
+                return fallback;
+            }
+            try {
+                return LocalDateTime.parse(value, STORED_TIMESTAMP_FORMAT)
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli();
+            } catch (DateTimeParseException e) {
+                throw new IllegalArgumentException("排期时间格式必须是 yyyy年MM月dd日 HH:mm:ss", e);
+            }
+        }
+        throw new IllegalArgumentException("排期时间必须是毫秒数字或 yyyy年MM月dd日 HH:mm:ss 字符串");
+    }
+
+    private static long normalizeTimestamp(long epochMillis) {
+        return Instant.ofEpochMilli(epochMillis)
+                .atZone(ZoneId.systemDefault())
+                .withNano(0)
+                .toInstant()
+                .toEpochMilli();
     }
 
     private ScheduleView emptySchedule(String cardId) {
