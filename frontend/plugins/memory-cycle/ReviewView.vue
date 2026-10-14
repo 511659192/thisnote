@@ -170,6 +170,7 @@ function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCycle
     queue.value = [{
       ...card,
       state: updated.schedule.state,
+      level: updated.schedule.level,
       dueAt: updated.schedule.dueAt,
       gradePreview: updated.gradePreview ?? card.gradePreview,
     }]
@@ -181,6 +182,7 @@ function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCycle
   remaining.splice(position, 0, {
     ...card,
     state: updated.schedule.state,
+    level: updated.schedule.level,
     dueAt: updated.schedule.dueAt,
     gradePreview: updated.gradePreview ?? card.gradePreview,
   })

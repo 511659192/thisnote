@@ -2,6 +2,7 @@ package com.thisnode.plugin.api.util;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.TypeReference;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -40,6 +41,15 @@ public final class JsonFileUtils {
      */
     public static <T> T read(Path file,
                              Class<T> type) throws IOException {
+        if (!Files.isRegularFile(file)) {
+            return null;
+        }
+        String text = Files.readString(file, StandardCharsets.UTF_8);
+        return text.isBlank() ? null : JSON.parseObject(text, type);
+    }
+
+    public static <T> T read(Path file,
+                             TypeReference<T> type) throws IOException {
         if (!Files.isRegularFile(file)) {
             return null;
         }

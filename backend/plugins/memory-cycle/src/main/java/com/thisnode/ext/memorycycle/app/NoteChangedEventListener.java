@@ -11,9 +11,9 @@ public class NoteChangedEventListener
 
     private static final Logger log = LoggerFactory.getLogger(NoteChangedEventListener.class);
 
-    private final SrsService srs;
+    private final MemoryCycleService srs;
 
-    public NoteChangedEventListener(SrsService srs) {
+    public NoteChangedEventListener(MemoryCycleService srs) {
         this.srs = srs;
     }
 
@@ -25,7 +25,7 @@ public class NoteChangedEventListener
         }
         int removedCards = 0;
         for (String cardId : change.cardIds()) {
-            if (srs.forgetDeletedCard(cardId)) {
+            if (srs.delete(cardId)) {
                 removedCards++;
             }
         }

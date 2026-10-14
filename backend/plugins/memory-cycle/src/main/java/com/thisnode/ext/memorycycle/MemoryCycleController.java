@@ -1,7 +1,9 @@
 package com.thisnode.ext.memorycycle;
 
 import com.thisnode.ext.memorycycle.api.dto.ReviewRequest;
-import com.thisnode.ext.memorycycle.app.SrsService;
+import com.thisnode.ext.memorycycle.api.dto.ScheduleView;
+import com.thisnode.ext.memorycycle.app.CardSchedule;
+import com.thisnode.ext.memorycycle.app.MemoryCycleService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,21 +21,21 @@ import java.util.Map;
 @RequestMapping("/api/plugins/memory-cycle")
 public class MemoryCycleController {
 
-    private final SrsService srs;
+    private final MemoryCycleService srs;
 
-    public MemoryCycleController(SrsService srs) {
+    public MemoryCycleController(MemoryCycleService srs) {
         this.srs = srs;
     }
 
     /** State for many cards at once, so a page of cards costs one request. */
     @GetMapping("/get-cards")
     public List<Map<String, Object>> cards(@RequestParam List<String> ids) {
-        return srs.cardStates(ids);
+        return srs.cardStates(ids).stream().map(this::cardStateView).toList();
     }
 
     @GetMapping("/get-card")
     public Map<String, Object> card(@RequestParam String cardId) {
-        return srs.cardState(cardId);
+        return cardStateView(srs.cardState(cardId));
     }
 
     @PostMapping("/update-state")
@@ -51,13 +53,13 @@ public class MemoryCycleController {
             throw new IllegalArgumentException("缺少 grade");
         }
         srs.review(cardId, request.grade());
-        return srs.cardState(cardId);
+        return cardStateView(srs.cardState(cardId));
     }
 
     /** Due cards across all notes (memory cycle enabled only). */
     @GetMapping("/get-due")
     public List<Map<String, Object>> due(@RequestParam(defaultValue = "50") int limit) {
-        return srs.due(limit);
+        return srs.due(limit).stream().map(this::dueView).toList();
     }
 
     /**
@@ -69,7 +71,53 @@ public class MemoryCycleController {
      */
     @PostMapping("/delete-schedule")
     public Map<String, Object> forget(@RequestParam String cardId) {
-        return Map.of("cardId", cardId, "removed", srs.forget(cardId));
+        return Map.of("cardId", cardId, "removed", srs.delete(cardId));
+    }
+
+    private Map<String, Object> cardStateView(CardSchedule schedule) {
+        return Map.of("cardId",
+                      schedule.getCardId(),
+                      "enabled",
+                      schedule.isEnabled(),
+                      "schedule",
+                      scheduleView(schedule),
+                      "gradePreview",
+                      schedule.getGradePreview());
+    }
+
+    private ScheduleView scheduleView(CardSchedule schedule) {
+        long now = System.currentTimeMillis();
+        long dueAt = 0;
+        if (schedule.isEnabled()) {
+            dueAt = isShortPhase(schedule.getState()) ? now : schedule.getDueAt().getTime();
+        }
+        Long lastReviewedAt = schedule.getLastReviewedAt() == null
+                ? null : schedule.getLastReviewedAt().getTime();
+        return new ScheduleView(schedule.getCardId(),
+                                schedule.getState(),
+                                schedule.getLevel(),
+                                dueAt,
+                                lastReviewedAt,
+                                schedule.getReps(),
+                                schedule.getLapses(),
+                                schedule.isDue());
+    }
+
+    private boolean isShortPhase(String state) {
+        return "new".equals(state) || "learning".equals(state) || "relearning".equals(state);
+    }
+
+    private Map<String, Object> dueView(CardSchedule schedule) {
+        return Map.of("cardId",
+                      schedule.getCardId(),
+                      "dueAt",
+                      schedule.getDueAt().getTime(),
+                      "state",
+                      schedule.getState(),
+                      "level",
+                      schedule.getLevel(),
+                      "gradePreview",
+                      schedule.getGradePreview());
     }
 
 }

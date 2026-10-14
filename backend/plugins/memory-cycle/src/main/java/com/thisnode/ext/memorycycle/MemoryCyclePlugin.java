@@ -3,7 +3,7 @@ package com.thisnode.ext.memorycycle;
 import com.thisnode.ext.memorycycle.app.MemoryCycleStateChangedEventListener;
 import com.thisnode.ext.memorycycle.app.NoteChangedEventListener;
 import com.thisnode.ext.memorycycle.app.CardChangedEventListener;
-import com.thisnode.ext.memorycycle.app.SrsService;
+import com.thisnode.ext.memorycycle.app.MemoryCycleService;
 
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -50,8 +50,8 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
      * 插件的服务来自**插件自己的容器**（不是主容器）：SBP 启动插件时才会 refresh 它，
      * 所以这里按需从插件上下文取，而不是在构造期注入。
      */
-    private SrsService srs() {
-        return getApplicationContext().getBean(SrsService.class);
+    private MemoryCycleService srs() {
+        return getApplicationContext().getBean(MemoryCycleService.class);
     }
 
     /**
@@ -68,7 +68,7 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        SrsService srs = ctx.getBean(SrsService.class);
+        MemoryCycleService srs = ctx.getBean(MemoryCycleService.class);
         srs.setMainEventPublisher(getMainApplicationContext());
         listener = new CardChangedEventListener(srs);
         noteChangedEventListener = new NoteChangedEventListener(srs);

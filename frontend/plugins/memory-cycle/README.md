@@ -50,7 +50,7 @@ backend/runtime/plugins/memory-cycle.jar
 | 状态 | 存放 | 为什么 |
 |---|---|---|
 | 「这张卡开了记忆周期吗」 | 插件自己的 `scheduling.json` | 对应排期存在即为开启；关闭时删除对应排期 |
-| 排期（state/ease/intervalDays/dueAt/reps/lapses…） | 插件自己的 `scheduling.json`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
+| 排期（state/level/dueAt/reps/lapses…） | 插件自己的 `scheduling.json`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
 `SrsService` 在启用卡片时创建初始排期，并以排期是否存在判断开关；控制器通过本插件端点调用它，不需要平台状态服务回调，也没有跨容器的存储依赖。
 
@@ -64,21 +64,16 @@ new ──评分──► learning（页面内短周期重现）──毕业─�
                   └────── 忘记：relearning（页面内重现）◄──┘
 ```
 
-与 Anki 的三处**刻意偏差**（都写在类注释里）：
-
-1. **毕业后固定 1 天**，不按 ease 放大间隔（2d→6d→15d…）。理由：这是给「活笔记」用的，不是应试闪卡 —— 每天碰一次足够，间隔爆炸等于从此不再见；
-2. ease（1.3 – 3.0）**只塑造曲线形状**（遗忘更快 / 保持率更高），不放大日历间隔；
-3. 没有牌组（deck）概念，短期学习在复习页队列中重现，不等待分钟级计时。
+记忆周期采用 10 档查表，按当前档位和评分选择困难、良好、简单对应的间隔，最高 60 天。首档分别为 1、2、3 天；简单第 7 档、良好第 9 档、困难第 10 档达到上限。忘记时立即重试并重置到第 1 档。没有牌组（deck）概念，短期学习在复习页队列中重现，不等待分钟级计时。
 
 评分四档：`1 忘记 / 2 困难 / 3 良好 / 4 简单`。
 
 一个防漂移技巧：**`previewDue()` 在副本上重放 `apply()`** 来算「这次评分后何时再见」，
 而不是另写一份间隔公式 —— 预览与真实调度永远一致（分别实现迟早会漂）。
 
-写入方式：内存 `Map` + 每次变更以 JSON 全量重写 `scheduling.json`。如果该文件内容仍为旧 Properties 格式，首次读取时会先备份为
-`scheduling.json.properties.bak`（同名备份已存在时追加序号），再迁移为 JSON；旧路径 `scheduling.meta` 不会自动读取或迁移。JSON 文件无法解析时会保留原文件并报错，避免后续写入覆盖数据。
+`CardScheduleRepository` 每次直接读取 `scheduling.json`，不缓存排期。文件不存在或为空时按无排期处理；每次变更都会以 JSON 全量重写。只读取当前 JSON 格式，不兼容或迁移历史排期数据；JSON 文件无法解析时会保留原文件并报错。
 
-JSON 中的 `dueAt`、`lastReviewedAt`、`createdAt`、`updatedAt` 按应用运行环境时区保存为 `yyyy年MM月dd日 HH:mm:ss`；读入后仍转换为毫秒值参与调度计算。旧数字 JSON 首次读入时会先备份为 `scheduling.json.bak`（同名备份已存在时追加序号），再迁移为日期字符串。格式精确到秒，毫秒部分会舍弃，备份保留原精度。
+JSON 中的 `dueAt`、`lastReviewedAt` 以毫秒时间戳数字保存，并直接反序列化为 `CardSchedule` 字段。
 
 ### 2.4 端点面（6 个，查询 GET、写入 POST + `@RequestParam`）
 

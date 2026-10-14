@@ -29,8 +29,8 @@ function blank(cardId: string): MemoryCycleCardState {
     cardId,
     enabled: false,
     schedule: {
-      cardId: null, state: 'new', ease: 2.5, intervalDays: 0,
-      dueAt: 0, lastReviewedAt: null, reps: 0, lapses: 0, due: false,
+      cardId: null, state: 'new', level: 1, dueAt: 0,
+      lastReviewedAt: null, reps: 0, lapses: 0, due: false,
     },
   }
 }

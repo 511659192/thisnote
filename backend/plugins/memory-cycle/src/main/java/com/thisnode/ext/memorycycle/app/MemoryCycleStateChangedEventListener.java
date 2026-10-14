@@ -13,16 +13,16 @@ public class MemoryCycleStateChangedEventListener
 
     private static final Logger log = LoggerFactory.getLogger(MemoryCycleStateChangedEventListener.class);
 
-    private final SrsService srs;
+    private final MemoryCycleService srs;
 
-    public MemoryCycleStateChangedEventListener(SrsService srs) {
+    public MemoryCycleStateChangedEventListener(MemoryCycleService srs) {
         this.srs = srs;
     }
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<MemoryCycleStateChangedEvent> event) {
         MemoryCycleStateChangedEvent change = event.getPayload();
-        if (!change.enabled() && srs.forget(change.cardId())) {
+        if (!change.enabled() && srs.delete(change.cardId())) {
             log.info("记忆周期已关闭，排期条目一并清除：{}", change.cardId());
         }
     }

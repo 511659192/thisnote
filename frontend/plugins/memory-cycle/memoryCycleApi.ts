@@ -5,8 +5,7 @@ import { http } from '@thisnode/plugin-api'
 export interface ScheduleView {
   cardId: string | null
   state: 'new' | 'learning' | 'review' | 'relearning'
-  ease: number
-  intervalDays: number
+  level: number
   dueAt: number
   lastReviewedAt: number | null
   reps: number
@@ -35,6 +34,7 @@ export interface DueCard {
   cardId: string
   dueAt: number
   state: string
+  level: number
   gradePreview: Record<string, number>
 }
 

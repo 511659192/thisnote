@@ -3,8 +3,7 @@ package com.thisnode.ext.memorycycle.api.dto;
 /** The API representation of one card's schedule; due status is computed, not stored. */
 public record ScheduleView(String cardId,
                            String state,
-                           double ease,
-                           double intervalDays,
+                           int level,
                            long dueAt,
                            Long lastReviewedAt,
                            int reps,
