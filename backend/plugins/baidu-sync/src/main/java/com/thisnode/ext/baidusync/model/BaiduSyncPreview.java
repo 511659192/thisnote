@@ -8,5 +8,6 @@ public record BaiduSyncPreview(boolean remoteDirectoryExists,
                                int deleteCount,
                                int overwriteCount,
                                int conflictCount,
+                               int consistentCount,
                                List<BaiduSyncPreviewItem> items) {
 }

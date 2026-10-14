@@ -411,13 +411,15 @@ public class BaiduPanClient {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
             }
+            long actualSize = Files.size(temporary);
+            if (actualSize != item.size()) {
+                throw new IllegalStateException("百度网盘下载大小不匹配：" + item.path()
+                        + "；期望 " + item.size() + "，实际 " + actualSize);
+            }
             String expectedMd5 = response.headers().firstValue("Content-MD5")
                     .map(this::normalizeMd5)
                     .filter(value -> !value.isBlank())
-                    .orElseGet(() -> normalizeMd5(item.md5()));
-            if (expectedMd5.isBlank() && !item.md5().isBlank()) {
-                throw new IllegalStateException("百度网盘返回的文件 MD5 格式无效：" + item.path());
-            }
+                    .orElse("");
             if (!expectedMd5.isBlank() && !expectedMd5.equalsIgnoreCase(fileMd5(temporary))) {
                 throw new IllegalStateException("百度网盘下载内容校验失败：" + item.path());
             }

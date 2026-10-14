@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
       <p class="small status">
         待上传 {{ previewResult.uploadCount }}，待下载 {{ previewResult.downloadCount }}，
         待删除 {{ previewResult.deleteCount }}，覆盖 {{ previewResult.overwriteCount }}，
-        双端冲突 {{ previewResult.conflictCount }}。
+        双端一致 {{ previewResult.consistentCount ?? '接口未提供' }}，双端冲突 {{ previewResult.conflictCount }}。
       </p>
       <p class="small muted status">
         只有存在历史共同基线且两端摘要都变化时，才能确认双端修改；缺少基线时无法判断变更来源，覆盖方向按文件时间戳选择。

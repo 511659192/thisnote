@@ -29,7 +29,7 @@ const openPlugin = ref('')
 const notesRootDir = ref('')
 const activeNotesRootDir = ref('')
 const notesRootRestartRequired = ref(false)
-const activeTab = ref<'storage' | 'plugins'>('storage')
+const activeTab = ref<'storage' | 'plugins' | 'baidu-sync'>('storage')
 
 interface NotesRootSettings {
   rootDir: string
@@ -218,6 +218,18 @@ onMounted(async () => {
       >
         插件管理
       </button>
+      <button
+        id="settings-tab-baidu-sync"
+        class="settings-tab"
+        :class="{ active: activeTab === 'baidu-sync' }"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'baidu-sync'"
+        aria-controls="settings-panel-baidu-sync"
+        @click="activeTab = 'baidu-sync'"
+      >
+        百度网盘同步
+      </button>
     </nav>
 
     <div class="body">
@@ -264,8 +276,8 @@ onMounted(async () => {
       >
         <h3>已安装的插件</h3>
         <p class="small muted">
-          插件分两类：<b>卡片插件</b>给卡片右上角加工具（如记忆周期）；<b>服务插件</b>提供整库范围的能力
-          并带来自己的设置面板（如百度网盘备份）。停用后该插件自己的端点会被拒绝，但管理面仍可访问，
+          插件分两类：<b>卡片插件</b>给卡片右上角加工具（如记忆周期）；<b>服务插件</b>提供整库范围的能力。
+          百度网盘同步配置位于独立页签。停用后该插件自己的端点会被拒绝，但管理面仍可访问，
           随时能再打开。
         </p>
 
@@ -296,7 +308,7 @@ onMounted(async () => {
             >
               重载
             </button>
-            <button class="btn sm ghost" @click="togglePluginPanel(plugin)">
+            <button v-if="plugin.id !== 'baidu-sync'" class="btn sm ghost" @click="togglePluginPanel(plugin)">
               {{ openPlugin === plugin.id ? '收起' : '设置' }}
             </button>
             <button
@@ -321,6 +333,23 @@ onMounted(async () => {
               自带迁移：{{ plugin.migrationLocation }}
             </p>
           </div>
+        </div>
+      </section>
+
+      <section
+        id="settings-panel-baidu-sync"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="settings-tab-baidu-sync"
+        v-show="activeTab === 'baidu-sync'"
+      >
+        <component
+          :is="pluginSettings('baidu-sync')"
+          v-if="activeTab === 'baidu-sync' && pluginSettings('baidu-sync')"
+        />
+        <div v-else-if="activeTab === 'baidu-sync'" class="small muted">
+          <p>百度网盘同步插件未提供设置面板。</p>
+          <button class="btn sm" type="button" @click="activeTab = 'plugins'">前往插件管理</button>
         </div>
       </section>
     </div>
