@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { pluginApi, type PluginInfo } from '@/api/plugins'
+import { request } from '@/core/http'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import {
   pluginSettings,
@@ -25,12 +26,55 @@ const confirmation = ref<{
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
 const openPlugin = ref('')
+const notesRootDir = ref('')
+const activeNotesRootDir = ref('')
+const notesRootRestartRequired = ref(false)
+const activeTab = ref<'storage' | 'plugins'>('storage')
+
+interface NotesRootSettings {
+  rootDir: string
+  activeRootDir: string
+  restartRequired: boolean
+}
 
 async function refreshPlugins() {
   try {
     plugins.value = await pluginApi.list()
   } catch {
     plugins.value = []
+  }
+}
+
+async function refreshNotesRoot() {
+  try {
+    const settings = await request<NotesRootSettings>('GET', '/api/notes/settings/get')
+    notesRootDir.value = settings.rootDir
+    activeNotesRootDir.value = settings.activeRootDir
+    notesRootRestartRequired.value = settings.restartRequired
+  } catch (e) {
+    ui.toast(`读取笔记根目录失败：${(e as Error).message}`, 'error')
+  }
+}
+
+async function saveNotesRoot() {
+  const rootDir = notesRootDir.value.trim()
+  if (!rootDir) {
+    ui.toast('笔记根目录不能为空', 'error')
+    return
+  }
+  busy.value = '正在保存笔记根目录'
+  try {
+    const settings = await request<NotesRootSettings>('POST', '/api/notes/settings/update-root', {
+      query: { rootDir },
+    })
+    notesRootDir.value = settings.rootDir
+    activeNotesRootDir.value = settings.activeRootDir
+    notesRootRestartRequired.value = settings.restartRequired
+    ui.toast(settings.restartRequired ? '笔记根目录已保存，重启应用后生效' : '笔记根目录已保存', 'success')
+  } catch (e) {
+    ui.toast(`保存笔记根目录失败：${(e as Error).message}`, 'error')
+  } finally {
+    busy.value = ''
   }
 }
 
@@ -132,7 +176,7 @@ function coreLabel(plugin: PluginInfo): string {
 }
 
 async function refresh() {
-  await refreshPlugins()
+  await Promise.all([refreshPlugins(), refreshNotesRoot()])
 }
 
 onMounted(async () => {
@@ -144,16 +188,80 @@ onMounted(async () => {
   <div class="settings">
     <header class="tabs">
       <button class="btn sm ghost" title="返回笔记" @click="$router.push('/notes')">← 返回笔记</button>
-      <div class="tab-title">设置 · 插件</div>
+      <div class="tab-title">设置</div>
       <div class="spacer"></div>
       <button class="btn sm" :disabled="!!busy" @click="refresh">刷新</button>
     </header>
 
+    <nav class="settings-tabs" role="tablist" aria-label="设置分类">
+      <button
+        id="settings-tab-storage"
+        class="settings-tab"
+        :class="{ active: activeTab === 'storage' }"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'storage'"
+        aria-controls="settings-panel-storage"
+        @click="activeTab = 'storage'"
+      >
+        笔记存储
+      </button>
+      <button
+        id="settings-tab-plugins"
+        class="settings-tab"
+        :class="{ active: activeTab === 'plugins' }"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'plugins'"
+        aria-controls="settings-panel-plugins"
+        @click="activeTab = 'plugins'"
+      >
+        插件管理
+      </button>
+    </nav>
+
     <div class="body">
       <div v-if="busy" class="busy-bar">{{ busy }}…</div>
 
+      <section
+        id="settings-panel-storage"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="settings-tab-storage"
+        v-show="activeTab === 'storage'"
+      >
+        <h3>笔记存储</h3>
+        <p class="small muted">
+          保存后只切换存储路径，不会搬移已有笔记。切换到空目录后列表会为空，旧笔记仍保留在原目录；重启应用后生效。
+        </p>
+        <label class="small muted" for="notes-root-dir">笔记根目录</label>
+        <div class="notes-root-form">
+          <input
+            id="notes-root-dir"
+            v-model="notesRootDir"
+            class="input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            :disabled="!!busy"
+            placeholder="例如 C:\Users\用户名\.thisnode\notes"
+          >
+          <button class="btn sm primary" :disabled="!!busy" @click="saveNotesRoot">保存</button>
+        </div>
+        <p class="small muted notes-root-active">当前生效：<span class="mono">{{ activeNotesRootDir }}</span></p>
+        <p v-if="notesRootRestartRequired" class="small warn notes-root-pending">
+          新路径已保存，重启后生效；当前仍使用上方显示的生效路径。
+        </p>
+      </section>
+
       <!-- ------------------------------ plugins ------------------------------ -->
-      <section class="panel">
+      <section
+        id="settings-panel-plugins"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="settings-tab-plugins"
+        v-show="activeTab === 'plugins'"
+      >
         <h3>已安装的插件</h3>
         <p class="small muted">
           插件分两类：<b>卡片插件</b>给卡片右上角加工具（如记忆周期）；<b>服务插件</b>提供整库范围的能力
@@ -251,6 +359,28 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--c-text-2);
 }
+.settings-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+.settings-tab {
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
 .tabs button {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
@@ -301,6 +431,24 @@ onMounted(async () => {
   color: var(--warning);
   margin: 0;
   padding-left: var(--space-4);
+}
+.notes-root-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 720px;
+  margin-top: var(--space-1);
+}
+.notes-root-form .input {
+  flex: 1;
+  min-width: 0;
+}
+.notes-root-active {
+  overflow-wrap: anywhere;
+  margin: var(--space-2) 0 0;
+}
+.notes-root-pending {
+  margin-top: var(--space-1);
 }
 .kv {
   display: grid;

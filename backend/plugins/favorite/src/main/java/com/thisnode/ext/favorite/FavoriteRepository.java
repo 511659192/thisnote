@@ -1,6 +1,7 @@
 package com.thisnode.ext.favorite;
 
 import com.google.common.base.Preconditions;
+import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import com.thisnode.plugin.api.util.PropertiesFileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -25,7 +26,8 @@ public class FavoriteRepository {
     private final Object lock = new Object();
 
     public FavoriteRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.file = Paths.get(dataRoot, "plugins", "favorite", "favorites.properties");
+        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "favorite")
+                                             .resolve("favorites.properties");
     }
 
     public boolean isFavorite(String noteId) {

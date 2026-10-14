@@ -3,6 +3,7 @@ package com.thisnode.ext.memorycycle.repository;
 import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.memorycycle.app.CardSchedule;
 import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +25,8 @@ public class CardScheduleRepository {
     private final Path file;
 
     public CardScheduleRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.file = Paths.get(dataRoot, "plugins", "memory-cycle", "scheduling.json");
+        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "memory-cycle")
+                                             .resolve("scheduling.json");
     }
 
     public synchronized CardSchedule getOne(String cardId) {

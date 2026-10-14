@@ -13,18 +13,22 @@ import java.nio.file.Path;
 @Getter
 public class NotesConfig {
 
-    @Value("${thisnode.root-dir}")
-    private Path rootDir;
+    private final Path rootDir;
 
-    @Value("${thisnode.note-meta-dir}")
-    private Path noteMetaDir;
+    private final Path noteMetaDir;
 
-    @Value("${thisnode.cards-dir}")
-    private Path cardsDir;
+    private final Path cardsDir;
 
-    @Value("${thisnode.notebook-dir}")
-    private Path notebookDir;
+    private final Path notebookDir;
 
-    @Value("${thisnode.attachments-dir}")
-    private Path attachmentsDir;
+    private final Path attachmentsDir;
+
+    public NotesConfig(NotesRootSettingsRepository rootSettingsRepository,
+                      @Value("${thisnode.root-dir}") Path defaultRootDir) {
+        this.rootDir = rootSettingsRepository.configuredRoot(defaultRootDir);
+        this.noteMetaDir = rootDir.resolve("meta");
+        this.cardsDir = rootDir.resolve("cards");
+        this.notebookDir = rootDir.resolve("ledgers");
+        this.attachmentsDir = rootDir.resolve("attachments");
+    }
 }
