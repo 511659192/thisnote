@@ -1,5 +1,6 @@
 package com.thisnode.ext.favorite;
 
+import com.thisnode.ext.favorite.controller.FavoriteController;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 

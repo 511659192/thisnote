@@ -2,6 +2,7 @@ packages:
   - 'host'
   - 'plugin-api'
   - 'plugins/favorite'
+  - 'plugins/baidu-sync'
   - 'plugins/memory-cycle'
   - 'plugins/notes'
 

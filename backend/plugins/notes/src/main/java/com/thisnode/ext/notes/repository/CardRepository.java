@@ -2,8 +2,8 @@ package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.io.FileUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.domain.Card;
-import com.thisnode.ext.notes.domain.Card.CardMeta;
+import com.thisnode.ext.notes.model.Card;
+import com.thisnode.ext.notes.model.Card.CardMeta;
 import com.thisnode.plugin.api.util.JsonFileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;

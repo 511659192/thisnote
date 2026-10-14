@@ -1,5 +1,7 @@
 package com.thisnode.ext.favorite;
 
+import com.thisnode.ext.favorite.service.FavoriteService;
+import com.thisnode.ext.favorite.service.NoteChangedEventListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;

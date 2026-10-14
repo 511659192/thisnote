@@ -8,7 +8,7 @@ thisnode:
   root-dir: ${user.home}/.thisnode/notes
   note-meta-dir: ${thisnode.root-dir}/meta
   cards-dir: ${thisnode.root-dir}/cards
-  notebook-dir: ${thisnode.root-dir}/ledgers
+  notebook-dir: ${thisnode.root-dir}/notebook
   attachments-dir: ${thisnode.root-dir}/attachments
 
 

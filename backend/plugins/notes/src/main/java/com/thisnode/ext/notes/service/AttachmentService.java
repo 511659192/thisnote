@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.domain.Card;
+import com.thisnode.ext.notes.model.Card;
 import com.thisnode.ext.notes.repository.CardRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

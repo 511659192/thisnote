@@ -1,10 +1,10 @@
 package com.thisnode.ext.notes.service;
 
-import com.thisnode.ext.notes.api.dto.CreateNoteRequest;
-import com.thisnode.ext.notes.api.dto.NoteListQuery;
-import com.thisnode.ext.notes.api.dto.UpdateNoteRequest;
-import com.thisnode.ext.notes.domain.Card;
-import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.model.Card;
+import com.thisnode.ext.notes.model.NoteMeta;
+import com.thisnode.ext.notes.model.request.CreateNoteRequest;
+import com.thisnode.ext.notes.model.request.NoteListQuery;
+import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;

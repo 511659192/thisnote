@@ -14,7 +14,7 @@ onMounted(async () => {
     <RouterView v-if="backendOnline" />
     <div v-else class="boot-screen">
       <div class="boot-mark">韧</div>
-      <h2>thisnode 韧知笔记</h2>
+      <h2>thisnote 韧知笔记</h2>
       <p class="muted">{{ backendMessage }}</p>
       <p class="small muted">
         本地后端默认监听 <span class="mono">127.0.0.1:45917</span>。请确认 Java 21+ 可用，或稍候重试。

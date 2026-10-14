@@ -13,6 +13,7 @@ export interface Viewport {
 export const MIN_ZOOM = 0.25
 export const MAX_ZOOM = 3
 export const BLOCK_MIN_W = 240
+export const BLOCK_MAX_W = 680
 export const BLOCK_MIN_H = 88
 /** Grid the page snaps to when snapping is on. */
 export const GRID = 24
@@ -24,7 +25,12 @@ export const GRID = 24
  * to click. The default column is ~62% of the visible page: comfortable for writing, and it
  * always leaves a clear strip of empty page to aim at.
  */
-const LIMITS = { maxW: 680, defaultH: 260, widthRatio: 0.62, minVisibleGap: 140 }
+const LIMITS = { maxW: BLOCK_MAX_W, defaultH: 260, widthRatio: 0.62, minVisibleGap: 140 }
+
+export function maxCardWidth(surfaceWidth: number): number {
+  return Math.max(320, Math.min(LIMITS.maxW, surfaceWidth - LIMITS.minVisibleGap))
+}
+
 /**
  * A note's page: the cards it is made of.
  *
@@ -256,7 +262,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   /** Clamp every card to the current surface width (called when the viewport resizes). */
   function clampWidths(surfaceWidth: number) {
-    const max = Math.max(320, Math.min(LIMITS.maxW, surfaceWidth - LIMITS.minVisibleGap))
+    const max = maxCardWidth(surfaceWidth)
     const updates: CardUpdate[] = []
     for (const v of cards.value) {
       if (v.card.w > max) {
@@ -300,23 +306,45 @@ export const usePageStore = defineStore('notePage', () => {
   }
 
   /** Card size that fits pasted text, so nothing is cropped on arrival. */
-  function sizeForContent(content: string): { w: number; h: number } {
-    const lines = content.split('\n')
+  function sizeForContent(
+    content: string,
+    imageSize?: { width: number; height: number },
+    surfaceWidth?: number,
+  ): { w: number; h: number } {
+    const maxWidth = surfaceWidth === undefined ? LIMITS.maxW : maxCardWidth(surfaceWidth)
+    const textContent = imageSize ? content.replace(/!\[[^\]]*\]\([^)]+\)/g, '').trim() : content
+    const lines = textContent.split('\n')
     const longest = lines.reduce((max, l) => Math.max(max, l.length), 0)
-    const cjk = (content.match(/[\u3400-\u9fff]/g) || []).length
-    const visual = Math.max(longest, content.length / 2) + cjk / 4
+    const cjk = (textContent.match(/[\u3400-\u9fff]/g) || []).length
+    const visual = Math.max(longest, textContent.length / 2) + cjk / 4
     // Cards are wide by default (a card is written in place, so it needs room), but never
     // wider than the page allows.
-    const w = Math.round(Math.min(LIMITS.maxW, Math.max(420, 260 + visual * 4.2)))
+    const textWidth = textContent.trim() ? Math.max(BLOCK_MIN_W, 260 + visual * 4.2) : 0
+    let w = Math.round(Math.min(maxWidth, Math.max(imageSize ? BLOCK_MIN_W : 420, textWidth)))
+    if (imageSize && imageSize.width > 0) {
+      const imageWidth = Math.min(imageSize.width, maxWidth - 32)
+      w = Math.round(Math.min(maxWidth, Math.max(w, imageWidth + 32)))
+    }
     const perLine = Math.max(20, Math.floor((w - 40) / 8.4))
-    const estLines = Math.min(30, Math.max(lines.length, Math.ceil(content.length / perLine)))
-    const h = Math.round(Math.min(520, Math.max(180, 84 + estLines * 24)))
+    const estLines = Math.min(30, Math.max(lines.length, Math.ceil(textContent.length / perLine)))
+    let h = Math.round(Math.min(520, Math.max(180, 84 + estLines * 24)))
+    if (imageSize && imageSize.width > 0) {
+      const imageWidth = Math.min(imageSize.width, maxWidth - 32)
+      const imageHeight = imageSize.height * imageWidth / imageSize.width
+      const textHeight = textContent.trim() ? estLines * 24 + 24 : 0
+      h = Math.round(Math.min(520, Math.max(BLOCK_MIN_H, imageHeight + textHeight + 56)))
+    }
     return { w, h }
   }
 
-  async function addBlockFromContent(content: string, at: { x: number; y: number }) {
+  async function addBlockFromContent(
+    content: string,
+    at: { x: number; y: number },
+    imageSize?: { width: number; height: number },
+    surfaceWidth?: number,
+  ) {
     const trimmed = content.replace(/\r\n/g, '\n').trim()
-    const { w, h } = sizeForContent(trimmed)
+    const { w, h } = sizeForContent(trimmed, imageSize, surfaceWidth)
     return addBlock(at, { contentMd: trimmed, w, h })
   }
 

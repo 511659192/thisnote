@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, usePageStore } from '@/stores/notePage'
+import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
 import { activeCardPlugins, toast } from '@thisnode/plugin-api'
-import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
+import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
+import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
 import type { CardView } from '@/api/types'
 import type { CardUpdate } from '@/api/page'
 
@@ -421,11 +422,18 @@ function onToggleCollapse(cardId: string) {
   void page.commit([{ cardId: view.card.cardId, collapsed: !view.card.collapsed }])
 }
 
-function onFitHeight(p: { cardId: string; h: number }) {
+function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: boolean }) {
   const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (!view) return
   // 用户手动定过长度的卡片不再自动贴合（说了算的是用户，不是内容）。
-  if (page.isManualHeight(p.cardId)) return
+  if (page.isManualHeight(p.cardId) && !p.fitImage) return
+  const width = p.w === undefined
+    ? view.card.w
+    : Math.max(BLOCK_MIN_W, Math.min(p.w, maxCardWidth(size.width)))
+  if (width !== view.card.w) {
+    void page.commit([{ cardId: view.card.cardId, w: width }]).catch(() => undefined)
+    return
+  }
   // 双向贴合（长高也缩回），再按视口封顶：卡片最高长到**浏览器底缘**，
   // 再多的内容在卡片内滚动，而不是把卡片撑出好几屏、在画布上够不着。
   const rect = root.value?.getBoundingClientRect()
@@ -436,7 +444,6 @@ function onFitHeight(p: { cardId: string; h: number }) {
   )
   const next = Math.min(Math.round(p.h), available)
   if (next === view.card.h) return
-  view.card.h = next
   void page.commit([{ cardId: view.card.cardId, h: next }]).catch(() => undefined)
 }
 
@@ -469,12 +476,13 @@ async function onPaste(e: ClipboardEvent) {
     const at = { x: Math.round(world.x), y: Math.round(world.y) }
     let markdown: string | null = null
     try {
+      const imageSize = await getImageDimensions(image)
       markdown = await uploadImageAttachment(image)
       if (page.noteId !== noteId) {
         await deleteUnreferencedImageAttachment(markdown)
         return
       }
-      const created = await page.addBlockFromContent(markdown, at)
+      const created = await page.addBlockFromContent(markdown, at, imageSize, size.width)
       if (created) toast('已粘贴图片为卡片', 'success')
       else await deleteUnreferencedImageAttachment(markdown)
     } catch (error) {
@@ -484,14 +492,30 @@ async function onPaste(e: ClipboardEvent) {
     return
   }
 
-  const text = e.clipboardData?.getData('text/plain') ?? ''
-  if (!text.trim()) return
+  const markdownFile = getClipboardMarkdownFile(e.clipboardData)
+  const clipboardCode = isClipboardCode(e.clipboardData)
+  const hasHtml = Boolean(e.clipboardData?.getData('text/html').trim())
+  const hasText = Boolean(e.clipboardData?.getData('text/plain').trim())
+  if (!markdownFile && !hasHtml && !hasText) return
   e.preventDefault()
+
+  const text = await getClipboardMarkdown(e.clipboardData)
+  if (!text.trim()) return
 
   const world = page.screenToWorld(lastPointer.value)
   const at = { x: Math.round(world.x), y: Math.round(world.y) }
   const created = await page.addBlockFromContent(text, at)
-  if (created) toast('已粘贴为卡片', 'success')
+  if (created) {
+    const format = markdownFile ? 'markdown' : clipboardCode ? 'text' : null
+    if (format) {
+      try {
+        localStorage.setItem(`thisnote.notes.card-format.${created.card.cardId}`, format)
+      } catch {
+        // The card content is still saved when browser storage is unavailable.
+      }
+    }
+    toast('已粘贴为卡片', 'success')
+  }
 }
 
 // ---------------------------------------------------------------- keyboard

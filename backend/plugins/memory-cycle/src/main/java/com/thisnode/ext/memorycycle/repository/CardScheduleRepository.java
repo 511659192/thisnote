@@ -1,7 +1,7 @@
 package com.thisnode.ext.memorycycle.repository;
 
 import com.alibaba.fastjson2.TypeReference;
-import com.thisnode.ext.memorycycle.app.CardSchedule;
+import com.thisnode.ext.memorycycle.model.CardSchedule;
 import com.thisnode.plugin.api.util.JsonFileUtils;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import org.slf4j.Logger;

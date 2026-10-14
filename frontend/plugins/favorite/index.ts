@@ -1,6 +1,6 @@
 import { registerNoteListFilter, registerNoteTool, unregisterPlugin } from '@thisnode/plugin-api'
-import FavoriteTool from './FavoriteTool.vue'
-import { favoriteApi, FAVORITE_PLUGIN_ID } from './favoriteApi'
+import FavoriteTool from './src/components/FavoriteTool.vue'
+import { favoriteApi, FAVORITE_PLUGIN_ID } from './src/api/favoriteApi'
 
 /**
  * 收藏插件的界面侧注册 —— 「实体插件」的参考实现，只挂两个槽位：
@@ -55,7 +55,7 @@ if (!window.__POWERED_BY_QIANKUN__) {
   register()
   document.getElementById('plugin-root')?.replaceChildren(
     Object.assign(document.createElement('p'), {
-      textContent: '收藏插件独立预览：完整的界面（★ 工具、列表筛选）渲染在 thisnode 宿主里。',
+      textContent: '收藏插件独立预览：完整的界面（★ 工具、列表筛选）渲染在 thisnote 宿主里。',
     }),
   )
 }

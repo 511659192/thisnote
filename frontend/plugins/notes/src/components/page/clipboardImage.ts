@@ -10,6 +10,15 @@ export function getClipboardImage(data: DataTransfer | null): Blob | null {
   return Array.from(data.files).find((file) => file.type.startsWith('image/')) ?? null
 }
 
+export async function getImageDimensions(image: Blob): Promise<{ width: number; height: number }> {
+  const bitmap = await createImageBitmap(image)
+  try {
+    return { width: bitmap.width, height: bitmap.height }
+  } finally {
+    bitmap.close()
+  }
+}
+
 export async function uploadImageAttachment(image: Blob): Promise<string> {
   const form = new FormData()
   form.append('file', image, 'clipboard-image')

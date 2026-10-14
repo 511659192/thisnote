@@ -116,6 +116,10 @@ function openNotebook(id: string) {
   void router.push('/notes')
 }
 
+function openPluginEntry(path: string) {
+  void router.push(path)
+}
+
 // ---------------------------------------------------------------- 分组列表
 
 /** 默认分组的固定 id（与后端 NotebookRepository.DEFAULT_GROUP_ID 一致）。 */
@@ -261,9 +265,10 @@ watch(
       <button
         v-for="entry in pluginNav"
         :key="entry.pluginId"
+        type="button"
         class="nav-item plugin-entry"
         :class="{ active: route.path === entry.to }"
-        @click="$router.push(entry.to)"
+        @click="openPluginEntry(entry.to)"
       >
         <span class="ico">{{ entry.glyph }}</span>
         <span class="label">{{ entry.label }}</span>

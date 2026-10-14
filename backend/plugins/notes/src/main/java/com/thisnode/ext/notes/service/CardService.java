@@ -1,12 +1,12 @@
 package com.thisnode.ext.notes.service;
 
-import com.thisnode.ext.notes.api.dto.BatchUpdateCardsRequest;
-import com.thisnode.ext.notes.api.dto.CreateCardRequest;
-import com.thisnode.ext.notes.api.dto.NoteDto;
-import com.thisnode.ext.notes.api.dto.UpdateCardRequest;
-import com.thisnode.ext.notes.domain.Card;
-import com.thisnode.ext.notes.domain.Card.CardMeta;
-import com.thisnode.ext.notes.domain.NoteMeta;
+import com.thisnode.ext.notes.model.Card;
+import com.thisnode.ext.notes.model.Card.CardMeta;
+import com.thisnode.ext.notes.model.NoteMeta;
+import com.thisnode.ext.notes.model.request.BatchUpdateCardsRequest;
+import com.thisnode.ext.notes.model.request.CreateCardRequest;
+import com.thisnode.ext.notes.model.request.UpdateCardRequest;
+import com.thisnode.ext.notes.model.view.NoteDto;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;

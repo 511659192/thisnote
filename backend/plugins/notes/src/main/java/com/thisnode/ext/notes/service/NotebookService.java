@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.service;
 
-import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.domain.Notebook;
+import com.thisnode.ext.notes.model.NoteMeta;
+import com.thisnode.ext.notes.model.Notebook;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.ext.notes.repository.NotebookRepository;
 import lombok.RequiredArgsConstructor;

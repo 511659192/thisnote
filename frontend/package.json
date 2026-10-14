@@ -1,10 +1,10 @@
 {
   "name": "thisnode-workspace",
   "private": true,
-  "description": "thisnode 韧知笔记 —— pnpm 工作区根（界面侧主应用 + 插件微应用）",
+  "description": "thisnote 韧知笔记 —— pnpm 工作区根（界面侧主应用 + 插件微应用）",
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "dev:host": "pnpm --filter thisnode-frontend dev",
-    "dev:plugins": "pnpm --filter @thisnode/plugin-favorite --filter @thisnode/plugin-memory-cycle --parallel dev"
+    "dev:plugins": "pnpm --filter @thisnode/plugin-favorite --filter @thisnode/plugin-memory-cycle --filter @thisnode/plugin-baidu-sync --parallel dev"
   }
 }

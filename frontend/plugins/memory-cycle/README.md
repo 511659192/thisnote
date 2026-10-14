@@ -4,7 +4,7 @@
 > 读它 = 读「一个插件如何独立管理自己的状态、通过消息事件协作并贡献界面插槽」。
 >
 > 代码位置：后端 `backend/plugins/memory-cycle/` ·
-> 界面侧 `frontend/plugins/memory-cycle/`（index.ts / memoryCycleApi.ts / MemoryCycleTool.vue / ReviewView.vue，约 990 行）
+> 界面侧 `frontend/plugins/memory-cycle/`（入口 `index.ts`；业务代码位于 `src/api`、`src/components`、`src/stores`、`src/views`，约 990 行）
 
 ---
 
@@ -145,7 +145,7 @@ if (!window.__POWERED_BY_QIANKUN__) register()                  // 独立预览�
 |---|---|---|
 | `registerCardPlugin` | `{ id, title, glyph:'🧠', loadState, isEnabled, toggle, cardComponent }` | 卡片右上角的 🧠 徽标 + 复习浮层 |
 | `registerNavEntry` | `{ label:'复习', glyph:'🧠', to:'/review', badge: () => due().length }` | 侧栏入口，带「今天到期 N 张」徽标（3 秒在飞合并，避免重复请求） |
-| `registerPluginRoute` | `{ path:'review', name:'review', component: () => import('./ReviewView.vue') }` | `/review` 页面（**核心路由表里不出现这条路径**） |
+| `registerPluginRoute` | `{ path:'review', name:'review', component: () => import('./src/views/ReviewView.vue') }` | `/review` 页面（**核心路由表里不出现这条路径**） |
 
 ### 3.3 契约被宿主消费的两处（数据流入口）
 

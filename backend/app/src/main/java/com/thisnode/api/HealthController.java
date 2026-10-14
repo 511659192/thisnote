@@ -29,7 +29,7 @@ public class HealthController {
     public Map<String, Object> health() {
         return Map.of(
                 "status", "ok",
-                "app", "thisnode-backend",
+                "app", "thisnote-backend",
                 "version", "0.1.0",
                 "port", port,
                 "pid", ProcessHandle.current().pid(),

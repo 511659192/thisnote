@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.domain.Notebook;
+import com.thisnode.ext.notes.model.Notebook;
 import com.thisnode.plugin.api.util.JsonFileUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;

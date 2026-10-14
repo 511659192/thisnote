@@ -1,9 +1,9 @@
 package com.thisnode.ext.memorycycle;
 
-import com.thisnode.ext.memorycycle.app.MemoryCycleStateChangedEventListener;
-import com.thisnode.ext.memorycycle.app.NoteChangedEventListener;
-import com.thisnode.ext.memorycycle.app.CardChangedEventListener;
-import com.thisnode.ext.memorycycle.app.MemoryCycleService;
+import com.thisnode.ext.memorycycle.service.MemoryCycleStateChangedEventListener;
+import com.thisnode.ext.memorycycle.service.NoteChangedEventListener;
+import com.thisnode.ext.memorycycle.service.CardChangedEventListener;
+import com.thisnode.ext.memorycycle.service.MemoryCycleService;
 
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;

@@ -17,7 +17,7 @@ const ui = useUiStore()
       </button>
       <div class="brand" @click="$router.push('/notes')">
         <span class="brand-mark">韧</span>
-        <span class="brand-name">thisnode</span>
+        <span class="brand-name">thisnote</span>
       </div>
       <!-- 顶栏搜索插槽：插件交付的模糊查询（宿主只渲染容器） -->
       <template v-for="w in topbarSearches_()" :key="w.pluginId">

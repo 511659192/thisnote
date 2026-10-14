@@ -28,7 +28,7 @@ public class NotesConfig {
         this.rootDir = rootSettingsRepository.configuredRoot(defaultRootDir);
         this.noteMetaDir = rootDir.resolve("meta");
         this.cardsDir = rootDir.resolve("cards");
-        this.notebookDir = rootDir.resolve("ledgers");
+        this.notebookDir = rootDir.resolve("notebook");
         this.attachmentsDir = rootDir.resolve("attachments");
     }
 }

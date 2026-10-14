@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CardView } from '@/api/types'
 import { activeCardPlugins, host, toast } from '@thisnode/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
+import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode, isMarkdown, type CardFormat } from './markdownFormat'
 
 /** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
 const MarkdownView = host().MarkdownView
@@ -35,11 +36,14 @@ const emit = defineEmits<{
   (e: 'end-edit'): void
   (e: 'toggle-collapse', id: string): void
   (e: 'focus', id: string): void
-  (e: 'fit-height', p: { cardId: string; h: number }): void
+  (e: 'fit-height', p: { cardId: string; h: number; w?: number; fitImage?: boolean }): void
 }>()
 
 const draft = ref('')
 const pastingImage = ref(false)
+const pastingMarkdownFile = ref(false)
+const autoFitImageWidth = ref(false)
+const fitPastedImage = ref(false)
 let blurAfterImagePaste = false
 const pendingImageAttachments = new Set<string>()
 const loadedFor = ref<string | null>(null)
@@ -52,6 +56,39 @@ const readBody = ref<HTMLElement | null>(null)
 const card = computed(() => props.view.card)
 const content = computed(() => props.view.contentMd ?? '')
 const sourceVisible = computed(() => !card.value.collapsed && props.editing)
+const formatMode = ref<CardFormat>('auto')
+const formatMenuOpen = ref(false)
+const detectedFormat = computed(() => (isMarkdown(props.editing ? draft.value : content.value) ? 'markdown' : 'text'))
+const effectiveFormat = computed(() => formatMode.value === 'auto' ? detectedFormat.value : formatMode.value)
+const formatIcon = computed(() => formatMode.value === 'auto' ? 'A' : formatMode.value === 'markdown' ? 'M' : 'T')
+const detectedFormatLabel = computed(() => detectedFormat.value === 'markdown' ? 'Markdown' : '普通文本')
+const formatTitle = computed(() => {
+  if (formatMode.value === 'auto') return `自动判定（当前：${detectedFormatLabel.value}）`
+  return formatMode.value === 'markdown' ? 'Markdown 格式' : '普通文本格式'
+})
+
+function readFormatMode(cardId: string): CardFormat {
+  try {
+    const value = localStorage.getItem(`thisnote.notes.card-format.${cardId}`)
+    return value === 'markdown' || value === 'text' ? value : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+
+function selectFormat(mode: CardFormat) {
+  formatMode.value = mode
+  formatMenuOpen.value = false
+  try {
+    localStorage.setItem(`thisnote.notes.card-format.${card.value.cardId}`, mode)
+  } catch {
+    // Keep the selection for this card until it is closed, even when browser storage is unavailable.
+  }
+}
+
+function focusFormatControl() {
+  emit('focus', card.value.cardId)
+}
 
 watch(
   () => [props.editing, card.value.cardId] as const,
@@ -73,10 +110,13 @@ watch(
 
 watch(
   () => card.value.cardId,
-  () => {
+  (id) => {
     loadedFor.value = null
     draft.value = ''
+    formatMenuOpen.value = false
+    formatMode.value = readFormatMode(id)
   },
+  { immediate: true },
 )
 
 /**
@@ -120,9 +160,39 @@ function commit() {
   emit('save', { cardId: card.value.cardId, contentMd: text })
 }
 
-async function onPasteImage(e: ClipboardEvent) {
+async function onPaste(e: ClipboardEvent) {
   const image = getClipboardImage(e.clipboardData)
-  if (!image) return
+  if (!image) {
+    const markdownFile = getClipboardMarkdownFile(e.clipboardData)
+    const clipboardCode = isClipboardCode(e.clipboardData)
+    const hasHtml = Boolean(e.clipboardData?.getData('text/html').trim())
+    if (!markdownFile && !clipboardCode && !hasHtml) return
+    e.preventDefault()
+    const input = e.currentTarget as HTMLTextAreaElement
+    const start = input.selectionStart
+    const end = input.selectionEnd
+    const cardId = card.value.cardId
+    pastingMarkdownFile.value = Boolean(markdownFile)
+    try {
+      const markdown = await getClipboardMarkdown(e.clipboardData)
+      if (!markdown || card.value.cardId !== cardId || !props.editing || textarea.value !== input) return
+      input.setRangeText(markdown, Math.min(start, input.value.length), Math.min(end, input.value.length), 'end')
+      draft.value = input.value
+      if (markdownFile) selectFormat('markdown')
+      else if (clipboardCode && formatMode.value === 'auto') selectFormat('text')
+      if (/!\[[^\]]*\]\([^)]+\)/.test(markdown)) {
+        autoFitImageWidth.value = true
+        fitPastedImage.value = true
+      }
+      await nextTick()
+      fitHeight()
+    } catch (error) {
+      toast(`粘贴 Markdown 失败：${error instanceof Error ? error.message : '无法读取文件'}`, 'error')
+    } finally {
+      pastingMarkdownFile.value = false
+    }
+    return
+  }
   e.preventDefault()
   if (pastingImage.value) return
 
@@ -131,6 +201,8 @@ async function onPasteImage(e: ClipboardEvent) {
   const end = input.selectionEnd
   const cardId = card.value.cardId
   pastingImage.value = true
+  autoFitImageWidth.value = true
+  fitPastedImage.value = true
   try {
     const markdown = await uploadImageAttachment(image)
     if (card.value.cardId !== cardId || !props.editing || textarea.value !== input) {
@@ -143,6 +215,7 @@ async function onPasteImage(e: ClipboardEvent) {
     const from = Math.min(start, text.length)
     const to = Math.min(Math.max(end, from), text.length)
     draft.value = text.slice(0, from) + markdown + text.slice(to)
+    selectFormat('markdown')
     await nextTick()
     input.setSelectionRange(from + markdown.length, from + markdown.length)
     fitHeight()
@@ -151,6 +224,8 @@ async function onPasteImage(e: ClipboardEvent) {
       commit()
     }
   } catch (error) {
+    autoFitImageWidth.value = false
+    fitPastedImage.value = false
     toast(`粘贴图片失败：${error instanceof Error ? error.message : '上传图片失败'}`, 'error')
     if (blurAfterImagePaste) {
       blurAfterImagePaste = false
@@ -220,9 +295,19 @@ function fitHeight() {
   armFitObserver()
   const needed = Math.round(el.scrollHeight) + 24
   const target = Math.max(BLOCK_MIN_H, needed)
-  if (Math.abs(target - card.value.h) > 8) {
-    emit('fit-height', { cardId: card.value.cardId, h: target })
+  const images = Array.from(el.querySelectorAll('img')).filter((image) => image.naturalWidth > 0)
+  if (autoFitImageWidth.value && images.length) {
+    const imageWidth = Math.max(...images.map((image) => image.naturalWidth)) + 32
+    autoFitImageWidth.value = false
+    if (imageWidth > card.value.w) {
+      emit('fit-height', { cardId: card.value.cardId, h: target, w: imageWidth, fitImage: true })
+      return
+    }
   }
+  if (Math.abs(target - card.value.h) > 8) {
+    emit('fit-height', { cardId: card.value.cardId, h: target, fitImage: fitPastedImage.value })
+  }
+  if (!props.editing && images.length) fitPastedImage.value = false
 }
 
 /** 当前要量的内容节点：编辑态是屏外 twin，预览态是渲染出来的内容根节点。 */
@@ -307,23 +392,48 @@ onBeforeUnmount(() => {
       ref="textarea"
       v-model="draft"
       class="body edit"
-      :readonly="pastingImage"
+      :readonly="pastingImage || pastingMarkdownFile"
       spellcheck="false"
       placeholder="在这里写…（Ctrl+Enter 保存，Esc 退出）"
       @pointerdown.stop
       @dblclick.stop
       @keydown="onKeydown"
-      @paste="onPasteImage"
+      @paste="onPaste"
       @blur="onBlur"
       @input="fitHeight"
     ></textarea>
 
     <div v-else-if="!card.collapsed" ref="readBody" class="body read">
       <component :is="MarkdownView"
-        v-if="content"
+        v-if="content && effectiveFormat === 'markdown'"
         :content="content"
       />
+      <div v-else-if="content" class="preview plain-text">{{ content }}</div>
       <div v-else class="preview empty-hint">点击写点什么</div>
+    </div>
+
+    <div class="format-control" @pointerdown.stop @click.stop="focusFormatControl">
+      <button
+        class="format-trigger"
+        type="button"
+        :title="formatTitle"
+        :aria-label="`卡片格式：${formatTitle}`"
+        :aria-expanded="formatMenuOpen"
+        @click="formatMenuOpen = !formatMenuOpen"
+      >
+        {{ formatIcon }}
+      </button>
+      <div v-if="formatMenuOpen" class="format-menu" role="menu">
+        <button class="format-option" :class="{ active: formatMode === 'auto' }" role="menuitem" @click="selectFormat('auto')">
+          <span>自动判定</span><small>当前：{{ detectedFormatLabel }}</small>
+        </button>
+        <button class="format-option" :class="{ active: formatMode === 'markdown' }" role="menuitem" @click="selectFormat('markdown')">
+          <span>Markdown</span>
+        </button>
+        <button class="format-option" :class="{ active: formatMode === 'text' }" role="menuitem" @click="selectFormat('text')">
+          <span>普通文本</span>
+        </button>
+      </div>
     </div>
 
     <!-- Off-screen copy of the draft lets "grow to fit" measure text instead of the textarea's
@@ -379,6 +489,67 @@ onBeforeUnmount(() => {
 }
 .card.collapsed {
   height: 40px !important;
+}
+
+.format-control {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  z-index: 4;
+}
+.format-trigger {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.format-trigger:hover,
+.format-trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.format-menu {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  display: grid;
+  min-width: 144px;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--c-border);
+  border-radius: 7px;
+  background: var(--c-surface);
+  box-shadow: var(--shadow);
+}
+.format-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.format-option:hover,
+.format-option.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.format-option small {
+  color: var(--c-text-3);
+  font-size: 10px;
 }
 
 /* --- card tools: an overlay row in the top-right corner ---
@@ -446,6 +617,10 @@ onBeforeUnmount(() => {
   user-select: text;
   /* The read view is the card's grab area now that the top strip is gone. */
   cursor: move;
+  padding-top: 30px;
+}
+.body.read :deep(.md-preview img) {
+  max-height: none;
 }
 .body.edit {
   background: transparent;
@@ -455,6 +630,7 @@ onBeforeUnmount(() => {
   outline: none;
   resize: none;
   overflow-y: auto;
+  padding-top: 30px;
 }
 .body.edit::placeholder {
   color: var(--c-text-3);

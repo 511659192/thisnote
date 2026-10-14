@@ -27,6 +27,7 @@
     <module>plugins/memory-cycle</module>
     <module>plugins/notes</module>
     <module>plugins/favorite</module>
+    <module>plugins/baidu-sync</module>
     <module>app</module>
   </modules>
 
@@ -55,6 +56,11 @@
       <dependency>
         <groupId>com.thisnode</groupId>
         <artifactId>plugin-favorite</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnode</groupId>
+        <artifactId>plugin-baidu-sync</artifactId>
         <version>${project.version}</version>
       </dependency>
 

@@ -80,7 +80,7 @@ if (!window.__POWERED_BY_QIANKUN__) {
   register()
   document.getElementById('plugin-root')?.replaceChildren(
     Object.assign(document.createElement('p'), {
-      textContent: '笔记域独立预览：完整界面（列表、页面、侧栏面板）渲染在 thisnode 宿主里。',
+      textContent: '笔记域独立预览：完整界面（列表、页面、侧栏面板）渲染在 thisnote 宿主里。',
     }),
   )
 }
