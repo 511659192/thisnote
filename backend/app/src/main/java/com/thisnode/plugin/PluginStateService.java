@@ -1,8 +1,7 @@
 package com.thisnode.plugin;
 
 import com.thisnode.plugin.api.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -17,10 +16,9 @@ import java.util.Map;
  *
  * <p>插件业务状态由插件自己的 API 与存储管理；平台只负责插件级启停与管理视图。
  */
+@Slf4j
 @Service
 public class PluginStateService {
-
-    private static final Logger log = LoggerFactory.getLogger(PluginStateService.class);
 
     private final PluginRegistry registry;
     private final org.springframework.beans.factory.ObjectProvider<org.pf4j.PluginManager> pluginManager;
@@ -78,6 +76,7 @@ public class PluginStateService {
             }
         }
         notifyGlobalState(pluginId, active);
+        log.info("插件 {} 全局启停 → {}", pluginId, active ? "启用" : "停用");
     }
 
     // ------------------------------------------------------------------ 重载

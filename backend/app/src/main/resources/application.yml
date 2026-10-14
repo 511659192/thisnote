@@ -38,6 +38,6 @@ spring:
 logging:
   level:
     root: INFO
-    com.thisnode: INFO
+    com.thisnode: DEBUG
   file:
     name: ${user.home}/.thisnode/logs/backend.log

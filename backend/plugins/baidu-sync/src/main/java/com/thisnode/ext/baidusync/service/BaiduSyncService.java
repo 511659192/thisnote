@@ -14,6 +14,7 @@ import com.thisnode.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnode.ext.baidusync.repository.BaiduSyncStateRepository;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -36,14 +37,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+@Slf4j
 @Service
 public class BaiduSyncService {
 
     private static final String STAGING_DIRECTORY = "._thisnode_baidu_sync_staging_64fd90c1";
+    private static final int UPLOAD_THREAD_COUNT = 8;
+    private static final int UPLOAD_QUEUE_CAPACITY = 256;
+    private static final int MAX_UPLOADS_IN_FLIGHT = UPLOAD_THREAD_COUNT + UPLOAD_QUEUE_CAPACITY;
 
     private final BaiduSyncSettingsRepository settingsRepository;
     private final BaiduSyncStateRepository stateRepository;
@@ -56,6 +67,18 @@ public class BaiduSyncService {
         thread.setDaemon(true);
         return thread;
     });
+    private final ThreadPoolExecutor uploadExecutor = new ThreadPoolExecutor(
+            UPLOAD_THREAD_COUNT,
+            UPLOAD_THREAD_COUNT,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(UPLOAD_QUEUE_CAPACITY),
+            task -> {
+                Thread thread = new Thread(task, "baidu-sync-upload");
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
     private final AtomicReference<BaiduSyncStatus> status = new AtomicReference<>(BaiduSyncStatus.idle());
 
     public BaiduSyncService(BaiduSyncSettingsRepository settingsRepository,
@@ -81,6 +104,7 @@ public class BaiduSyncService {
         if (!status.compareAndSet(current, running)) {
             return status.get();
         }
+        log.info("百度网盘同步开始");
         try {
             executor.execute(() -> sync(running));
         } catch (RuntimeException e) {
@@ -173,13 +197,11 @@ public class BaiduSyncService {
     @PreDestroy
     public void stop() {
         executor.shutdownNow();
+        uploadExecutor.shutdownNow();
     }
 
     private void sync(BaiduSyncStatus initial) {
-        int uploaded = 0;
-        int downloaded = 0;
-        int deleted = 0;
-        int conflicts = 0;
+        SyncCounters counters = new SyncCounters();
         try {
             BaiduSyncSettings settings = settingsRepository.get();
             validateSettings(settings);
@@ -198,52 +220,294 @@ public class BaiduSyncService {
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
             validatePathTypes(local.keySet(), localDirectories, remote);
             BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
-            for (FileChange change : planFileChanges(local, remote, baseline)) {
-                if (change.conflict()) {
-                    conflicts++;
-                }
-                switch (change.action()) {
-                    case UPLOAD -> {
-                        upload(accessToken, remoteRoot, change.relative(), change.local());
-                        uploaded++;
-                    }
-                    case DOWNLOAD -> {
-                        download(accessToken, notesRoot, change.relative(), change.remote());
-                        downloaded++;
-                    }
-                    case DELETE_LOCAL -> {
-                        Files.deleteIfExists(change.local().file());
-                        deleted++;
-                    }
-                    case DELETE_REMOTE -> {
-                        panClient.delete(accessToken, change.remote().path());
-                        deleted++;
-                    }
-                }
-            }
-
-            Set<String> localFilesAfterTransfer = scanLocal(notesRoot, pluginDirectory).keySet();
-            syncDirectories(accessToken, notesRoot, remoteRoot, localFilesAfterTransfer,
-                    remote.directories(), baseline.directories());
-            Map<String, LocalItem> finalLocal = scanLocal(notesRoot, pluginDirectory);
-            RemoteSnapshot finalRemote = scanRemote(accessToken, remoteRoot);
-            Map<String, String> finalFiles = new LinkedHashMap<>();
-            for (Map.Entry<String, LocalItem> entry : finalLocal.entrySet()) {
-                BaiduPanEntry cloud = finalRemote.files().get(entry.getKey());
-                if (cloud != null && entry.getValue().md5().equalsIgnoreCase(cloud.md5())) {
-                    finalFiles.put(entry.getKey(), entry.getValue().md5());
-                }
-            }
-            Set<String> directories = new LinkedHashSet<>();
-            finalLocal.values().stream().map(LocalItem::parent).filter(value -> !value.isEmpty()).forEach(directories::add);
-            directories.addAll(scanLocalDirectories(notesRoot, pluginDirectory));
-            stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(),
-                    finalFiles, directories));
-            status.set(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(),
-                    uploaded, downloaded, deleted, conflicts, ""));
+            List<FileChange> changes = planFileChanges(local, remote, baseline);
+            counters.conflicts = (int) changes.stream().filter(FileChange::conflict).count();
+            uploadChanges(accessToken, remoteRoot, changes, counters)
+                    .thenRunAsync(() -> {
+                        try {
+                            completeSyncAfterUploads(initial, counters, accessToken, notesRoot,
+                                    remoteRoot, changes, remote, baseline);
+                        } catch (Exception e) {
+                            throw new CompletionException(e);
+                        }
+                    }, executor)
+                    .whenComplete((ignored, error) -> {
+                        if (error != null) {
+                            failSync(initial, counters, error);
+                        }
+                    });
         } catch (Exception e) {
-            status.set(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(),
-                    uploaded, downloaded, deleted, conflicts, message(e)));
+            failSync(initial, counters, e);
+        }
+    }
+
+    private void completeSyncAfterUploads(BaiduSyncStatus initial,
+                                          SyncCounters counters,
+                                          String accessToken,
+                                          Path notesRoot,
+                                          String remoteRoot,
+                                          List<FileChange> changes,
+                                          RemoteSnapshot remote,
+                                          BaiduSyncState baseline) throws IOException {
+        downloadChanges(accessToken, notesRoot, changes, counters);
+        for (FileChange change : changes) {
+            if (change.action() == FileAction.DELETE_LOCAL) {
+                log.debug("删除本地 {}", change.relative());
+                Files.deleteIfExists(change.local().file());
+                counters.deleted++;
+            }
+        }
+        deleteRemoteChanges(accessToken, changes, counters);
+
+        Set<String> localFilesAfterTransfer = scanLocal(notesRoot, pluginDirectory).keySet();
+        syncDirectories(accessToken, notesRoot, remoteRoot, localFilesAfterTransfer,
+                remote.directories(), baseline.directories());
+        Map<String, LocalItem> finalLocal = scanLocal(notesRoot, pluginDirectory);
+        RemoteSnapshot finalRemote = scanRemote(accessToken, remoteRoot);
+        Map<String, String> finalFiles = new LinkedHashMap<>();
+        for (Map.Entry<String, LocalItem> entry : finalLocal.entrySet()) {
+            BaiduPanEntry cloud = finalRemote.files().get(entry.getKey());
+            if (cloud != null && entry.getValue().md5().equalsIgnoreCase(cloud.md5())) {
+                finalFiles.put(entry.getKey(), entry.getValue().md5());
+            }
+        }
+        Set<String> directories = new LinkedHashSet<>();
+        finalLocal.values().stream().map(LocalItem::parent).filter(value -> !value.isEmpty()).forEach(directories::add);
+        directories.addAll(scanLocalDirectories(notesRoot, pluginDirectory));
+        stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(),
+                finalFiles, directories));
+        status.set(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(),
+                counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, ""));
+        log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}（耗时 {} ms）",
+                counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts,
+                System.currentTimeMillis() - initial.startedAt());
+    }
+
+    private void failSync(BaiduSyncStatus initial,
+                          SyncCounters counters,
+                          Throwable error) {
+        Throwable cause = error;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        Exception failure = cause instanceof Exception exception
+                ? exception
+                : new IllegalStateException("百度网盘同步失败", cause);
+        log.warn("百度网盘同步失败：{}", message(failure), failure);
+        status.set(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(),
+                counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, message(failure)));
+    }
+
+    private CompletableFuture<Void> uploadChanges(String accessToken,
+                                                  String remoteRoot,
+                                                  List<FileChange> changes,
+                                                  SyncCounters counters) {
+        List<FileChange> changesToUpload = changes.stream()
+                .filter(change -> change.action() == FileAction.UPLOAD)
+                .toList();
+        if (changesToUpload.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        createRemoteDirectory(accessToken, remoteRoot, STAGING_DIRECTORY);
+        Set<String> uploadDirectories = new LinkedHashSet<>();
+        for (FileChange change : changesToUpload) {
+            String parent = change.local().parent();
+            if (parent.isBlank()) {
+                continue;
+            }
+            String path = remoteRoot;
+            for (String segment : parent.split("/")) {
+                path += "/" + segment;
+                uploadDirectories.add(path);
+            }
+        }
+        for (String directory : uploadDirectories) {
+            createRemoteDirectoryPath(accessToken, directory);
+        }
+
+        return uploadAllAsync(accessToken, remoteRoot, changesToUpload)
+                .thenAcceptAsync(uploadPlans -> {
+                    for (int start = 0; start < uploadPlans.size();
+                         start += BaiduPanClient.FILE_MANAGER_BATCH_SIZE) {
+                        List<UploadPlan> moveBatch = uploadPlans.subList(start,
+                                Math.min(start + BaiduPanClient.FILE_MANAGER_BATCH_SIZE, uploadPlans.size()));
+                        moveUploadedBatch(accessToken, moveBatch, counters);
+                    }
+                }, executor)
+                .thenRunAsync(() -> panClient.delete(
+                        accessToken, remoteRoot + "/" + STAGING_DIRECTORY), executor);
+    }
+
+    private CompletableFuture<List<UploadPlan>> uploadAllAsync(String accessToken,
+                                                               String remoteRoot,
+                                                               List<FileChange> changes) {
+        UploadDispatch dispatch = new UploadDispatch(accessToken, remoteRoot, changes);
+        dispatchUploads(dispatch);
+        return dispatch.completion;
+    }
+
+    private void dispatchUploads(UploadDispatch dispatch) {
+        while (dispatch.failure == null
+                && dispatch.nextIndex < dispatch.changes.size()
+                && dispatch.inFlight < MAX_UPLOADS_IN_FLIGHT) {
+            int index = dispatch.nextIndex++;
+            FileChange change = dispatch.changes.get(index);
+            dispatch.inFlight++;
+            try {
+                CompletableFuture.supplyAsync(() -> uploadOne(
+                                dispatch.accessToken, dispatch.remoteRoot, change), uploadExecutor)
+                        .whenComplete((plan, error) -> {
+                            try {
+                                executor.execute(() -> uploadCompleted(dispatch, index, plan, error));
+                            } catch (RejectedExecutionException e) {
+                                dispatch.completion.completeExceptionally(e);
+                            }
+                        });
+            } catch (RejectedExecutionException e) {
+                dispatch.nextIndex--;
+                dispatch.inFlight--;
+                if (uploadExecutor.isShutdown()) {
+                    dispatch.failure = new IllegalStateException("百度网盘上传线程池已关闭", e);
+                } else if (dispatch.inFlight == 0) {
+                    dispatch.failure = new IllegalStateException("百度网盘上传任务无法入队", e);
+                }
+                // A full queue may be a brief handoff race; the next completion callback retries dispatch.
+                break;
+            }
+        }
+
+        if (dispatch.failure != null && dispatch.inFlight == 0) {
+            dispatch.completion.completeExceptionally(dispatch.failure);
+        } else if (dispatch.failure == null
+                && dispatch.nextIndex == dispatch.changes.size()
+                && dispatch.inFlight == 0) {
+            dispatch.completion.complete(List.of(dispatch.plans));
+        }
+    }
+
+    private UploadPlan uploadOne(String accessToken,
+                                 String remoteRoot,
+                                 FileChange change) {
+        log.debug("上传 {}", change.relative());
+        String stagingPath = remoteRoot + "/" + STAGING_DIRECTORY
+                + "/upload-" + UUID.randomUUID() + ".tmp";
+        try {
+            panClient.upload(accessToken, change.local().file(), stagingPath);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("上传百度网盘文件失败：" + change.relative(), e);
+        }
+        String destinationDirectory = change.local().parent().isBlank()
+                ? remoteRoot
+                : remoteRoot + "/" + change.local().parent();
+        String filename = change.relative().substring(change.relative().lastIndexOf('/') + 1);
+        return new UploadPlan(new BaiduPanClient.FileManagerMove(
+                stagingPath, destinationDirectory, filename));
+    }
+
+    private void uploadCompleted(UploadDispatch dispatch,
+                                 int index,
+                                 UploadPlan plan,
+                                 Throwable error) {
+        dispatch.inFlight--;
+        if (error != null) {
+            if (dispatch.failure == null) {
+                dispatch.failure = error;
+            }
+        } else if (dispatch.failure == null) {
+            dispatch.plans[index] = plan;
+        }
+        dispatchUploads(dispatch);
+    }
+
+    private void moveUploadedBatch(String accessToken,
+                                   List<UploadPlan> stagedBatch,
+                                   SyncCounters counters) {
+        List<BaiduPanClient.FileManagerMove> moves = stagedBatch.stream().map(UploadPlan::move).toList();
+        List<BaiduPanClient.FileManagerFailure> failures = panClient.moveOverwriteBatch(accessToken, moves);
+        Map<UploadPlan, BaiduPanClient.FileManagerFailure> failuresByUpload = new LinkedHashMap<>();
+        for (BaiduPanClient.FileManagerFailure failure : failures) {
+            UploadPlan plan = matchUploadFailure(stagedBatch, failure);
+            if (plan == null || failuresByUpload.put(plan, failure) != null) {
+                throw new IllegalStateException("无法对应百度网盘批量移动的失败项：" + failure.path());
+            }
+        }
+        counters.uploaded += stagedBatch.size() - failuresByUpload.size();
+        for (Map.Entry<UploadPlan, BaiduPanClient.FileManagerFailure> entry : failuresByUpload.entrySet()) {
+            BaiduPanClient.FileManagerFailure failure = entry.getValue();
+            if (failure.apiErrno() == 12 && failure.itemErrno() == -8) {
+                BaiduPanClient.FileManagerMove move = entry.getKey().move();
+                panClient.moveOverwrite(accessToken, move.sourcePath(),
+                        move.destinationDirectory(), move.filename());
+                counters.uploaded++;
+            } else {
+                throw new IllegalStateException("百度网盘批量移动失败："
+                        + failure.exception().getMessage(), failure.exception());
+            }
+        }
+    }
+
+    private UploadPlan matchUploadFailure(List<UploadPlan> batch,
+                                          BaiduPanClient.FileManagerFailure failure) {
+        for (UploadPlan plan : batch) {
+            BaiduPanClient.FileManagerMove move = plan.move();
+            String destinationPath = move.destinationDirectory() + "/" + move.filename();
+            if (failure.path() != null
+                    && (failure.path().equals(move.sourcePath()) || failure.path().equals(destinationPath))) {
+                return plan;
+            }
+        }
+        return batch.size() == 1 ? batch.get(0) : null;
+    }
+
+    private void downloadChanges(String accessToken,
+                                 Path notesRoot,
+                                 List<FileChange> changes,
+                                 SyncCounters counters) {
+        List<FileChange> changesToDownload = changes.stream()
+                .filter(change -> change.action() == FileAction.DOWNLOAD)
+                .toList();
+        if (changesToDownload.isEmpty()) {
+            return;
+        }
+        List<BaiduPanEntry> entries = changesToDownload.stream().map(FileChange::remote).toList();
+        Map<Long, String> downloadUrls = panClient.downloadUrls(accessToken, entries);
+        for (FileChange change : changesToDownload) {
+            log.debug("下载 {}", change.relative());
+            panClient.downloadWithUrl(accessToken, change.remote(),
+                    resolveLocal(notesRoot, change.relative()), downloadUrls.get(change.remote().fsId()));
+            counters.downloaded++;
+        }
+    }
+
+    private void deleteRemoteChanges(String accessToken,
+                                     List<FileChange> changes,
+                                     SyncCounters counters) {
+        List<FileChange> changesToDelete = changes.stream()
+                .filter(change -> change.action() == FileAction.DELETE_REMOTE)
+                .toList();
+        for (int start = 0; start < changesToDelete.size(); start += BaiduPanClient.FILE_MANAGER_BATCH_SIZE) {
+            List<FileChange> batch = changesToDelete.subList(start,
+                    Math.min(start + BaiduPanClient.FILE_MANAGER_BATCH_SIZE, changesToDelete.size()));
+            List<String> paths = batch.stream().map(change -> change.remote().path()).toList();
+            List<BaiduPanClient.FileManagerFailure> failures = panClient.deleteBatch(accessToken, paths);
+            Set<String> failedPaths = new LinkedHashSet<>();
+            for (BaiduPanClient.FileManagerFailure failure : failures) {
+                String failedPath = failure.path();
+                if (failedPath == null || !paths.contains(failedPath)) {
+                    if (paths.size() != 1) {
+                        throw new IllegalStateException("无法对应百度网盘批量删除的失败项：" + failedPath);
+                    }
+                    failedPath = paths.get(0);
+                }
+                failedPaths.add(failedPath);
+            }
+            counters.deleted += batch.size() - failedPaths.size();
+            if (!failures.isEmpty()) {
+                BaiduPanClient.FileManagerFailure failure = failures.get(0);
+                throw new IllegalStateException("删除百度网盘文件失败："
+                        + failure.exception().getMessage(), failure.exception());
+            }
         }
     }
 
@@ -415,8 +679,16 @@ public class BaiduSyncService {
                 throw new IllegalStateException("百度网盘同步保留目录包含未知文件，请先手动处理：" + item.path());
             }
         }
-        for (BaiduPanEntry item : stagedItems) {
-            panClient.delete(accessToken, item.path());
+        List<String> stagedPaths = stagedItems.stream().map(BaiduPanEntry::path).toList();
+        for (int start = 0; start < stagedPaths.size(); start += BaiduPanClient.FILE_MANAGER_BATCH_SIZE) {
+            List<String> batch = stagedPaths.subList(start,
+                    Math.min(start + BaiduPanClient.FILE_MANAGER_BATCH_SIZE, stagedPaths.size()));
+            List<BaiduPanClient.FileManagerFailure> failures = panClient.deleteBatch(accessToken, batch);
+            if (!failures.isEmpty()) {
+                BaiduPanClient.FileManagerFailure failure = failures.get(0);
+                throw new IllegalStateException("清理百度网盘同步临时文件失败："
+                        + failure.exception().getMessage(), failure.exception());
+            }
         }
         panClient.delete(accessToken, stagingPath);
     }
@@ -480,39 +752,19 @@ public class BaiduSyncService {
         String path = remoteRoot;
         for (String segment : relative.split("/")) {
             path += "/" + segment;
-            try {
-                panClient.createDirectory(accessToken, path);
-            } catch (BaiduPanException e) {
-                if (e.errno() != -8) {
-                    throw new IllegalStateException("创建百度网盘目录失败：" + path + "；" + e.getMessage(), e);
-                }
+            createRemoteDirectoryPath(accessToken, path);
+        }
+    }
+
+    private void createRemoteDirectoryPath(String accessToken,
+                                           String path) {
+        try {
+            panClient.createDirectory(accessToken, path);
+        } catch (BaiduPanException e) {
+            if (e.errno() != -8) {
+                throw new IllegalStateException("创建百度网盘目录失败：" + path + "；" + e.getMessage(), e);
             }
         }
-    }
-
-    private void upload(String accessToken,
-                        String remoteRoot,
-                        String relative,
-                        LocalItem item) {
-        if (!item.parent().isBlank()) {
-            createRemoteDirectory(accessToken, remoteRoot, item.parent());
-        }
-        createRemoteDirectory(accessToken, remoteRoot, STAGING_DIRECTORY);
-        String stagingPath = remoteRoot + "/" + STAGING_DIRECTORY + "/upload-" + UUID.randomUUID() + ".tmp";
-        panClient.upload(accessToken, item.file(), stagingPath);
-        String destinationDirectory = item.parent().isBlank()
-                ? remoteRoot
-                : remoteRoot + "/" + item.parent();
-        String filename = relative.substring(relative.lastIndexOf('/') + 1);
-        panClient.moveOverwrite(accessToken, stagingPath, destinationDirectory, filename);
-        panClient.delete(accessToken, remoteRoot + "/" + STAGING_DIRECTORY);
-    }
-
-    private void download(String accessToken,
-                          Path root,
-                          String relative,
-                          BaiduPanEntry item) {
-        panClient.download(accessToken, item, resolveLocal(root, relative));
     }
 
     private String remoteRoot(String appName) {
@@ -584,6 +836,34 @@ public class BaiduSyncService {
     private String message(Exception e) {
         String value = e.getMessage();
         return value == null || value.isBlank() ? "同步失败" : value;
+    }
+
+    private static final class SyncCounters {
+        private int uploaded;
+        private int downloaded;
+        private int deleted;
+        private int conflicts;
+    }
+
+    private static final class UploadDispatch {
+        private final String accessToken;
+        private final String remoteRoot;
+        private final List<FileChange> changes;
+        private final UploadPlan[] plans;
+        private final CompletableFuture<List<UploadPlan>> completion = new CompletableFuture<>();
+        private int nextIndex;
+        private int inFlight;
+        private Throwable failure;
+
+        private UploadDispatch(String accessToken, String remoteRoot, List<FileChange> changes) {
+            this.accessToken = accessToken;
+            this.remoteRoot = remoteRoot;
+            this.changes = changes;
+            this.plans = new UploadPlan[changes.size()];
+        }
+    }
+
+    private record UploadPlan(BaiduPanClient.FileManagerMove move) {
     }
 
     private record LocalItem(Path file,

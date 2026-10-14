@@ -4,12 +4,14 @@ import com.thisnode.ext.memorycycle.model.CardSchedule;
 import com.thisnode.ext.memorycycle.model.view.ScheduleView;
 import com.thisnode.ext.memorycycle.repository.CardScheduleRepository;
 import com.thisnode.plugin.api.MemoryCycleStateChangedEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 @Service
+@Slf4j
 public class MemoryCycleService {
 
     private static final int[][] INTERVAL_DAYS_BY_LEVEL = {{1, 2, 3}, {2, 3, 5}, {3, 5, 8}, {5, 8, 13}, {8, 13, 21}, {13, 21, 34}, {21, 34, 60}, {34, 48, 60}, {47, 60, 60}, {60, 60, 60}};
@@ -86,6 +88,7 @@ public class MemoryCycleService {
         }
         if (changed) {
             publisher.publishEvent(new MemoryCycleStateChangedEvent(cardId, enabled));
+            log.info("卡片 {} 记忆周期 → {}", cardId, enabled ? "开启" : "关闭");
         }
     }
 
@@ -123,6 +126,8 @@ public class MemoryCycleService {
         s.setReps(s.getReps() + 1);
         s.setLastReviewedAt(new Date(now));
         scheduleRepository.save(s);
+        log.info("卡片 {} 评分 {} → 状态 {}，下次复习 {}（level={}）",
+                cardId, grade, s.getState(), s.getDueAt(), s.getLevel());
         return scheduleView(s);
     }
 
@@ -184,7 +189,11 @@ public class MemoryCycleService {
      * @return 是否真的删掉了一条（没排期过返回 false）
      */
     public synchronized boolean delete(String cardId) {
-        return scheduleRepository.delete(cardId);
+        boolean removed = scheduleRepository.delete(cardId);
+        if (removed) {
+            log.debug("卡片 {} 的记忆周期排期已删除", cardId);
+        }
+        return removed;
     }
 
     private ScheduleView scheduleView(CardSchedule schedule) {

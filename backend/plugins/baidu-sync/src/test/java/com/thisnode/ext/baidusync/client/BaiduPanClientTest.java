@@ -109,6 +109,79 @@ class BaiduPanClientTest {
     }
 
     @Test
+    void retriesReplacementMoveWhenRateLimited() {
+        responses.add(conflict(SOURCE_PATH));
+        responses.add(success());
+        responses.add("{\"errno\":12,\"info\":[{\"errno\":31034,\"path\":\"" + SOURCE_PATH + "\"}]}");
+        responses.add(success());
+        responses.add(success());
+
+        client.moveOverwrite("test-token", SOURCE_PATH, REMOTE_ROOT, ".id-file-index.json");
+
+        assertEquals(5, requests.size());
+        assertMove(requests.get(3), SOURCE_PATH, REMOTE_ROOT, ".id-file-index.json");
+        assertEquals("delete", requests.get(4).query().get("opera"));
+    }
+
+    @Test
+    void fetchesDownloadUrlsInBatchesOfFifty() {
+        JSONArray firstBatch = new JSONArray();
+        for (long fsId = 1; fsId <= 50; fsId++) {
+            firstBatch.add(Map.of("fs_id", fsId, "dlink", "https://download/" + fsId));
+        }
+        JSONArray secondBatch = new JSONArray();
+        secondBatch.add(Map.of("fs_id", 51, "dlink", "https://download/51"));
+        responses.add(JSON.toJSONString(Map.of("errno", 0, "list", firstBatch)));
+        responses.add(JSON.toJSONString(Map.of("errno", 0, "list", secondBatch)));
+        List<BaiduPanEntry> entries = java.util.stream.LongStream.rangeClosed(1, 51)
+                .mapToObj(fsId -> new BaiduPanEntry(REMOTE_ROOT + "/" + fsId, false,
+                        1, "", 0, fsId))
+                .toList();
+
+        Map<Long, String> urls = client.downloadUrls("test-token", entries);
+
+        assertEquals(51, urls.size());
+        assertEquals("https://download/1", urls.get(1L));
+        assertEquals("https://download/51", urls.get(51L));
+        assertEquals(2, requests.size());
+        assertEquals(50, JSON.parseArray(requests.get(0).query().get("fsids")).size());
+        assertEquals(1, JSON.parseArray(requests.get(1).query().get("fsids")).size());
+    }
+
+    @Test
+    void deletesMultipleFilesWithOneFileManagerRequest() {
+        responses.add("{\"errno\":0,\"info\":[{\"errno\":0},{\"errno\":0}]}");
+
+        List<BaiduPanClient.FileManagerFailure> failures = client.deleteBatch("test-token",
+                List.of(REMOTE_ROOT + "/one", REMOTE_ROOT + "/two"));
+
+        assertTrue(failures.isEmpty());
+        assertEquals(1, requests.size());
+        CapturedRequest request = requests.get(0);
+        assertEquals("delete", request.query().get("opera"));
+        assertEquals(2, JSON.parseArray(request.form().get("filelist")).size());
+    }
+
+    @Test
+    void returnsPerFileErrorsFromBatchMove() {
+        responses.add("{\"errno\":12,\"info\":[{\"errno\":0,\"path\":\"source-one\"},"
+                + "{\"errno\":-8,\"path\":\"source-two\"}]}");
+        List<BaiduPanClient.FileManagerMove> moves = List.of(
+                new BaiduPanClient.FileManagerMove("source-one", REMOTE_ROOT, "one"),
+                new BaiduPanClient.FileManagerMove("source-two", REMOTE_ROOT, "two"));
+
+        List<BaiduPanClient.FileManagerFailure> failures = client.moveOverwriteBatch("test-token", moves);
+
+        assertEquals(1, failures.size());
+        assertEquals("source-two", failures.get(0).path());
+        assertEquals(12, failures.get(0).apiErrno());
+        assertEquals(-8, failures.get(0).itemErrno());
+        assertEquals("move", requests.get(0).query().get("opera"));
+        assertEquals("overwrite", requests.get(0).form().get("ondup"));
+        assertEquals(2, JSON.parseArray(requests.get(0).form().get("filelist")).size());
+    }
+
+    @Test
     void normalizesBase64Md5FromDirectoryListing() throws NoSuchAlgorithmException {
         byte[] content = "unchanged local content".getBytes(StandardCharsets.UTF_8);
         byte[] digest = MessageDigest.getInstance("MD5").digest(content);

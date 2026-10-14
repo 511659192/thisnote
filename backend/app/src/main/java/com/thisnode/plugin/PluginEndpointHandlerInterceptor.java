@@ -2,6 +2,7 @@ package com.thisnode.plugin;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -15,6 +16,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * <p>未注册的插件 id 不拦——那种请求本来就该由控制器给出「未知插件」的答复，
  * 而不是这里冒充一个状态错误。
  */
+@Slf4j
 @Component
 public class PluginEndpointHandlerInterceptor implements HandlerInterceptor {
 
@@ -51,6 +53,7 @@ public class PluginEndpointHandlerInterceptor implements HandlerInterceptor {
         if (registry.undeactivatable(pluginId)) {
             return true;
         }
+        log.warn("插件「{}」已停用，拦截请求 {} {}", registry.title(pluginId), request.getMethod(), path);
         response.setStatus(HttpServletResponse.SC_CONFLICT);
         response.setContentType("application/json;charset=UTF-8");
         response.getWriter().write("""

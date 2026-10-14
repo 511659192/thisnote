@@ -11,6 +11,7 @@ import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.plugin.api.CardChangedEvent;
 import com.thisnode.plugin.api.NoteChangedEvent;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ import java.util.Set;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NoteService {
 
     private final NoteRepository noteRepository;
@@ -48,6 +50,7 @@ public class NoteService {
         NoteMeta noteMeta = new NoteMeta().setTitle("").setType(req.type()).setNotebookId(req.notebookId());
         String noteId = noteRepository.saveNew(noteMeta);
         publisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, noteMeta.getTitle(), List.of()));
+        log.info("创建笔记 {}（type={}，notebook={}）", noteId, req.type(), req.notebookId());
         return noteId;
     }
 
@@ -68,6 +71,7 @@ public class NoteService {
                 publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
             }
             publisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TITLE_CHANGED, title, List.of()));
+            log.info("笔记 {} 标题改为「{}」（联动重命名 {} 张卡片）", noteId, title, meta.getCardIds().size());
         }
         return meta;
     }
@@ -93,6 +97,7 @@ public class NoteService {
         } finally {
             attachmentService.deleteIfUnreferenced(removedAttachments);
         }
+        log.info("删除笔记 {}「{}」及 {} 张卡片", id, meta.getTitle(), deletedCardIds.size());
     }
 
     public NoteMeta get(String id) {

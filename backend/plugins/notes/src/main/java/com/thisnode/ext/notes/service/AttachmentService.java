@@ -74,6 +74,7 @@ public class AttachmentService {
         } catch (IOException e) {
             throw new UncheckedIOException("保存图片附件失败", e);
         }
+        log.info("保存图片附件 {}", fileName);
         return "../attachments/" + fileName;
     }
 
@@ -108,6 +109,7 @@ public class AttachmentService {
             if (path == null) continue;
             try {
                 Files.deleteIfExists(path);
+                log.info("删除未引用的图片附件 {}", fileName);
             } catch (IOException e) {
                 log.warn("无法删除未引用的图片附件 {}", fileName, e);
             }

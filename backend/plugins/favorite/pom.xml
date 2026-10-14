@@ -48,6 +48,12 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
+    <!-- Lombok：编译期生成 @Slf4j 等样板；provided 不进插件 jar，版本由父 pom 锁。 -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <!-- SBP 插件入口需要 @SpringBootApplication（spring-boot-autoconfigure）。 -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

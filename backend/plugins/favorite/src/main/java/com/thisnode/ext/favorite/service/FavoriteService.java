@@ -1,11 +1,13 @@
 package com.thisnode.ext.favorite.service;
 
 import com.thisnode.ext.favorite.repository.FavoriteRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
+@Slf4j
 public class FavoriteService {
 
     private final FavoriteRepository favoriteRepository;
@@ -24,9 +26,12 @@ public class FavoriteService {
 
     public void setFavorite(String noteId, boolean favorite) {
         favoriteRepository.setFavorite(noteId, favorite);
+        log.info("笔记 {} 收藏 → {}", noteId, favorite);
     }
 
     public boolean removeFavorite(String noteId) {
-        return favoriteRepository.removeFavorite(noteId);
+        boolean removed = favoriteRepository.removeFavorite(noteId);
+        log.info("笔记 {} 取消收藏（原收藏={}）", noteId, removed);
+        return removed;
     }
 }

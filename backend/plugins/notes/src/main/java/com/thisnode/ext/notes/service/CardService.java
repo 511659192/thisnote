@@ -12,6 +12,7 @@ import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.plugin.api.CardChangedEvent;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CardService {
 
     private final CardRepository cardRepository;
@@ -76,6 +78,7 @@ public class CardService {
         noteMeta.setCardIds(cardIds);
         noteRepository.save(noteMeta);
         publisher.publishEvent(new CardChangedEvent(card.getCardId(), CardChangedEvent.Kind.CREATED));
+        log.info("笔记 {} 新建卡片 {}", noteId, card.getCardId());
         return new Card(card, content);
     }
 
@@ -105,6 +108,7 @@ public class CardService {
         noteRepository.save(noteMeta);
         attachmentService.deleteIfUnreferenced(removedAttachments);
         publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
+        log.debug("卡片 {} 内容已保存（{} 字符）", cardId, body.length());
         Card saved = cardRepository.getOne(cardId);
         return saved == null ? new Card(cardMeta, body) : saved;
     }
@@ -136,6 +140,7 @@ public class CardService {
         Optional.ofNullable(changes.collapsed()).ifPresent(meta::setCollapsed);
         cardRepository.save(meta, cardId);
         publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
+        log.debug("卡片 {} 元数据已更新", cardId);
         return meta;
     }
 
@@ -161,6 +166,7 @@ public class CardService {
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
         noteRepository.save(note);
         publisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED, removedAttachments));
+        log.info("笔记 {} 删除卡片 {}", noteId, cardId);
     }
 
     private ApplicationEventPublisher requireMainEventPublisher() {
