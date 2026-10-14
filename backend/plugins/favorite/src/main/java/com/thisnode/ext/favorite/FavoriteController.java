@@ -1,5 +1,6 @@
 package com.thisnode.ext.favorite;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,13 +18,10 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/plugins/" + FavoritePlugin.PLUGIN_ID)
+@RequiredArgsConstructor
 public class FavoriteController {
 
     private final FavoriteService favoriteService;
-
-    public FavoriteController(FavoriteService favoriteService) {
-        this.favoriteService = favoriteService;
-    }
 
     /**
      * 收藏了哪些笔记 —— **只给 id**。

@@ -1,5 +1,6 @@
 package com.thisnode.ext.favorite;
 
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
@@ -9,8 +10,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * SBP 的 {@code SbpWebConfigurer} 再把插件里的 {@code @RestController} 挂进主容器的 MVC，
  * 所以外部看到的路径仍是 {@code /api/plugins/favorite/**}。
  *
- * <p>注意这里**没有** main 方法：插件不自己启动，它由 SBP 在插件生命周期里 run 起来。
+ * <p>由 SBP 加载时作为插件上下文入口；也提供 main 方法，便于独立启动。
  */
 @SpringBootApplication
 public class FavoriteStarter {
+
+    public static void main(String[] args) {
+        SpringApplication.run(FavoriteStarter.class, args);
+    }
 }

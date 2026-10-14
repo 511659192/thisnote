@@ -15,8 +15,8 @@
 
 | 关注点 | 归属 | 存放位置 |
 |---|---|---|
-| 卡片是否开启记忆周期（开关） | **插件自己** | `<data-root>/plugins/memory-cycle/enabled-cards.properties` |
-| 排期（状态/难度/间隔/到期时间…） | **插件自己** | `<data-root>/plugins/memory-cycle/scheduling.meta` |
+| 卡片是否开启记忆周期（开关） | **插件自己** | `scheduling.json` 中存在对应排期即表示开启 |
+| 排期（状态/难度/间隔/到期时间…） | **插件自己** | `<data-root>/plugins/memory-cycle/scheduling.json` |
 | 卡片正文与标题 | **不归它管**（不读笔记数据） | 由界面侧经核心的公开 API 现拼 |
 
 ---
@@ -49,10 +49,10 @@ backend/runtime/plugins/memory-cycle.jar
 
 | 状态 | 存放 | 为什么 |
 |---|---|---|
-| 「这张卡开了记忆周期吗」 | 插件自己的 `enabled-cards.properties` | 开关由插件专属 API 读写，不与其他插件共享文件或存储契约 |
-| 排期（state/ease/intervalDays/dueAt/reps/lapses/learningStep…） | 插件自己的 `scheduling.meta`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
+| 「这张卡开了记忆周期吗」 | 插件自己的 `scheduling.json` | 对应排期存在即为开启；关闭时删除对应排期 |
+| 排期（state/ease/intervalDays/dueAt/reps/lapses…） | 插件自己的 `scheduling.json`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
-`SrsService` 通过同容器内的 `EnabledCardsRepository` 查询开关，并在启用卡片时创建初始排期；控制器通过本插件端点调用它，不需要平台状态服务回调，也没有跨容器的存储依赖。
+`SrsService` 在启用卡片时创建初始排期，并以排期是否存在判断开关；控制器通过本插件端点调用它，不需要平台状态服务回调，也没有跨容器的存储依赖。
 
 ### 2.3 调度算法：为「笔记」调过的 SM-2
 
@@ -75,10 +75,10 @@ new ──评分──► learning（页面内短周期重现）──毕业─�
 一个防漂移技巧：**`previewDue()` 在副本上重放 `apply()`** 来算「这次评分后何时再见」，
 而不是另写一份间隔公式 —— 预览与真实调度永远一致（分别实现迟早会漂）。
 
-写入方式：内存 `Map` + 每次变更以 JSON 全量重写 `scheduling.meta`。旧 Properties 文件首次读取时会先备份为
-`scheduling.meta.properties.bak`（同名备份已存在时追加序号），再迁移为 JSON；JSON 文件无法解析时会保留原文件并报错，避免后续写入覆盖数据。
+写入方式：内存 `Map` + 每次变更以 JSON 全量重写 `scheduling.json`。如果该文件内容仍为旧 Properties 格式，首次读取时会先备份为
+`scheduling.json.properties.bak`（同名备份已存在时追加序号），再迁移为 JSON；旧路径 `scheduling.meta` 不会自动读取或迁移。JSON 文件无法解析时会保留原文件并报错，避免后续写入覆盖数据。
 
-JSON 中的 `dueAt`、`lastReviewedAt`、`createdAt`、`updatedAt` 按应用运行环境时区保存为 `yyyy年MM月dd日 HH:mm:ss`；读入后仍转换为毫秒值参与调度计算。旧数字 JSON 首次读入时会先备份为 `scheduling.meta.json.bak`（同名备份已存在时追加序号），再迁移为日期字符串。格式精确到秒，毫秒部分会舍弃，备份保留原精度。
+JSON 中的 `dueAt`、`lastReviewedAt`、`createdAt`、`updatedAt` 按应用运行环境时区保存为 `yyyy年MM月dd日 HH:mm:ss`；读入后仍转换为毫秒值参与调度计算。旧数字 JSON 首次读入时会先备份为 `scheduling.json.bak`（同名备份已存在时追加序号），再迁移为日期字符串。格式精确到秒，毫秒部分会舍弃，备份保留原精度。
 
 ### 2.4 端点面（6 个，查询 GET、写入 POST + `@RequestParam`）
 
@@ -177,12 +177,10 @@ NoteCard 渲染卡片时：
 
 ### 3.5 复习页（`ReviewView.vue`，440 行）
 
-- 取 `due(50)` 得到排期 → `loadCardContent(cardIds)` 拼正文 → 每次居中呈现一张卡片（可用宽度的 2/3）
-  （Markdown 用宿主服务 `host().MarkdownView` 渲染，标记事件用 `host().notify`）；
-- **`loadCardContent` 的代价是显式承认的**：列出笔记 → 每 8 篇并发取页面 → 找齐即停，
-  最坏情况 N 个请求（N = 笔记数）。换来的是插件之间零契约（见 2.6）；
-- **孤儿处理**：`due` 里那些在核心查不到卡片的排期，一律跳过渲染（渲染成空白卡会让人以为复习坏了），
-  并顺手 `forget` 掉；界面上如果有孤儿会明确提示；
+- 打开时先取 `due(50)` 的排期摘要，再只读取当前展示卡片的正文；评分后轮到下一张时再取下一张正文；
+  正文通过笔记 meta 的 `cardIds` 定位，只请求所属笔记的目标卡片（Markdown 用宿主服务 `host().MarkdownView` 渲染）；
+- “已开启”页签的全量卡片列表只在用户切换到该页签后加载；
+- **孤儿处理**：轮到的卡片在核心查不到时跳过并顺手 `forget`，界面提示已跳过的孤儿数；
 - 卡片逐张评分（四档按钮标注下次出现方式）；
   短周期卡按队列规则随机插回；只有一张时在当前队列中立即重现；毕业卡移出视图；
 - 键盘 `1-4` 作用于最上方卡片；
@@ -204,7 +202,7 @@ NoteCard 渲染卡片时：
 | 运行期提供 | `GET /plugin-assets/memory-cycle/plugin.js` | **界面侧静态服务**提供（开发期：宿主 dev server 的中间件从 `frontend/runtime/plugins/` 端出）；闸门在装载器（停用即不装载） |
 | 开发期 | `frontend/plugins/memory-cycle` dev server: **7112** | 端口约定见 `host/src/plugins/devPorts.ts`；没起则自动回退到交付产物 |
 
-> 排期与卡片开关文件都是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-cycle/scheduling.meta` 和 `enabled-cards.properties`。
+> 排期是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-cycle/scheduling.json`。存在对应排期即表示卡片已开启。
 
 ---
 
@@ -213,15 +211,14 @@ NoteCard 渲染卡片时：
 ```
 ① 用户右键卡片并选「开启记忆周期」（或点灰色图标）
    POST /api/plugins/memory-cycle/update-state?cardId=id&value=true
-     → EnabledCardsRepository 写入 enabled-cards.properties
-     → SrsService.createIfAbsent(id)：写一条 dueAt=now 的排期
+     → SrsService.createIfAbsent(id)：写一条 dueAt=now 的排期（有排期即为已开启）
    → 卡片徽标变「已到期」，侧栏「复习」徽标 +1
 
 ② 用户打开 /review（插件登记的路由）
-   GET get-due → 得到排期 → loadCardContent 拼正文（核心公开 API）→ 瀑布流渲染
+   GET get-due → 得到排期摘要 → 定位当前卡片所属笔记并读取这张卡的正文（核心公开 API）
 
 ③ 用户点「良好」
-   POST /review?cardId=… {grade:3} → SrsService.apply() 推进状态机 → 全量重写 scheduling.meta
+   POST /review?cardId=… {grade:3} → SrsService.apply() 推进状态机 → 全量重写 scheduling.json
    → 界面侧用返回的新排期覆盖本地 → 短周期卡随机回到当前队列，毕业卡移出视图
 
 ④ 用户在笔记里删掉这张卡片

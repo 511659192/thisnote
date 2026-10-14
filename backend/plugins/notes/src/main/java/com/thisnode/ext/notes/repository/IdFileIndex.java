@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.NoteMeta;
-import com.thisnode.ext.notes.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.JsonFileUtils;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;

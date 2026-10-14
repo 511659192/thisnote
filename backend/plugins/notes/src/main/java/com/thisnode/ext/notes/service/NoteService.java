@@ -11,6 +11,7 @@ import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.plugin.api.CardChangedEvent;
 import com.thisnode.plugin.api.NoteChangedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -37,6 +38,7 @@ public class NoteService {
     private final AttachmentService attachmentService;
     private ApplicationEventPublisher mainEventPublisher;
 
+    @Autowired
     public void setMainEventPublisher(ApplicationEventPublisher publisher) {
         this.mainEventPublisher = publisher;
     }

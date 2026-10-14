@@ -12,14 +12,14 @@ import org.springframework.context.PayloadApplicationEvent;
  * <p>实例注册在**主容器**上（跨插件容器的事件不会传播），由 {@code MemoryCyclePlugin} 在
  * {@code afterPluginBootstrap} 里挂上。
  */
-public class SchedulingListener
+public class CardChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<CardChangedEvent>> {
 
-    private static final Logger log = LoggerFactory.getLogger(SchedulingListener.class);
+    private static final Logger log = LoggerFactory.getLogger(CardChangedEventListener.class);
 
     private final SrsService srs;
 
-    public SchedulingListener(SrsService srs) {
+    public CardChangedEventListener(SrsService srs) {
         this.srs = srs;
     }
 

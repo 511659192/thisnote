@@ -5,15 +5,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
+import org.springframework.stereotype.Component;
 
-public class MemoryCycleStateListener
+@Component
+public class MemoryCycleStateChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<MemoryCycleStateChangedEvent>> {
 
-    private static final Logger log = LoggerFactory.getLogger(MemoryCycleStateListener.class);
+    private static final Logger log = LoggerFactory.getLogger(MemoryCycleStateChangedEventListener.class);
 
     private final SrsService srs;
 
-    public MemoryCycleStateListener(SrsService srs) {
+    public MemoryCycleStateChangedEventListener(SrsService srs) {
         this.srs = srs;
     }
 

@@ -4,7 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.domain.Card;
 import com.thisnode.ext.notes.domain.Card.CardMeta;
-import com.thisnode.ext.notes.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.JsonFileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Repository;

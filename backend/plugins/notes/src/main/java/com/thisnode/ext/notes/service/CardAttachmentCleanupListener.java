@@ -3,7 +3,9 @@ package com.thisnode.ext.notes.service;
 import com.thisnode.plugin.api.CardChangedEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
+import org.springframework.stereotype.Component;
 
+@Component
 public class CardAttachmentCleanupListener
         implements ApplicationListener<PayloadApplicationEvent<CardChangedEvent>> {
 

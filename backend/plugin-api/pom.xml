@@ -2,33 +2,54 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>com.thisnode</groupId>
-    <artifactId>thisnode-parent</artifactId>
-    <version>0.1.0</version>
-    <relativePath>../pom.xml</relativePath>
-  </parent>
+    <parent>
+        <groupId>com.thisnode</groupId>
+        <artifactId>thisnode-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
 
-  <artifactId>plugin-api</artifactId>
-  <name>thisnode-plugin-api</name>
-  <description>插件通用契约与工具：生命周期扩展点、文件工具、通用异常与跨插件消息</description>
+    <artifactId>plugin-api</artifactId>
+    <name>thisnode-plugin-api</name>
+    <description>插件通用契约与工具：生命周期扩展点、文件工具、通用异常与跨插件消息</description>
 
-  <!--
-    依赖刻意压到最小：只有 Spring 的注解（@Component）与 PF4J 的契约类型。
-    没有 spring-web、没有 jdbc、没有 Jackson —— 契约层不该把实现技术栈强加给插件作者。
-  -->
-  <dependencies>
-    <dependency>
-      <groupId>org.pf4j</groupId>
-      <artifactId>pf4j</artifactId>
-      <version>3.16.0</version>
-    </dependency>
+    <!--
+      依赖刻意压到最小：只有 Spring 的注解（@Component）与 PF4J 的契约类型。
+      没有 spring-web、没有 jdbc、没有 Jackson —— 契约层不该把实现技术栈强加给插件作者。
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>org.pf4j</groupId>
+            <artifactId>pf4j</artifactId>
+            <version>3.16.0</version>
+        </dependency>
 
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-context</artifactId>
-    </dependency>
-  </dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>33.4.8-jre</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+    </dependencies>
 </project>

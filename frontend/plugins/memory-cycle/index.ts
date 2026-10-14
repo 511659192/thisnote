@@ -28,7 +28,6 @@ function blank(cardId: string): MemoryCycleCardState {
   return {
     cardId,
     enabled: false,
-    learningStep: 0,
     schedule: {
       cardId: null, state: 'new', ease: 2.5, intervalDays: 0,
       dueAt: 0, lastReviewedAt: null, reps: 0, lapses: 0, due: false,
@@ -76,7 +75,6 @@ export const memoryCycle = {
     } else if (!result.enabled) {
       const reset = blank(cardId)
       updated.schedule = reset.schedule
-      updated.learningStep = reset.learningStep
     }
   },
 

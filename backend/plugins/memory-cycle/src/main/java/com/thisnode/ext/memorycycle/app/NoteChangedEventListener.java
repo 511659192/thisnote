@@ -6,14 +6,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
-public class NoteDeletionListener
+public class NoteChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteChangedEvent>> {
 
-    private static final Logger log = LoggerFactory.getLogger(NoteDeletionListener.class);
+    private static final Logger log = LoggerFactory.getLogger(NoteChangedEventListener.class);
 
     private final SrsService srs;
 
-    public NoteDeletionListener(SrsService srs) {
+    public NoteChangedEventListener(SrsService srs) {
         this.srs = srs;
     }
 

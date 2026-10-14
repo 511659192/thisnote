@@ -29,6 +29,9 @@ const router = useRouter()
 const { MarkdownView } = host()
 const queue = ref<Array<DueCard & Partial<CardContent>>>([])
 const currentCard = computed(() => queue.value[0])
+const loadedContentIds = ref(new Set<string>())
+const contentLoadingCardId = ref<string | null>(null)
+const contentError = ref('')
 const activeTab = ref<'review' | 'enabled'>('review')
 const enabledCards = ref<EnabledMemoryCard[]>([])
 const previewCard = ref<EnabledMemoryCard | null>(null)
@@ -73,22 +76,41 @@ const orphanCount = ref(0)
 async function loadQueue() {
   loading.value = true
   reviewedCount.value = 0
+  orphanCount.value = 0
   try {
     const due = await memoryCycleApi.due(50)
-    // 正文要自己去核心取：due 只给排期（复习插件不读笔记数据，也就不依赖笔记插件）
-    const content = await loadCardContent(due.map((c) => c.cardId))
-    // 核心那边已经查不到卡片的排期是**孤儿**（卡片被删，或库被外部重建过）。
-    // 必须跳过它们：渲染成一张空白卡只会让人以为复习坏了。
-    const live = due.filter((c) => content.has(c.cardId))
-    orphanCount.value = due.length - live.length
-    // 顺手把孤儿清掉：本插件不读笔记数据，只有「界面侧刚在核心那边查过」这个时点才知道卡片没了。
-    // 正常删除由主容器的 CardChangedEvent 兜住，这里补上外部重建/绕过 API 留下的那些。
-    for (const gone of due.filter((c) => !content.has(c.cardId))) {
-      void memoryCycleApi.forget(gone.cardId).catch(() => {})
-    }
-    queue.value = live.map((c) => ({ ...c, ...content.get(c.cardId) }))
+    queue.value = due
+    await loadCurrentCardContent()
   } finally {
     loading.value = false
+  }
+}
+
+async function loadCurrentCardContent() {
+  while (currentCard.value) {
+    const card = currentCard.value
+    if (loadedContentIds.value.has(card.cardId)) return
+
+    contentLoadingCardId.value = card.cardId
+    contentError.value = ''
+    try {
+      const content = await loadCardContent([card.cardId])
+      const details = content.get(card.cardId)
+      if (details) {
+        Object.assign(card, details)
+        loadedContentIds.value = new Set(loadedContentIds.value).add(card.cardId)
+        return
+      }
+
+      orphanCount.value++
+      queue.value = queue.value.filter((item) => item.cardId !== card.cardId)
+      void memoryCycleApi.forget(card.cardId).catch(() => {})
+    } catch (error) {
+      contentError.value = error instanceof Error ? error.message : '读取卡片失败，请重试'
+      return
+    } finally {
+      contentLoadingCardId.value = null
+    }
   }
 }
 
@@ -149,7 +171,6 @@ function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCycle
       ...card,
       state: updated.schedule.state,
       dueAt: updated.schedule.dueAt,
-      learningStep: updated.learningStep,
       gradePreview: updated.gradePreview ?? card.gradePreview,
     }]
     return
@@ -161,7 +182,6 @@ function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCycle
     ...card,
     state: updated.schedule.state,
     dueAt: updated.schedule.dueAt,
-    learningStep: updated.learningStep,
     gradePreview: updated.gradePreview ?? card.gradePreview,
   })
   queue.value = remaining
@@ -182,11 +202,12 @@ function settleGrade(card: DueCard & Partial<CardContent>, updated: MemoryCycleC
 }
 
 async function grade(card: DueCard, g: Grade) {
-  if (busyIds.value.has(card.cardId)) return
+  if (busyIds.value.has(card.cardId) || !loadedContentIds.value.has(card.cardId)) return
   busyIds.value.add(card.cardId)
   try {
     const updated = await memoryCycle.review(card.cardId, g)
     settleGrade(card, updated)
+    await loadCurrentCardContent()
   } finally {
     busyIds.value.delete(card.cardId)
   }
@@ -215,7 +236,6 @@ onMounted(async () => {
   await refreshPluginAvailability()
   if (isPluginActive(PLUGIN_ID)) {
     void loadQueue()
-    void loadEnabledCardList()
   } else {
     loading.value = false
   }
@@ -302,7 +322,18 @@ const GRADES: { grade: Grade; label: string }[] = [
           class="rv-card rv-first"
         >
           <div class="rv-content">
-            <component :is="MarkdownView" :content="card.contentMd || ''" />
+            <div v-if="contentLoadingCardId === card.cardId" class="rv-state small muted">
+              正在读取当前卡片…
+            </div>
+            <div v-else-if="contentError" class="rv-state small muted">
+              <span>读取卡片失败：{{ contentError }}</span>
+              <button class="btn sm ghost" @click="loadCurrentCardContent">重试</button>
+            </div>
+            <component
+              v-else-if="loadedContentIds.has(card.cardId)"
+              :is="MarkdownView"
+              :content="card.contentMd || ''"
+            />
           </div>
 
         </div>
@@ -312,7 +343,7 @@ const GRADES: { grade: Grade; label: string }[] = [
             :key="g.grade"
             class="btn rv-grade-btn"
             :class="{ 'rv-good': g.grade === 3 }"
-            :disabled="busyIds.has(currentCard.cardId)"
+            :disabled="busyIds.has(currentCard.cardId) || !loadedContentIds.has(currentCard.cardId) || contentLoadingCardId === currentCard.cardId"
             :title="intervalHint(currentCard, g.grade)"
             @click="grade(currentCard, g.grade)"
           >

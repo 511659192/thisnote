@@ -17,7 +17,6 @@ export interface ScheduleView {
 export interface MemoryCycleCardState {
   cardId: string
   enabled: boolean
-  learningStep: number
   schedule: ScheduleView
   /** 按评分 1..4 预览的下一次复习时间（epoch 毫秒），与真实调度共用同一套计算 */
   gradePreview?: Record<string, number>
@@ -36,7 +35,6 @@ export interface DueCard {
   cardId: string
   dueAt: number
   state: string
-  learningStep: number
   gradePreview: Record<string, number>
 }
 
@@ -49,6 +47,24 @@ export interface CardContent {
 export interface EnabledMemoryCard extends CardContent {
   cardId: string
   schedule: ScheduleView
+}
+
+type NoteCardIndex = { noteId: string; title: string; cardIds: string[] }
+
+let noteCardIndexCache: { notes: NoteCardIndex[]; loadedAt: number } | null = null
+let noteCardIndexRequest: Promise<NoteCardIndex[]> | null = null
+
+async function loadNoteCardIndex(): Promise<NoteCardIndex[]> {
+  if (noteCardIndexCache && Date.now() - noteCardIndexCache.loadedAt <= 60_000) {
+    return noteCardIndexCache.notes
+  }
+  noteCardIndexRequest ??= http.get<NoteCardIndex[]>('/api/notes/get', { limit: 2000 })
+    .then((notes) => {
+      noteCardIndexCache = { notes, loadedAt: Date.now() }
+      return notes
+    })
+    .finally(() => { noteCardIndexRequest = null })
+  return noteCardIndexRequest!
 }
 
 export const memoryCycleApi = {
@@ -75,40 +91,42 @@ export const memoryCycleApi = {
     ),
 }
 
-/**
- * 按 cardId 把卡片内容拼出来：列出笔记 → 并发取页面 → 找全就停。
- *
- * <p>这是「复习插件不依赖笔记插件」的代价所在：首屏最多 N 个请求（N = 笔记数）。
- * 换来的是两个插件之间没有任何契约 —— 笔记插件缺位时复习插件照样能起来（只是拼不出内容）。
- */
+/** 按笔记元数据中的 cardIds 定位目标卡片，只读取目标笔记的卡片明细。 */
 export async function loadCardContent(cardIds: string[]): Promise<Map<string, CardContent>> {
   const want = new Set(cardIds)
   const found = new Map<string, CardContent>()
   if (!want.size) return found
-  const notes = await http.get<Array<{ noteId: string; title: string }>>('/api/notes/get', { limit: 2000 })
-  const batchSize = 8
-  for (let i = 0; i < notes.length && found.size < want.size; i += batchSize) {
-    const batch = notes.slice(i, i + batchSize)
-    const pages = await Promise.all(batch.map(async (note) => {
-      try {
-        const page = await http.get<{
-          cards: Array<{ meta: { cardId: string }; content: string }>
-        }>('/api/notes/cards/get', { noteId: note.noteId })
-        return { note, page }
-      } catch {
-        return null
-      }
+  const indexWasFresh = noteCardIndexCache !== null
+    && Date.now() - noteCardIndexCache.loadedAt <= 60_000
+  let notes = await loadNoteCardIndex()
+  const findOwners = (items: NoteCardIndex[]) => items
+    .map((note) => ({
+      note,
+      cardIds: (note.cardIds ?? []).filter((cardId) => want.has(cardId)),
     }))
-    for (const item of pages) {
-      if (!item) continue
-      for (const card of item.page.cards) {
-        const cardId = card.meta.cardId
-        if (want.has(cardId) && !found.has(cardId)) {
-          found.set(cardId, {
-            noteTitle: item.note.title,
-            contentMd: card.content,
-          })
-        }
+    .filter(({ cardIds: noteCardIds }) => noteCardIds.length > 0)
+  let owners = findOwners(notes)
+  if (!owners.length && indexWasFresh) {
+    noteCardIndexCache = null
+    notes = await loadNoteCardIndex()
+    owners = findOwners(notes)
+  }
+  const pages = await Promise.all(owners.map(async ({ note, cardIds: noteCardIds }) => {
+    const page = await http.get<{
+      cards: Array<{ meta: { cardId: string }; content: string }>
+    }>('/api/notes/cards/get', { noteId: note.noteId, cardIds: noteCardIds.join(',') })
+    return { note, page }
+  })).catch((error) => {
+    noteCardIndexCache = null
+    throw error
+  })
+  for (const item of pages) {
+    for (const card of item.page.cards) {
+      if (want.has(card.meta.cardId)) {
+        found.set(card.meta.cardId, {
+          noteTitle: item.note.title,
+          contentMd: card.content,
+        })
       }
     }
   }

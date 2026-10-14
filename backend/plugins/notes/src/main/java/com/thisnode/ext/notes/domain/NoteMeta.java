@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.domain;
 
-import com.thisnode.ext.notes.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.JsonFileUtils;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

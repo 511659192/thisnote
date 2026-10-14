@@ -1,8 +1,8 @@
 package com.thisnode.ext.memorycycle;
 
-import com.thisnode.ext.memorycycle.app.MemoryCycleStateListener;
-import com.thisnode.ext.memorycycle.app.NoteDeletionListener;
-import com.thisnode.ext.memorycycle.app.SchedulingListener;
+import com.thisnode.ext.memorycycle.app.MemoryCycleStateChangedEventListener;
+import com.thisnode.ext.memorycycle.app.NoteChangedEventListener;
+import com.thisnode.ext.memorycycle.app.CardChangedEventListener;
 import com.thisnode.ext.memorycycle.app.SrsService;
 
 import org.laxture.sbp.SpringBootPlugin;
@@ -13,8 +13,8 @@ import org.pf4j.PluginWrapper;
 /**
  * 记忆周期插件：thisnote 的**卡片插件**参考实现（参考 Anki 的 SM-2 间隔重复）。
  *
- * <p>它的状态全在本插件自己的文件里：排期写在 {@code plugins/memory-cycle/scheduling.meta}，
- * 卡片开关写在 {@code plugins/memory-cycle/enabled-cards.properties}。它**不依赖核心插件**，也不读笔记内容 ——
+ * <p>它的状态全在本插件自己的 {@code plugins/memory-cycle/scheduling.json} 里；有排期即表示已开启。
+ * 它**不依赖核心插件**，也不读笔记内容 ——
  * 核心插件缺位时它照样能独立启动。开启某张卡片会立刻建一条到期记录，于是马上可复习；
  * 关闭卡片的记忆周期时会删除对应排期。
  *
@@ -26,9 +26,9 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     public static final String PLUGIN_ID = "memory-cycle";
 
     /** 注册到主容器的排期清理器（停止时要摘掉，见 {@link #stop()}）。 */
-    private SchedulingListener listener;
-    private NoteDeletionListener noteDeletionListener;
-    private MemoryCycleStateListener stateListener;
+    private CardChangedEventListener listener;
+    private NoteChangedEventListener noteChangedEventListener;
+    private MemoryCycleStateChangedEventListener stateListener;
 
     public MemoryCyclePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -70,11 +70,11 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
                                      org.springframework.context.support.GenericApplicationContext ctx) {
         SrsService srs = ctx.getBean(SrsService.class);
         srs.setMainEventPublisher(getMainApplicationContext());
-        listener = new SchedulingListener(srs);
-        noteDeletionListener = new NoteDeletionListener(srs);
-        stateListener = new MemoryCycleStateListener(srs);
+        listener = new CardChangedEventListener(srs);
+        noteChangedEventListener = new NoteChangedEventListener(srs);
+        stateListener = new MemoryCycleStateChangedEventListener(srs);
         getMainApplicationContext().addApplicationListener(listener);
-        getMainApplicationContext().addApplicationListener(noteDeletionListener);
+        getMainApplicationContext().addApplicationListener(noteChangedEventListener);
         getMainApplicationContext().addApplicationListener(stateListener);
     }
 
@@ -88,9 +88,9 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
             getMainApplicationContext().removeApplicationListener(listener);
             listener = null;
         }
-        if (noteDeletionListener != null) {
-            getMainApplicationContext().removeApplicationListener(noteDeletionListener);
-            noteDeletionListener = null;
+        if (noteChangedEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteChangedEventListener);
+            noteChangedEventListener = null;
         }
         if (stateListener != null) {
             getMainApplicationContext().removeApplicationListener(stateListener);

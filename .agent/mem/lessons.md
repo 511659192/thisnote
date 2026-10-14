@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-14 — 核验插件范围先枚举模块
+- **纠正来源：** 用户在插件独立运行验证过程中将目标数量从 2 个更正为 3 个。
+- **可核验事实：** `backend/pom.xml` 的模块列表包含 `memory-cycle`、`notes`、`favorite`；运行插件目录还残留旧 ID `memory-curve` 的 JAR，而当前宿主将其列为禁用状态。
+- **下次执行规则：** 核验插件前先从 Maven 模块和描述符枚举当前插件，覆盖所有目标；旧 ID 构件单独报告，不混入当前模块数量。
+
 ## 2026-10-14 — 硬规则：插件改名需覆盖契约和模块身份
 - **纠正来源：** 用户在 MemoryCurve 改名为 MemoryCycle 时补充指出，除业务类和显示文案外，还需同步 module 名称与 plugin-api 事件类型。
 - **可核验事实：** 本次改名前，Maven 坐标和 workspace 包名仍为 `plugin-memory-curve` / `@thisnode/plugin-memory-curve`，跨插件事件仍定义为 `MemoryCurveStateChangedEvent` 并被插件监听器引用。

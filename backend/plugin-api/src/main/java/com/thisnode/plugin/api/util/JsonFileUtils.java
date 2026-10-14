@@ -1,4 +1,4 @@
-package com.thisnode.ext.notes.util;
+package com.thisnode.plugin.api.util;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
@@ -24,8 +24,7 @@ public final class JsonFileUtils {
                                  String text) {
         try {
             Files.createDirectories(file.getParent());
-            Files.writeString(file, text, StandardCharsets.UTF_8,
-                              StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.writeString(file, text);
         } catch (IOException e) {
             throw new UncheckedIOException("写入失败 " + file, e);
         }

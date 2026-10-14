@@ -27,8 +27,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
 
 @org.springframework.stereotype.Service
 public class SrsService {
@@ -51,26 +49,19 @@ public class SrsService {
             DateTimeFormatter.ofPattern("uuuu年MM月dd日 HH:mm:ss");
 
     /**
-     * 排期存放在本插件自己的 {@code scheduling.meta}，卡片开关存放在 {@code enabled-cards.properties}。
+     * 排期存放在本插件自己的 {@code scheduling.json}，有排期即表示卡片已开启。
      *
-     * <p>本插件因此是「纯状态管理器」：只管排期与开关，**不读笔记内容**，也不依赖核心插件 ——
-     * 核心插件缺位时它照样能独立启动。代价是卡片被删后条目会残留（没有通知机制能感知），
-     * 所以 due 列表把它们原样返回，由界面侧跳过（卡片内容由界面侧自己取）。
+     * <p>本插件不读笔记内容，也不依赖核心插件；卡片被删除时由主容器发出的变更事件清理排期。
      */
-    private final EnabledCardsRepository enabledCards;
     private final Path file;
     private Map<String, CardSchedule> schedules;
     private ApplicationEventPublisher mainEventPublisher;
 
-    public SrsService(EnabledCardsRepository enabledCards,
+    public SrsService(ApplicationEventPublisher mainEventPublisher,
                       @org.springframework.beans.factory.annotation.Value(
                               "${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.enabledCards = enabledCards;
-        this.file = Paths.get(dataRoot, "plugins", "memory-cycle", "scheduling.meta");
-    }
-
-    private boolean enabled(String cardId) {
-        return enabledCards.isEnabled(cardId);
+        this.mainEventPublisher = mainEventPublisher;
+        this.file = Paths.get(dataRoot, "plugins", "memory-cycle", "scheduling.json");
     }
 
     private static boolean isShortPhase(String state) {
@@ -83,9 +74,8 @@ public class SrsService {
         CardSchedule basis = s == null ? newCardSchedule(cardId) : s;
         return Map.of(
                 "cardId", cardId,
-                "enabled", enabled(cardId),
+                "enabled", s != null,
                 "schedule", s == null ? emptySchedule(cardId) : scheduleView(s),
-                "learningStep", basis.getLearningStep(),
                 "gradePreview", previewDue(basis, System.currentTimeMillis()));
     }
 
@@ -104,7 +94,6 @@ public class SrsService {
         s.setCardId(cardId);
         s.setState("new");
         s.setEase(EASE_INIT);
-        s.setLearningStep(0);
         return s;
     }
 
@@ -114,26 +103,19 @@ public class SrsService {
 
     /** Enable a card with a fresh schedule, or publish the state change for listeners to handle. */
     public synchronized void setEnabled(String cardId, boolean enabled) {
-        boolean wasEnabled = enabledCards.isEnabled(cardId);
+        boolean wasEnabled = load(cardId) != null;
         boolean changed = wasEnabled != enabled;
         ApplicationEventPublisher publisher = mainEventPublisher;
         if (changed && publisher == null) {
             throw new IllegalStateException("主容器事件发布器尚未就绪");
         }
 
-        enabledCards.setEnabled(cardId, enabled);
-        boolean scheduleChanged = false;
         if (enabled) {
-            if (!wasEnabled) {
-                scheduleChanged = schedules().remove(cardId) != null;
+            if (createIfAbsent(cardId)) {
+                saveAll();
             }
-            scheduleChanged |= removeDisabledSchedules(enabledCards.enabledCardIds());
-            scheduleChanged |= createIfAbsent(cardId);
-        } else if (!changed) {
-            scheduleChanged = schedules().remove(cardId) != null;
-            scheduleChanged |= removeDisabledSchedules(enabledCards.enabledCardIds());
-        }
-        if (scheduleChanged) {
+        } else if (changed) {
+            schedules().remove(cardId);
             saveAll();
         }
         if (changed) {
@@ -155,7 +137,6 @@ public class SrsService {
         s.setDueAt(now);
         s.setReps(0);
         s.setLapses(0);
-        s.setLearningStep(0);
         s.setCreatedAt(now);
         s.setUpdatedAt(now);
         schedules().put(cardId, s);
@@ -167,14 +148,9 @@ public class SrsService {
         if (grade < 1 || grade > 4) {
             throw new IllegalArgumentException("评分必须是 1..4");
         }
-        if (!enabled(cardId)) {
-            throw new IllegalStateException("该卡片未开启记忆周期");
-        }
         CardSchedule s = load(cardId);
         if (s == null) {
-            // 排期丢失（meta 被手工改坏、卡片是导入进来的）：当作全新卡片，而不是报错。
-            createIfAbsent(cardId);
-            s = load(cardId);
+            throw new IllegalStateException("该卡片未开启记忆周期");
         }
         long now = System.currentTimeMillis();
         apply(s, grade, now);
@@ -195,7 +171,6 @@ public class SrsService {
                 s.setLapses(s.getLapses() + 1);
             }
             s.setState(hadGraduated ? "relearning" : "learning");
-            s.setLearningStep(0);
             s.setDueAt(now);
             return;
         }
@@ -222,7 +197,6 @@ public class SrsService {
 
     private void graduate(CardSchedule s, long now, int intervalDays) {
         s.setState("review");
-        s.setLearningStep(0);
         s.setIntervalDays(intervalDays);
         s.setDueAt(now + intervalDays * DAY_MS);
     }
@@ -242,14 +216,13 @@ public class SrsService {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (CardSchedule s : schedules().values()) {
             boolean shortPhase = isShortPhase(s.getState());
-            if (!enabled(s.getCardId()) || (!shortPhase && s.getDueAt() > now)) {
+            if (!shortPhase && s.getDueAt() > now) {
                 continue;
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("cardId", s.getCardId());
             row.put("dueAt", shortPhase ? now : s.getDueAt());
             row.put("state", s.getState());
-            row.put("learningStep", s.getLearningStep());
             row.put("gradePreview", previewDue(s, now));
             rows.add(row);
         }
@@ -296,13 +269,7 @@ public class SrsService {
     }
 
     public synchronized boolean forgetDeletedCard(String cardId) {
-        boolean wasEnabled = enabledCards.isEnabled(cardId);
-        enabledCards.setEnabled(cardId, false);
-        return forget(cardId) || wasEnabled;
-    }
-
-    private boolean removeDisabledSchedules(Set<String> enabledCardIds) {
-        return schedules().keySet().removeIf(cardId -> !enabledCardIds.contains(cardId));
+        return forget(cardId);
     }
 
     /** 读取并按需迁移排期文件。 */
@@ -325,6 +292,7 @@ public class SrsService {
                     throw new IllegalArgumentException("排期 JSON 根节点必须是对象");
                 }
                 boolean needsTimestampMigration = false;
+                boolean needsLearningStepRemoval = false;
                 for (Map.Entry<String, Object> entry : loaded.entrySet()) {
                     if (!(entry.getValue() instanceof Map<?, ?> row)
                             || entry.getKey() == null
@@ -332,12 +300,13 @@ public class SrsService {
                         throw new IllegalArgumentException("排期 JSON 中的 cardId 与对象字段不匹配");
                     }
                     needsTimestampMigration |= hasNumericTimestamp(row);
+                    needsLearningStepRemoval |= row.containsKey("learningStep");
                     out.put(entry.getKey(), scheduleFromJson(entry.getKey(), row));
                 }
-                if (needsTimestampMigration) {
+                if (needsTimestampMigration || needsLearningStepRemoval) {
                     Path backup = backupJsonFile();
                     writeJson(out);
-                    log.info("排期时间戳已迁移为日期字符串，原 JSON 备份位于 {}", backup);
+                    log.info("排期 JSON 已更新并备份原文件：{}", backup);
                 }
                 return out;
             }
@@ -401,10 +370,9 @@ public class SrsService {
     }
 
     private Path backupJsonFile() throws IOException {
-        String baseName = file.getFileName() + ".json";
-        Path backup = file.resolveSibling(baseName + ".bak");
+        Path backup = file.resolveSibling(file.getFileName() + ".bak");
         for (int suffix = 1; Files.exists(backup); suffix++) {
-            backup = file.resolveSibling(baseName + "-" + suffix + ".bak");
+            backup = file.resolveSibling(file.getFileName() + "-" + suffix + ".bak");
         }
         return Files.copy(file, backup);
     }
@@ -422,7 +390,7 @@ public class SrsService {
                 jsonValues.put(entry.getKey(), scheduleToJson(entry.getValue()));
             }
             String json = JSON.toJSONString(jsonValues, JSONWriter.Feature.PrettyFormat);
-            tempFile = Files.createTempFile(file.getParent(), "scheduling.meta.", ".tmp");
+            tempFile = Files.createTempFile(file.getParent(), "scheduling.json.", ".tmp");
             Files.writeString(tempFile, json, StandardCharsets.UTF_8,
                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             try {
@@ -453,7 +421,6 @@ public class SrsService {
                     ? null : parseLegacyTimestamp(value, 0));
             case "reps" -> s.setReps((int) parseNumber(value, 0));
             case "lapses" -> s.setLapses((int) parseNumber(value, 0));
-            case "learningStep" -> s.setLearningStep((int) parseNumber(value, 0));
             case "createdAt" -> s.setCreatedAt(parseLegacyTimestamp(value, 0));
             case "updatedAt" -> s.setUpdatedAt(parseLegacyTimestamp(value, 0));
             default -> {
@@ -498,7 +465,6 @@ public class SrsService {
         schedule.setLastReviewedAt(parseTimestamp(row.get("lastReviewedAt"), null));
         schedule.setReps((int) number(row.get("reps"), 0));
         schedule.setLapses((int) number(row.get("lapses"), 0));
-        schedule.setLearningStep((int) number(row.get("learningStep"), 0));
         schedule.setCreatedAt(parseTimestamp(row.get("createdAt"), 0L));
         schedule.setUpdatedAt(parseTimestamp(row.get("updatedAt"), 0L));
         return schedule;
@@ -515,7 +481,6 @@ public class SrsService {
                 ? null : formatTimestamp(schedule.getLastReviewedAt()));
         row.put("reps", schedule.getReps());
         row.put("lapses", schedule.getLapses());
-        row.put("learningStep", schedule.getLearningStep());
         row.put("createdAt", formatTimestamp(schedule.getCreatedAt()));
         row.put("updatedAt", formatTimestamp(schedule.getUpdatedAt()));
         return row;
@@ -582,7 +547,6 @@ public class SrsService {
             copy.setState(basis.getState());
             copy.setEase(basis.getEase());
             copy.setIntervalDays(basis.getIntervalDays());
-            copy.setLearningStep(basis.getLearningStep());
             copy.setLapses(basis.getLapses());
             apply(copy, g, now);
             out.put(g, copy.getDueAt());

@@ -1,21 +1,17 @@
 package com.thisnode.ext.favorite;
 
 import com.thisnode.plugin.api.NoteChangedEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
-public class FavoriteNoteCleanupListener
+@Slf4j
+@RequiredArgsConstructor
+public class NoteChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteChangedEvent>> {
 
-    private static final Logger log = LoggerFactory.getLogger(FavoriteNoteCleanupListener.class);
-
     private final FavoriteService favoriteService;
-
-    public FavoriteNoteCleanupListener(FavoriteService favoriteService) {
-        this.favoriteService = favoriteService;
-    }
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<NoteChangedEvent> event) {

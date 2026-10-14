@@ -22,7 +22,8 @@
   <!--
     依赖面 = 契约 + 插件侧共享支持 + SBP —— 这就是「独立构件」的全部含义：本模块的 classpath 里
     没有核心的 service/domain/api.dto，想调也调不到（编译期即失败，不靠约定或测试兜底）。
-    依赖版本一律由父 pom 锁（应用与插件必须同一套栈），运行期由主应用类加载器提供，不打进插件 jar。
+    依赖版本一律由父 pom 锁（应用与插件必须同一套栈）；PF4J 使用普通 jar，运行期由主应用类加载器提供。
+    standalone 分类器另行打包可独立运行的 Spring Boot jar。
   -->
   <dependencies>
     <dependency>
@@ -48,6 +49,10 @@
       <artifactId>spring-web</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
@@ -66,6 +71,15 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <classifier>standalone</classifier>
+          <mainClass>com.thisnode.ext.memorycycle.MemoryCycleStarter</mainClass>
+        </configuration>
+      </plugin>
+
       <!-- 交付：把自己的 jar 拷到 backend/runtime/plugins/（界面资源由界面侧自行交付，不经这里）。
            在插件模块做而非主体 dependency:copy —— 后者从本地仓库解析，可能拿到陈旧构件
            （踩过：runtime/plugins/ 里是 Oct 2 的旧 jar）。 -->

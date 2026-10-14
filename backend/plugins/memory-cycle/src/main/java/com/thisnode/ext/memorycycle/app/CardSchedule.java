@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * 一张卡片的间隔重复状态（memory-cycle 插件自己的数据，落成 {@code scheduling.meta}）。
+ * 一张卡片的间隔重复状态（memory-cycle 插件自己的数据，落成 {@code scheduling.json}）。
  *
  * <p>字段默认值就是「一张还没排期的卡片」的初始状态；状态机在 {@link SrsService} 里就地推进它，
  * 所以这里是可变对象，而不是 record。
@@ -28,7 +28,6 @@ public class CardSchedule {
     private Long lastReviewedAt;
     private int reps;
     private int lapses;
-    private int learningStep;
     private long createdAt;
     private long updatedAt;
 }
