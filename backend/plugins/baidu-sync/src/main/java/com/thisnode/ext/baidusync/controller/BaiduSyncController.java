@@ -37,11 +37,11 @@ public class BaiduSyncController {
 
     @PostMapping("/update-settings")
     public SettingsView updateSettings(@RequestBody UpdateSettingsRequest request) {
-        return settingsView(
-                baiduSyncSettingsRepository.updateCredentials(Objects.toString(request.appName(), ""),
-                                                              Objects.toString(request.appKey(), ""),
-                                                              Objects.toString(request.secretKey(), ""),
-                                                              Objects.toString(request.signKey(), "")));
+        BaiduSyncSettings settings = baiduSyncSettingsRepository.updateCredentials(Objects.toString(request.appName(), ""),
+                                                                                   Objects.toString(request.appKey(), ""),
+                                                                                   Objects.toString(request.secretKey(), ""),
+                                                                                   Objects.toString(request.signKey(), ""));
+        return settingsView(settings);
     }
 
     @GetMapping("/get-authorization-url")
