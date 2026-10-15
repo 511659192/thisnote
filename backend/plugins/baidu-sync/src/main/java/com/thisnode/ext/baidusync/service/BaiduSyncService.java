@@ -9,8 +9,8 @@ import com.thisnode.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnode.ext.baidusync.repository.BaiduSyncStateRepository;
 import com.thisnode.plugin.api.event.FileChangeEvent;
 import com.thisnode.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -56,27 +56,17 @@ public class BaiduSyncService {
 
     @PostConstruct
     // 示例：启动时本地存在 cards/，则初始化任务在网盘创建 notes/cards。
-    public void initializeRemoteDirectories() {
+    public void initializeRemoteDirectories() throws IOException {
         BaiduSyncSettings settings = settingsRepository.get();
         if (settings.appName().isBlank() || (settings.accessToken().isBlank() && settings.refreshToken().isBlank())) {
+            log.error("param is null appName:{} accessToken:{} refreshToken:{}", settings.appName(), settings.accessToken(), settings.refreshToken());
             return;
         }
 
-        List<String> remoteDirectories;
-        try {
-            remoteDirectories = (Files.exists(notesRoot)
-                    ? scanLocalSnapshot(notesRoot, baiduSyncDirectory).directories()
-                    : Set.<String>of()).stream()
-                    .sorted(Comparator.comparingInt(directory -> directory.split("/").length))
-                    .map(directory -> "/apps/" + settings.appName() + "/notes/" + directory)
-                    .toList();
-        } catch (IOException e) {
-            synchronized (remoteDirectoryInitializationLock) {
-                remoteDirectoryInitialization = CompletableFuture.failedFuture(e);
-            }
-            log.warn("扫描本地目录以初始化百度网盘目录失败", e);
-            return;
-        }
+        List<String> remoteDirectories = (Files.exists(notesRoot) ? scanLocalSnapshot(notesRoot, baiduSyncDirectory).directories() : Set.<String>of()).stream()
+                .sorted(Comparator.comparingInt(directory -> directory.split("/").length))
+                .map(directory -> "/apps/" + settings.appName() + "/notes/" + directory)
+                .toList();
 
         synchronized (remoteDirectoryInitializationLock) {
             if (!remoteDirectoryInitialization.isDone()) {
@@ -251,7 +241,6 @@ public class BaiduSyncService {
 
             LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
             Map<String, LocalItem> local = localSnapshot.files();
-            Set<String> localDirectories = localSnapshot.directories();
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
             BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
             List<FileChange> changes = planFileChanges(local, remote, baseline);
@@ -301,8 +290,7 @@ public class BaiduSyncService {
         Set<String> directories = new LinkedHashSet<>(finalLocalSnapshot.directories());
         stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), finalFiles, directories));
         status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
-        log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}（耗时 {} ms）", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts,
-                 System.currentTimeMillis() - startedAt);
+        log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}（耗时 {} ms）", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, System.currentTimeMillis() - startedAt);
     }
 
     // 示例：上传 2 个文件后第 3 个失败，状态保留已完成计数并记录错误信息。
@@ -807,7 +795,7 @@ public class BaiduSyncService {
     }
 
     private record LocalSnapshot(Map<String, LocalItem> files, Set<String> directories) {
-    // 示例：本地 notes 根目录不存在时，用空文件集和空目录集表示快照。
+        // 示例：本地 notes 根目录不存在时，用空文件集和空目录集表示快照。
         private static LocalSnapshot empty() {
             return new LocalSnapshot(Map.of(), Set.of());
         }

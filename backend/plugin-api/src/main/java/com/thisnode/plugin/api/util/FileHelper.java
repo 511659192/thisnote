@@ -1,12 +1,13 @@
 package com.thisnode.plugin.api.util;
 
+import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import com.thisnode.plugin.api.event.FileChangeEvent;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -24,25 +25,11 @@ import java.util.Objects;
  * Executes persistent file mutations and publishes their plugin-scoped change events.
  */
 @Slf4j
+@RequiredArgsConstructor
 public final class FileHelper {
 
     private final ApplicationEventPublisher eventPublisher;
     private final String sourcePluginId;
-
-    public FileHelper(ApplicationEventPublisher eventPublisher,
-                      String sourcePluginId) {
-        this.eventPublisher = Objects.requireNonNull(eventPublisher, "publisher");
-        if (sourcePluginId == null || sourcePluginId.isBlank()) {
-            throw new IllegalArgumentException("sourcePluginId 不能为空");
-        }
-        this.sourcePluginId = sourcePluginId;
-    }
-
-    public static void registerSpringBeans(GenericApplicationContext context,
-                                           ApplicationEventPublisher mainEventPublisher,
-                                           String sourcePluginId) {
-        context.registerBean(FileHelper.class, () -> new FileHelper(mainEventPublisher, sourcePluginId));
-    }
 
     public void fileWritten(Path file,
                             Object content) {

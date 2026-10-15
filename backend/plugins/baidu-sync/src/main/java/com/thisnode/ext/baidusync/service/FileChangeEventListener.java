@@ -29,7 +29,7 @@ public class FileChangeEventListener
                 syncService.requestSyncAfterChange(change);
             }
         } catch (RuntimeException e) {
-            log.warn("处理文件变更事件失败：{}", change.url(), e);
+            log.error("处理文件变更事件失败：{}", change.url(), e);
         }
     }
 }

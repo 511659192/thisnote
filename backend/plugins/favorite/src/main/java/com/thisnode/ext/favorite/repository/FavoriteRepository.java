@@ -1,5 +1,6 @@
 package com.thisnode.ext.favorite.repository;
 
+import cn.hutool.core.io.file.PathUtil;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;

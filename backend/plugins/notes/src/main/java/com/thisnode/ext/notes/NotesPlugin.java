@@ -45,7 +45,7 @@ public class NotesPlugin extends SpringBootPlugin {
     public void onPluginBootstrap(SpringBootstrap bootstrap,
                                   org.springframework.context.support.GenericApplicationContext ctx) {
         super.onPluginBootstrap(bootstrap, ctx);
-        FileHelper.registerSpringBeans(ctx, getMainApplicationContext(), PLUGIN_ID);
+        ctx.registerBean(FileHelper.class, () -> new FileHelper(getMainApplicationContext(), PLUGIN_ID));
     }
 
     @Override
