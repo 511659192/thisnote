@@ -142,10 +142,6 @@ async function setAutoSync(event: Event) {
   }
 }
 
-function formatTime(value: number) {
-  return value ? new Date(value).toLocaleString() : '尚未同步'
-}
-
 onMounted(async () => {
   await refresh()
   pollTimer = window.setInterval(async () => {
@@ -249,7 +245,7 @@ onBeforeUnmount(() => {
     </div>
 
     <p v-if="status" class="small muted status">
-      最近完成：{{ formatTime(status.completedAt) }}；上传 {{ status.uploaded }}，下载 {{ status.downloaded }}，删除 {{ status.deleted }}，冲突覆盖 {{ status.conflicts }}
+      上传 {{ status.uploaded }}，下载 {{ status.downloaded }}，删除 {{ status.deleted }}，冲突覆盖 {{ status.conflicts }}
     </p>
     <p v-if="busy" class="small muted">{{ busy }}…</p>
     <p v-if="error || status?.error" class="small error">{{ error || status?.error }}</p>

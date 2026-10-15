@@ -31,7 +31,7 @@ public class BaiduSyncService {
     private final FileHelper fileHelper;
     private final Path notesRoot;
     private final Path baiduSyncDirectory;
-    private volatile BaiduSyncStatus status = BaiduSyncStatus.idle();
+    private volatile BaiduSyncStatus status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
     private final Object syncExecutionLock = new Object();
 
     public BaiduSyncService(BaiduSyncSettingsRepository settingsRepository,
@@ -52,25 +52,26 @@ public class BaiduSyncService {
 
     public void requestSyncAfterChange(FileChangeEvent event) {
         Set<Path> changedPaths = new LinkedHashSet<>();
-        // 重命名同时处理新旧路径，例如 a.md 改为 b.md，需要上传 b.md 并删除云端 a.md。
-        addNotesPath(event.url(), notesRoot, changedPaths);
-        addNotesPath(event.previousUrl(), notesRoot, changedPaths);
+        Optional.ofNullable(filterNotesPath(event.url(), notesRoot)).ifPresent(changedPaths::add);
+        Optional.ofNullable(filterNotesPath(event.previousUrl(), notesRoot)).ifPresent(changedPaths::add);
         if (changedPaths.isEmpty()) {
             return;
         }
         log.debug("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}", event.sourcePluginId(), event.operation(), event.url(), event.previousUrl());
+
         startFileChangeSync(changedPaths);
     }
 
-    private void addNotesPath(Path path,
-                              Path notesRoot,
-                              Set<Path> changedPaths) {
+    private Path filterNotesPath(Path path,
+                                 Path notesRoot) {
         if (path == null) {
-            return;
+            return null;
         }
         if (!path.equals(notesRoot) && path.startsWith(notesRoot)) {
-            changedPaths.add(path);
+            return path;
         }
+
+        return null;
     }
 
     private void startFileChangeSync(Set<Path> changedPaths) {
@@ -79,10 +80,9 @@ public class BaiduSyncService {
                 return;
             }
             long startedAt = System.currentTimeMillis();
-            BaiduSyncStatus initial = new BaiduSyncStatus(true, startedAt, status.completedAt(), 0, 0, 0, 0, "");
-            status = initial;
+            status = new BaiduSyncStatus(true, 0, 0, 0, 0, "");
             log.info("百度网盘文件变更同步开始：{} 个路径", changedPaths.size());
-            syncChangedFiles(initial, changedPaths);
+            syncChangedFiles(startedAt, changedPaths);
         }
     }
 
@@ -96,10 +96,9 @@ public class BaiduSyncService {
                 return current;
             }
             long startedAt = System.currentTimeMillis();
-            BaiduSyncStatus initial = new BaiduSyncStatus(true, startedAt, current.completedAt(), 0, 0, 0, 0, "");
-            status = initial;
+            status = new BaiduSyncStatus(true, 0, 0, 0, 0, "");
             log.info("百度网盘同步开始");
-            sync(initial);
+            sync(startedAt);
             return status;
         }
     }
@@ -158,7 +157,7 @@ public class BaiduSyncService {
     }
 
     private static FileFingerprint matchingFingerprint(LocalItem local,
-                                                      BaiduPanEntry remote) {
+                                                       BaiduPanEntry remote) {
         FileFingerprint fingerprint = FileFingerprint.of(local.size(), local.modifiedAt());
         return fingerprint.equals(FileFingerprint.of(remote.size(), remote.modifiedAt())) ? fingerprint : null;
     }
@@ -198,7 +197,7 @@ public class BaiduSyncService {
         }
     }
 
-    private void sync(BaiduSyncStatus initial) {
+    private void sync(long startedAt) {
         SyncCounters counters = new SyncCounters();
         try {
             BaiduSyncSettings settings = settingsRepository.get();
@@ -217,13 +216,13 @@ public class BaiduSyncService {
             List<FileChange> changes = planFileChanges(local, remote, baseline);
             counters.conflicts = (int) changes.stream().filter(FileChange::conflict).count();
             uploadChanges(accessToken, remoteRoot, changes, counters);
-            completeSyncAfterUploads(initial, counters, accessToken, notesRoot, remoteRoot, changes, remote, baseline);
+            completeSyncAfterUploads(startedAt, counters, accessToken, notesRoot, remoteRoot, changes, remote, baseline);
         } catch (Exception e) {
-            failSync(initial, counters, e);
+            failSync(counters, e);
         }
     }
 
-    private void completeSyncAfterUploads(BaiduSyncStatus initial,
+    private void completeSyncAfterUploads(long startedAt,
                                           SyncCounters counters,
                                           String accessToken,
                                           Path notesRoot,
@@ -259,13 +258,12 @@ public class BaiduSyncService {
         }
         Set<String> directories = new LinkedHashSet<>(finalLocalSnapshot.directories());
         stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), finalFiles, directories));
-        finishSync(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(), counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, ""));
+        finishSync(new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, ""));
         log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}（耗时 {} ms）", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts,
-                 System.currentTimeMillis() - initial.startedAt());
+                 System.currentTimeMillis() - startedAt);
     }
 
-    private void failSync(BaiduSyncStatus initial,
-                          SyncCounters counters,
+    private void failSync(SyncCounters counters,
                           Throwable error) {
         Exception failure = error instanceof Exception exception ? exception : new IllegalStateException("百度网盘同步失败", error);
         String failureMessage = failure.getMessage();
@@ -273,10 +271,10 @@ public class BaiduSyncService {
             failureMessage = "同步失败";
         }
         log.warn("百度网盘同步失败：{}", failureMessage, failure);
-        finishSync(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(), counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, failureMessage));
+        finishSync(new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, failureMessage));
     }
 
-    private void syncChangedFiles(BaiduSyncStatus initial,
+    private void syncChangedFiles(long startedAt,
                                   Set<Path> changedPaths) {
         SyncCounters counters = new SyncCounters();
         try {
@@ -288,7 +286,7 @@ public class BaiduSyncService {
 
             Set<String> relativePaths = relativeChangedPaths(notesRoot, changedPaths);
             if (relativePaths.isEmpty()) {
-                finishSync(new BaiduSyncStatus(false, initial.startedAt(), System.currentTimeMillis(), 0, 0, 0, 0, ""));
+                finishSync(new BaiduSyncStatus(false, 0, 0, 0, 0, ""));
                 return;
             }
 
@@ -303,11 +301,11 @@ public class BaiduSyncService {
             uploadChanges(accessToken, remoteRoot, changes, counters);
             deleteRemoteChanges(accessToken, changes, counters);
             saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, relativePaths);
-            long completedAt = System.currentTimeMillis();
-            finishSync(new BaiduSyncStatus(false, initial.startedAt(), completedAt, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, ""));
-            log.info("百度网盘文件变更同步完成：上传 {} 删除 {}（{} 个路径，耗时 {} ms）", counters.uploaded, counters.deleted, relativePaths.size(), completedAt - initial.startedAt());
+            long elapsedMillis = System.currentTimeMillis() - startedAt;
+            finishSync(new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, ""));
+            log.info("百度网盘文件变更同步完成：上传 {} 删除 {}（{} 个路径，耗时 {} ms）", counters.uploaded, counters.deleted, relativePaths.size(), elapsedMillis);
         } catch (Exception e) {
-            failSync(initial, counters, e);
+            failSync(counters, e);
         }
     }
 
@@ -440,9 +438,9 @@ public class BaiduSyncService {
     }
 
     private void uploadChanges(String accessToken,
-                              String remoteRoot,
-                              List<FileChange> changes,
-                              SyncCounters counters) {
+                               String remoteRoot,
+                               List<FileChange> changes,
+                               SyncCounters counters) {
         List<FileChange> changesToUpload = changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList();
         if (changesToUpload.isEmpty()) {
             return;
@@ -728,11 +726,14 @@ public class BaiduSyncService {
 
     record FileFingerprint(long size, long modifiedAtSeconds) {
 
-        static FileFingerprint of(long size, long modifiedAtMillis) {
+        static FileFingerprint of(long size,
+                                  long modifiedAtMillis) {
             return new FileFingerprint(size, Math.floorDiv(modifiedAtMillis, 1000L));
         }
 
-        /** 基线持久化格式为 size:mtimeSeconds；旧 MD5 等无法解析的值视为缺失。 */
+        /**
+         * 基线持久化格式为 size:mtimeSeconds；旧 MD5 等无法解析的值视为缺失。
+         */
         static FileFingerprint parse(String value) {
             if (value == null) {
                 return null;

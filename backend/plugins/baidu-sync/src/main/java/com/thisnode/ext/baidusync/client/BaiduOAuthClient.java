@@ -23,10 +23,7 @@ public class BaiduOAuthClient {
     private static final String AUTHORIZE_URL = "https://openapi.baidu.com/oauth/2.0/authorize";
     private static final String TOKEN_URL = "https://openapi.baidu.com/oauth/2.0/token";
     private final BaiduSyncSettingsRepository settingsRepository;
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(20))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NORMAL).build();
 
     public BaiduOAuthClient(BaiduSyncSettingsRepository settingsRepository) {
         this.settingsRepository = settingsRepository;
@@ -34,14 +31,8 @@ public class BaiduOAuthClient {
 
     public String authorizationUrl() {
         BaiduSyncSettings settings = requireClientSettings();
-        return AUTHORIZE_URL + "?" + form(Map.of(
-                "response_type", "code",
-                "client_id", settings.appKey(),
-                "redirect_uri", "oob",
-                "scope", "basic,netdisk",
-                "display", "tv",
-                "qrcode", "1",
-                "force_login", "1"));
+        return AUTHORIZE_URL + "?" + form(
+                Map.of("response_type", "code", "client_id", settings.appKey(), "redirect_uri", "oob", "scope", "basic,netdisk", "display", "tv", "qrcode", "1", "force_login", "1"));
     }
 
     public void exchangeCode(String code) {
@@ -57,8 +48,7 @@ public class BaiduOAuthClient {
 
     public synchronized String accessToken() {
         BaiduSyncSettings settings = requireClientSettings();
-        if (!settings.accessToken().isBlank()
-                && settings.accessTokenExpiresAt() > System.currentTimeMillis() + 60_000) {
+        if (!settings.accessToken().isBlank() && settings.accessTokenExpiresAt() > System.currentTimeMillis() + 60_000) {
             return settings.accessToken();
         }
         if (settings.refreshToken().isBlank()) {
@@ -83,16 +73,11 @@ public class BaiduOAuthClient {
     }
 
     private JSONObject postToken(Map<String, String> params) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(TOKEN_URL + "?" + form(params)))
-                .timeout(Duration.ofSeconds(30))
-                .header("User-Agent", "thisnote-baidu-sync")
-                .GET()
-                .build();
+        HttpRequest request = HttpRequest.newBuilder(URI.create(TOKEN_URL + "?" + form(params))).timeout(Duration.ofSeconds(30)).header("User-Agent", "thisnote-baidu-sync").GET().build();
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             JSONObject body = JSON.parseObject(response.body());
-            if (response.statusCode() < 200 || response.statusCode() >= 300 || body == null
-                    || body.containsKey("error") || body.getString("access_token") == null) {
+            if (response.statusCode() < 200 || response.statusCode() >= 300 || body == null || body.containsKey("error") || body.getString("access_token") == null) {
                 throw new IllegalStateException("百度 OAuth 授权失败：" + oauthError(body, response.statusCode()));
             }
             return body;
@@ -130,9 +115,9 @@ public class BaiduOAuthClient {
     }
 
     private static String form(Map<String, String> values) {
-        return values.entrySet().stream()
-                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
-                              + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+        return values.entrySet()
+                .stream()
+                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
                 .reduce((left, right) -> left + "&" + right)
                 .orElse("");
     }

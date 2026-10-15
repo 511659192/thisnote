@@ -15,8 +15,6 @@ export interface BaiduSyncSettingsView {
 
 export interface BaiduSyncStatus {
   running: boolean
-  startedAt: number
-  completedAt: number
   uploaded: number
   downloaded: number
   deleted: number
