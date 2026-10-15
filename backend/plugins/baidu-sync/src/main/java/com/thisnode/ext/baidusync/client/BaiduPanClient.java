@@ -3,11 +3,14 @@ package com.thisnode.ext.baidusync.client;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.thisnode.plugin.api.util.FileHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -18,6 +21,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -34,6 +38,8 @@ import java.util.UUID;
 @Service
 public class BaiduPanClient {
 
+    private final FileHelper fileHelper;
+
     public static final int FILE_MANAGER_BATCH_SIZE = 50;
     private static final int FILE_MANAGER_RATE_LIMIT_ERRNO = 31034;
     private static final int FILE_MANAGER_RATE_LIMIT_RETRIES = 6;
@@ -49,11 +55,21 @@ public class BaiduPanClient {
     private final String fileApi;
 
     public BaiduPanClient() {
-        this(FILE_API);
+        this(FILE_API, null);
     }
 
     BaiduPanClient(String fileApi) {
+        this(fileApi, null);
+    }
+
+    @Autowired
+    public BaiduPanClient(FileHelper fileHelper) {
+        this(FILE_API, fileHelper);
+    }
+
+    BaiduPanClient(String fileApi, FileHelper fileHelper) {
         this.fileApi = fileApi;
+        this.fileHelper = fileHelper;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -405,11 +421,15 @@ public class BaiduPanClient {
                     .header("User-Agent", "pan.baidu.com")
                     .GET()
                     .build();
-            HttpResponse<Path> response = http.send(request,
-                    HttpResponse.BodyHandlers.ofFile(temporary, StandardOpenOption.CREATE,
-                            StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
+            HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream body = response.body()) {
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
+                }
+                try (OutputStream output = Files.newOutputStream(temporary,
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                    body.transferTo(output);
+                }
             }
             long actualSize = Files.size(temporary);
             if (actualSize != item.size()) {
@@ -423,10 +443,10 @@ public class BaiduPanClient {
             if (!expectedMd5.isBlank() && !expectedMd5.equalsIgnoreCase(fileMd5(temporary))) {
                 throw new IllegalStateException("百度网盘下载内容校验失败：" + item.path());
             }
-            Files.move(temporary, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             if (item.modifiedAt() > 0) {
-                Files.setLastModifiedTime(destination, java.nio.file.attribute.FileTime.fromMillis(item.modifiedAt()));
+                Files.setLastModifiedTime(temporary, java.nio.file.attribute.FileTime.fromMillis(item.modifiedAt()));
             }
+            fileHelper.fileWritten(destination, temporary);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("百度网盘下载被中断：" + item.path(), e);

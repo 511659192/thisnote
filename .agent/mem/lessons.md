@@ -1,5 +1,20 @@
 # Lessons
 
+## 2026-10-15 — FileHelper 直接执行文件操作并处理 I/O 异常
+- **纠正来源：** 用户指出 `fileWritten(Path, FileWriteOperation)` 通过回调执行写入不直观，并要求 `fileDeleted`、`fileWritten`、`fileMoved` 在 helper 内处理异常。
+- **可核验事实：** JSON 对象可直接传给 `fileWritten(Path, Object)`；文本、Properties 和附件分别使用字符串或 MultipartFile 重载；所有成功的持久化重载都应发布文件事件；网盘下载先写入并校验临时文件，再以替换方式移动到目标路径。
+- **下次执行规则：** JSON 对象优先使用 `fileWritten(Path, Object)`；Markdown/Properties 等文本使用 `String` 重载，附件使用 MultipartFile 重载，暂存文件使用对应重载，不传入写入回调；检查每个持久化重载都在文件操作成功后发布事件。`fileDeleted` 捕获并记录 `IOException`，失败返回 `false`；`fileWritten` 与 `fileMoved` 捕获、记录后抛 `UncheckedIOException`，保持失败可见。publisher 由插件 Spring 上下文注册并注入 helper，不从业务调用方传入。
+
+## 2026-10-15 — 通用文件变更事件覆盖插件持久化入口
+- **纠正来源：** 用户指出仅监听卡片、笔记和笔记本领域事件无法覆盖所有插件文件操作，要求统一发布带操作类型和对象 URL 的文件变更事件。
+- **可核验事实：** 插件持久化分散在 `JsonFileUtils`、`PropertiesFileUtils` 及 notes 的直接文件写入/移动/删除、附件操作和百度同步下载中；插件使用独立 Spring 子容器，跨插件事件需经主容器发布；SBP 的 `onPluginBootstrap` 在插件上下文 refresh 前调用。
+- **下次执行规则：** 处理跨插件文件同步时先盘点所有插件的持久文件写入、移动和删除入口；在插件 refresh 前由 `FileHelper` 注册来源专属 `FileChangeEventPublisher` Bean，并由 Spring 注入插件 singleton `FileHelper`；持久写入/删除/移动通过 helper 的配对操作方法完成，操作成功后发布带操作类型、绝对文件 URI 的事件，重命名同时携带旧 URI；临时文件与目录清理不发布；消费者按路径范围和来源过滤，不能以领域事件清单推断文件事件已全覆盖。
+
+## 2026-10-15 — 文件变更事件不可直接触发全量同步
+- **纠正来源：** 用户指出 `BaiduSyncService.requestSyncAfterChange` 触发的是全量同步，不是按事件增量处理，要求先标记 TODO 并后续实现。
+- **可核验事实：** `startSyncLocked` 将 `sync` 提交到执行器；`sync` 会扫描整个笔记根目录与云端并规划全部文件变更；`FileChangeEvent` 已包含操作类型、当前 URL 和可选的旧 URL。
+- **下次执行规则：** 文件事件消费者应保留并传递事件载荷；完成按事件增量同步前，只记录事件并保留 TODO，不得以全量扫描代替事件同步。
+
 ## 2026-10-14 — 百度网盘双端比较不依赖云端 MD5
 - **纠正来源：** 用户指出百度网盘返回的 MD5 不是可用于内容对比的真实 MD5，要求双端覆盖判断改用文件大小与秒级最后修改时间。
 - **可核验事实：** `BaiduSyncService` 原先用本地与云端 MD5 做相等判断、变化基线和同步后状态记录；`BaiduPanClient.download` 在没有 `Content-MD5` 时还会回退使用列表 MD5。

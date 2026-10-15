@@ -39,10 +39,6 @@ public class Card {
     @SneakyThrows
     public static Card parse(Path file) {
         String raw = Files.readString(file, StandardCharsets.UTF_8);
-        if (raw == null) {
-            return null;
-        }
-
         CardMeta cardMeta = meta(raw);
         String content = content(raw);
         return new Card(cardMeta, content);

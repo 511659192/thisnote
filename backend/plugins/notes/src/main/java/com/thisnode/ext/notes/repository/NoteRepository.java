@@ -1,15 +1,16 @@
 package com.thisnode.ext.notes.repository;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.NoteMeta;
-import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Repository;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -28,12 +29,13 @@ public class NoteRepository {
 
     private final NotesConfig notesConfig;
     private final IdFileIndex fileIndex;
+    private final FileHelper fileHelper;
 
     public String saveNew(NoteMeta note) {
         String noteId = IdUtil.randomUUID();
         String fileName = "tmp-" + noteId + ".json";
         Path file = notesConfig.getNoteMetaDir().resolve(fileName);
-        JsonFileUtils.write(file, note.setNoteId(noteId));
+        writeJson(file, note.setNoteId(noteId));
         fileIndex.addNote(noteId, fileName);
         return noteId;
     }
@@ -50,8 +52,10 @@ public class NoteRepository {
 
         noteMeta.setTitle(newTitle);
         String newFileName = newTitle + ".json";
-        Path newFile = Files.move(notesConfig.getNoteMetaDir().resolve(oldFileName), notesConfig.getNoteMetaDir().resolve(newFileName));
-        JsonFileUtils.write(newFile, noteMeta);
+        Path oldFile = notesConfig.getNoteMetaDir().resolve(oldFileName);
+        Path newFile = notesConfig.getNoteMetaDir().resolve(newFileName);
+        fileHelper.fileMoved(oldFile, newFile);
+        writeJson(newFile, noteMeta);
         fileIndex.updateNoteFileName(noteId, newFileName);
     }
 
@@ -67,7 +71,7 @@ public class NoteRepository {
         if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteMeta.getNoteId());
 
         Path file = notesConfig.getNoteMetaDir().resolve(fileName);
-        JsonFileUtils.write(file, noteMeta);
+        writeJson(file, noteMeta);
     }
 
     /**
@@ -77,7 +81,8 @@ public class NoteRepository {
         String fileName = fileIndex.noteFileName(noteId);
         if (fileName == null) return;
         fileIndex.removeNote(noteId);
-        FileUtil.del(notesConfig.getNoteMetaDir().resolve(fileName));
+        Path file = notesConfig.getNoteMetaDir().resolve(fileName);
+        fileHelper.fileDeleted(file);
     }
 
     @SneakyThrows
@@ -89,7 +94,11 @@ public class NoteRepository {
             Path file = metaDir.resolve(fileName);
             if (!Files.isRegularFile(file)) continue;
             files.add(file);
-            modifiedTimes.put(file, Files.getLastModifiedTime(file));
+            try {
+                modifiedTimes.put(file, Files.getLastModifiedTime(file));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
         files.sort(Comparator.comparing(modifiedTimes::get).reversed());
 
@@ -108,6 +117,10 @@ public class NoteRepository {
         if (StrUtil.isBlank(noteId)) return null;
         String fileName = fileIndex.noteFileName(noteId);
         return fileName == null ? null : NoteMeta.parse(notesConfig.getNoteMetaDir().resolve(fileName));
+    }
+
+    private void writeJson(Path file, Object value) {
+        fileHelper.fileWritten(file, value);
     }
 
 }

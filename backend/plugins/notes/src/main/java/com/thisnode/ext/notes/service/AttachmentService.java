@@ -3,15 +3,13 @@ package com.thisnode.ext.notes.service;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.Card;
 import com.thisnode.ext.notes.repository.CardRepository;
+import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -55,6 +53,7 @@ public class AttachmentService {
 
     private final NotesConfig notesConfig;
     private final CardRepository cardRepository;
+    private final FileHelper fileHelper;
 
     public String save(MultipartFile file) {
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("图片文件为空");
@@ -66,15 +65,7 @@ public class AttachmentService {
 
         String fileName = UUID.randomUUID() + "." + extension;
         Path destination = imagePath(fileName);
-        try {
-            Files.createDirectories(destination.getParent());
-            try (InputStream input = file.getInputStream()) {
-                Files.copy(input, destination);
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("保存图片附件失败", e);
-        }
-        log.info("保存图片附件 {}", fileName);
+        fileHelper.fileWritten(destination, file);
         return "../attachments/" + fileName;
     }
 
@@ -107,12 +98,7 @@ public class AttachmentService {
             if (stillReferenced.contains(fileName)) continue;
             Path path = imagePathOrNull(fileName);
             if (path == null) continue;
-            try {
-                Files.deleteIfExists(path);
-                log.info("删除未引用的图片附件 {}", fileName);
-            } catch (IOException e) {
-                log.warn("无法删除未引用的图片附件 {}", fileName, e);
-            }
+            fileHelper.fileDeleted(path);
         }
     }
 

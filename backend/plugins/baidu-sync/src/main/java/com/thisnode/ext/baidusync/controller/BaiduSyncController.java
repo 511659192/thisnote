@@ -32,7 +32,6 @@ public class BaiduSyncController {
     private final BaiduSyncSettingsRepository settingsRepository;
     private final BaiduOAuthClient oauthClient;
     private final BaiduSyncService syncService;
-
     @Value("${thisnode.data-root:${user.home}/.thisnode}")
     private String dataRoot;
 

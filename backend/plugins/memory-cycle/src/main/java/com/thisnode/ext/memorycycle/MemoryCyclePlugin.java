@@ -4,6 +4,7 @@ import com.thisnode.ext.memorycycle.service.MemoryCycleStateChangedEventListener
 import com.thisnode.ext.memorycycle.service.NoteChangedEventListener;
 import com.thisnode.ext.memorycycle.service.CardChangedEventListener;
 import com.thisnode.ext.memorycycle.service.MemoryCycleService;
+import com.thisnode.plugin.api.util.FileHelper;
 
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -44,6 +45,13 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, MemoryCycleStarter.class);
+    }
+
+    @Override
+    public void onPluginBootstrap(SpringBootstrap bootstrap,
+                                  org.springframework.context.support.GenericApplicationContext ctx) {
+        super.onPluginBootstrap(bootstrap, ctx);
+        FileHelper.registerSpringBeans(ctx, getMainApplicationContext(), PLUGIN_ID);
     }
 
     /**

@@ -3,14 +3,13 @@ package com.thisnode.ext.notes.repository;
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.Notebook;
-import com.thisnode.plugin.api.util.JsonFileUtils;
-import jakarta.annotation.PostConstruct;
+import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,9 +23,9 @@ import java.util.List;
 public class NotebookRepository {
 
     private final NotesConfig notesConfig;
+    private final FileHelper fileHelper;
 
-    @PostConstruct
-    private void initializeDefaultGroup() {
+    public void initializeDefaultGroup() {
         List<Notebook> notebooks = getAll();
         if (getOne(notebooks, Notebook.DEFAULT_GROUP_ID) == null) {
             notebooks.add(Notebook.newNotebook(Notebook.DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK, Notebook.DEFAULT_GROUP_TITLE, "📥", 0, System.currentTimeMillis()));
@@ -44,7 +43,8 @@ public class NotebookRepository {
     }
 
     private void save(List<Notebook> notebooks) {
-        JsonFileUtils.write(notesConfig.getNotebookDir().resolve("notebooks.json"), notebooks);
+        Path file = notesConfig.getNotebookDir().resolve("notebooks.json");
+        fileHelper.fileWritten(file, notebooks);
     }
 
     public List<Notebook> getAll(String type) {

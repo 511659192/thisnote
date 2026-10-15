@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.Card;
 import com.thisnode.ext.notes.model.NoteMeta;
-import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.FileHelper;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +11,7 @@ import lombok.Setter;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,7 @@ public class IdFileIndex {
     private static final String INDEX_FILE = ".id-file-index.json";
 
     private final NotesConfig notesConfig;
+    private final FileHelper fileHelper;
 
     public synchronized String noteFileName(String noteId) { return read().noteFiles.get(noteId); }
     public synchronized String cardFileName(String cardId) { return read().cardFiles.get(cardId); }
@@ -75,7 +77,8 @@ public class IdFileIndex {
             return rebuilt;
         }
         try {
-            IndexData index = JsonFileUtils.read(indexFile, IndexData.class);
+            String json = Files.readString(indexFile, StandardCharsets.UTF_8);
+            IndexData index = json.isBlank() ? null : com.alibaba.fastjson2.JSON.parseObject(json, IndexData.class);
             if (index == null) return new IndexData();
             if (index.noteFiles == null) index.noteFiles = new LinkedHashMap<>();
             if (index.cardFiles == null) index.cardFiles = new LinkedHashMap<>();
@@ -130,7 +133,8 @@ public class IdFileIndex {
     }
 
     private void persist(IndexData index) {
-        JsonFileUtils.write(indexPath(), index);
+        Path file = indexPath();
+        fileHelper.fileWritten(file, index);
     }
 
     private Path indexPath() {

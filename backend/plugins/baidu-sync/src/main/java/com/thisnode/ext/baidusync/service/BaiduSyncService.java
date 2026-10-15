@@ -7,6 +7,8 @@ import com.thisnode.ext.baidusync.client.BaiduPanException;
 import com.thisnode.ext.baidusync.model.*;
 import com.thisnode.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnode.ext.baidusync.repository.BaiduSyncStateRepository;
+import com.thisnode.plugin.api.FileChangeEvent;
+import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +40,7 @@ public class BaiduSyncService {
     private final BaiduSyncStateRepository stateRepository;
     private final BaiduOAuthClient oauthClient;
     private final BaiduPanClient panClient;
+    private final FileHelper fileHelper;
     private final Path dataRoot;
     private final Path pluginDirectory;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> {
@@ -56,21 +60,51 @@ public class BaiduSyncService {
                                                                              },
                                                                              new ThreadPoolExecutor.AbortPolicy());
     private final AtomicReference<BaiduSyncStatus> status = new AtomicReference<>(BaiduSyncStatus.idle());
+    private final Object syncLock = new Object();
 
     public BaiduSyncService(BaiduSyncSettingsRepository settingsRepository,
                             BaiduSyncStateRepository stateRepository,
                             BaiduOAuthClient oauthClient,
                             BaiduPanClient panClient,
+                            FileHelper fileHelper,
                             @Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
         this.settingsRepository = settingsRepository;
         this.stateRepository = stateRepository;
         this.oauthClient = oauthClient;
         this.panClient = panClient;
+        this.fileHelper = fileHelper;
         this.dataRoot = Path.of(dataRoot).toAbsolutePath().normalize();
-        this.pluginDirectory = PluginDataPathUtils.pluginDataDirectory(this.dataRoot, "baidu-sync");
+        this.pluginDirectory = PluginDataPathUtils.pluginDataDirectory(this.dataRoot, "baidu-sync", fileHelper);
+    }
+
+    public boolean isNotesRootFileChange(FileChangeEvent event) {
+        Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes"))
+                .toAbsolutePath()
+                .normalize();
+        return isWithinRoot(event.url(), notesRoot)
+                || event.previousUrl() != null && isWithinRoot(event.previousUrl(), notesRoot);
+    }
+
+    private boolean isWithinRoot(String url,
+                                 Path root) {
+        try {
+            return Path.of(URI.create(url)).toAbsolutePath().normalize().startsWith(root);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     public BaiduSyncStatus startSync() {
+        synchronized (syncLock) {
+            return startSyncLocked();
+        }
+    }
+
+    public void requestSyncAfterChange(FileChangeEvent event) {
+        // TODO: 根据文件变更事件执行增量同步，避免触发全量扫描。
+    }
+
+    private BaiduSyncStatus startSyncLocked() {
         BaiduSyncStatus current = status.get();
         if (current.running()) {
             return current;
@@ -87,6 +121,12 @@ public class BaiduSyncService {
             status.set(new BaiduSyncStatus(false, startedAt, current.completedAt(), 0, 0, 0, 0, "无法启动同步任务"));
         }
         return status.get();
+    }
+
+    private void finishSync(BaiduSyncStatus finished) {
+        synchronized (syncLock) {
+            status.set(finished);
+        }
     }
 
     public BaiduSyncStatus status() {
@@ -227,8 +267,9 @@ public class BaiduSyncService {
         for (FileChange change : changes) {
             if (change.action() == FileAction.DELETE_LOCAL) {
                 log.debug("删除本地 {}", change.relative());
-                Files.deleteIfExists(change.local().file());
-                counters.deleted++;
+                if (fileHelper.fileDeleted(change.local().file())) {
+                    counters.deleted++;
+                }
             }
         }
         deleteRemoteChanges(accessToken, changes, counters);
@@ -251,7 +292,7 @@ public class BaiduSyncService {
         finalLocal.values().stream().map(LocalItem::parent).filter(value -> !value.isEmpty()).forEach(directories::add);
         directories.addAll(scanLocalDirectories(notesRoot, pluginDirectory));
         stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), finalFiles, directories));
-        status.set(new BaiduSyncStatus(false,
+        finishSync(new BaiduSyncStatus(false,
                                        initial.startedAt(),
                                        System.currentTimeMillis(),
                                        counters.uploaded,
@@ -276,7 +317,7 @@ public class BaiduSyncService {
         }
         Exception failure = cause instanceof Exception exception ? exception : new IllegalStateException("百度网盘同步失败", cause);
         log.warn("百度网盘同步失败：{}", message(failure), failure);
-        status.set(new BaiduSyncStatus(false,
+        finishSync(new BaiduSyncStatus(false,
                                        initial.startedAt(),
                                        System.currentTimeMillis(),
                                        counters.uploaded,

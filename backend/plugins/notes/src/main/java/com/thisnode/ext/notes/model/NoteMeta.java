@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.model;
 
-import com.thisnode.plugin.api.util.JsonFileUtils;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -8,6 +7,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -18,6 +18,7 @@ import java.util.List;
 @Accessors(chain = true)
 @Slf4j
 public class NoteMeta {
+
     private int v;
     private String noteId;
     private String title;
@@ -31,7 +32,8 @@ public class NoteMeta {
         }
 
         try {
-            return JsonFileUtils.read(filePath, NoteMeta.class);
+            String json = Files.readString(filePath, StandardCharsets.UTF_8);
+            return json.isBlank() ? null : com.alibaba.fastjson2.JSON.parseObject(json, NoteMeta.class);
         } catch (IOException | RuntimeException e) {
             log.warn("元数据无法解析，已跳过：{}", filePath, e);
             return null;

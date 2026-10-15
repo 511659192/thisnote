@@ -2,6 +2,7 @@ package com.thisnode.ext.favorite;
 
 import com.thisnode.ext.favorite.service.FavoriteService;
 import com.thisnode.ext.favorite.service.NoteChangedEventListener;
+import com.thisnode.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -31,6 +32,13 @@ public class FavoritePlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, FavoriteStarter.class);
+    }
+
+    @Override
+    public void onPluginBootstrap(SpringBootstrap bootstrap,
+                                  org.springframework.context.support.GenericApplicationContext ctx) {
+        super.onPluginBootstrap(bootstrap, ctx);
+        FileHelper.registerSpringBeans(ctx, getMainApplicationContext(), PLUGIN_ID);
     }
 
     @Override

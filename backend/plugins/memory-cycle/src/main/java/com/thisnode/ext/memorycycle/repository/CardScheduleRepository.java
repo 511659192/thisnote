@@ -1,8 +1,9 @@
 package com.thisnode.ext.memorycycle.repository;
 
 import com.alibaba.fastjson2.TypeReference;
+import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.memorycycle.model.CardSchedule;
-import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -23,9 +26,12 @@ public class CardScheduleRepository {
     private static final Logger log = LoggerFactory.getLogger(CardScheduleRepository.class);
 
     private final Path file;
+    private final FileHelper fileHelper;
 
-    public CardScheduleRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "memory-cycle")
+    public CardScheduleRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot,
+                                  FileHelper fileHelper) {
+        this.fileHelper = fileHelper;
+        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "memory-cycle", fileHelper)
                                              .resolve("scheduling.json");
     }
 
@@ -54,8 +60,9 @@ public class CardScheduleRepository {
 
     private Map<String, CardSchedule> loadAll() {
         try {
-            Map<String, CardSchedule> schedules = JsonFileUtils.read(file, new TypeReference<>() {
-            });
+            if (!Files.isRegularFile(file)) return new LinkedHashMap<>();
+            String json = Files.readString(file, StandardCharsets.UTF_8);
+            Map<String, CardSchedule> schedules = json.isBlank() ? null : JSON.parseObject(json, new TypeReference<>() {});
             if (schedules == null) {
                 return new LinkedHashMap<>();
             }
@@ -72,6 +79,6 @@ public class CardScheduleRepository {
     }
 
     private void writeJson(Map<String, CardSchedule> values) {
-        JsonFileUtils.write(file, values);
+        fileHelper.fileWritten(file, values);
     }
 }

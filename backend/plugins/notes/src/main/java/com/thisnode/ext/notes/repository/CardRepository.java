@@ -1,14 +1,15 @@
 package com.thisnode.ext.notes.repository;
 
-import cn.hutool.core.io.FileUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.Card;
 import com.thisnode.ext.notes.model.Card.CardMeta;
-import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Repository;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ public class CardRepository {
 
     private final NotesConfig notesConfig;
     private final IdFileIndex fileIndex;
+    private final FileHelper fileHelper;
 
     public Card getOne(String cardId) {
         if (cardId == null || cardId.isBlank()) return null;
@@ -66,7 +68,7 @@ public class CardRepository {
             String fileName = prefix + suffix + ".md";
             Path file = dir.resolve(fileName);
             if (Files.exists(file)) continue;
-            Files.writeString(file, cardContent);
+            fileHelper.fileWritten(file, cardContent);
             fileIndex.addCard(cardId, fileName);
             return cardId;
         }
@@ -90,7 +92,8 @@ public class CardRepository {
                 Path newFile = dir.resolve(newFileName);
                 if (Files.exists(newFile)) continue;
 
-                Files.move(dir.resolve(oldFileName), newFile);
+                Path oldFile = dir.resolve(oldFileName);
+                fileHelper.fileMoved(oldFile, newFile);
                 fileIndex.updateCardFileName(cardId, newFileName);
                 break;
             }
@@ -105,7 +108,8 @@ public class CardRepository {
                        String cardId) {
         String fileName = fileIndex.cardFileName(cardId);
         if (fileName == null) throw new IllegalStateException("卡片 ID 不在文件索引中：" + cardId);
-        JsonFileUtils.writeText(notesConfig.getCardsDir().resolve(fileName), Card.compose(meta, contentMd));
+        Path file = notesConfig.getCardsDir().resolve(fileName);
+        fileHelper.fileWritten(file, Card.compose(meta, contentMd));
         return cardId;
     }
 
@@ -122,7 +126,8 @@ public class CardRepository {
             String fileName = fileIndex.cardFileName(cardId);
             if (fileName == null) continue;
             fileIndex.removeCard(cardId);
-            FileUtil.del(notesConfig.getCardsDir().resolve(fileName));
+            Path file = notesConfig.getCardsDir().resolve(fileName);
+            fileHelper.fileDeleted(file);
         }
     }
 }

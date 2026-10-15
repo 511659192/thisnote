@@ -1,9 +1,12 @@
 package com.thisnode.ext.notes;
 
+import com.thisnode.ext.notes.repository.NotebookRepository;
 import com.thisnode.ext.notes.service.AttachmentService;
 import com.thisnode.ext.notes.service.CardAttachmentCleanupListener;
 import com.thisnode.ext.notes.service.CardService;
 import com.thisnode.ext.notes.service.NoteService;
+import com.thisnode.ext.notes.service.NotebookService;
+import com.thisnode.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -24,6 +27,8 @@ import org.pf4j.PluginWrapper;
  */
 public class NotesPlugin extends SpringBootPlugin {
 
+    public static final String PLUGIN_ID = "notes";
+
     private CardAttachmentCleanupListener attachmentCleanupListener;
 
     public NotesPlugin(PluginWrapper wrapper) {
@@ -37,10 +42,20 @@ public class NotesPlugin extends SpringBootPlugin {
     }
 
     @Override
+    public void onPluginBootstrap(SpringBootstrap bootstrap,
+                                  org.springframework.context.support.GenericApplicationContext ctx) {
+        super.onPluginBootstrap(bootstrap, ctx);
+        FileHelper.registerSpringBeans(ctx, getMainApplicationContext(), PLUGIN_ID);
+    }
+
+    @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
+        NotebookRepository notebookRepository = ctx.getBean(NotebookRepository.class);
+        notebookRepository.initializeDefaultGroup();
         ctx.getBean(CardService.class).setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(NoteService.class).setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(NotebookService.class).setMainEventPublisher(getMainApplicationContext());
         attachmentCleanupListener = new CardAttachmentCleanupListener(ctx.getBean(AttachmentService.class));
         getMainApplicationContext().addApplicationListener(attachmentCleanupListener);
     }

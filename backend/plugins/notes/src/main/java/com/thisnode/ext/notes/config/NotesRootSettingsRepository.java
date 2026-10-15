@@ -1,12 +1,14 @@
 package com.thisnode.ext.notes.config;
 
 import com.alibaba.fastjson2.TypeReference;
-import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.alibaba.fastjson2.JSON;
+import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -17,6 +19,11 @@ public class NotesRootSettingsRepository {
 
     private static final Path SETTINGS_FILE = Path.of(System.getProperty("user.home"), ".thisnode", "settings.json");
     private static final TypeReference<Map<String, Object>> SETTINGS_TYPE = new TypeReference<>() {};
+    private final FileHelper fileHelper;
+
+    public NotesRootSettingsRepository(FileHelper fileHelper) {
+        this.fileHelper = fileHelper;
+    }
 
     public Path configuredRoot(Path defaultRoot) {
         return PluginDataPathUtils.configuredNotesRoot(defaultRoot);
@@ -29,7 +36,7 @@ public class NotesRootSettingsRepository {
         }
         Map<String, Object> settings = readSettings();
         settings.put("notesRoot", root.toString());
-        JsonFileUtils.write(SETTINGS_FILE, settings);
+        fileHelper.fileWritten(SETTINGS_FILE, settings);
         return root;
     }
 
@@ -46,7 +53,9 @@ public class NotesRootSettingsRepository {
 
     private Map<String, Object> readSettings() {
         try {
-            Map<String, Object> settings = JsonFileUtils.read(SETTINGS_FILE, SETTINGS_TYPE);
+            if (!Files.isRegularFile(SETTINGS_FILE)) return new LinkedHashMap<>();
+            String json = Files.readString(SETTINGS_FILE, StandardCharsets.UTF_8);
+            Map<String, Object> settings = json.isBlank() ? null : JSON.parseObject(json, SETTINGS_TYPE);
             return settings == null ? new LinkedHashMap<>() : new LinkedHashMap<>(settings);
         } catch (IOException e) {
             throw new UncheckedIOException("读取配置失败 " + SETTINGS_FILE, e);

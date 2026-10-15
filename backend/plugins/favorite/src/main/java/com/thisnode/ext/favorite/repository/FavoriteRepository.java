@@ -1,8 +1,7 @@
 package com.thisnode.ext.favorite.repository;
 
-import com.google.common.base.Preconditions;
+import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
-import com.thisnode.plugin.api.util.PropertiesFileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +9,11 @@ import org.springframework.stereotype.Repository;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -24,22 +28,25 @@ public class FavoriteRepository {
 
     private final Path file;
     private final Object lock = new Object();
+    private final FileHelper fileHelper;
 
-    public FavoriteRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "favorite")
-                                             .resolve("favorites.properties");
+    public FavoriteRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot,
+                              FileHelper fileHelper) {
+        this.fileHelper = fileHelper;
+        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "favorite", fileHelper)
+                .resolve("favorites.properties");
     }
 
     public boolean isFavorite(String noteId) {
         Optional.ofNullable(noteId).filter(StringUtils::isNotBlank).orElseThrow(() -> new IllegalArgumentException("noteId 不能为空"));
         synchronized (lock) {
-            return Boolean.parseBoolean(PropertiesFileUtils.read(file).getProperty(noteId));
+            return Boolean.parseBoolean(readProperties().getProperty(noteId));
         }
     }
 
     public List<String> favoriteNoteIds() {
         synchronized (lock) {
-            Properties properties = PropertiesFileUtils.read(file);
+            Properties properties = readProperties();
             List<String> ids = new ArrayList<>();
             for (String noteId : properties.stringPropertyNames()) {
                 if (Boolean.parseBoolean(properties.getProperty(noteId))) {
@@ -55,7 +62,7 @@ public class FavoriteRepository {
                             boolean favorite) {
         Optional.ofNullable(noteId).filter(StringUtils::isNotBlank).orElseThrow(() -> new IllegalArgumentException("noteId 不能为空"));
         synchronized (lock) {
-            Properties properties = PropertiesFileUtils.read(file);
+            Properties properties = readProperties();
             boolean current = Boolean.parseBoolean(properties.getProperty(noteId));
             if (favorite == current && (favorite || !properties.containsKey(noteId))) {
                 return;
@@ -65,7 +72,7 @@ public class FavoriteRepository {
             } else {
                 properties.remove(noteId);
             }
-            PropertiesFileUtils.write(file, properties, "favorite note ids");
+            writeProperties(properties);
         }
     }
 
@@ -73,14 +80,34 @@ public class FavoriteRepository {
         Optional.ofNullable(noteId).filter(StringUtils::isNotBlank).orElseThrow(() -> new IllegalArgumentException("noteId 不能为空"));
 
         synchronized (lock) {
-            Properties properties = PropertiesFileUtils.read(file);
+            Properties properties = readProperties();
             if (!properties.containsKey(noteId)) {
                 return false;
             }
             properties.remove(noteId);
-            PropertiesFileUtils.write(file, properties, "favorite note ids");
+            writeProperties(properties);
             return true;
         }
     }
 
+    private Properties readProperties() {
+        Properties properties = new Properties();
+        if (Files.notExists(file)) return properties;
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            properties.load(reader);
+        } catch (IOException e) {
+            log.error("读取收藏文件失败 file:{}", file, e);
+        }
+        return properties;
+    }
+
+    private void writeProperties(Properties properties) {
+        try {
+            StringWriter writer = new StringWriter();
+            properties.store(writer, "favorite note ids");
+            fileHelper.fileWritten(file, writer.toString());
+        } catch (IOException e) {
+            log.error("写入收藏文件失败 file:{}", file, e);
+        }
+    }
 }

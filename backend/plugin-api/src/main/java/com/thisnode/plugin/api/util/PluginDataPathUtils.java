@@ -1,9 +1,11 @@
 package com.thisnode.plugin.api.util;
 
+import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -18,17 +20,27 @@ public final class PluginDataPathUtils {
 
     public static Path pluginDataDirectory(Path dataRoot,
                                            String pluginId) {
+        return pluginDataDirectory(dataRoot, pluginId, null);
+    }
+
+    public static Path pluginDataDirectory(Path dataRoot,
+                                           String pluginId,
+                                           FileHelper fileHelper) {
         Path baseDirectory = dataRoot.toAbsolutePath().normalize();
         Path legacyDirectory = baseDirectory.resolve("plugins").resolve(pluginId);
         Path notesRoot = configuredNotesRoot(baseDirectory.resolve("notes"));
         Path pluginDirectory = notesRoot.resolve("plugins").resolve(pluginId);
-        moveLegacyDirectory(legacyDirectory, pluginDirectory);
+        moveLegacyDirectory(legacyDirectory, pluginDirectory, fileHelper);
         return pluginDirectory;
     }
 
     public static Path configuredNotesRoot(Path defaultRoot) {
         try {
-            Map<String, Object> settings = JsonFileUtils.read(SETTINGS_FILE, SETTINGS_TYPE);
+            if (!Files.isRegularFile(SETTINGS_FILE)) {
+                return defaultRoot.toAbsolutePath().normalize();
+            }
+            String json = Files.readString(SETTINGS_FILE, StandardCharsets.UTF_8);
+            Map<String, Object> settings = json.isBlank() ? null : JSON.parseObject(json, SETTINGS_TYPE);
             Object value = settings == null ? null : settings.get("notesRoot");
             if (value == null || value.toString().isBlank()) {
                 return defaultRoot.toAbsolutePath().normalize();
@@ -44,7 +56,8 @@ public final class PluginDataPathUtils {
     }
 
     private static void moveLegacyDirectory(Path legacyDirectory,
-                                            Path pluginDirectory) {
+                                            Path pluginDirectory,
+                                            FileHelper fileHelper) {
         Path source = legacyDirectory.normalize();
         Path target = pluginDirectory.normalize();
         if (!Files.isDirectory(source) || source.equals(target)) {
@@ -58,7 +71,11 @@ public final class PluginDataPathUtils {
         }
         try {
             Files.createDirectories(target.getParent());
-            Files.move(source, target);
+            if (fileHelper != null) {
+                fileHelper.fileMoved(source, target);
+            } else {
+                Files.move(source, target);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException("迁移插件数据失败 " + source + " -> " + target, e);
         }

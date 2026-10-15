@@ -1,28 +1,34 @@
 package com.thisnode.ext.baidusync.repository;
 
+import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.baidusync.model.BaiduSyncSettings;
-import com.thisnode.plugin.api.util.JsonFileUtils;
+import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 @Repository
 public class BaiduSyncSettingsRepository {
 
     private final Path file;
+    private final FileHelper fileHelper;
 
-    public BaiduSyncSettingsRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        Path pluginDirectory = PluginDataPathUtils.pluginDataDirectory(Path.of(dataRoot), "baidu-sync");
+    public BaiduSyncSettingsRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot,
+                                       FileHelper fileHelper) {
+        this.fileHelper = fileHelper;
+        Path pluginDirectory = PluginDataPathUtils.pluginDataDirectory(Path.of(dataRoot), "baidu-sync", fileHelper);
         this.file = pluginDirectory.resolve("credentials.json");
     }
 
     public synchronized BaiduSyncSettings get() {
         try {
-            BaiduSyncSettings settings = JsonFileUtils.read(file, BaiduSyncSettings.class);
+            BaiduSyncSettings settings = read();
             return settings == null ? BaiduSyncSettings.empty() : settings;
         } catch (IOException e) {
             throw new UncheckedIOException("读取百度网盘配置失败 " + file, e);
@@ -54,6 +60,12 @@ public class BaiduSyncSettingsRepository {
     }
 
     private void write(BaiduSyncSettings settings) {
-        JsonFileUtils.write(file, settings);
+        fileHelper.fileWritten(file, settings);
+    }
+
+    private BaiduSyncSettings read() throws IOException {
+        if (!Files.isRegularFile(file)) return null;
+        String json = Files.readString(file, StandardCharsets.UTF_8);
+        return json.isBlank() ? null : JSON.parseObject(json, BaiduSyncSettings.class);
     }
 }
