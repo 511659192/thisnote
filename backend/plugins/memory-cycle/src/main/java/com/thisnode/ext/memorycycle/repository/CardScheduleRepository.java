@@ -1,12 +1,11 @@
 package com.thisnode.ext.memorycycle.repository;
 
-import com.alibaba.fastjson2.TypeReference;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.memorycycle.model.CardSchedule;
 import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
@@ -21,9 +20,8 @@ import java.util.List;
 import java.util.Map;
 
 @Repository
+@Slf4j
 public class CardScheduleRepository {
-
-    private static final Logger log = LoggerFactory.getLogger(CardScheduleRepository.class);
 
     private final Path file;
     private final FileHelper fileHelper;
@@ -32,7 +30,7 @@ public class CardScheduleRepository {
                                   FileHelper fileHelper) {
         this.fileHelper = fileHelper;
         this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "memory-cycle", fileHelper)
-                                             .resolve("scheduling.json");
+                .resolve("scheduling.json");
     }
 
     public synchronized CardSchedule getOne(String cardId) {
@@ -62,7 +60,8 @@ public class CardScheduleRepository {
         try {
             if (!Files.isRegularFile(file)) return new LinkedHashMap<>();
             String json = Files.readString(file, StandardCharsets.UTF_8);
-            Map<String, CardSchedule> schedules = json.isBlank() ? null : JSON.parseObject(json, new TypeReference<>() {});
+            Map<String, CardSchedule> schedules = json.isBlank() ? null : JSON.parseObject(json, new TypeReference<>() {
+            });
             if (schedules == null) {
                 return new LinkedHashMap<>();
             }

@@ -2,9 +2,8 @@ package com.thisnode.plugin;
 
 import com.thisnode.plugin.api.PluginHealth;
 import com.thisnode.plugin.api.PluginRegister;
+import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginWrapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 
@@ -28,14 +27,13 @@ import java.util.Map;
  * 插件的状态通知与健康检查必须落在这个窗口里，否则第一个请求可能撞上还没就绪的插件。
  */
 @Component
+@Slf4j
 public class PluginLifecycle implements SmartInitializingSingleton {
 
     /**
      * 阶段名，按执行顺序（日志与测试共用这一份，避免两处各写一遍）。
      */
     public static final List<String> PHASES = List.of("发现", "校验契约", "激活", "健康检查");
-
-    private static final Logger log = LoggerFactory.getLogger(PluginLifecycle.class);
 
     private final PluginRegistry registry;
     private final PluginStateService states;

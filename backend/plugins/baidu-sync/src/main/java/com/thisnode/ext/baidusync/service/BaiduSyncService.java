@@ -78,11 +78,8 @@ public class BaiduSyncService {
     }
 
     public boolean isNotesRootFileChange(FileChangeEvent event) {
-        Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes"))
-                .toAbsolutePath()
-                .normalize();
-        return isWithinRoot(event.url(), notesRoot)
-                || event.previousUrl() != null && isWithinRoot(event.previousUrl(), notesRoot);
+        Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes")).toAbsolutePath().normalize();
+        return isWithinRoot(event.url(), notesRoot) || event.previousUrl() != null && isWithinRoot(event.previousUrl(), notesRoot);
     }
 
     private boolean isWithinRoot(String url,
@@ -98,10 +95,6 @@ public class BaiduSyncService {
         synchronized (syncLock) {
             return startSyncLocked();
         }
-    }
-
-    public void requestSyncAfterChange(FileChangeEvent event) {
-        // TODO: 根据文件变更事件执行增量同步，避免触发全量扫描。
     }
 
     private BaiduSyncStatus startSyncLocked() {
@@ -159,27 +152,37 @@ public class BaiduSyncService {
             throw new IllegalStateException("笔记根目录不是文件夹：" + notesRoot);
         }
 
-        Map<String, LocalItem> local = Files.isDirectory(notesRoot) ? scanLocal(notesRoot, pluginDirectory) : Map.of();
-        Set<String> localDirectories = Files.isDirectory(notesRoot) ? scanLocalDirectories(notesRoot, pluginDirectory) : Set.of();
-        if (local.containsKey(STAGING_DIRECTORY) || localDirectories.contains(STAGING_DIRECTORY)) {
-            throw new IllegalStateException("笔记根目录包含百度同步保留目录，请先重命名：" + STAGING_DIRECTORY);
-        }
+        LocalSnapshot localSnapshot = Files.isDirectory(notesRoot) ? scanLocalSnapshot(notesRoot, pluginDirectory) : LocalSnapshot.empty();
+        Map<String, LocalItem> local = localSnapshot.files();
+        validateNoLocalStagingDirectory(localSnapshot);
 
         boolean remoteExists = panClient.directoryExists(accessToken, remoteRoot);
         RemoteSnapshot remote = remoteExists ? scanRemote(accessToken, remoteRoot) : new RemoteSnapshot(Map.of(), Set.of());
-        validatePathTypes(local.keySet(), localDirectories, remote);
+        validatePathTypes(local.keySet(), localSnapshot.directories(), remote);
         BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
         List<FileChange> changes = planFileChanges(local, remote, baseline);
-        List<BaiduSyncPreviewItem> items = new ArrayList<>();
+        int consistent = countConsistentFiles(local, remote.files());
+        return createPreview(remoteExists, consistent, changes);
+    }
+
+    private int countConsistentFiles(Map<String, LocalItem> local,
+                                     Map<String, BaiduPanEntry> remoteFiles) {
         int consistent = 0;
         for (Map.Entry<String, LocalItem> entry : local.entrySet()) {
-            BaiduPanEntry remoteItem = remote.files().get(entry.getKey());
-            if (remoteItem != null
-                    && fileFingerprint(entry.getValue().size(), entry.getValue().modifiedAt())
-                    .equals(fileFingerprint(remoteItem.size(), remoteItem.modifiedAt()))) {
+            BaiduPanEntry remoteItem = remoteFiles.get(entry.getKey());
+            if (remoteItem != null && fileFingerprint(entry.getValue().size(),
+                                                      entry.getValue().modifiedAt()).equals(fileFingerprint(remoteItem.size(),
+                                                                                                            remoteItem.modifiedAt()))) {
                 consistent++;
             }
         }
+        return consistent;
+    }
+
+    private BaiduSyncPreview createPreview(boolean remoteExists,
+                                           int consistent,
+                                           List<FileChange> changes) {
+        List<BaiduSyncPreviewItem> items = new ArrayList<>();
         int uploads = 0;
         int downloads = 0;
         int deletions = 0;
@@ -228,11 +231,10 @@ public class BaiduSyncService {
             String remoteRoot = remoteRoot(settings.appName());
             ensureRemoteRoot(accessToken, remoteRoot);
 
-            Map<String, LocalItem> local = scanLocal(notesRoot, pluginDirectory);
-            Set<String> localDirectories = scanLocalDirectories(notesRoot, pluginDirectory);
-            if (local.containsKey(STAGING_DIRECTORY) || localDirectories.contains(STAGING_DIRECTORY)) {
-                throw new IllegalStateException("笔记根目录包含百度同步保留目录，请先重命名：" + STAGING_DIRECTORY);
-            }
+            LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, pluginDirectory);
+            Map<String, LocalItem> local = localSnapshot.files();
+            Set<String> localDirectories = localSnapshot.directories();
+            validateNoLocalStagingDirectory(localSnapshot);
             cleanRemoteStaging(accessToken, remoteRoot);
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
             validatePathTypes(local.keySet(), localDirectories, remote);
@@ -274,9 +276,16 @@ public class BaiduSyncService {
         }
         deleteRemoteChanges(accessToken, changes, counters);
 
-        Set<String> localFilesAfterTransfer = scanLocal(notesRoot, pluginDirectory).keySet();
-        syncDirectories(accessToken, notesRoot, remoteRoot, localFilesAfterTransfer, remote.directories(), baseline.directories());
-        Map<String, LocalItem> finalLocal = scanLocal(notesRoot, pluginDirectory);
+        LocalSnapshot localAfterTransfer = scanLocalSnapshot(notesRoot, pluginDirectory);
+        syncDirectories(accessToken,
+                        notesRoot,
+                        remoteRoot,
+                        localAfterTransfer.files().keySet(),
+                        localAfterTransfer.directories(),
+                        remote.directories(),
+                        baseline.directories());
+        LocalSnapshot finalLocalSnapshot = scanLocalSnapshot(notesRoot, pluginDirectory);
+        Map<String, LocalItem> finalLocal = finalLocalSnapshot.files();
         RemoteSnapshot finalRemote = scanRemote(accessToken, remoteRoot);
         Map<String, String> finalFiles = new LinkedHashMap<>();
         for (Map.Entry<String, LocalItem> entry : finalLocal.entrySet()) {
@@ -290,7 +299,7 @@ public class BaiduSyncService {
         }
         Set<String> directories = new LinkedHashSet<>();
         finalLocal.values().stream().map(LocalItem::parent).filter(value -> !value.isEmpty()).forEach(directories::add);
-        directories.addAll(scanLocalDirectories(notesRoot, pluginDirectory));
+        directories.addAll(finalLocalSnapshot.directories());
         stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), finalFiles, directories));
         finishSync(new BaiduSyncStatus(false,
                                        initial.startedAt(),
@@ -517,15 +526,19 @@ public class BaiduSyncService {
         }
     }
 
-    private Map<String, LocalItem> scanLocal(Path root,
-                                             Path excluded) throws IOException {
-        Map<String, LocalItem> result = new LinkedHashMap<>();
+    private LocalSnapshot scanLocalSnapshot(Path root,
+                                            Path excluded) throws IOException {
+        Map<String, LocalItem> files = new LinkedHashMap<>();
+        Set<String> directories = new LinkedHashSet<>();
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir,
                                                      BasicFileAttributes attrs) {
                 if (dir.toAbsolutePath().normalize().equals(excluded)) {
                     return FileVisitResult.SKIP_SUBTREE;
+                }
+                if (!dir.equals(root)) {
+                    directories.add(relative(root, dir));
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -535,31 +548,12 @@ public class BaiduSyncService {
                                              BasicFileAttributes attrs) throws IOException {
                 if (attrs.isRegularFile() && !Files.isSymbolicLink(file)) {
                     String relative = relative(root, file);
-                    result.put(relative, new LocalItem(file, relative, Files.getLastModifiedTime(file).toMillis(), attrs.size()));
+                    files.put(relative, new LocalItem(file, relative, Files.getLastModifiedTime(file).toMillis(), attrs.size()));
                 }
                 return FileVisitResult.CONTINUE;
             }
         });
-        return result;
-    }
-
-    private Set<String> scanLocalDirectories(Path root,
-                                             Path excluded) throws IOException {
-        Set<String> result = new LinkedHashSet<>();
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir,
-                                                     BasicFileAttributes attrs) {
-                if (dir.toAbsolutePath().normalize().equals(excluded)) {
-                    return FileVisitResult.SKIP_SUBTREE;
-                }
-                if (!dir.equals(root)) {
-                    result.add(relative(root, dir));
-                }
-                return FileVisitResult.CONTINUE;
-            }
-        });
-        return result;
+        return new LocalSnapshot(files, directories);
     }
 
     private RemoteSnapshot scanRemote(String accessToken,
@@ -592,12 +586,18 @@ public class BaiduSyncService {
         return new RemoteSnapshot(files, directoriesSeen);
     }
 
+    /**
+     * 将基线路径也纳入比较，才能识别当前快照中已经消失的文件。
+     * 例如指纹为 size:mtime秒：基线 100:10、本地仍为 100:10、云端缺失 -> 删除本地；
+     * 本地变为 120:11 或该路径没有基线 -> 上传本地文件。
+     */
     private List<FileChange> planFileChanges(Map<String, LocalItem> local,
                                              RemoteSnapshot remote,
                                              BaiduSyncState baseline) {
         Set<String> paths = new LinkedHashSet<>();
         paths.addAll(local.keySet());
         paths.addAll(remote.files().keySet());
+        // 保留两端当前都没有、但基线记得的路径，以便下面明确跳过已在两端删除的文件。
         paths.addAll(baseline.files().keySet());
         List<FileChange> changes = new ArrayList<>();
 
@@ -619,6 +619,7 @@ public class BaiduSyncService {
                 boolean conflict = isConfirmedConflict(previousFingerprint, localChanged, remoteChanged);
                 boolean localWins;
                 if (previousFingerprint == null || conflict) {
+                    // 例如基线 100:10、本地 120:11、云端 110:12：双方都变更，标记冲突并以较新的秒级修改时间决胜。
                     localWins = modifiedAtSeconds(localItem.modifiedAt()) >= modifiedAtSeconds(remoteItem.modifiedAt());
                 } else {
                     localWins = localChanged || !remoteChanged;
@@ -686,6 +687,12 @@ public class BaiduSyncService {
         }
     }
 
+    private void validateNoLocalStagingDirectory(LocalSnapshot localSnapshot) {
+        if (localSnapshot.files().containsKey(STAGING_DIRECTORY) || localSnapshot.directories().contains(STAGING_DIRECTORY)) {
+            throw new IllegalStateException("笔记根目录包含百度同步保留目录，请先重命名：" + STAGING_DIRECTORY);
+        }
+    }
+
     private void cleanRemoteStaging(String accessToken,
                                     String remoteRoot) {
         String stagingPath = remoteRoot + "/" + STAGING_DIRECTORY;
@@ -718,9 +725,9 @@ public class BaiduSyncService {
                                  Path localRoot,
                                  String remoteRoot,
                                  Set<String> localFiles,
+                                 Set<String> localDirs,
                                  Set<String> remoteDirsBefore,
                                  Set<String> baseline) throws IOException {
-        Set<String> localDirs = scanLocalDirectories(localRoot, pluginDirectory);
         for (String directory : remoteDirsBefore) {
             if (!localDirs.contains(directory) && !baseline.contains(directory)) {
                 Files.createDirectories(resolveLocal(localRoot, directory));
@@ -783,7 +790,7 @@ public class BaiduSyncService {
             panClient.createDirectory(accessToken, path);
         } catch (BaiduPanException e) {
             if (e.errno() != -8) {
-                throw new IllegalStateException("创建百度网盘目录失败：" + path + "；" + e.getMessage(), e);
+                log.error("创建百度网盘目录失败：" + path + "；" + e.getMessage(), e);
             }
         }
     }
@@ -871,6 +878,12 @@ public class BaiduSyncService {
     }
 
     private record UploadPlan(BaiduPanClient.FileManagerMove move) {
+    }
+
+    private record LocalSnapshot(Map<String, LocalItem> files, Set<String> directories) {
+        private static LocalSnapshot empty() {
+            return new LocalSnapshot(Map.of(), Set.of());
+        }
     }
 
     private record LocalItem(Path file, String relative, long modifiedAt, long size) {

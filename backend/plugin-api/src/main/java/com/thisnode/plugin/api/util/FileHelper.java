@@ -1,9 +1,10 @@
 package com.thisnode.plugin.api.util;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
 import com.thisnode.plugin.api.FileChangeEventPublisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.support.GenericApplicationContext;
@@ -20,16 +21,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 
 /** Executes persistent file mutations and publishes their plugin-scoped change events. */
+@RequiredArgsConstructor
+@Slf4j
 public final class FileHelper {
 
-    private static final Logger log = LoggerFactory.getLogger(FileHelper.class);
-
     private final FileChangeEventPublisher fileChangeEventPublisher;
-
-    @Autowired
-    public FileHelper(FileChangeEventPublisher fileChangeEventPublisher) {
-        this.fileChangeEventPublisher = Objects.requireNonNull(fileChangeEventPublisher, "fileChangeEventPublisher");
-    }
 
     public static void registerSpringBeans(GenericApplicationContext context,
                                            ApplicationEventPublisher mainEventPublisher,
@@ -41,7 +37,7 @@ public final class FileHelper {
 
     public void fileWritten(Path file,
                             Object content) {
-        fileWritten(file, JSON.toJSONString(content));
+        fileWritten(file, JSON.toJSONString(content, JSONWriter.Feature.PrettyFormat));
     }
 
     public void fileWritten(Path file,

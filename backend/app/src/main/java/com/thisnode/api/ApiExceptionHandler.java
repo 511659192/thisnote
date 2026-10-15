@@ -3,8 +3,7 @@ package com.thisnode.api;
 import com.thisnode.plugin.api.CardLimitException;
 import com.thisnode.plugin.api.ConflictException;
 import com.thisnode.plugin.api.NotFoundException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -26,9 +25,8 @@ import java.util.Map;
  * 这些类由主体类加载器装载、各插件经委派共享同一个 Class 对象，跨容器 instanceof 成立。
  */
 @RestControllerAdvice
+@Slf4j
 public class ApiExceptionHandler {
-
-    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Map<String, Object>> notFound(NotFoundException e) {

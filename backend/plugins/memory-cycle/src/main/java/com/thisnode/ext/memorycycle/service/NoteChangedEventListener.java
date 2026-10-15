@@ -1,15 +1,13 @@
 package com.thisnode.ext.memorycycle.service;
 
 import com.thisnode.plugin.api.NoteChangedEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
+@Slf4j
 public class NoteChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteChangedEvent>> {
-
-    private static final Logger log = LoggerFactory.getLogger(NoteChangedEventListener.class);
 
     private final MemoryCycleService srs;
 

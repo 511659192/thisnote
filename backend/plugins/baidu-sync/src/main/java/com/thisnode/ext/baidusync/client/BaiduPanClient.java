@@ -558,25 +558,27 @@ public class BaiduPanClient {
 
     private JSONObject postJson(String url,
                                 Map<String, String> values) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofMinutes(2))
-                .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                .header("User-Agent", "thisnote-baidu-sync")
-                .POST(HttpRequest.BodyPublishers.ofString(query(values)))
-                .build();
-        try {
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            return checkJson(response.statusCode(), response.body(), "百度网盘写入失败");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("百度网盘请求被中断", e);
-        } catch (IOException e) {
-            throw new IllegalStateException("无法连接百度网盘", e);
-        }
+        HttpResponse<String> response = postForm(url, values);
+        return checkJson(response.statusCode(), response.body(), "百度网盘写入失败");
     }
 
     private JSONObject postFileManagerJson(String url,
                                            Map<String, String> values) {
+        HttpResponse<String> response = postForm(url, values);
+        JSONObject body;
+        try {
+            body = JSON.parseObject(response.body());
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("百度网盘文件管理失败，HTTP " + response.statusCode());
+        }
+        if (response.statusCode() < 200 || response.statusCode() >= 300 || body == null) {
+            throw new IllegalStateException("百度网盘文件管理失败，HTTP " + response.statusCode());
+        }
+        return body;
+    }
+
+    private HttpResponse<String> postForm(String url,
+                                          Map<String, String> values) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofMinutes(2))
                 .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
@@ -584,17 +586,7 @@ public class BaiduPanClient {
                 .POST(HttpRequest.BodyPublishers.ofString(query(values)))
                 .build();
         try {
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            JSONObject body;
-            try {
-                body = JSON.parseObject(response.body());
-            } catch (RuntimeException e) {
-                throw new IllegalStateException("百度网盘文件管理失败，HTTP " + response.statusCode());
-            }
-            if (response.statusCode() < 200 || response.statusCode() >= 300 || body == null) {
-                throw new IllegalStateException("百度网盘文件管理失败，HTTP " + response.statusCode());
-            }
-            return body;
+            return http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("百度网盘请求被中断", e);

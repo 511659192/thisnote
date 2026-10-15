@@ -2,14 +2,11 @@ package com.thisnode.ext.memorycycle.controller;
 
 import com.thisnode.ext.memorycycle.model.CardSchedule;
 import com.thisnode.ext.memorycycle.model.request.ReviewRequest;
+import com.thisnode.ext.memorycycle.model.view.CardStateView;
+import com.thisnode.ext.memorycycle.model.view.DueCardView;
 import com.thisnode.ext.memorycycle.model.view.ScheduleView;
 import com.thisnode.ext.memorycycle.service.MemoryCycleService;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
@@ -27,28 +24,32 @@ public class MemoryCycleController {
         this.srs = srs;
     }
 
-    /** State for many cards at once, so a page of cards costs one request. */
+    /**
+     * State for many cards at once, so a page of cards costs one request.
+     */
     @GetMapping("/get-cards")
-    public List<Map<String, Object>> cards(@RequestParam List<String> ids) {
+    public List<CardStateView> cards(@RequestParam List<String> ids) {
         return srs.cardStates(ids).stream().map(this::cardStateView).toList();
     }
 
     @GetMapping("/get-card")
-    public Map<String, Object> card(@RequestParam String cardId) {
+    public CardStateView card(@RequestParam String cardId) {
         return cardStateView(srs.cardState(cardId));
     }
 
     @PostMapping("/update-state")
     public Map<String, Object> setState(@RequestParam String cardId,
-                                       @RequestParam boolean value) {
+                                        @RequestParam boolean value) {
         srs.setEnabled(cardId, value);
         return Map.of("enabled", value);
     }
 
-    /** Grade a card: 1=忘记 2=困难 3=良好 4=简单. */
+    /**
+     * Grade a card: 1=忘记 2=困难 3=良好 4=简单.
+     */
     @PostMapping("/review")
-    public Map<String, Object> review(@RequestParam String cardId,
-                                      @RequestBody ReviewRequest request) {
+    public CardStateView review(@RequestParam String cardId,
+                                @RequestBody ReviewRequest request) {
         if (request == null || request.grade() == null) {
             throw new IllegalArgumentException("缺少 grade");
         }
@@ -56,9 +57,11 @@ public class MemoryCycleController {
         return cardStateView(srs.cardState(cardId));
     }
 
-    /** Due cards across all notes (memory cycle enabled only). */
+    /**
+     * Due cards across all notes (memory cycle enabled only).
+     */
     @GetMapping("/get-due")
-    public List<Map<String, Object>> due(@RequestParam(defaultValue = "50") int limit) {
+    public List<DueCardView> due(@RequestParam(defaultValue = "50") int limit) {
         return srs.due(limit).stream().map(this::dueView).toList();
     }
 
@@ -74,15 +77,8 @@ public class MemoryCycleController {
         return Map.of("cardId", cardId, "removed", srs.delete(cardId));
     }
 
-    private Map<String, Object> cardStateView(CardSchedule schedule) {
-        return Map.of("cardId",
-                      schedule.getCardId(),
-                      "enabled",
-                      schedule.isEnabled(),
-                      "schedule",
-                      scheduleView(schedule),
-                      "gradePreview",
-                      schedule.getGradePreview());
+    private CardStateView cardStateView(CardSchedule schedule) {
+        return new CardStateView(schedule.getCardId(), schedule.isEnabled(), scheduleView(schedule), schedule.getGradePreview());
     }
 
     private ScheduleView scheduleView(CardSchedule schedule) {
@@ -91,8 +87,7 @@ public class MemoryCycleController {
         if (schedule.isEnabled()) {
             dueAt = isShortPhase(schedule.getState()) ? now : schedule.getDueAt().getTime();
         }
-        Long lastReviewedAt = schedule.getLastReviewedAt() == null
-                ? null : schedule.getLastReviewedAt().getTime();
+        Long lastReviewedAt = schedule.getLastReviewedAt() == null ? null : schedule.getLastReviewedAt().getTime();
         return new ScheduleView(schedule.getCardId(),
                                 schedule.getState(),
                                 schedule.getLevel(),
@@ -107,17 +102,12 @@ public class MemoryCycleController {
         return "new".equals(state) || "learning".equals(state) || "relearning".equals(state);
     }
 
-    private Map<String, Object> dueView(CardSchedule schedule) {
-        return Map.of("cardId",
-                      schedule.getCardId(),
-                      "dueAt",
-                      schedule.getDueAt().getTime(),
-                      "state",
-                      schedule.getState(),
-                      "level",
-                      schedule.getLevel(),
-                      "gradePreview",
-                      schedule.getGradePreview());
+    private DueCardView dueView(CardSchedule schedule) {
+        return new DueCardView(schedule.getCardId(),
+                               schedule.getDueAt().getTime(),
+                               schedule.getState(),
+                               schedule.getLevel(),
+                               schedule.getGradePreview());
     }
 
 }

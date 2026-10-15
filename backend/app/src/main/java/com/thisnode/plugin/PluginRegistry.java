@@ -2,11 +2,10 @@ package com.thisnode.plugin;
 
 import com.thisnode.plugin.api.PluginHealth;
 import com.thisnode.plugin.api.PluginRegister;
+import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginDescriptor;
 import org.pf4j.PluginManager;
 import org.pf4j.PluginWrapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -34,9 +33,8 @@ import java.util.Map;
  * 而且运行期还能停用/重载。
  */
 @Component
+@Slf4j
 public class PluginRegistry {
-
-    private static final Logger log = LoggerFactory.getLogger(PluginRegistry.class);
 
     private final ObjectProvider<PluginManager> pluginManager;
 

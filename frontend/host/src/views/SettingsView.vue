@@ -369,12 +369,15 @@ onMounted(async () => {
 
 <style scoped>
 .settings {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
 .tabs {
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -389,24 +392,30 @@ onMounted(async () => {
   color: var(--c-text-2);
 }
 .settings-tabs {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 0 var(--space-3);
-  border-bottom: 1px solid var(--c-border);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: var(--space-3) var(--space-2);
+  border-right: 1px solid var(--c-border);
   background: var(--c-surface);
 }
 .settings-tab {
+  width: 100%;
+  text-align: left;
   padding: 9px 12px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-left: 2px solid transparent;
   background: transparent;
   color: var(--c-text-3);
   font-size: 13px;
   cursor: pointer;
 }
 .settings-tab.active {
-  border-bottom-color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
@@ -421,8 +430,10 @@ onMounted(async () => {
   color: var(--accent);
 }
 .body {
-  flex: 1;
+  grid-column: 2;
+  grid-row: 2;
   overflow-y: auto;
+  min-width: 0;
   min-height: 0;
 }
 .busy-bar {
@@ -512,6 +523,40 @@ onMounted(async () => {
 }
 .lines li {
   line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .settings {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 40px auto minmax(0, 1fr);
+  }
+  .tabs {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .settings-tabs {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0 var(--space-2);
+    border-right: 0;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .body {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .settings-tab {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+  }
+  .settings-tab.active {
+    border-bottom-color: var(--accent);
+  }
 }
 
 /* --- 插件管理 --- */
