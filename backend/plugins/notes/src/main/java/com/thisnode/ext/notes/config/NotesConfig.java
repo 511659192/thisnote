@@ -23,9 +23,8 @@ public class NotesConfig {
 
     private final Path attachmentsDir;
 
-    public NotesConfig(NotesRootSettingsRepository rootSettingsRepository,
-                      @Value("${thisnode.root-dir}") Path defaultRootDir) {
-        this.rootDir = rootSettingsRepository.configuredRoot(defaultRootDir);
+    public NotesConfig(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
+        this.rootDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes");
         this.noteMetaDir = rootDir.resolve("meta");
         this.cardsDir = rootDir.resolve("cards");
         this.notebookDir = rootDir.resolve("notebook");

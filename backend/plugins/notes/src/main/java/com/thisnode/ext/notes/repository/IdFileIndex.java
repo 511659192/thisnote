@@ -92,7 +92,7 @@ public class IdFileIndex {
     private IndexData scanExistingFiles() {
         IndexData index = new IndexData();
         Path metaDir = notesConfig.getNoteMetaDir();
-        if (Files.isDirectory(metaDir)) {
+        if (Files.exists(metaDir)) {
             try (DirectoryStream<Path> files = Files.newDirectoryStream(metaDir, "*.json")) {
                 for (Path file : files) {
                     NoteMeta note = NoteMeta.parse(file);
@@ -107,7 +107,7 @@ public class IdFileIndex {
         }
 
         Path cardsDir = notesConfig.getCardsDir();
-        if (Files.isDirectory(cardsDir)) {
+        if (Files.exists(cardsDir)) {
             try (DirectoryStream<Path> files = Files.newDirectoryStream(cardsDir, "*.md")) {
                 for (Path file : files) {
                     Card.CardMeta meta;

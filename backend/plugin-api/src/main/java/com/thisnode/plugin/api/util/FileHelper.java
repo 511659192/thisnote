@@ -84,7 +84,7 @@ public final class FileHelper {
         boolean previouslyExisted = Files.exists(file);
         try {
             createParentDirectories(file);
-            Files.move(stagedFile, file, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(stagedFile, file);
         } catch (IOException e) {
             log.warn("无法写入文件 {}", file, e);
             throw new UncheckedIOException("写入文件失败 " + file, e);
@@ -122,8 +122,8 @@ public final class FileHelper {
     private void publishFileChange(FileChangeEvent.Operation operation,
                                    Path file,
                                    Path previousFile) {
-        String url = file.toAbsolutePath().normalize().toUri().toString();
-        String previousUrl = previousFile == null ? null : previousFile.toAbsolutePath().normalize().toUri().toString();
+        Path url = file.toAbsolutePath().normalize();
+        Path previousUrl = previousFile == null ? null : previousFile.toAbsolutePath().normalize();
         eventPublisher.publishEvent(new FileChangeEvent(sourcePluginId, operation, url, previousUrl));
     }
 

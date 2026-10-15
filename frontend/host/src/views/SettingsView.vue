@@ -27,14 +27,10 @@ const confirmation = ref<{
 const plugins = ref<PluginInfo[]>([])
 const openPlugin = ref('')
 const notesRootDir = ref('')
-const activeNotesRootDir = ref('')
-const notesRootRestartRequired = ref(false)
 const activeTab = ref<'storage' | 'plugins' | 'baidu-sync'>('storage')
 
 interface NotesRootSettings {
   rootDir: string
-  activeRootDir: string
-  restartRequired: boolean
 }
 
 async function refreshPlugins() {
@@ -49,32 +45,8 @@ async function refreshNotesRoot() {
   try {
     const settings = await request<NotesRootSettings>('GET', '/api/notes/settings/get')
     notesRootDir.value = settings.rootDir
-    activeNotesRootDir.value = settings.activeRootDir
-    notesRootRestartRequired.value = settings.restartRequired
   } catch (e) {
     ui.toast(`读取笔记根目录失败：${(e as Error).message}`, 'error')
-  }
-}
-
-async function saveNotesRoot() {
-  const rootDir = notesRootDir.value.trim()
-  if (!rootDir) {
-    ui.toast('笔记根目录不能为空', 'error')
-    return
-  }
-  busy.value = '正在保存笔记根目录'
-  try {
-    const settings = await request<NotesRootSettings>('POST', '/api/notes/settings/update-root', {
-      query: { rootDir },
-    })
-    notesRootDir.value = settings.rootDir
-    activeNotesRootDir.value = settings.activeRootDir
-    notesRootRestartRequired.value = settings.restartRequired
-    ui.toast(settings.restartRequired ? '笔记根目录已保存，重启应用后生效' : '笔记根目录已保存', 'success')
-  } catch (e) {
-    ui.toast(`保存笔记根目录失败：${(e as Error).message}`, 'error')
-  } finally {
-    busy.value = ''
   }
 }
 
@@ -243,27 +215,8 @@ onMounted(async () => {
         v-show="activeTab === 'storage'"
       >
         <h3>笔记存储</h3>
-        <p class="small muted">
-          保存后只切换存储路径，不会搬移已有笔记。切换到空目录后列表会为空，旧笔记仍保留在原目录；重启应用后生效。
-        </p>
-        <label class="small muted" for="notes-root-dir">笔记根目录</label>
-        <div class="notes-root-form">
-          <input
-            id="notes-root-dir"
-            v-model="notesRootDir"
-            class="input"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            :disabled="!!busy"
-            placeholder="例如 C:\Users\用户名\.thisnode\notes"
-          >
-          <button class="btn sm primary" :disabled="!!busy" @click="saveNotesRoot">保存</button>
-        </div>
-        <p class="small muted notes-root-active">当前生效：<span class="mono">{{ activeNotesRootDir }}</span></p>
-        <p v-if="notesRootRestartRequired" class="small warn notes-root-pending">
-          新路径已保存，重启后生效；当前仍使用上方显示的生效路径。
-        </p>
+        <p class="small muted">笔记根目录由服务配置确定。</p>
+        <p class="small muted notes-root-active">当前笔记根目录：<span class="mono">{{ notesRootDir }}</span></p>
       </section>
 
       <!-- ------------------------------ plugins ------------------------------ -->
@@ -472,23 +425,9 @@ onMounted(async () => {
   margin: 0;
   padding-left: var(--space-4);
 }
-.notes-root-form {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: 720px;
-  margin-top: var(--space-1);
-}
-.notes-root-form .input {
-  flex: 1;
-  min-width: 0;
-}
 .notes-root-active {
   overflow-wrap: anywhere;
   margin: var(--space-2) 0 0;
-}
-.notes-root-pending {
-  margin-top: var(--space-1);
 }
 .kv {
   display: grid;

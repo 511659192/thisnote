@@ -20,11 +20,8 @@ public final class FileChangeEventListener
         try {
             // 忽略本插件触发的变更，避免同步写入反复唤起自身。
             if (!BaiduSyncPlugin.PLUGIN_ID.equals(change.sourcePluginId()) && syncService.isNotesRootFileChange(change)) {
-                log.debug("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}",
-                          change.sourcePluginId(),
-                          change.operation(),
-                          change.url(),
-                          change.previousUrl());
+                log.debug("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}", change.sourcePluginId(), change.operation(),
+                          change.url(), change.previousUrl());
                 syncService.requestSyncAfterChange(change);
             }
         } catch (RuntimeException e) {

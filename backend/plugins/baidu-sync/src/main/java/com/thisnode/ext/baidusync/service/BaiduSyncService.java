@@ -17,12 +17,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -32,14 +30,13 @@ public class BaiduSyncService {
     private static final int UPLOAD_THREAD_COUNT = 8;
     private static final int UPLOAD_QUEUE_CAPACITY = 256;
     private static final int MAX_UPLOADS_IN_FLIGHT = UPLOAD_THREAD_COUNT + UPLOAD_QUEUE_CAPACITY;
-    private static final int FILE_CHANGE_DEBOUNCE_SECONDS = 5;
 
     private final BaiduSyncSettingsRepository settingsRepository;
     private final BaiduSyncStateRepository stateRepository;
     private final BaiduOAuthClient oauthClient;
     private final BaiduPanClient panClient;
     private final FileHelper fileHelper;
-    private final Path dataRoot;
+    private final Path notesRoot;
     private final Path pluginDirectory;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(daemonThreadFactory("baidu-sync"));
     private final ThreadPoolExecutor uploadExecutor = new ThreadPoolExecutor(UPLOAD_THREAD_COUNT,
@@ -48,11 +45,8 @@ public class BaiduSyncService {
                                                                              TimeUnit.MILLISECONDS,
                                                                              new ArrayBlockingQueue<>(UPLOAD_QUEUE_CAPACITY),
                                                                              daemonThreadFactory("baidu-sync-upload"));
-    private final ScheduledExecutorService fileChangeDebouncer = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("baidu-sync-change-debounce"));
     private volatile BaiduSyncStatus status = BaiduSyncStatus.idle();
     private final Object syncLock = new Object();
-    private final Object fileChangeDebounceLock = new Object();
-    private final Map<Path, PendingFileChanges> pendingFileChangesByPath = new HashMap<>();
     private final Set<Path> queuedFileChangePaths = new LinkedHashSet<>();
     private boolean fileChangeSyncScheduled;
 
@@ -67,91 +61,35 @@ public class BaiduSyncService {
         this.oauthClient = oauthClient;
         this.panClient = panClient;
         this.fileHelper = fileHelper;
-        this.dataRoot = Path.of(dataRoot).toAbsolutePath().normalize();
-        this.pluginDirectory = PluginDataPathUtils.pluginDataDirectory(this.dataRoot, "baidu-sync", fileHelper);
+        Path root = Path.of(dataRoot).toAbsolutePath().normalize();
+        this.notesRoot = root.resolve("notes");
+        this.pluginDirectory = PluginDataPathUtils.pluginDataDirectory(root, "baidu-sync", fileHelper);
     }
 
     public boolean isNotesRootFileChange(FileChangeEvent event) {
-        Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes")).toAbsolutePath().normalize();
-        return isWithinRoot(event.url(), notesRoot) || event.previousUrl() != null && isWithinRoot(event.previousUrl(), notesRoot);
+        return event.url().startsWith(notesRoot)
+               || event.previousUrl() != null && event.previousUrl().startsWith(notesRoot);
     }
 
     public void requestSyncAfterChange(FileChangeEvent event) {
-        Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes")).toAbsolutePath().normalize();
         Set<Path> changedPaths = new LinkedHashSet<>();
-        switch (event.operation()) {
-            case CREATED, UPDATED, DELETED -> addNotesPath(event.url(), notesRoot, changedPaths);
-            case RENAME -> {
-                addNotesPath(event.url(), notesRoot, changedPaths);
-                addNotesPath(event.previousUrl(), notesRoot, changedPaths);
-            }
-        }
+        addNotesPath(event.url(), notesRoot, changedPaths);
+        addNotesPath(event.previousUrl(), notesRoot, changedPaths);
         if (changedPaths.isEmpty()) {
             return;
         }
-
-        synchronized (fileChangeDebounceLock) {
-            // Merge old/new paths so consecutive writes and chained renames settle as one change.
-            Set<PendingFileChanges> related = changedPaths.stream()
-                    .map(pendingFileChangesByPath::get)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-
-            PendingFileChanges pending = related.stream().findFirst().orElseGet(PendingFileChanges::new);
-            for (PendingFileChanges other : related) {
-                if (other == pending) {
-                    continue;
-                }
-                if (other.scheduled != null) {
-                    other.scheduled.cancel(false);
-                }
-                pending.paths.addAll(other.paths);
-                other.paths.forEach(path -> pendingFileChangesByPath.remove(path, other));
-                other.generation++;
-            }
-            if (pending.scheduled != null) {
-                pending.scheduled.cancel(false);
-            }
-            pending.paths.addAll(changedPaths);
-            pending.paths.forEach(path -> pendingFileChangesByPath.put(path, pending));
-
-            // 新事件重置 5 秒静默期；generation 用于丢弃与新事件竞态的旧回调。
-            long generation = ++pending.generation;
-            try {
-                pending.scheduled = fileChangeDebouncer.schedule(() -> flushFileChanges(pending, generation),
-                                                                 FILE_CHANGE_DEBOUNCE_SECONDS,
-                                                                 TimeUnit.SECONDS);
-            } catch (RejectedExecutionException e) {
-                pending.paths.forEach(path -> pendingFileChangesByPath.remove(path, pending));
-                log.debug("百度网盘文件变更防抖线程已关闭，忽略变更事件", e);
-            }
-        }
+        queueFileChangeSync(changedPaths);
     }
 
-    private void addNotesPath(String url,
+    private void addNotesPath(Path path,
                               Path notesRoot,
                               Set<Path> changedPaths) {
-        if (url == null) {
+        if (path == null) {
             return;
         }
-        Path path = Path.of(URI.create(url));
         if (!path.equals(notesRoot) && path.startsWith(notesRoot)) {
             changedPaths.add(path);
         }
-    }
-
-    private void flushFileChanges(PendingFileChanges pending,
-                                  long generation) {
-        Set<Path> changedPaths;
-        synchronized (fileChangeDebounceLock) {
-            if (pending.generation != generation || pending.paths.stream().anyMatch(path -> pendingFileChangesByPath.get(path) != pending)) {
-                return;
-            }
-            changedPaths = new LinkedHashSet<>(pending.paths);
-            changedPaths.forEach(path -> pendingFileChangesByPath.remove(path, pending));
-            pending.scheduled = null;
-        }
-        queueFileChangeSync(changedPaths);
     }
 
     private void queueFileChangeSync(Set<Path> changedPaths) {
@@ -198,11 +136,6 @@ public class BaiduSyncService {
         syncChangedFiles(initial, changedPaths);
     }
 
-    private boolean isWithinRoot(String url,
-                                 Path root) {
-        return Path.of(URI.create(url)).startsWith(root);
-    }
-
     public BaiduSyncStatus startSync() {
         synchronized (syncLock) {
             return startSyncLocked();
@@ -241,7 +174,7 @@ public class BaiduSyncService {
         ensureSyncIdle();
         BaiduSyncSettings settings = settingsRepository.get();
         validateSettings(settings);
-        String remoteRoot = remoteRoot(settings.appName());
+        String remoteRoot = "/apps/" + settings.appName() + "/notes";
         String accessToken = oauthClient.accessToken();
         if (!panClient.directoryExists(accessToken, remoteRoot)) {
             return new BaiduSyncConnectionProbe(remoteRoot, false, 0, 0);
@@ -256,20 +189,14 @@ public class BaiduSyncService {
         ensureSyncIdle();
         BaiduSyncSettings settings = settingsRepository.get();
         validateSettings(settings);
-        String remoteRoot = remoteRoot(settings.appName());
+        String remoteRoot = "/apps/" + settings.appName() + "/notes";
         String accessToken = oauthClient.accessToken();
-        Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes"));
-        if (Files.exists(notesRoot) && !Files.isDirectory(notesRoot)) {
-            throw new IllegalStateException("笔记根目录不是文件夹：" + notesRoot);
-        }
-
-        LocalSnapshot localSnapshot = Files.isDirectory(notesRoot) ? scanLocalSnapshot(notesRoot, pluginDirectory) : LocalSnapshot.empty();
+        Path notesRoot = this.notesRoot;
+        LocalSnapshot localSnapshot = Files.exists(notesRoot) ? scanLocalSnapshot(notesRoot, pluginDirectory) : LocalSnapshot.empty();
         Map<String, LocalItem> local = localSnapshot.files();
-        validateNoLocalStagingDirectory(localSnapshot);
 
         boolean remoteExists = panClient.directoryExists(accessToken, remoteRoot);
         RemoteSnapshot remote = remoteExists ? scanRemote(accessToken, remoteRoot) : new RemoteSnapshot(Map.of(), Set.of());
-        validatePathTypes(local.keySet(), localSnapshot.directories(), remote);
         BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
         List<FileChange> changes = planFileChanges(local, remote, baseline);
         int consistent = countConsistentFiles(local, remote.files());
@@ -331,15 +258,6 @@ public class BaiduSyncService {
 
     @PreDestroy
     public void stop() {
-        fileChangeDebouncer.shutdownNow();
-        synchronized (fileChangeDebounceLock) {
-            new HashSet<>(pendingFileChangesByPath.values()).forEach(pending -> {
-                if (pending.scheduled != null) {
-                    pending.scheduled.cancel(false);
-                }
-            });
-            pendingFileChangesByPath.clear();
-        }
         synchronized (syncLock) {
             queuedFileChangePaths.clear();
         }
@@ -353,18 +271,16 @@ public class BaiduSyncService {
             BaiduSyncSettings settings = settingsRepository.get();
             validateSettings(settings);
             String accessToken = oauthClient.accessToken();
-            Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes"));
+            Path notesRoot = this.notesRoot;
             Files.createDirectories(notesRoot);
-            String remoteRoot = remoteRoot(settings.appName());
-            ensureRemoteRoot(accessToken, remoteRoot);
+            String remoteRoot = "/apps/" + settings.appName() + "/notes";
+            createRemoteDirectory(accessToken, "/apps", remoteRoot.substring("/apps/".length()));
 
             LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, pluginDirectory);
             Map<String, LocalItem> local = localSnapshot.files();
             Set<String> localDirectories = localSnapshot.directories();
-            validateNoLocalStagingDirectory(localSnapshot);
             cleanRemoteStaging(accessToken, remoteRoot);
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
-            validatePathTypes(local.keySet(), localDirectories, remote);
             BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
             List<FileChange> changes = planFileChanges(local, remote, baseline);
             counters.conflicts = (int) changes.stream().filter(FileChange::conflict).count();
@@ -450,7 +366,11 @@ public class BaiduSyncService {
             cause = cause.getCause();
         }
         Exception failure = cause instanceof Exception exception ? exception : new IllegalStateException("百度网盘同步失败", cause);
-        log.warn("百度网盘同步失败：{}", message(failure), failure);
+        String failureMessage = failure.getMessage();
+        if (failureMessage == null || failureMessage.isBlank()) {
+            failureMessage = "同步失败";
+        }
+        log.warn("百度网盘同步失败：{}", failureMessage, failure);
         finishSync(new BaiduSyncStatus(false,
                                        initial.startedAt(),
                                        System.currentTimeMillis(),
@@ -458,7 +378,7 @@ public class BaiduSyncService {
                                        counters.downloaded,
                                        counters.deleted,
                                        counters.conflicts,
-                                       message(failure)));
+                                       failureMessage));
     }
 
     private void syncChangedFiles(BaiduSyncStatus initial,
@@ -468,8 +388,8 @@ public class BaiduSyncService {
             BaiduSyncSettings settings = settingsRepository.get();
             validateSettings(settings);
             String accessToken = oauthClient.accessToken();
-            Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes")).toAbsolutePath().normalize();
-            String remoteRoot = remoteRoot(settings.appName());
+            Path notesRoot = this.notesRoot;
+            String remoteRoot = "/apps/" + settings.appName() + "/notes";
 
             Set<String> relativePaths = relativeChangedPaths(notesRoot, changedPaths);
             if (relativePaths.isEmpty()) {
@@ -484,7 +404,7 @@ public class BaiduSyncService {
                                                                                                                                   relativePaths) : Map.of();
             List<FileChange> changes = planChangedFileOperations(relativePaths, localFiles, remoteFiles);
             if (changes.stream().anyMatch(change -> change.action() == FileAction.UPLOAD)) {
-                ensureRemoteRoot(accessToken, remoteRoot);
+                createRemoteDirectory(accessToken, "/apps", remoteRoot.substring("/apps/".length()));
             }
 
             uploadChanges(accessToken, remoteRoot, changes, counters).thenRunAsync(() -> {
@@ -528,7 +448,7 @@ public class BaiduSyncService {
                     normalizedPluginDirectory))) {
                 continue;
             }
-            String relative = relative(notesRoot, path);
+            String relative = notesRoot.relativize(path).toString().replace('\\', '/');
             if (relative.equals(STAGING_DIRECTORY) || relative.startsWith(STAGING_DIRECTORY + "/")) {
                 throw new IllegalStateException("笔记根目录包含百度同步保留路径，请先重命名：" + relative);
             }
@@ -566,6 +486,7 @@ public class BaiduSyncService {
         }
 
         Map<String, BaiduPanEntry> remoteFiles = new LinkedHashMap<>();
+        String remotePrefix = remoteRoot.endsWith("/") ? remoteRoot : remoteRoot + "/";
         for (Map.Entry<String, Set<String>> parentEntry : pathsByParent.entrySet()) {
             List<BaiduPanEntry> entries;
             try {
@@ -577,7 +498,7 @@ public class BaiduSyncService {
                 throw e;
             }
             for (BaiduPanEntry entry : entries) {
-                String relative = remoteRelative(remoteRoot, entry.path());
+                String relative = entry.path().startsWith(remotePrefix) ? entry.path().substring(remotePrefix.length()) : "";
                 if (!parentEntry.getValue().contains(relative)) {
                     continue;
                 }
@@ -849,7 +770,7 @@ public class BaiduSyncService {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 if (!dir.equals(root)) {
-                    directories.add(relative(root, dir));
+                    directories.add(root.relativize(dir).toString().replace('\\', '/'));
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -858,7 +779,7 @@ public class BaiduSyncService {
             public FileVisitResult visitFile(Path file,
                                              BasicFileAttributes attrs) throws IOException {
                 if (attrs.isRegularFile() && !Files.isSymbolicLink(file)) {
-                    String relative = relative(root, file);
+                    String relative = root.relativize(file).toString().replace('\\', '/');
                     files.put(relative, new LocalItem(file, relative, attrs.lastModifiedTime().toMillis(), attrs.size()));
                 }
                 return FileVisitResult.CONTINUE;
@@ -872,11 +793,12 @@ public class BaiduSyncService {
         Map<String, BaiduPanEntry> files = new LinkedHashMap<>();
         Set<String> directoriesSeen = new LinkedHashSet<>();
         ArrayDeque<String> directories = new ArrayDeque<>();
+        String remotePrefix = remoteRoot.endsWith("/") ? remoteRoot : remoteRoot + "/";
         directories.add(remoteRoot);
         while (!directories.isEmpty()) {
             String directory = directories.removeFirst();
             for (BaiduPanEntry item : panClient.listDirectory(accessToken, directory)) {
-                String relative = remoteRelative(remoteRoot, item.path());
+                String relative = item.path().startsWith(remotePrefix) ? item.path().substring(remotePrefix.length()) : "";
                 if (relative.isBlank()) {
                     continue;
                 }
@@ -922,11 +844,11 @@ public class BaiduSyncService {
                 }
                 boolean localChanged = previousFingerprint == null || !localFingerprint.equals(previousFingerprint);
                 boolean remoteChanged = previousFingerprint == null || !remoteFingerprint.equals(previousFingerprint);
-                boolean conflict = isConfirmedConflict(previousFingerprint, localChanged, remoteChanged);
+                boolean conflict = previousFingerprint != null && localChanged && remoteChanged;
                 boolean localWins;
                 if (previousFingerprint == null || conflict) {
                     // 例如基线 100:10、本地 120:11、云端 110:12：双方都变更，标记冲突并以较新的秒级修改时间决胜。
-                    localWins = modifiedAtSeconds(localItem.modifiedAt()) >= modifiedAtSeconds(remoteItem.modifiedAt());
+                    localWins = Math.floorDiv(localItem.modifiedAt(), 1000L) >= Math.floorDiv(remoteItem.modifiedAt(), 1000L);
                 } else {
                     localWins = localChanged || !remoteChanged;
                 }
@@ -948,7 +870,7 @@ public class BaiduSyncService {
 
     static String fileFingerprint(long size,
                                   long modifiedAtMillis) {
-        return size + ":" + modifiedAtSeconds(modifiedAtMillis);
+        return size + ":" + Math.floorDiv(modifiedAtMillis, 1000L);
     }
 
     static String parseBaselineFingerprint(String value) {
@@ -965,37 +887,6 @@ public class BaiduSyncService {
             return size < 0 ? null : size + ":" + modifiedAtSeconds;
         } catch (NumberFormatException e) {
             return null;
-        }
-    }
-
-    private static long modifiedAtSeconds(long modifiedAtMillis) {
-        return Math.floorDiv(modifiedAtMillis, 1000L);
-    }
-
-    static boolean isConfirmedConflict(String previousFingerprint,
-                                       boolean localChanged,
-                                       boolean remoteChanged) {
-        return previousFingerprint != null && localChanged && remoteChanged;
-    }
-
-    private void validatePathTypes(Set<String> localFiles,
-                                   Set<String> localDirectories,
-                                   RemoteSnapshot remote) {
-        for (String path : localFiles) {
-            if (remote.directories().contains(path)) {
-                throw new IllegalStateException("本地文件与百度网盘目录路径冲突，请先手动处理：" + path);
-            }
-        }
-        for (String path : remote.files().keySet()) {
-            if (localDirectories.contains(path)) {
-                throw new IllegalStateException("百度网盘文件与本地目录路径冲突，请先手动处理：" + path);
-            }
-        }
-    }
-
-    private void validateNoLocalStagingDirectory(LocalSnapshot localSnapshot) {
-        if (localSnapshot.files().containsKey(STAGING_DIRECTORY) || localSnapshot.directories().contains(STAGING_DIRECTORY)) {
-            throw new IllegalStateException("笔记根目录包含百度同步保留目录，请先重命名：" + STAGING_DIRECTORY);
         }
     }
 
@@ -1052,7 +943,7 @@ public class BaiduSyncService {
         List<String> ordered = new ArrayList<>(allDirs);
         ordered.sort((left, right) -> Integer.compare(right.length(), left.length()));
         for (String directory : ordered) {
-            boolean localExists = Files.isDirectory(resolveLocal(localRoot, directory));
+            boolean localExists = Files.exists(resolveLocal(localRoot, directory));
             boolean remoteExists = remoteDirs.contains(directory);
             if (localExists && remoteExists) {
                 continue;
@@ -1070,11 +961,6 @@ public class BaiduSyncService {
                 Files.deleteIfExists(resolveLocal(localRoot, directory));
             }
         }
-    }
-
-    private void ensureRemoteRoot(String accessToken,
-                                  String remoteRoot) {
-        createRemoteDirectory(accessToken, "/apps", remoteRoot.substring("/apps/".length()));
     }
 
     private void createRemoteDirectory(String accessToken,
@@ -1101,14 +987,6 @@ public class BaiduSyncService {
         }
     }
 
-    private String remoteRoot(String appName) {
-        String name = appName.trim();
-        if (name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) {
-            throw new IllegalStateException("请填写有效的百度应用名称");
-        }
-        return "/apps/" + name + "/notes";
-    }
-
     private void validateSettings(BaiduSyncSettings settings) {
         if (settings.refreshToken().isBlank() && settings.accessToken().isBlank()) {
             throw new IllegalStateException("请先在插件设置中完成百度网盘授权");
@@ -1122,17 +1000,6 @@ public class BaiduSyncService {
         if (status.running()) {
             throw new IllegalStateException("同步进行中，请稍后重试");
         }
-    }
-
-    private String relative(Path root,
-                            Path path) {
-        return root.relativize(path).toString().replace('\\', '/');
-    }
-
-    private String remoteRelative(String remoteRoot,
-                                  String path) {
-        String prefix = remoteRoot.endsWith("/") ? remoteRoot : remoteRoot + "/";
-        return path.startsWith(prefix) ? path.substring(prefix.length()) : "";
     }
 
     private Path resolveLocal(Path root,
@@ -1151,11 +1018,6 @@ public class BaiduSyncService {
         return target;
     }
 
-    private String message(Exception e) {
-        String value = e.getMessage();
-        return value == null || value.isBlank() ? "同步失败" : value;
-    }
-
     private static ThreadFactory daemonThreadFactory(String name) {
         return task -> {
             Thread thread = new Thread(task, name);
@@ -1169,12 +1031,6 @@ public class BaiduSyncService {
         private int downloaded;
         private int deleted;
         private int conflicts;
-    }
-
-    private static final class PendingFileChanges {
-        private final Set<Path> paths = new LinkedHashSet<>();
-        private ScheduledFuture<?> scheduled;
-        private long generation;
     }
 
     private static final class UploadDispatch {

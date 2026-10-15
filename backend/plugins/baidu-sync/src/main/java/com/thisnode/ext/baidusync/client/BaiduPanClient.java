@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -111,7 +112,7 @@ public class BaiduPanClient {
                     }
                     path = remoteDirectory + "/" + name;
                 }
-                String listedMd5 = value(row.getString("md5")).trim();
+                String listedMd5 = Objects.toString(row.getString("md5"), "").trim();
                 String normalizedMd5 = normalizeMd5(listedMd5);
                 items.add(new BaiduPanEntry(path,
                                             row.getIntValue("isdir") == 1,
@@ -389,7 +390,8 @@ public class BaiduPanClient {
         if (downloadUrl == null || downloadUrl.isBlank()) {
             throw new IllegalStateException("百度网盘没有返回文件下载地址：" + item.path());
         }
-        downloadUrl += downloadUrl.contains("?") ? "&access_token=" + encode(accessToken) : "?access_token=" + encode(accessToken);
+        String encodedAccessToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8);
+        downloadUrl += downloadUrl.contains("?") ? "&access_token=" + encodedAccessToken : "?access_token=" + encodedAccessToken;
         Path parent = destination.getParent();
         Path temporary = parent.resolve(destination.getFileName() + ".baidu-sync.tmp");
         try {
@@ -672,13 +674,10 @@ public class BaiduPanClient {
     private static String query(Map<String, String> values) {
         return values.entrySet()
                 .stream()
-                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
+                              + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
                 .reduce((left, right) -> left + "&" + right)
                 .orElse("");
-    }
-
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private static String md5(byte[] bytes) {
@@ -692,10 +691,6 @@ public class BaiduPanClient {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("当前 Java 运行环境不支持 MD5", e);
         }
-    }
-
-    private static String value(String text) {
-        return text == null ? "" : text;
     }
 
     private static long modifiedAt(JSONObject row) {

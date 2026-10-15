@@ -1,5 +1,7 @@
 package com.thisnode.ext.baidusync.model;
 
+import java.util.Objects;
+
 public record BaiduSyncSettings(String appName,
                                 String appKey,
                                 String secretKey,
@@ -10,12 +12,12 @@ public record BaiduSyncSettings(String appName,
                                 boolean autoSync) {
 
     public BaiduSyncSettings {
-        appName = value(appName);
-        appKey = value(appKey);
-        secretKey = value(secretKey);
-        signKey = value(signKey);
-        accessToken = value(accessToken);
-        refreshToken = value(refreshToken);
+        appName = Objects.toString(appName, "");
+        appKey = Objects.toString(appKey, "");
+        secretKey = Objects.toString(secretKey, "");
+        signKey = Objects.toString(signKey, "");
+        accessToken = Objects.toString(accessToken, "");
+        refreshToken = Objects.toString(refreshToken, "");
     }
 
     public static BaiduSyncSettings empty() {
@@ -44,9 +46,5 @@ public record BaiduSyncSettings(String appName,
     public BaiduSyncSettings withAutoSync(boolean value) {
         return new BaiduSyncSettings(appName, appKey, secretKey, signKey,
                                      accessToken, refreshToken, accessTokenExpiresAt, value);
-    }
-
-    private static String value(String value) {
-        return value == null ? "" : value;
     }
 }

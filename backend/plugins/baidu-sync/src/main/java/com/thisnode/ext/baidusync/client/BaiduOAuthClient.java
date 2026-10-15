@@ -131,12 +131,9 @@ public class BaiduOAuthClient {
 
     private static String form(Map<String, String> values) {
         return values.entrySet().stream()
-                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
+                              + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
                 .reduce((left, right) -> left + "&" + right)
                 .orElse("");
-    }
-
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }

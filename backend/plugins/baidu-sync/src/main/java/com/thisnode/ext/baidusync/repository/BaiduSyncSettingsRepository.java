@@ -44,22 +44,18 @@ public class BaiduSyncSettingsRepository {
                                                             appKey.isBlank() ? current.appKey() : appKey.trim(),
                                                             secretKey.isBlank() ? current.secretKey() : secretKey,
                                                             signKey.isBlank() ? current.signKey() : signKey);
-        write(updated);
+        fileHelper.fileWritten(file, updated);
         return updated;
     }
 
     public synchronized void updateAutoSync(boolean autoSync) {
-        write(get().withAutoSync(autoSync));
+        fileHelper.fileWritten(file, get().withAutoSync(autoSync));
     }
 
     public synchronized void updateTokens(String accessToken,
                                           String refreshToken,
                                           long expiresAt) {
-        write(get().withTokens(accessToken, refreshToken, expiresAt));
-    }
-
-    private void write(BaiduSyncSettings settings) {
-        fileHelper.fileWritten(file, settings);
+        fileHelper.fileWritten(file, get().withTokens(accessToken, refreshToken, expiresAt));
     }
 
     private BaiduSyncSettings read() throws IOException {

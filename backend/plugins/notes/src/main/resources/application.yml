@@ -3,15 +3,6 @@
 # 业务配置从主体 application.yml 随业务一起迁来（各应用持有自己的配置，sbp 约定）。
 # 没有数据源：笔记数据以本地 md 文件为权威（见 store 包），插件侧没有表也没有 mapper。
 
-thisnode:
-  # Note meta, card files, and notebook ledger storage root.
-  root-dir: ${user.home}/.thisnode/notes
-  note-meta-dir: ${thisnode.root-dir}/meta
-  cards-dir: ${thisnode.root-dir}/cards
-  notebook-dir: ${thisnode.root-dir}/notebook
-  attachments-dir: ${thisnode.root-dir}/attachments
-
-
 spring:
   # SBP 会传递引入 Flyway；插件不连数据库，留着只是防它去动别的库。
   flyway:

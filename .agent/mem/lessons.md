@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-15 — 笔记根目录以 Spring data-root 为准
+- **纠正来源：** 用户澄清 `PluginDataPathUtils.configuredNotesRoot` 应依据 Spring application 配置中的 `thisnode.data-root`，而不是 `~/.thisnode/settings.json` 的 `notesRoot`。
+- **可核验事实：** 插件通过 `@Value("${thisnode.data-root:${user.home}/.thisnode}")` 获取数据根目录；notes 插件另有基于 `settings.json` 的可变根目录设置及更新接口。
+- **下次执行规则：** 笔记根目录统一由 Spring `data-root` 派生为 `data-root/notes`；不得再以用户 settings JSON 覆盖。调整该规则时同步处理所有插件路径及旧的根目录设置入口，不自动搬移或删除已有数据。
+
 ## 2026-10-15 — 按业务不变量精简防御分支
 - **纠正来源：** 用户澄清精简代码的目的是提升可读性，删除业务上不可能的边界处理，而不是为减少行数牺牲有效保护。
 - **可核验事实：** 用户明确说明配置文件存在时内容始终合规；仓库内 `pluginDataDirectory` 的调用点均传入 Spring 注入的 `FileHelper`。
