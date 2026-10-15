@@ -13,12 +13,7 @@ import com.thisnode.ext.baidusync.service.BaiduSyncService;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -42,9 +37,10 @@ public class BaiduSyncController {
 
     @PostMapping("/update-settings")
     public SettingsView updateSettings(@RequestBody UpdateSettingsRequest request) {
-        return settingsView(settingsRepository.updateCredentials(
-                value(request.appName()), value(request.appKey()),
-                value(request.secretKey()), value(request.signKey())));
+        return settingsView(settingsRepository.updateCredentials(value(request.appName()),
+                                                                 value(request.appKey()),
+                                                                 value(request.secretKey()),
+                                                                 value(request.signKey())));
     }
 
     @GetMapping("/get-authorization-url")
@@ -87,17 +83,15 @@ public class BaiduSyncController {
     private SettingsView settingsView(BaiduSyncSettings settings) {
         Path data = Path.of(dataRoot).toAbsolutePath().normalize();
         Path notesRoot = PluginDataPathUtils.configuredNotesRoot(data.resolve("notes"));
-        String remoteDirectory = settings.appName().isBlank()
-                ? ""
-                : "/apps/" + settings.appName() + "/notes";
+        String remoteDirectory = settings.appName().isBlank() ? "" : "/apps/" + settings.appName() + "/notes";
         return new SettingsView(settings.appName(),
-                !settings.appKey().isBlank(),
-                !settings.secretKey().isBlank(),
-                !settings.signKey().isBlank(),
-                !settings.refreshToken().isBlank() || !settings.accessToken().isBlank(),
-                settings.autoSync(),
-                notesRoot.toString(),
-                remoteDirectory);
+                                !settings.appKey().isBlank(),
+                                !settings.secretKey().isBlank(),
+                                !settings.signKey().isBlank(),
+                                !settings.refreshToken().isBlank() || !settings.accessToken().isBlank(),
+                                settings.autoSync(),
+                                notesRoot.toString(),
+                                remoteDirectory);
     }
 
     private String value(String value) {

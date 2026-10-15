@@ -19,11 +19,6 @@ public final class PluginDataPathUtils {
     }
 
     public static Path pluginDataDirectory(Path dataRoot,
-                                           String pluginId) {
-        return pluginDataDirectory(dataRoot, pluginId, null);
-    }
-
-    public static Path pluginDataDirectory(Path dataRoot,
                                            String pluginId,
                                            FileHelper fileHelper) {
         Path baseDirectory = dataRoot.toAbsolutePath().normalize();

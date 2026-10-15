@@ -18,10 +18,10 @@ import java.util.Map;
 @RequestMapping("/api/plugins/memory-cycle")
 public class MemoryCycleController {
 
-    private final MemoryCycleService srs;
+    private final MemoryCycleService memoryCycleService;
 
-    public MemoryCycleController(MemoryCycleService srs) {
-        this.srs = srs;
+    public MemoryCycleController(MemoryCycleService memoryCycleService) {
+        this.memoryCycleService = memoryCycleService;
     }
 
     /**
@@ -29,18 +29,18 @@ public class MemoryCycleController {
      */
     @GetMapping("/get-cards")
     public List<CardStateView> cards(@RequestParam List<String> ids) {
-        return srs.cardStates(ids).stream().map(this::cardStateView).toList();
+        return memoryCycleService.cardStates(ids).stream().map(this::cardStateView).toList();
     }
 
     @GetMapping("/get-card")
     public CardStateView card(@RequestParam String cardId) {
-        return cardStateView(srs.cardState(cardId));
+        return cardStateView(memoryCycleService.cardState(cardId));
     }
 
     @PostMapping("/update-state")
     public Map<String, Object> setState(@RequestParam String cardId,
                                         @RequestParam boolean value) {
-        srs.setEnabled(cardId, value);
+        memoryCycleService.setEnabled(cardId, value);
         return Map.of("enabled", value);
     }
 
@@ -53,8 +53,8 @@ public class MemoryCycleController {
         if (request == null || request.grade() == null) {
             throw new IllegalArgumentException("缺少 grade");
         }
-        srs.review(cardId, request.grade());
-        return cardStateView(srs.cardState(cardId));
+        memoryCycleService.review(cardId, request.grade());
+        return cardStateView(memoryCycleService.cardState(cardId));
     }
 
     /**
@@ -62,7 +62,7 @@ public class MemoryCycleController {
      */
     @GetMapping("/get-due")
     public List<DueCardView> due(@RequestParam(defaultValue = "50") int limit) {
-        return srs.due(limit).stream().map(this::dueView).toList();
+        return memoryCycleService.due(limit).stream().map(this::dueView).toList();
     }
 
     /**
@@ -74,7 +74,7 @@ public class MemoryCycleController {
      */
     @PostMapping("/delete-schedule")
     public Map<String, Object> forget(@RequestParam String cardId) {
-        return Map.of("cardId", cardId, "removed", srs.delete(cardId));
+        return Map.of("cardId", cardId, "removed", memoryCycleService.delete(cardId));
     }
 
     private CardStateView cardStateView(CardSchedule schedule) {
