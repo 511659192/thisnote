@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -71,11 +72,6 @@ public class IdFileIndex {
 
     private IndexData read() {
         Path indexFile = indexPath();
-        if (!Files.isRegularFile(indexFile)) {
-            IndexData rebuilt = scanExistingFiles();
-            persist(rebuilt);
-            return rebuilt;
-        }
         try {
             String json = Files.readString(indexFile, StandardCharsets.UTF_8);
             IndexData index = json.isBlank() ? null : com.alibaba.fastjson2.JSON.parseObject(json, IndexData.class);
@@ -83,6 +79,10 @@ public class IdFileIndex {
             if (index.noteFiles == null) index.noteFiles = new LinkedHashMap<>();
             if (index.cardFiles == null) index.cardFiles = new LinkedHashMap<>();
             return index;
+        } catch (NoSuchFileException e) {
+            IndexData rebuilt = scanExistingFiles();
+            persist(rebuilt);
+            return rebuilt;
         } catch (IOException | RuntimeException e) {
             throw new IllegalStateException("ID-文件索引无法解析：" + indexFile, e);
         }

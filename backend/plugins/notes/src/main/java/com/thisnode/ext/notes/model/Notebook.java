@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -82,9 +83,6 @@ public class Notebook {
     }
 
     public static List<Notebook> parse(Path file) {
-        if (!Files.isRegularFile(file)) {
-            return new ArrayList<>();
-        }
         try {
             String json = Files.readString(file, StandardCharsets.UTF_8);
             if (json.isBlank()) {
@@ -100,6 +98,8 @@ public class Notebook {
                 }
             }
             return new ArrayList<>(loaded);
+        } catch (NoSuchFileException e) {
+            return new ArrayList<>();
         } catch (IOException | RuntimeException e) {
             log.warn("分组清单无法读取，按空清单处理：{}", e.toString());
             return new ArrayList<>();

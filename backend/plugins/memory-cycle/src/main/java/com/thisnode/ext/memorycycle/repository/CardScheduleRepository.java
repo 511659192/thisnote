@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -57,8 +58,12 @@ public class CardScheduleRepository {
 
     private Map<String, CardSchedule> loadAll() {
         try {
-            if (!Files.isRegularFile(file)) return new LinkedHashMap<>();
-            String json = Files.readString(file, StandardCharsets.UTF_8);
+            String json;
+            try {
+                json = Files.readString(file, StandardCharsets.UTF_8);
+            } catch (NoSuchFileException e) {
+                return new LinkedHashMap<>();
+            }
             Map<String, CardSchedule> schedules = json.isBlank() ? null : JSON.parseObject(json, new TypeReference<>() {
             });
             if (schedules == null) {

@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSON;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 
 import java.io.BufferedReader;
@@ -36,8 +35,7 @@ public class Card {
         }
     }
 
-    @SneakyThrows
-    public static Card parse(Path file) {
+    public static Card parse(Path file) throws IOException {
         String raw = Files.readString(file, StandardCharsets.UTF_8);
         CardMeta cardMeta = meta(raw);
         String content = content(raw);

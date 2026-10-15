@@ -9,8 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.nio.file.Path;
-import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -35,10 +33,6 @@ public class NotebookRepository {
 
     private List<Notebook> getAll() {
         Path file = notesConfig.getNotebookDir().resolve("notebooks.json");
-        if (!Files.isRegularFile(file)) {
-            return new ArrayList<>();
-        }
-
         return Notebook.parse(file);
     }
 

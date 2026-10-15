@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
 @Repository
@@ -45,8 +46,12 @@ public class BaiduSyncStateRepository {
     }
 
     private BaiduSyncState read() throws IOException {
-        if (!Files.isRegularFile(file)) return null;
-        String json = Files.readString(file, StandardCharsets.UTF_8);
+        String json;
+        try {
+            json = Files.readString(file, StandardCharsets.UTF_8);
+        } catch (NoSuchFileException e) {
+            return null;
+        }
         return json.isBlank() ? null : JSON.parseObject(json, BaiduSyncState.class);
     }
 }

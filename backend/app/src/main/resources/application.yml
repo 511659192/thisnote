@@ -23,6 +23,11 @@ spring:
     # 这一份留给运维与脚本；服务只监听 127.0.0.1，不存在对外暴露。
     controller:
       base-path: /sbp
+    plugin-properties:
+      management:
+        health:
+          ssl:
+            enabled: false
   application:
     name: thisnote-backend
   jackson:

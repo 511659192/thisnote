@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,12 +28,17 @@ public class CardRepository {
     private final IdFileIndex fileIndex;
     private final FileHelper fileHelper;
 
+    @SneakyThrows
     public Card getOne(String cardId) {
         if (cardId == null || cardId.isBlank()) return null;
         String fileName = fileIndex.cardFileName(cardId);
         if (fileName == null) return null;
         Path file = notesConfig.getCardsDir().resolve(fileName);
-        return Files.isRegularFile(file) ? Card.parse(file) : null;
+        try {
+            return Card.parse(file);
+        } catch (NoSuchFileException e) {
+            return null;
+        }
     }
 
     public List<Card> getAll(List<String> cardIds) {

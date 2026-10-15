@@ -157,10 +157,10 @@ public class BaiduSyncService {
         return consistent;
     }
 
-    private static String matchingFingerprint(LocalItem local,
-                                              BaiduPanEntry remote) {
-        String fingerprint = local.size() + ":" + Math.floorDiv(local.modifiedAt(), 1000L);
-        return fingerprint.equals(remote.size() + ":" + Math.floorDiv(remote.modifiedAt(), 1000L)) ? fingerprint : null;
+    private static FileFingerprint matchingFingerprint(LocalItem local,
+                                                      BaiduPanEntry remote) {
+        FileFingerprint fingerprint = FileFingerprint.of(local.size(), local.modifiedAt());
+        return fingerprint.equals(FileFingerprint.of(remote.size(), remote.modifiedAt())) ? fingerprint : null;
     }
 
     private BaiduSyncPreview createPreview(boolean remoteExists,
@@ -251,9 +251,9 @@ public class BaiduSyncService {
         for (Map.Entry<String, LocalItem> entry : finalLocal.entrySet()) {
             BaiduPanEntry cloud = finalRemote.files().get(entry.getKey());
             if (cloud != null) {
-                String fingerprint = matchingFingerprint(entry.getValue(), cloud);
+                FileFingerprint fingerprint = matchingFingerprint(entry.getValue(), cloud);
                 if (fingerprint != null) {
-                    finalFiles.put(entry.getKey(), fingerprint);
+                    finalFiles.put(entry.getKey(), fingerprint.toStorage());
                 }
             }
         }
@@ -294,7 +294,7 @@ public class BaiduSyncService {
 
             // 仅按变更路径查询，不扫描整个本地笔记树或网盘目录树。
             Map<String, LocalItem> localFiles = localFilesForPaths(notesRoot, relativePaths);
-            Map<String, BaiduPanEntry> remoteFiles = panClient.directoryExists(accessToken, remoteRoot) ? listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths) : Map.of();
+            Map<String, BaiduPanEntry> remoteFiles = listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths);
             List<FileChange> changes = planChangedFileOperations(relativePaths, localFiles, remoteFiles);
             if (changes.stream().anyMatch(change -> change.action() == FileAction.UPLOAD)) {
                 createRemoteDirectory(accessToken, "/apps", remoteRoot.substring("/apps/".length()));
@@ -331,13 +331,15 @@ public class BaiduSyncService {
         Map<String, LocalItem> localFiles = new LinkedHashMap<>();
         for (String relative : relativePaths) {
             Path file = resolveLocal(notesRoot, relative);
-            if (Files.notExists(file, LinkOption.NOFOLLOW_LINKS)) {
+            BasicFileAttributes attributes;
+            try {
+                attributes = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            } catch (NoSuchFileException e) {
                 continue;
             }
-            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+            if (!attributes.isRegularFile()) {
                 throw new IllegalStateException("同步目标不是普通文件：" + relative);
             }
-            BasicFileAttributes attributes = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             localFiles.put(relative, new LocalItem(file, relative, attributes.lastModifiedTime().toMillis(), attributes.size()));
         }
         return localFiles;
@@ -403,7 +405,7 @@ public class BaiduSyncService {
                                          String remoteRoot,
                                          Set<String> relativePaths) throws IOException {
         Map<String, LocalItem> localFiles = localFilesForPaths(notesRoot, relativePaths);
-        Map<String, BaiduPanEntry> remoteFiles = panClient.directoryExists(accessToken, remoteRoot) ? listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths) : Map.of();
+        Map<String, BaiduPanEntry> remoteFiles = listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths);
         // 重新读取传输后的两端状态；只有仍匹配的路径才写入基线。
         // 例如上传期间本地文件又被编辑、两端指纹不一致时，移除旧基线，下一轮再按无基线差异决策。
         BaiduSyncState current = stateRepository.get(notesRoot.toString(), remoteRoot);
@@ -413,9 +415,9 @@ public class BaiduSyncService {
         for (String relative : relativePaths) {
             LocalItem local = localFiles.get(relative);
             BaiduPanEntry remote = remoteFiles.get(relative);
-            String fingerprint = local == null || remote == null ? null : matchingFingerprint(local, remote);
+            FileFingerprint fingerprint = local == null || remote == null ? null : matchingFingerprint(local, remote);
             if (fingerprint != null) {
-                files.put(relative, fingerprint);
+                files.put(relative, fingerprint.toStorage());
                 addParentDirectories(local.parent(), directories);
             } else {
                 files.remove(relative);
@@ -590,10 +592,10 @@ public class BaiduSyncService {
         for (String relative : paths) {
             LocalItem localItem = local.get(relative);
             BaiduPanEntry remoteItem = remote.files().get(relative);
-            String previousFingerprint = parseBaselineFingerprint(baseline.files().get(relative));
+            FileFingerprint previousFingerprint = FileFingerprint.parse(baseline.files().get(relative));
             if (localItem != null && remoteItem != null) {
-                String localFingerprint = localItem.size() + ":" + Math.floorDiv(localItem.modifiedAt(), 1000L);
-                String remoteFingerprint = remoteItem.size() + ":" + Math.floorDiv(remoteItem.modifiedAt(), 1000L);
+                FileFingerprint localFingerprint = FileFingerprint.of(localItem.size(), localItem.modifiedAt());
+                FileFingerprint remoteFingerprint = FileFingerprint.of(remoteItem.size(), remoteItem.modifiedAt());
                 if (localFingerprint.equals(remoteFingerprint)) {
                     continue;
                 }
@@ -603,7 +605,7 @@ public class BaiduSyncService {
                 boolean localWins;
                 if (previousFingerprint == null || conflict) {
                     // 例如基线 100:10、本地 120:11、云端 110:12：双方都变更，标记冲突并以较新的秒级修改时间决胜。
-                    localWins = Math.floorDiv(localItem.modifiedAt(), 1000L) >= Math.floorDiv(remoteItem.modifiedAt(), 1000L);
+                    localWins = localFingerprint.modifiedAtSeconds() >= remoteFingerprint.modifiedAtSeconds();
                 } else {
                     localWins = localChanged || !remoteChanged;
                 }
@@ -611,33 +613,16 @@ public class BaiduSyncService {
                 continue;
             }
             if (localItem != null) {
-                String localFingerprint = localItem.size() + ":" + Math.floorDiv(localItem.modifiedAt(), 1000L);
+                FileFingerprint localFingerprint = FileFingerprint.of(localItem.size(), localItem.modifiedAt());
                 boolean localChanged = previousFingerprint == null || !localFingerprint.equals(previousFingerprint);
                 changes.add(new FileChange(relative, localChanged ? FileAction.UPLOAD : FileAction.DELETE_LOCAL, localItem, null, false, false));
                 continue;
             }
-            String remoteFingerprint = remoteItem.size() + ":" + Math.floorDiv(remoteItem.modifiedAt(), 1000L);
+            FileFingerprint remoteFingerprint = FileFingerprint.of(remoteItem.size(), remoteItem.modifiedAt());
             boolean remoteChanged = previousFingerprint == null || !remoteFingerprint.equals(previousFingerprint);
             changes.add(new FileChange(relative, remoteChanged ? FileAction.DOWNLOAD : FileAction.DELETE_REMOTE, null, remoteItem, false, false));
         }
         return changes;
-    }
-
-    static String parseBaselineFingerprint(String value) {
-        if (value == null) {
-            return null;
-        }
-        int separator = value.indexOf(':');
-        if (separator <= 0 || separator != value.lastIndexOf(':')) {
-            return null;
-        }
-        try {
-            long size = Long.parseLong(value.substring(0, separator));
-            long modifiedAtSeconds = Long.parseLong(value.substring(separator + 1));
-            return size < 0 ? null : size + ":" + modifiedAtSeconds;
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     private void syncDirectories(String accessToken,
@@ -739,6 +724,35 @@ public class BaiduSyncService {
             }
         }
         return target;
+    }
+
+    record FileFingerprint(long size, long modifiedAtSeconds) {
+
+        static FileFingerprint of(long size, long modifiedAtMillis) {
+            return new FileFingerprint(size, Math.floorDiv(modifiedAtMillis, 1000L));
+        }
+
+        /** 基线持久化格式为 size:mtimeSeconds；旧 MD5 等无法解析的值视为缺失。 */
+        static FileFingerprint parse(String value) {
+            if (value == null) {
+                return null;
+            }
+            int separator = value.indexOf(':');
+            if (separator <= 0 || separator != value.lastIndexOf(':')) {
+                return null;
+            }
+            try {
+                long size = Long.parseLong(value.substring(0, separator));
+                long modifiedAtSeconds = Long.parseLong(value.substring(separator + 1));
+                return size < 0 ? null : new FileFingerprint(size, modifiedAtSeconds);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        String toStorage() {
+            return size + ":" + modifiedAtSeconds;
+        }
     }
 
     private static final class SyncCounters {

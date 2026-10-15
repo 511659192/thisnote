@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
@@ -92,13 +93,16 @@ public class NoteRepository {
         Map<Path, FileTime> modifiedTimes = new HashMap<>();
         for (String fileName : fileIndex.noteFiles().values()) {
             Path file = metaDir.resolve(fileName);
-            if (!Files.isRegularFile(file)) continue;
-            files.add(file);
+            FileTime modifiedTime;
             try {
-                modifiedTimes.put(file, Files.getLastModifiedTime(file));
+                modifiedTime = Files.getLastModifiedTime(file);
+            } catch (NoSuchFileException e) {
+                continue;
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
+            files.add(file);
+            modifiedTimes.put(file, modifiedTime);
         }
         files.sort(Comparator.comparing(modifiedTimes::get).reversed());
 
