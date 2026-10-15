@@ -1,4 +1,4 @@
-package com.thisnode.plugin.api;
+package com.thisnode.plugin.api.lifecycle;
 
 import org.pf4j.ExtensionPoint;
 

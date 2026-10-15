@@ -1,6 +1,6 @@
 package com.thisnode.ext.memorycycle.service;
 
-import com.thisnode.plugin.api.CardChangedEvent;
+import com.thisnode.plugin.api.event.CardChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;

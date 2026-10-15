@@ -1,4 +1,4 @@
-package com.thisnode.plugin.api;
+package com.thisnode.plugin.api.lifecycle;
 
 /**
  * 插件的自我体检结果。

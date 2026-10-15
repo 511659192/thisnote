@@ -4,7 +4,7 @@ import com.thisnode.ext.notes.model.NoteMeta;
 import com.thisnode.ext.notes.model.Notebook;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.ext.notes.repository.NotebookRepository;
-import com.thisnode.plugin.api.NotebookChangedEvent;
+import com.thisnode.plugin.api.event.NotebookChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

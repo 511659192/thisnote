@@ -1,6 +1,6 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.PluginHealth;
+import com.thisnode.plugin.api.lifecycle.PluginHealth;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

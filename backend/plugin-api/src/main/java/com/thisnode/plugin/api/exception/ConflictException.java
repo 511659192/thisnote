@@ -1,4 +1,4 @@
-package com.thisnode.plugin.api;
+package com.thisnode.plugin.api.exception;
 
 /**
  * 请求与当前状态冲突（HTTP 409；重命名撞车、引用未清空等）。

@@ -1,7 +1,7 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginRegister;
+import com.thisnode.plugin.api.lifecycle.PluginHealth;
+import com.thisnode.plugin.api.lifecycle.PluginRegister;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginDescriptor;
 import org.pf4j.PluginManager;

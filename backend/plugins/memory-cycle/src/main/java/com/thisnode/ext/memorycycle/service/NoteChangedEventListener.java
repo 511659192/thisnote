@@ -1,6 +1,6 @@
 package com.thisnode.ext.memorycycle.service;
 
-import com.thisnode.plugin.api.NoteChangedEvent;
+import com.thisnode.plugin.api.event.NoteChangedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;

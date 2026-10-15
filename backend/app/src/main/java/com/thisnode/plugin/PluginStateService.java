@@ -1,6 +1,8 @@
 package com.thisnode.plugin;
 
-import com.thisnode.plugin.api.*;
+import com.thisnode.plugin.api.exception.ConflictException;
+import com.thisnode.plugin.api.lifecycle.PluginHealth;
+import com.thisnode.plugin.api.lifecycle.PluginRegister;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -56,13 +58,13 @@ public class PluginStateService {
      * 启用/停用插件：落到 PF4J 的 enable/disable（它自己持久化管理状态）并显式 start/stop，
      * 让它在本次运行里立即生效；随后才通知插件本体。
      *
-     * @throws com.thisnode.plugin.api.ConflictException 拒绝停用核心插件（notes）——
+     * @throws ConflictException 拒绝停用核心插件（notes）——
      *         它承载整个应用的笔记领域，停用等于把主体下线；管理页对它不展示停用按钮，
      *         这里是最后一道闸。
      */
     public void setActive(String pluginId, boolean active) {
         if (!active && registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
-            throw new com.thisnode.plugin.api.ConflictException(
+            throw new ConflictException(
                     "「" + registry.title(pluginId) + "」承载主体业务，不允许停用");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
@@ -92,7 +94,7 @@ public class PluginStateService {
         if (registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
             // 不可停用的插件是全部业务端点的宿主：重载会重建它的 Spring 子容器，期间路由与索引短暂缺失。
             // （早先的理由是"兄弟插件共享它导入的门面"，那层共享已经不存在了。）拒绝并提示重启。
-            throw new com.thisnode.plugin.api.ConflictException(
+            throw new ConflictException(
                     "「" + registry.title(pluginId) + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();

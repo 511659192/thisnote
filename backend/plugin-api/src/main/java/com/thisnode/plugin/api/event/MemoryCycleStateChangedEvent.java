@@ -1,4 +1,4 @@
-package com.thisnode.plugin.api;
+package com.thisnode.plugin.api.event;
 
 /**
  * Memory-cycle enablement changed for a card.

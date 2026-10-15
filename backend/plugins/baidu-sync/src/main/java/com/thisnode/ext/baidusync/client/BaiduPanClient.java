@@ -67,13 +67,11 @@ public class BaiduPanClient {
         this(FILE_API, fileHelper);
     }
 
-    BaiduPanClient(String fileApi, FileHelper fileHelper) {
+    BaiduPanClient(String fileApi,
+                   FileHelper fileHelper) {
         this.fileApi = fileApi;
         this.fileHelper = fileHelper;
-        this.http = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
+        this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 
     public List<BaiduPanEntry> listDirectory(String accessToken,
@@ -116,11 +114,11 @@ public class BaiduPanClient {
                 String listedMd5 = value(row.getString("md5")).trim();
                 String normalizedMd5 = normalizeMd5(listedMd5);
                 items.add(new BaiduPanEntry(path,
-                        row.getIntValue("isdir") == 1,
-                        row.getLongValue("size"),
-                        normalizedMd5.isBlank() ? listedMd5 : normalizedMd5,
-                        modifiedAt(row),
-                        row.getLongValue("fs_id")));
+                                            row.getIntValue("isdir") == 1,
+                                            row.getLongValue("size"),
+                                            normalizedMd5.isBlank() ? listedMd5 : normalizedMd5,
+                                            modifiedAt(row),
+                                            row.getLongValue("fs_id")));
             }
             if (list.size() < PAGE_SIZE) {
                 break;
@@ -130,7 +128,7 @@ public class BaiduPanClient {
     }
 
     public boolean directoryExists(String accessToken,
-                                    String directoryPath) {
+                                   String directoryPath) {
         int slash = directoryPath.lastIndexOf('/');
         String parent = slash <= 0 ? "/" : directoryPath.substring(0, slash);
         List<BaiduPanEntry> items;
@@ -142,16 +140,12 @@ public class BaiduPanClient {
             }
             throw e;
         }
-        return items.stream()
-                .filter(item -> item.path().equals(directoryPath))
-                .findFirst()
-                .map(item -> {
-                    if (!item.directory()) {
-                        throw new IllegalStateException("百度网盘目标路径不是目录：" + directoryPath);
-                    }
-                    return true;
-                })
-                .orElse(false);
+        return items.stream().filter(item -> item.path().equals(directoryPath)).findFirst().map(item -> {
+            if (!item.directory()) {
+                throw new IllegalStateException("百度网盘目标路径不是目录：" + directoryPath);
+            }
+            return true;
+        }).orElse(false);
     }
 
     public void createDirectory(String accessToken,
@@ -172,8 +166,7 @@ public class BaiduPanClient {
             if (!failures.isEmpty()) {
                 FileManagerFailure failure = failures.get(0);
                 BaiduPanException exception = failure.exception();
-                throw new IllegalStateException("删除百度网盘文件失败：" + path + "；"
-                        + exception.getMessage(), exception);
+                throw new IllegalStateException("删除百度网盘文件失败：" + path + "；" + exception.getMessage(), exception);
             }
         } catch (BaiduPanException e) {
             throw new IllegalStateException("删除百度网盘文件失败：" + path + "；" + e.getMessage(), e);
@@ -186,9 +179,7 @@ public class BaiduPanClient {
         if (paths.isEmpty()) {
             return List.of();
         }
-        List<Map<String, String>> items = paths.stream()
-                .map(path -> Map.of("path", path))
-                .toList();
+        List<Map<String, String>> items = paths.stream().map(path -> Map.of("path", path)).toList();
         return fileManagerFailures(fileManager(accessToken, "delete", items, false));
     }
 
@@ -247,8 +238,8 @@ public class BaiduPanClient {
                 moveFile(accessToken, backupPath, destinationDirectory, filename, false);
             } catch (RuntimeException restoreError) {
                 moveError.addSuppressed(restoreError);
-                throw new IllegalStateException("新文件移动失败且旧文件恢复失败；旧文件保留在备份路径："
-                        + backupPath + "；恢复错误：" + restoreError.getMessage(), moveError);
+                throw new IllegalStateException("新文件移动失败且旧文件恢复失败；旧文件保留在备份路径：" + backupPath + "；恢复错误：" + restoreError.getMessage(),
+                                                moveError);
             }
             throw moveError;
         }
@@ -260,10 +251,7 @@ public class BaiduPanClient {
                           String destinationDirectory,
                           String filename,
                           boolean overwrite) {
-        Map<String, String> query = Map.of(
-                "method", "filemanager",
-                "opera", "move",
-                "access_token", accessToken);
+        Map<String, String> query = Map.of("method", "filemanager", "opera", "move", "access_token", accessToken);
         Map<String, String> item = new LinkedHashMap<>();
         item.put("path", sourcePath);
         item.put("dest", destinationDirectory);
@@ -280,8 +268,7 @@ public class BaiduPanClient {
                 checkFileManagerErrors(postJson(fileApi + "?" + query(query), form));
                 return;
             } catch (BaiduPanException e) {
-                if (e.errno() != FILE_MANAGER_RATE_LIMIT_ERRNO
-                        || retry >= FILE_MANAGER_RATE_LIMIT_RETRIES) {
+                if (e.errno() != FILE_MANAGER_RATE_LIMIT_ERRNO || retry >= FILE_MANAGER_RATE_LIMIT_RETRIES) {
                     throw e;
                 }
                 waitBeforeFileManagerRetry(retry);
@@ -303,10 +290,7 @@ public class BaiduPanClient {
                                    String operation,
                                    List<Map<String, String>> items,
                                    boolean overwrite) {
-        Map<String, String> query = Map.of(
-                "method", "filemanager",
-                "opera", operation,
-                "access_token", accessToken);
+        Map<String, String> query = Map.of("method", "filemanager", "opera", operation, "access_token", accessToken);
         Map<String, String> form = new LinkedHashMap<>();
         form.put("async", "0");
         form.put("filelist", JSON.toJSONString(items));
@@ -337,8 +321,7 @@ public class BaiduPanClient {
 
     private void requireFileManagerBatchSize(int size) {
         if (size > FILE_MANAGER_BATCH_SIZE) {
-            throw new IllegalArgumentException("百度网盘单次文件管理操作最多处理 "
-                    + FILE_MANAGER_BATCH_SIZE + " 个文件");
+            throw new IllegalArgumentException("百度网盘单次文件管理操作最多处理 " + FILE_MANAGER_BATCH_SIZE + " 个文件");
         }
     }
 
@@ -368,16 +351,12 @@ public class BaiduPanClient {
                                           List<BaiduPanEntry> items) {
         Map<Long, String> urls = new LinkedHashMap<>();
         for (int start = 0; start < items.size(); start += FILE_META_BATCH_SIZE) {
-            List<BaiduPanEntry> batch = items.subList(start,
-                    Math.min(start + FILE_META_BATCH_SIZE, items.size()));
+            List<BaiduPanEntry> batch = items.subList(start, Math.min(start + FILE_META_BATCH_SIZE, items.size()));
             List<Long> fsIds = batch.stream().map(BaiduPanEntry::fsId).toList();
             JSONObject metadata;
             try {
-                metadata = getJson(META_API, Map.of(
-                        "method", "filemetas",
-                        "access_token", accessToken,
-                        "fsids", JSON.toJSONString(fsIds),
-                        "dlink", "1"));
+                metadata = getJson(META_API,
+                                   Map.of("method", "filemetas", "access_token", accessToken, "fsids", JSON.toJSONString(fsIds), "dlink", "1"));
             } catch (BaiduPanException e) {
                 throw new IllegalStateException("获取百度网盘批量下载地址失败：" + e.getMessage(), e);
             }
@@ -410,8 +389,7 @@ public class BaiduPanClient {
         if (downloadUrl == null || downloadUrl.isBlank()) {
             throw new IllegalStateException("百度网盘没有返回文件下载地址：" + item.path());
         }
-        downloadUrl += downloadUrl.contains("?") ? "&access_token=" + encode(accessToken)
-                                                  : "?access_token=" + encode(accessToken);
+        downloadUrl += downloadUrl.contains("?") ? "&access_token=" + encode(accessToken) : "?access_token=" + encode(accessToken);
         Path parent = destination.getParent();
         Path temporary = parent.resolve(destination.getFileName() + ".baidu-sync.tmp");
         try {
@@ -426,20 +404,15 @@ public class BaiduPanClient {
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
                 }
-                try (OutputStream output = Files.newOutputStream(temporary,
-                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                try (OutputStream output = Files.newOutputStream(temporary)) {
                     body.transferTo(output);
                 }
             }
             long actualSize = Files.size(temporary);
             if (actualSize != item.size()) {
-                throw new IllegalStateException("百度网盘下载大小不匹配：" + item.path()
-                        + "；期望 " + item.size() + "，实际 " + actualSize);
+                throw new IllegalStateException("百度网盘下载大小不匹配：" + item.path() + "；期望 " + item.size() + "，实际 " + actualSize);
             }
-            String expectedMd5 = response.headers().firstValue("Content-MD5")
-                    .map(this::normalizeMd5)
-                    .filter(value -> !value.isBlank())
-                    .orElse("");
+            String expectedMd5 = response.headers().firstValue("Content-MD5").map(this::normalizeMd5).filter(value -> !value.isBlank()).orElse("");
             if (!expectedMd5.isBlank() && !expectedMd5.equalsIgnoreCase(fileMd5(temporary))) {
                 throw new IllegalStateException("百度网盘下载内容校验失败：" + item.path());
             }
@@ -474,8 +447,7 @@ public class BaiduPanClient {
             precreate.put("autoinit", "1");
             precreate.put("rtype", "0");
             precreate.put("block_list", JSON.toJSONString(blocks));
-            JSONObject prepared = postJson(fileApi + "?" + query(Map.of(
-                    "method", "precreate", "access_token", accessToken)), precreate);
+            JSONObject prepared = postJson(fileApi + "?" + query(Map.of("method", "precreate", "access_token", accessToken)), precreate);
             String uploadId = prepared.getString("uploadid");
             if (uploadId == null || uploadId.isBlank()) {
                 throw new IllegalStateException("百度网盘未返回上传任务编号：" + remotePath);
@@ -687,9 +659,8 @@ public class BaiduPanClient {
                              byte[] bytes) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream(bytes.length + 256);
-            out.write(("--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"file\"; filename=\"part\"\r\n"
-                    + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+            out.write(("--" + boundary + "\r\n" + "Content-Disposition: form-data; name=\"file\"; filename=\"part\"\r\n" + "Content-Type: application/octet-stream\r\n\r\n").getBytes(
+                    StandardCharsets.UTF_8));
             out.write(bytes);
             out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
             return out.toByteArray();
@@ -699,7 +670,8 @@ public class BaiduPanClient {
     }
 
     private static String query(Map<String, String> values) {
-        return values.entrySet().stream()
+        return values.entrySet()
+                .stream()
                 .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
                 .reduce((left, right) -> left + "&" + right)
                 .orElse("");
@@ -731,14 +703,10 @@ public class BaiduPanClient {
         return (local > 0 ? local : row.getLongValue("server_mtime")) * 1000;
     }
 
-    public record FileManagerMove(String sourcePath,
-                                  String destinationDirectory,
-                                  String filename) {
+    public record FileManagerMove(String sourcePath, String destinationDirectory, String filename) {
     }
 
-    public record FileManagerFailure(String path,
-                                     int apiErrno,
-                                     int itemErrno) {
+    public record FileManagerFailure(String path, int apiErrno, int itemErrno) {
         public BaiduPanException exception() {
             return new BaiduPanException(apiErrno, itemErrno, path);
         }

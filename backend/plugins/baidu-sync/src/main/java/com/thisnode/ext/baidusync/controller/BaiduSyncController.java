@@ -24,60 +24,60 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class BaiduSyncController {
 
-    private final BaiduSyncSettingsRepository settingsRepository;
-    private final BaiduOAuthClient oauthClient;
-    private final BaiduSyncService syncService;
+    private final BaiduSyncSettingsRepository baiduSyncSettingsRepository;
+    private final BaiduOAuthClient baiduOAuthClient;
+    private final BaiduSyncService baiduSyncService;
     @Value("${thisnode.data-root:${user.home}/.thisnode}")
     private String dataRoot;
 
     @GetMapping("/get-settings")
     public SettingsView getSettings() {
-        return settingsView(settingsRepository.get());
+        return settingsView(baiduSyncSettingsRepository.get());
     }
 
     @PostMapping("/update-settings")
     public SettingsView updateSettings(@RequestBody UpdateSettingsRequest request) {
-        return settingsView(settingsRepository.updateCredentials(value(request.appName()),
-                                                                 value(request.appKey()),
-                                                                 value(request.secretKey()),
-                                                                 value(request.signKey())));
+        return settingsView(baiduSyncSettingsRepository.updateCredentials(value(request.appName()),
+                                                                          value(request.appKey()),
+                                                                          value(request.secretKey()),
+                                                                          value(request.signKey())));
     }
 
     @GetMapping("/get-authorization-url")
     public Map<String, String> authorizationUrl() {
-        return Map.of("url", oauthClient.authorizationUrl());
+        return Map.of("url", baiduOAuthClient.authorizationUrl());
     }
 
     @PostMapping("/exchange-code")
     public SettingsView exchangeCode(@RequestBody ExchangeCodeRequest request) {
-        oauthClient.exchangeCode(value(request.code()).trim());
-        return settingsView(settingsRepository.get());
+        baiduOAuthClient.exchangeCode(value(request.code()).trim());
+        return settingsView(baiduSyncSettingsRepository.get());
     }
 
     @PostMapping("/update-auto-sync")
     public SettingsView updateAutoSync(@RequestParam boolean value) {
-        settingsRepository.updateAutoSync(value);
-        return settingsView(settingsRepository.get());
+        baiduSyncSettingsRepository.updateAutoSync(value);
+        return settingsView(baiduSyncSettingsRepository.get());
     }
 
     @PostMapping("/sync")
     public BaiduSyncStatus sync() {
-        return syncService.startSync();
+        return baiduSyncService.startSync();
     }
 
     @GetMapping("/get-sync-status")
     public BaiduSyncStatus syncStatus() {
-        return syncService.status();
+        return baiduSyncService.status();
     }
 
     @GetMapping("/get-connection-probe")
     public BaiduSyncConnectionProbe connectionProbe() {
-        return syncService.probeConnection();
+        return baiduSyncService.probeConnection();
     }
 
     @GetMapping("/get-diff-preview")
     public BaiduSyncPreview diffPreview() throws IOException {
-        return syncService.preview();
+        return baiduSyncService.preview();
     }
 
     private SettingsView settingsView(BaiduSyncSettings settings) {

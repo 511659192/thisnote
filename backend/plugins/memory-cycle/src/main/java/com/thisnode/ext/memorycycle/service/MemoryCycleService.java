@@ -3,7 +3,7 @@ package com.thisnode.ext.memorycycle.service;
 import com.thisnode.ext.memorycycle.model.CardSchedule;
 import com.thisnode.ext.memorycycle.model.view.ScheduleView;
 import com.thisnode.ext.memorycycle.repository.CardScheduleRepository;
-import com.thisnode.plugin.api.MemoryCycleStateChangedEvent;
+import com.thisnode.plugin.api.event.MemoryCycleStateChangedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;

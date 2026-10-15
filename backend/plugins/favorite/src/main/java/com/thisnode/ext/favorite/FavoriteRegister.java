@@ -1,7 +1,7 @@
 package com.thisnode.ext.favorite;
 
-import com.thisnode.plugin.api.PluginHealth;
-import com.thisnode.plugin.api.PluginRegister;
+import com.thisnode.plugin.api.lifecycle.PluginHealth;
+import com.thisnode.plugin.api.lifecycle.PluginRegister;
 import org.pf4j.Extension;
 
 /**

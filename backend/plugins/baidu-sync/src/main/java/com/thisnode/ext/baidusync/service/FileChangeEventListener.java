@@ -1,20 +1,18 @@
 package com.thisnode.ext.baidusync.service;
 
 import com.thisnode.ext.baidusync.BaiduSyncPlugin;
-import com.thisnode.plugin.api.FileChangeEvent;
+import com.thisnode.plugin.api.event.FileChangeEvent;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
 @Slf4j
-public final class BaiduSyncChangeEventListener
+@RequiredArgsConstructor
+public final class FileChangeEventListener
         implements ApplicationListener<PayloadApplicationEvent<FileChangeEvent>> {
 
     private final BaiduSyncService syncService;
-
-    public BaiduSyncChangeEventListener(BaiduSyncService syncService) {
-        this.syncService = syncService;
-    }
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<FileChangeEvent> event) {

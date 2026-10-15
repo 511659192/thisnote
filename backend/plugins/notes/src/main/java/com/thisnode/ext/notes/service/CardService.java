@@ -10,7 +10,8 @@ import com.thisnode.ext.notes.model.view.NoteDto;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
-import com.thisnode.plugin.api.CardChangedEvent;
+import com.thisnode.plugin.api.event.CardChangedEvent;
+import com.thisnode.plugin.api.exception.ConflictException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -97,7 +98,7 @@ public class CardService {
 
         String current = card.getContent();
         if (baseContentMd != null && !baseContentMd.equals(current)) {
-            throw new com.thisnode.plugin.api.ConflictException("这张卡片已被外部修改（磁盘上的内容与你打开时的不一样），已停止保存");
+            throw new ConflictException("这张卡片已被外部修改（磁盘上的内容与你打开时的不一样），已停止保存");
         }
 
         CardMeta cardMeta = card.getMeta();

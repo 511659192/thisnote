@@ -1,4 +1,4 @@
-package com.thisnode.plugin.api;
+package com.thisnode.plugin.api.exception;
 
 /**
  * 请求的资源不存在（HTTP 404）。

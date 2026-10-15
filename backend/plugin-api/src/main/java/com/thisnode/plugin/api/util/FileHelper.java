@@ -2,8 +2,7 @@ package com.thisnode.plugin.api.util;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
-import com.thisnode.plugin.api.FileChangeEventPublisher;
-import lombok.RequiredArgsConstructor;
+import com.thisnode.plugin.api.event.FileChangeEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -20,19 +19,28 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 
-/** Executes persistent file mutations and publishes their plugin-scoped change events. */
-@RequiredArgsConstructor
+/**
+ * Executes persistent file mutations and publishes their plugin-scoped change events.
+ */
 @Slf4j
 public final class FileHelper {
 
-    private final FileChangeEventPublisher fileChangeEventPublisher;
+    private final ApplicationEventPublisher eventPublisher;
+    private final String sourcePluginId;
+
+    public FileHelper(ApplicationEventPublisher eventPublisher,
+                      String sourcePluginId) {
+        this.eventPublisher = Objects.requireNonNull(eventPublisher, "publisher");
+        if (sourcePluginId == null || sourcePluginId.isBlank()) {
+            throw new IllegalArgumentException("sourcePluginId 不能为空");
+        }
+        this.sourcePluginId = sourcePluginId;
+    }
 
     public static void registerSpringBeans(GenericApplicationContext context,
                                            ApplicationEventPublisher mainEventPublisher,
                                            String sourcePluginId) {
-        context.registerBean(FileChangeEventPublisher.class,
-                () -> new FileChangeEventPublisher(mainEventPublisher, sourcePluginId));
-        context.registerBean(FileHelper.class);
+        context.registerBean(FileHelper.class, () -> new FileHelper(mainEventPublisher, sourcePluginId));
     }
 
     public void fileWritten(Path file,
@@ -51,7 +59,7 @@ public final class FileHelper {
             log.warn("无法写入文件 {}", file, e);
             throw new UncheckedIOException("写入文件失败 " + file, e);
         }
-        fileChangeEventPublisher.fileWritten(file, previouslyExisted);
+        publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
     }
 
     public void fileWritten(Path destination,
@@ -66,7 +74,7 @@ public final class FileHelper {
             log.warn("无法写入文件 {}", destination, e);
             throw new UncheckedIOException("保存图片附件失败", e);
         }
-        fileChangeEventPublisher.fileWritten(destination, previouslyExisted);
+        publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, destination, null);
         log.info("保存图片附件 {}", destination.getFileName());
     }
 
@@ -81,14 +89,14 @@ public final class FileHelper {
             log.warn("无法写入文件 {}", file, e);
             throw new UncheckedIOException("写入文件失败 " + file, e);
         }
-        fileChangeEventPublisher.fileWritten(file, previouslyExisted);
+        publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
     }
 
     public boolean fileDeleted(Path file) {
         try {
             boolean deleted = Files.deleteIfExists(file);
             if (deleted) {
-                fileChangeEventPublisher.fileDeleted(file);
+                publishFileChange(FileChangeEvent.Operation.DELETED, file, null);
             }
             return deleted;
         } catch (IOException e) {
@@ -107,8 +115,16 @@ public final class FileHelper {
             log.warn("无法移动文件 {} -> {}", previousFile, file, e);
             throw new UncheckedIOException("移动文件失败 " + previousFile + " -> " + file, e);
         }
-        fileChangeEventPublisher.fileMoved(previousFile, moved);
+        publishFileChange(FileChangeEvent.Operation.RENAME, moved, previousFile);
         return moved;
+    }
+
+    private void publishFileChange(FileChangeEvent.Operation operation,
+                                   Path file,
+                                   Path previousFile) {
+        String url = file.toAbsolutePath().normalize().toUri().toString();
+        String previousUrl = previousFile == null ? null : previousFile.toAbsolutePath().normalize().toUri().toString();
+        eventPublisher.publishEvent(new FileChangeEvent(sourcePluginId, operation, url, previousUrl));
     }
 
     private void createParentDirectories(Path file) throws IOException {

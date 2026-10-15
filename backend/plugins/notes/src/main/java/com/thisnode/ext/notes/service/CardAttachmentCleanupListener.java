@@ -1,6 +1,6 @@
 package com.thisnode.ext.notes.service;
 
-import com.thisnode.plugin.api.CardChangedEvent;
+import com.thisnode.plugin.api.event.CardChangedEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.stereotype.Component;

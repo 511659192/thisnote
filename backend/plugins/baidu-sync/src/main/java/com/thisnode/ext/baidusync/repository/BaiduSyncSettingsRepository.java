@@ -40,11 +40,10 @@ public class BaiduSyncSettingsRepository {
                                                             String secretKey,
                                                             String signKey) {
         BaiduSyncSettings current = get();
-        BaiduSyncSettings updated = current.withCredentials(
-                appName.isBlank() ? current.appName() : appName.trim(),
-                appKey.isBlank() ? current.appKey() : appKey.trim(),
-                secretKey.isBlank() ? current.secretKey() : secretKey,
-                signKey.isBlank() ? current.signKey() : signKey);
+        BaiduSyncSettings updated = current.withCredentials(appName.isBlank() ? current.appName() : appName.trim(),
+                                                            appKey.isBlank() ? current.appKey() : appKey.trim(),
+                                                            secretKey.isBlank() ? current.secretKey() : secretKey,
+                                                            signKey.isBlank() ? current.signKey() : signKey);
         write(updated);
         return updated;
     }

@@ -1,6 +1,6 @@
 package com.thisnode.ext.baidusync;
 
-import com.thisnode.ext.baidusync.service.BaiduSyncChangeEventListener;
+import com.thisnode.ext.baidusync.service.FileChangeEventListener;
 import com.thisnode.ext.baidusync.service.BaiduSyncService;
 import com.thisnode.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
@@ -13,7 +13,7 @@ public class BaiduSyncPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "baidu-sync";
 
-    private BaiduSyncChangeEventListener changeEventListener;
+    private FileChangeEventListener changeEventListener;
 
     public BaiduSyncPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -33,7 +33,7 @@ public class BaiduSyncPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         BaiduSyncService syncService = ctx.getBean(BaiduSyncService.class);
-        changeEventListener = new BaiduSyncChangeEventListener(syncService);
+        changeEventListener = new FileChangeEventListener(syncService);
         getMainApplicationContext().addApplicationListener(changeEventListener);
     }
 

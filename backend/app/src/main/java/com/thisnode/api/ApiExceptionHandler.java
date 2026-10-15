@@ -1,8 +1,8 @@
 package com.thisnode.api;
 
-import com.thisnode.plugin.api.CardLimitException;
-import com.thisnode.plugin.api.ConflictException;
-import com.thisnode.plugin.api.NotFoundException;
+import com.thisnode.plugin.api.exception.CardLimitException;
+import com.thisnode.plugin.api.exception.ConflictException;
+import com.thisnode.plugin.api.exception.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

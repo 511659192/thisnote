@@ -1,4 +1,4 @@
-package com.thisnode.plugin.api;
+package com.thisnode.plugin.api.exception;
 
 /**
  * 达到每块画布的卡片上限（HTTP 409，附 {@code limit} 供界面侧提示）。

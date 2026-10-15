@@ -1,6 +1,6 @@
 package com.thisnode.ext.favorite.service;
 
-import com.thisnode.plugin.api.NoteChangedEvent;
+import com.thisnode.plugin.api.event.NoteChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;

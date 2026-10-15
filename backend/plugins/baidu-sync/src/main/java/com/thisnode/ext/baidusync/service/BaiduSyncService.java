@@ -7,7 +7,7 @@ import com.thisnode.ext.baidusync.client.BaiduPanException;
 import com.thisnode.ext.baidusync.model.*;
 import com.thisnode.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnode.ext.baidusync.repository.BaiduSyncStateRepository;
-import com.thisnode.plugin.api.FileChangeEvent;
+import com.thisnode.plugin.api.event.FileChangeEvent;
 import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import jakarta.annotation.PreDestroy;
@@ -22,7 +22,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -41,28 +41,15 @@ public class BaiduSyncService {
     private final FileHelper fileHelper;
     private final Path dataRoot;
     private final Path pluginDirectory;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> {
-        Thread thread = new Thread(task, "baidu-sync");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(daemonThreadFactory("baidu-sync"));
     private final ThreadPoolExecutor uploadExecutor = new ThreadPoolExecutor(UPLOAD_THREAD_COUNT,
                                                                              UPLOAD_THREAD_COUNT,
                                                                              0L,
                                                                              TimeUnit.MILLISECONDS,
                                                                              new ArrayBlockingQueue<>(UPLOAD_QUEUE_CAPACITY),
-                                                                             task -> {
-                                                                                 Thread thread = new Thread(task, "baidu-sync-upload");
-                                                                                 thread.setDaemon(true);
-                                                                                 return thread;
-                                                                             },
-                                                                             new ThreadPoolExecutor.CallerRunsPolicy());
-    private final ScheduledExecutorService fileChangeDebouncer = Executors.newSingleThreadScheduledExecutor(task -> {
-        Thread thread = new Thread(task, "baidu-sync-change-debounce");
-        thread.setDaemon(true);
-        return thread;
-    });
-    private final AtomicReference<BaiduSyncStatus> status = new AtomicReference<>(BaiduSyncStatus.idle());
+                                                                             daemonThreadFactory("baidu-sync-upload"));
+    private final ScheduledExecutorService fileChangeDebouncer = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("baidu-sync-change-debounce"));
+    private volatile BaiduSyncStatus status = BaiduSyncStatus.idle();
     private final Object syncLock = new Object();
     private final Object fileChangeDebounceLock = new Object();
     private final Map<Path, PendingFileChanges> pendingFileChangesByPath = new HashMap<>();
@@ -92,10 +79,9 @@ public class BaiduSyncService {
     public void requestSyncAfterChange(FileChangeEvent event) {
         Path notesRoot = PluginDataPathUtils.configuredNotesRoot(dataRoot.resolve("notes")).toAbsolutePath().normalize();
         Set<Path> changedPaths = new LinkedHashSet<>();
-        // UPDATED 也可能代表重命名，需要同时检查新旧路径。
         switch (event.operation()) {
-            case CREATED, DELETED -> addNotesPath(event.url(), notesRoot, changedPaths);
-            case UPDATED -> {
+            case CREATED, UPDATED, DELETED -> addNotesPath(event.url(), notesRoot, changedPaths);
+            case RENAME -> {
                 addNotesPath(event.url(), notesRoot, changedPaths);
                 addNotesPath(event.previousUrl(), notesRoot, changedPaths);
             }
@@ -106,13 +92,10 @@ public class BaiduSyncService {
 
         synchronized (fileChangeDebounceLock) {
             // Merge old/new paths so consecutive writes and chained renames settle as one change.
-            Set<PendingFileChanges> related = new LinkedHashSet<>();
-            for (Path path : changedPaths) {
-                PendingFileChanges pending = pendingFileChangesByPath.get(path);
-                if (pending != null) {
-                    related.add(pending);
-                }
-            }
+            Set<PendingFileChanges> related = changedPaths.stream()
+                    .map(pendingFileChangesByPath::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
 
             PendingFileChanges pending = related.stream().findFirst().orElseGet(PendingFileChanges::new);
             for (PendingFileChanges other : related) {
@@ -148,16 +131,12 @@ public class BaiduSyncService {
     private void addNotesPath(String url,
                               Path notesRoot,
                               Set<Path> changedPaths) {
-        if (url == null || url.isBlank()) {
+        if (url == null) {
             return;
         }
-        try {
-            Path path = Path.of(URI.create(url)).toAbsolutePath().normalize();
-            if (!path.equals(notesRoot) && path.startsWith(notesRoot)) {
-                changedPaths.add(path);
-            }
-        } catch (RuntimeException e) {
-            log.debug("忽略无效的文件变更 URI：{}", url, e);
+        Path path = Path.of(URI.create(url));
+        if (!path.equals(notesRoot) && path.startsWith(notesRoot)) {
+            changedPaths.add(path);
         }
     }
 
@@ -185,7 +164,7 @@ public class BaiduSyncService {
     private void scheduleQueuedFileChangeSync() {
         // 同步期间只累积变更路径，当前任务结束后再串行调度。
         synchronized (syncLock) {
-            if (status.get().running() || queuedFileChangePaths.isEmpty() || fileChangeSyncScheduled) {
+            if (status.running() || queuedFileChangePaths.isEmpty() || fileChangeSyncScheduled) {
                 return;
             }
             fileChangeSyncScheduled = true;
@@ -205,15 +184,15 @@ public class BaiduSyncService {
         BaiduSyncStatus initial;
         synchronized (syncLock) {
             fileChangeSyncScheduled = false;
-            if (status.get().running() || queuedFileChangePaths.isEmpty()) {
+            if (status.running() || queuedFileChangePaths.isEmpty()) {
                 return;
             }
             changedPaths = new LinkedHashSet<>(queuedFileChangePaths);
             queuedFileChangePaths.clear();
-            BaiduSyncStatus current = status.get();
+            BaiduSyncStatus current = status;
             long startedAt = System.currentTimeMillis();
             initial = new BaiduSyncStatus(true, startedAt, current.completedAt(), 0, 0, 0, 0, "");
-            status.set(initial);
+            status = initial;
         }
         log.info("百度网盘文件变更同步开始：{} 个路径", changedPaths.size());
         syncChangedFiles(initial, changedPaths);
@@ -221,11 +200,7 @@ public class BaiduSyncService {
 
     private boolean isWithinRoot(String url,
                                  Path root) {
-        try {
-            return Path.of(URI.create(url)).toAbsolutePath().normalize().startsWith(root);
-        } catch (RuntimeException e) {
-            return false;
-        }
+        return Path.of(URI.create(url)).startsWith(root);
     }
 
     public BaiduSyncStatus startSync() {
@@ -235,33 +210,31 @@ public class BaiduSyncService {
     }
 
     private BaiduSyncStatus startSyncLocked() {
-        BaiduSyncStatus current = status.get();
+        BaiduSyncStatus current = status;
         if (current.running()) {
             return current;
         }
         long startedAt = System.currentTimeMillis();
         BaiduSyncStatus running = new BaiduSyncStatus(true, startedAt, current.completedAt(), 0, 0, 0, 0, "");
-        if (!status.compareAndSet(current, running)) {
-            return status.get();
-        }
+        status = running;
         log.info("百度网盘同步开始");
         try {
             executor.execute(() -> sync(running));
         } catch (RuntimeException e) {
-            status.set(new BaiduSyncStatus(false, startedAt, current.completedAt(), 0, 0, 0, 0, "无法启动同步任务"));
+            status = new BaiduSyncStatus(false, startedAt, current.completedAt(), 0, 0, 0, 0, "无法启动同步任务");
         }
-        return status.get();
+        return status;
     }
 
     private void finishSync(BaiduSyncStatus finished) {
         synchronized (syncLock) {
-            status.set(finished);
+            status = finished;
         }
         scheduleQueuedFileChangeSync();
     }
 
     public BaiduSyncStatus status() {
-        return status.get();
+        return status;
     }
 
     public BaiduSyncConnectionProbe probeConnection() {
@@ -308,13 +281,17 @@ public class BaiduSyncService {
         int consistent = 0;
         for (Map.Entry<String, LocalItem> entry : local.entrySet()) {
             BaiduPanEntry remoteItem = remoteFiles.get(entry.getKey());
-            if (remoteItem != null && fileFingerprint(entry.getValue().size(),
-                                                      entry.getValue().modifiedAt()).equals(fileFingerprint(remoteItem.size(),
-                                                                                                            remoteItem.modifiedAt()))) {
+            if (remoteItem != null && matchingFingerprint(entry.getValue(), remoteItem) != null) {
                 consistent++;
             }
         }
         return consistent;
+    }
+
+    private static String matchingFingerprint(LocalItem local,
+                                              BaiduPanEntry remote) {
+        String fingerprint = fileFingerprint(local.size(), local.modifiedAt());
+        return fingerprint.equals(fileFingerprint(remote.size(), remote.modifiedAt())) ? fingerprint : null;
     }
 
     private BaiduSyncPreview createPreview(boolean remoteExists,
@@ -441,15 +418,13 @@ public class BaiduSyncService {
         for (Map.Entry<String, LocalItem> entry : finalLocal.entrySet()) {
             BaiduPanEntry cloud = finalRemote.files().get(entry.getKey());
             if (cloud != null) {
-                String localFingerprint = fileFingerprint(entry.getValue().size(), entry.getValue().modifiedAt());
-                if (localFingerprint.equals(fileFingerprint(cloud.size(), cloud.modifiedAt()))) {
-                    finalFiles.put(entry.getKey(), localFingerprint);
+                String fingerprint = matchingFingerprint(entry.getValue(), cloud);
+                if (fingerprint != null) {
+                    finalFiles.put(entry.getKey(), fingerprint);
                 }
             }
         }
-        Set<String> directories = new LinkedHashSet<>();
-        finalLocal.values().stream().map(LocalItem::parent).filter(value -> !value.isEmpty()).forEach(directories::add);
-        directories.addAll(finalLocalSnapshot.directories());
+        Set<String> directories = new LinkedHashSet<>(finalLocalSnapshot.directories());
         stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), finalFiles, directories));
         finishSync(new BaiduSyncStatus(false,
                                        initial.startedAt(),
@@ -648,9 +623,9 @@ public class BaiduSyncService {
         for (String relative : relativePaths) {
             LocalItem local = localFiles.get(relative);
             BaiduPanEntry remote = remoteFiles.get(relative);
-            if (local != null && remote != null && fileFingerprint(local.size(), local.modifiedAt()).equals(fileFingerprint(remote.size(),
-                                                                                                                            remote.modifiedAt()))) {
-                files.put(relative, fileFingerprint(local.size(), local.modifiedAt()));
+            String fingerprint = local == null || remote == null ? null : matchingFingerprint(local, remote);
+            if (fingerprint != null) {
+                files.put(relative, fingerprint);
                 addParentDirectories(local.parent(), directories);
             } else {
                 files.remove(relative);
@@ -884,7 +859,7 @@ public class BaiduSyncService {
                                              BasicFileAttributes attrs) throws IOException {
                 if (attrs.isRegularFile() && !Files.isSymbolicLink(file)) {
                     String relative = relative(root, file);
-                    files.put(relative, new LocalItem(file, relative, Files.getLastModifiedTime(file).toMillis(), attrs.size()));
+                    files.put(relative, new LocalItem(file, relative, attrs.lastModifiedTime().toMillis(), attrs.size()));
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -933,17 +908,12 @@ public class BaiduSyncService {
         Set<String> paths = new LinkedHashSet<>();
         paths.addAll(local.keySet());
         paths.addAll(remote.files().keySet());
-        // 保留两端当前都没有、但基线记得的路径，以便下面明确跳过已在两端删除的文件。
-        paths.addAll(baseline.files().keySet());
         List<FileChange> changes = new ArrayList<>();
 
         for (String relative : paths) {
             LocalItem localItem = local.get(relative);
             BaiduPanEntry remoteItem = remote.files().get(relative);
             String previousFingerprint = parseBaselineFingerprint(baseline.files().get(relative));
-            if (localItem == null && remoteItem == null) {
-                continue;
-            }
             if (localItem != null && remoteItem != null) {
                 String localFingerprint = fileFingerprint(localItem.size(), localItem.modifiedAt());
                 String remoteFingerprint = fileFingerprint(remoteItem.size(), remoteItem.modifiedAt());
@@ -1133,7 +1103,7 @@ public class BaiduSyncService {
 
     private String remoteRoot(String appName) {
         String name = appName.trim();
-        if (name.isBlank() || name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) {
+        if (name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) {
             throw new IllegalStateException("请填写有效的百度应用名称");
         }
         return "/apps/" + name + "/notes";
@@ -1149,7 +1119,7 @@ public class BaiduSyncService {
     }
 
     private void ensureSyncIdle() {
-        if (status.get().running()) {
+        if (status.running()) {
             throw new IllegalStateException("同步进行中，请稍后重试");
         }
     }
@@ -1184,6 +1154,14 @@ public class BaiduSyncService {
     private String message(Exception e) {
         String value = e.getMessage();
         return value == null || value.isBlank() ? "同步失败" : value;
+    }
+
+    private static ThreadFactory daemonThreadFactory(String name) {
+        return task -> {
+            Thread thread = new Thread(task, name);
+            thread.setDaemon(true);
+            return thread;
+        };
     }
 
     private static final class SyncCounters {

@@ -30,21 +30,12 @@ public final class PluginDataPathUtils {
     }
 
     public static Path configuredNotesRoot(Path defaultRoot) {
+        if (!Files.exists(SETTINGS_FILE)) {
+            return defaultRoot;
+        }
         try {
-            if (!Files.isRegularFile(SETTINGS_FILE)) {
-                return defaultRoot.toAbsolutePath().normalize();
-            }
-            String json = Files.readString(SETTINGS_FILE, StandardCharsets.UTF_8);
-            Map<String, Object> settings = json.isBlank() ? null : JSON.parseObject(json, SETTINGS_TYPE);
-            Object value = settings == null ? null : settings.get("notesRoot");
-            if (value == null || value.toString().isBlank()) {
-                return defaultRoot.toAbsolutePath().normalize();
-            }
-            Path root = Path.of(value.toString().trim());
-            if (!root.isAbsolute()) {
-                throw new IllegalArgumentException("笔记根目录必须是绝对路径");
-            }
-            return root.normalize();
+            Map<String, Object> settings = JSON.parseObject(Files.readString(SETTINGS_FILE, StandardCharsets.UTF_8), SETTINGS_TYPE);
+            return Path.of(settings.get("notesRoot").toString());
         } catch (IOException e) {
             throw new UncheckedIOException("读取配置失败 " + SETTINGS_FILE, e);
         }
@@ -66,11 +57,7 @@ public final class PluginDataPathUtils {
         }
         try {
             Files.createDirectories(target.getParent());
-            if (fileHelper != null) {
-                fileHelper.fileMoved(source, target);
-            } else {
-                Files.move(source, target);
-            }
+            fileHelper.fileMoved(source, target);
         } catch (IOException e) {
             throw new UncheckedIOException("迁移插件数据失败 " + source + " -> " + target, e);
         }
