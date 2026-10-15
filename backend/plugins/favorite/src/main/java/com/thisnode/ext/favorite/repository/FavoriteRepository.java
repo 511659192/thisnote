@@ -1,7 +1,6 @@
 package com.thisnode.ext.favorite.repository;
 
 import com.thisnode.plugin.api.util.FileHelper;
-import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,7 +32,7 @@ public class FavoriteRepository {
     public FavoriteRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot,
                               FileHelper fileHelper) {
         this.fileHelper = fileHelper;
-        this.file = PluginDataPathUtils.pluginDataDirectory(Paths.get(dataRoot), "favorite", fileHelper)
+        this.file = Paths.get(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("favorite")
                 .resolve("favorites.properties");
     }
 

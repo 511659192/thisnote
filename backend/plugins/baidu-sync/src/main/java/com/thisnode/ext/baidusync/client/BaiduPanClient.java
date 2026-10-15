@@ -8,9 +8,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -21,7 +22,6 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 @Service
 public class BaiduPanClient {
@@ -42,9 +41,7 @@ public class BaiduPanClient {
     private final FileHelper fileHelper;
 
     public static final int FILE_MANAGER_BATCH_SIZE = 50;
-    private static final int FILE_MANAGER_RATE_LIMIT_ERRNO = 31034;
-    private static final int FILE_MANAGER_RATE_LIMIT_RETRIES = 6;
-    private static final long FILE_MANAGER_RETRY_BASE_DELAY_MILLIS = 1_000L;
+    private static final String UPLOAD_RTYPE_OVERWRITE = "3";
 
     private static final String FILE_API = "https://pan.baidu.com/rest/2.0/xpan/file";
     private static final String META_API = "https://pan.baidu.com/rest/2.0/xpan/multimedia";
@@ -181,123 +178,16 @@ public class BaiduPanClient {
             return List.of();
         }
         List<Map<String, String>> items = paths.stream().map(path -> Map.of("path", path)).toList();
-        return fileManagerFailures(fileManager(accessToken, "delete", items, false));
-    }
-
-    public void moveOverwrite(String accessToken,
-                              String sourcePath,
-                              String destinationDirectory,
-                              String filename) {
-        String destinationPath = destinationDirectory + "/" + filename;
-        String action = "百度网盘覆盖移动失败：" + sourcePath + " -> " + destinationPath;
-        try {
-            moveFile(accessToken, sourcePath, destinationDirectory, filename, true);
-        } catch (BaiduPanException e) {
-            if (e.apiErrno() != 12 || e.itemErrno() != -8) {
-                throw new IllegalStateException(action + "；" + e.getMessage(), e);
-            }
-            try {
-                moveWithBackup(accessToken, sourcePath, destinationPath, destinationDirectory, filename);
-            } catch (RuntimeException replacementError) {
-                throw new IllegalStateException(action + "；" + replacementError.getMessage(), replacementError);
-            }
-        } catch (RuntimeException e) {
-            throw new IllegalStateException(action + "；" + e.getMessage(), e);
-        }
-    }
-
-    public List<FileManagerFailure> moveOverwriteBatch(String accessToken,
-                                                       List<FileManagerMove> moves) {
-        requireFileManagerBatchSize(moves.size());
-        if (moves.isEmpty()) {
-            return List.of();
-        }
-        List<Map<String, String>> items = moves.stream().map(move -> {
-            Map<String, String> item = new LinkedHashMap<>();
-            item.put("path", move.sourcePath());
-            item.put("dest", move.destinationDirectory());
-            item.put("newname", move.filename());
-            item.put("ondup", "overwrite");
-            return item;
-        }).toList();
-        return fileManagerFailures(fileManager(accessToken, "move", items, true));
-    }
-
-    private void moveWithBackup(String accessToken,
-                                String sourcePath,
-                                String destinationPath,
-                                String destinationDirectory,
-                                String filename) {
-        String stagingDirectory = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
-        String backupFilename = "backup-" + UUID.randomUUID() + ".tmp";
-        String backupPath = stagingDirectory + "/" + backupFilename;
-        moveFile(accessToken, destinationPath, stagingDirectory, backupFilename, false);
-        try {
-            moveFile(accessToken, sourcePath, destinationDirectory, filename, false);
-        } catch (RuntimeException moveError) {
-            try {
-                moveFile(accessToken, backupPath, destinationDirectory, filename, false);
-            } catch (RuntimeException restoreError) {
-                moveError.addSuppressed(restoreError);
-                throw new IllegalStateException("新文件移动失败且旧文件恢复失败；旧文件保留在备份路径：" + backupPath + "；恢复错误：" + restoreError.getMessage(),
-                                                moveError);
-            }
-            throw moveError;
-        }
-        delete(accessToken, backupPath);
-    }
-
-    private void moveFile(String accessToken,
-                          String sourcePath,
-                          String destinationDirectory,
-                          String filename,
-                          boolean overwrite) {
-        Map<String, String> query = Map.of("method", "filemanager", "opera", "move", "access_token", accessToken);
-        Map<String, String> item = new LinkedHashMap<>();
-        item.put("path", sourcePath);
-        item.put("dest", destinationDirectory);
-        item.put("newname", filename);
-        Map<String, String> form = new LinkedHashMap<>();
-        form.put("async", "0");
-        if (overwrite) {
-            item.put("ondup", "overwrite");
-            form.put("ondup", "overwrite");
-        }
-        form.put("filelist", JSON.toJSONString(List.of(item)));
-        for (int retry = 0; ; retry++) {
-            try {
-                checkFileManagerErrors(postJson(fileApi + "?" + query(query), form));
-                return;
-            } catch (BaiduPanException e) {
-                if (e.errno() != FILE_MANAGER_RATE_LIMIT_ERRNO || retry >= FILE_MANAGER_RATE_LIMIT_RETRIES) {
-                    throw e;
-                }
-                waitBeforeFileManagerRetry(retry);
-            }
-        }
-    }
-
-    private void waitBeforeFileManagerRetry(int retry) {
-        long delayMillis = FILE_MANAGER_RETRY_BASE_DELAY_MILLIS << retry;
-        try {
-            Thread.sleep(delayMillis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("等待百度网盘文件管理频控解除时被中断", e);
-        }
+        return fileManagerFailures(fileManager(accessToken, "delete", items));
     }
 
     private JSONObject fileManager(String accessToken,
                                    String operation,
-                                   List<Map<String, String>> items,
-                                   boolean overwrite) {
+                                   List<Map<String, String>> items) {
         Map<String, String> query = Map.of("method", "filemanager", "opera", operation, "access_token", accessToken);
         Map<String, String> form = new LinkedHashMap<>();
         form.put("async", "0");
         form.put("filelist", JSON.toJSONString(items));
-        if (overwrite) {
-            form.put("ondup", "overwrite");
-        }
         return postFileManagerJson(fileApi + "?" + query(query), form);
     }
 
@@ -323,21 +213,6 @@ public class BaiduPanClient {
     private void requireFileManagerBatchSize(int size) {
         if (size > FILE_MANAGER_BATCH_SIZE) {
             throw new IllegalArgumentException("百度网盘单次文件管理操作最多处理 " + FILE_MANAGER_BATCH_SIZE + " 个文件");
-        }
-    }
-
-    private void checkFileManagerErrors(JSONObject result) {
-        JSONArray info = result.getJSONArray("info");
-        if (info == null) {
-            return;
-        }
-        int apiErrno = result.getIntValue("errno");
-        for (int i = 0; i < info.size(); i++) {
-            JSONObject item = info.getJSONObject(i);
-            int itemErrno = item.getIntValue("errno");
-            if (itemErrno != 0) {
-                throw new BaiduPanException(apiErrno, itemErrno, item.getString("path"));
-            }
         }
     }
 
@@ -392,46 +267,30 @@ public class BaiduPanClient {
         }
         String encodedAccessToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8);
         downloadUrl += downloadUrl.contains("?") ? "&access_token=" + encodedAccessToken : "?access_token=" + encodedAccessToken;
-        Path parent = destination.getParent();
-        Path temporary = parent.resolve(destination.getFileName() + ".baidu-sync.tmp");
         try {
-            Files.createDirectories(parent);
+            MessageDigest digest = newMd5Digest();
             HttpRequest request = HttpRequest.newBuilder(URI.create(downloadUrl))
                     .timeout(Duration.ofMinutes(30))
                     .header("User-Agent", "pan.baidu.com")
                     .GET()
                     .build();
             HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            try (InputStream body = response.body()) {
-                if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                    throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
-                }
-                try (OutputStream output = Files.newOutputStream(temporary)) {
-                    body.transferTo(output);
-                }
-            }
-            long actualSize = Files.size(temporary);
-            if (actualSize != item.size()) {
-                throw new IllegalStateException("百度网盘下载大小不匹配：" + item.path() + "；期望 " + item.size() + "，实际 " + actualSize);
+            InputStream body = response.body();
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                body.close();
+                throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
             }
             String expectedMd5 = response.headers().firstValue("Content-MD5").map(this::normalizeMd5).filter(value -> !value.isBlank()).orElse("");
-            if (!expectedMd5.isBlank() && !expectedMd5.equalsIgnoreCase(fileMd5(temporary))) {
-                throw new IllegalStateException("百度网盘下载内容校验失败：" + item.path());
-            }
-            if (item.modifiedAt() > 0) {
-                Files.setLastModifiedTime(temporary, java.nio.file.attribute.FileTime.fromMillis(item.modifiedAt()));
-            }
-            fileHelper.fileWritten(destination, temporary);
+            fileHelper.fileWritten(destination,
+                                   new DownloadValidationInputStream(body, item.size(), expectedMd5, item.path(), digest),
+                                   item.modifiedAt());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("百度网盘下载被中断：" + item.path(), e);
+        } catch (UncheckedIOException e) {
+            throw new IllegalStateException("百度网盘下载失败：" + item.path(), e.getCause());
         } catch (IOException e) {
             throw new IllegalStateException("百度网盘下载失败：" + item.path(), e);
-        } finally {
-            try {
-                Files.deleteIfExists(temporary);
-            } catch (IOException ignored) {
-            }
         }
     }
 
@@ -447,7 +306,7 @@ public class BaiduPanClient {
             precreate.put("size", Long.toString(size));
             precreate.put("isdir", "0");
             precreate.put("autoinit", "1");
-            precreate.put("rtype", "0");
+            precreate.put("rtype", UPLOAD_RTYPE_OVERWRITE);
             precreate.put("block_list", JSON.toJSONString(blocks));
             JSONObject prepared = postJson(fileApi + "?" + query(Map.of("method", "precreate", "access_token", accessToken)), precreate);
             String uploadId = prepared.getString("uploadid");
@@ -469,9 +328,13 @@ public class BaiduPanClient {
             create.put("isdir", "0");
             create.put("uploadid", uploadId);
             create.put("block_list", JSON.toJSONString(blocks));
-            create.put("rtype", "0");
+            create.put("rtype", UPLOAD_RTYPE_OVERWRITE);
             create.put("local_mtime", Long.toString(modifiedAt / 1000));
-            postJson(fileApi + "?" + query(Map.of("method", "create", "access_token", accessToken)), create);
+            JSONObject created = postJson(fileApi + "?" + query(Map.of("method", "create", "access_token", accessToken)), create);
+            String createdPath = created.getString("path");
+            if (createdPath != null && !remotePath.equals(createdPath)) {
+                throw new IllegalStateException("百度网盘上传后路径被重命名：" + remotePath + " -> " + createdPath);
+            }
             if (Files.size(source) != size || Files.getLastModifiedTime(source).toMillis() != modifiedAt) {
                 throw new IllegalStateException("同步期间文件发生变化，已上传旧版本，请再次同步：" + source);
             }
@@ -607,22 +470,6 @@ public class BaiduPanClient {
         return md5s;
     }
 
-    private String fileMd5(Path file) throws IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("MD5");
-            try (InputStream input = Files.newInputStream(file)) {
-                byte[] buffer = new byte[64 * 1024];
-                int read;
-                while ((read = input.read(buffer)) != -1) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("当前 Java 运行环境不支持 MD5", e);
-        }
-    }
-
     private String normalizeMd5(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -636,6 +483,67 @@ public class BaiduPanClient {
             return digest.length == 16 ? HexFormat.of().formatHex(digest) : "";
         } catch (IllegalArgumentException ignored) {
             return "";
+        }
+    }
+
+    private static final class DownloadValidationInputStream extends FilterInputStream {
+        private final long expectedSize;
+        private final String expectedMd5;
+        private final String remotePath;
+        private final MessageDigest digest;
+        private long actualSize;
+        private boolean validated;
+
+        private DownloadValidationInputStream(InputStream input,
+                                              long expectedSize,
+                                              String expectedMd5,
+                                              String remotePath,
+                                              MessageDigest digest) {
+            super(input);
+            this.expectedSize = expectedSize;
+            this.expectedMd5 = expectedMd5;
+            this.remotePath = remotePath;
+            this.digest = digest;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int value = super.read();
+            if (value < 0) {
+                validate();
+            } else {
+                digest.update((byte) value);
+                actualSize++;
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] bytes,
+                        int offset,
+                        int length) throws IOException {
+            int count = super.read(bytes, offset, length);
+            if (count < 0) {
+                validate();
+            } else if (count > 0) {
+                digest.update(bytes, offset, count);
+                actualSize += count;
+            }
+            return count;
+        }
+
+        private void validate() throws IOException {
+            if (validated) {
+                return;
+            }
+            validated = true;
+            if (actualSize != expectedSize) {
+                throw new IOException("百度网盘下载大小不匹配：" + remotePath + "；期望 " + expectedSize + "，实际 " + actualSize);
+            }
+            String actualMd5 = HexFormat.of().formatHex(digest.digest());
+            if (!expectedMd5.isBlank() && !expectedMd5.equalsIgnoreCase(actualMd5)) {
+                throw new IOException("百度网盘下载内容校验失败：" + remotePath);
+            }
         }
     }
 
@@ -681,13 +589,17 @@ public class BaiduPanClient {
     }
 
     private static String md5(byte[] bytes) {
+        byte[] digest = newMd5Digest().digest(bytes);
+        StringBuilder value = new StringBuilder(32);
+        for (byte part : digest) {
+            value.append(String.format("%02x", part));
+        }
+        return value.toString();
+    }
+
+    private static MessageDigest newMd5Digest() {
         try {
-            byte[] digest = MessageDigest.getInstance("MD5").digest(bytes);
-            StringBuilder value = new StringBuilder(32);
-            for (byte part : digest) {
-                value.append(String.format("%02x", part));
-            }
-            return value.toString();
+            return MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("当前 Java 运行环境不支持 MD5", e);
         }
@@ -696,9 +608,6 @@ public class BaiduPanClient {
     private static long modifiedAt(JSONObject row) {
         long local = row.getLongValue("local_mtime");
         return (local > 0 ? local : row.getLongValue("server_mtime")) * 1000;
-    }
-
-    public record FileManagerMove(String sourcePath, String destinationDirectory, String filename) {
     }
 
     public record FileManagerFailure(String path, int apiErrno, int itemErrno) {

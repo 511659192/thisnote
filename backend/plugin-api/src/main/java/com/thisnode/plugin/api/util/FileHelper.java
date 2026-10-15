@@ -17,6 +17,7 @@ import java.nio.file.CopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.FileTime;
 import java.util.Objects;
 
 /**
@@ -85,6 +86,25 @@ public final class FileHelper {
         try {
             createParentDirectories(file);
             Files.move(stagedFile, file);
+        } catch (IOException e) {
+            log.warn("无法写入文件 {}", file, e);
+            throw new UncheckedIOException("写入文件失败 " + file, e);
+        }
+        publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
+    }
+
+    /** Copies and closes the stream, writing directly to the destination before publishing its change event. */
+    public void fileWritten(Path file,
+                            InputStream content,
+                            long modifiedAtMillis) {
+        Objects.requireNonNull(content, "content");
+        boolean previouslyExisted = Files.exists(file);
+        try (InputStream input = content) {
+            createParentDirectories(file);
+            Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING);
+            if (modifiedAtMillis > 0) {
+                Files.setLastModifiedTime(file, FileTime.fromMillis(modifiedAtMillis));
+            }
         } catch (IOException e) {
             log.warn("无法写入文件 {}", file, e);
             throw new UncheckedIOException("写入文件失败 " + file, e);

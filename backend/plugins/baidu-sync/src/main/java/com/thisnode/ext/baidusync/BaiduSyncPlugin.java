@@ -32,8 +32,7 @@ public class BaiduSyncPlugin extends SpringBootPlugin {
 
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
-        BaiduSyncService syncService = ctx.getBean(BaiduSyncService.class);
-        changeEventListener = new FileChangeEventListener(syncService);
+        changeEventListener = ctx.getBean(FileChangeEventListener.class);
         getMainApplicationContext().addApplicationListener(changeEventListener);
     }
 

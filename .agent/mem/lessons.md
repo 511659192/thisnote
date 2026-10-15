@@ -1,9 +1,14 @@
 # Lessons
 
+## 2026-10-15 — 文件变更事件直接生成独立同步任务
+- **纠正来源：** 用户明确要求 `BaiduSyncService` 不使用线程池，改为同步调用。
+- **可核验事实：** 全量/增量同步、上传和回调原先使用三个执行器及 `CompletableFuture`；`/sync` 控制器和定时任务都直接调用 `startSync()`。
+- **下次执行规则：** 百度同步流程在调用线程完成，文件逐个上传；不得恢复线程池或异步 future。使用同步锁串行化全量同步和事件同步，避免并发操作云端状态。
+
 ## 2026-10-15 — 笔记根目录以 Spring data-root 为准
-- **纠正来源：** 用户澄清 `PluginDataPathUtils.configuredNotesRoot` 应依据 Spring application 配置中的 `thisnode.data-root`，而不是 `~/.thisnode/settings.json` 的 `notesRoot`。
-- **可核验事实：** 插件通过 `@Value("${thisnode.data-root:${user.home}/.thisnode}")` 获取数据根目录；notes 插件另有基于 `settings.json` 的可变根目录设置及更新接口。
-- **下次执行规则：** 笔记根目录统一由 Spring `data-root` 派生为 `data-root/notes`；不得再以用户 settings JSON 覆盖。调整该规则时同步处理所有插件路径及旧的根目录设置入口，不自动搬移或删除已有数据。
+- **纠正来源：** 用户澄清插件路径应依据 Spring application 配置中的 `thisnode.data-root`，而不是 `~/.thisnode/settings.json` 的 `notesRoot`；随后确认删除 `PluginDataPathUtils` 并内联调用点。
+- **可核验事实：** 插件通过 `@Value("${thisnode.data-root:${user.home}/.thisnode}")` 获取数据根目录；notes 插件另有基于 `settings.json` 的可变根目录设置及更新接口；仓库内该路径工具有 5 个调用点。
+- **下次执行规则：** 笔记根目录统一由 Spring `data-root` 派生为 `data-root/notes`；不得再以用户 settings JSON 覆盖。插件数据目录统一直接定位到 `data-root/notes/plugins/<pluginId>`，不保留旧 `data-root/plugins/<pluginId>` 的迁移兼容；不自动搬移或删除已有数据。简单路径拼接只有少数调用点时直接内联，不保留仅作封装的公共工具类。
 
 ## 2026-10-15 — 按业务不变量精简防御分支
 - **纠正来源：** 用户澄清精简代码的目的是提升可读性，删除业务上不可能的边界处理，而不是为减少行数牺牲有效保护。
@@ -11,9 +16,14 @@
 - **下次执行规则：** 删除防御分支前先核对业务约束和全部调用点；移除已证实不可能的分支，保留保护真实数据风险的逻辑，不以行数减少为目标。
 
 ## 2026-10-15 — FileHelper 直接执行文件操作并处理 I/O 异常
-- **纠正来源：** 用户指出 `fileWritten(Path, FileWriteOperation)` 通过回调执行写入不直观，并要求 `fileDeleted`、`fileWritten`、`fileMoved` 在 helper 内处理异常。
-- **可核验事实：** JSON 对象可直接传给 `fileWritten(Path, Object)`；文本、Properties 和附件分别使用字符串或 MultipartFile 重载；所有成功的持久化重载都应发布文件事件；网盘下载先写入并校验临时文件，再以替换方式移动到目标路径。
-- **下次执行规则：** JSON 对象优先使用 `fileWritten(Path, Object)`；Markdown/Properties 等文本使用 `String` 重载，附件使用 MultipartFile 重载，暂存文件使用对应重载，不传入写入回调；检查每个持久化重载都在文件操作成功后发布事件。`fileDeleted` 捕获并记录 `IOException`，失败返回 `false`；`fileWritten` 与 `fileMoved` 捕获、记录后抛 `UncheckedIOException`，保持失败可见。插件 Spring 上下文注册单例 `FileHelper`；helper 内部持有事件发布器并发布事件，业务调用方不传入发布器。
+- **纠正来源：** 用户指出 `fileWritten(Path, FileWriteOperation)` 通过回调执行写入不直观，并要求文件操作与事件发布由 helper 完成；随后明确百度网盘同步不使用临时目录或临时文件，改为原地写入。
+- **可核验事实：** JSON 对象、文本和附件分别使用既有重载；百度网盘下载新增流式重载，直接覆盖目标、校验内容后发布事件；用户确认接受下载中断时目标文件可能不完整。
+- **下次执行规则：** JSON 对象优先使用 `fileWritten(Path, Object)`；Markdown/Properties 等文本使用 `String` 重载，附件使用 MultipartFile 重载；百度网盘下载使用 `fileWritten(Path, InputStream, modifiedAtMillis)` 直接写目标并在发布事件前校验字节数及可用的真实 MD5。`fileDeleted` 捕获并记录 `IOException`，失败返回 `false`；`fileWritten` 与 `fileMoved` 捕获、记录后抛 `UncheckedIOException`，保持失败可见。插件 Spring 上下文注册单例 `FileHelper`；helper 内部持有事件发布器并发布事件，业务调用方不传入发布器。
+
+## 2026-10-15 — 百度网盘冲突策略不能混淆重命名和覆盖
+- **纠正来源：** 用户报告原地上传后云端出现多个文件；此前将 rtype=2 误认为覆盖策略。
+- **可核验事实：** BaiduPanClient.upload 在预创建和创建请求中都传入了 rtype=2；百度官方文件上传示例在这两个请求中都传入 rtype=3。
+- **下次执行规则：** 上传前按当前 xpan 文件上传接口核实冲突策略，不能把创建文件夹或其他 SDK 的枚举含义套用过来；使用文件上传示例的覆盖策略并在创建响应返回实际路径时核对它与请求目标一致。不得擅自清理用户已有的云端副本。
 
 ## 2026-10-15 — 通用文件变更事件覆盖插件持久化入口
 - **纠正来源：** 用户指出仅监听卡片、笔记和笔记本领域事件无法覆盖所有插件文件操作，要求统一发布带操作类型和对象 URL 的文件变更事件。

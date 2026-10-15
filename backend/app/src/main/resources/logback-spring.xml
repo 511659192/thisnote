@@ -3,9 +3,9 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <property name="CONSOLE_LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %clr(%-5level) [%thread] %logger{0} - %msg%n%wEx"/>
+              value="%d{yyyy-MM-dd HH:mm:ss} %clr(%-5level) [%-10.20thread] %logger{0}:%line - %msg%n%wEx"/>
     <property name="FILE_LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %-5level [%thread] %logger{0} - %msg%n%wEx"/>
+              value="%d{yyyy-MM-dd HH:mm:ss} %-5level [%-10.20thread] %logger{0}:%line - %msg%n%wEx"/>
 
     <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
     <include resource="org/springframework/boot/logging/logback/file-appender.xml"/>

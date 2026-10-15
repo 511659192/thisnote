@@ -3,7 +3,6 @@ package com.thisnode.ext.baidusync.repository;
 import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.baidusync.model.BaiduSyncState;
 import com.thisnode.plugin.api.util.FileHelper;
-import com.thisnode.plugin.api.util.PluginDataPathUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
@@ -22,7 +21,7 @@ public class BaiduSyncStateRepository {
     public BaiduSyncStateRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot,
                                     FileHelper fileHelper) {
         this.fileHelper = fileHelper;
-        this.file = PluginDataPathUtils.pluginDataDirectory(Path.of(dataRoot), "baidu-sync", fileHelper)
+        this.file = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("baidu-sync")
                 .resolve("sync-state.json");
     }
 
