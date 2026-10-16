@@ -8,6 +8,7 @@
 export const PLUGIN_DEV_PORTS: Record<string, number> = {
   favorite: 7111,
   'baidu-sync': 7114,
+  'card-importer': 7115,
   'memory-cycle': 7112,
   notes: 7113,
 }

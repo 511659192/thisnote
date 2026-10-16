@@ -21,6 +21,7 @@ $plugins = [ordered]@{
     'favorite'     = 'plugins/favorite'
     'memory-cycle' = 'plugins/memory-cycle'
     'baidu-sync'   = 'plugins/baidu-sync'
+    'card-importer' = 'plugins/card-importer'
 }
 
 foreach ($id in $plugins.Keys) {

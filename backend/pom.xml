@@ -28,6 +28,7 @@
     <module>plugins/notes</module>
     <module>plugins/favorite</module>
     <module>plugins/baidu-sync</module>
+    <module>plugins/card-importer</module>
     <module>app</module>
   </modules>
 
@@ -61,6 +62,11 @@
       <dependency>
         <groupId>com.thisnode</groupId>
         <artifactId>plugin-baidu-sync</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnode</groupId>
+        <artifactId>plugin-card-importer</artifactId>
         <version>${project.version}</version>
       </dependency>
 

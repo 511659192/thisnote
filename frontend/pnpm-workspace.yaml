@@ -3,6 +3,7 @@ packages:
   - 'plugin-api'
   - 'plugins/favorite'
   - 'plugins/baidu-sync'
+  - 'plugins/card-importer'
   - 'plugins/memory-cycle'
   - 'plugins/notes'
 

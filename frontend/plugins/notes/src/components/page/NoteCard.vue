@@ -281,33 +281,19 @@ function onKeydown(e: KeyboardEvent) {
   e.stopPropagation()
 }
 
-/** 预览态内容的最长可见行宽（折算回世界像素）：文本按 Range 行盒量，图片/代码块/表格按元素盒量。 */
-function measureLongestLine(): number {
+/**
+ * 量预览内容的 max-content 宽度：克隆到屏外按「不换行一行放下」布局取宽。
+ * 不在当前渲染上量行宽——按当前换行量、缩完再换行会死循环，把难看的断行锁死。
+ */
+function measureMaxContentWidth(): number {
   const body = readBody.value
-  const root = rootEl.value
-  if (!body || !root) return 0
-  const zoom = root.getBoundingClientRect().width / card.value.w
-  if (!Number.isFinite(zoom) || zoom <= 0) return 0
-  let maxExtent = 0
-  const range = document.createRange()
-  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
-  let current = walker.nextNode()
-  while (current) {
-    const text = current as Text
-    if (text.textContent && text.textContent.trim()) {
-      range.selectNodeContents(text)
-      const rects = range.getClientRects()
-      for (let i = 0; i < rects.length; i++) {
-        if (rects[i].width > maxExtent) maxExtent = rects[i].width
-      }
-    }
-    current = walker.nextNode()
-  }
-  for (const el of body.querySelectorAll('img, pre, table')) {
-    const rect = el.getBoundingClientRect()
-    if (rect.width > maxExtent) maxExtent = rect.width
-  }
-  return maxExtent / zoom
+  if (!body) return 0
+  const clone = body.cloneNode(true) as HTMLElement
+  clone.style.cssText += ';position:fixed;left:-10000px;top:0;width:max-content;max-width:none;overflow:visible;'
+  document.body.appendChild(clone)
+  const width = Math.ceil(clone.scrollWidth)
+  clone.remove()
+  return width
 }
 
 /**
@@ -367,8 +353,9 @@ function fitHeight(force = false) {
     if (autoFitImageWidth.value && loadedImages.length) {
       desiredWidths.push(Math.max(...loadedImages.map((image) => image.naturalWidth)) + 32)
     }
-    const longestLine = measureLongestLine()
-    if (longestLine > 0) desiredWidths.push(Math.ceil(longestLine) + 30)
+    const maxContentWidth = measureMaxContentWidth()
+    // 克隆体已含 .body.read 左右 28px 内边距，再补卡片左右边框 2px
+    if (maxContentWidth > 0) desiredWidths.push(maxContentWidth + 2)
     if (desiredWidths.length) {
       autoFitImageWidth.value = false
       const desired = Math.max(...desiredWidths)
