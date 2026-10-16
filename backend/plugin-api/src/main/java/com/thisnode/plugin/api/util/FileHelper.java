@@ -1,12 +1,10 @@
 package com.thisnode.plugin.api.util;
 
-import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import com.thisnode.plugin.api.event.FileChangeEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +18,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Executes persistent file mutations and publishes their plugin-scoped change events.
@@ -30,6 +31,12 @@ public final class FileHelper {
 
     private final ApplicationEventPublisher eventPublisher;
     private final String sourcePluginId;
+
+    /**
+     * 5 秒缓冲窗口：窗口内完全相同的事件合并为一条，窗口结束时才送达消费者。
+     */
+    private static final long FILE_EVENT_BUFFER_SECONDS = 5;
+    private final ConcurrentHashMap<String, Boolean> bufferedFileEvents = new ConcurrentHashMap<>();
 
     public void fileWritten(Path file,
                             Object content) {
@@ -80,7 +87,9 @@ public final class FileHelper {
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
     }
 
-    /** Copies and closes the stream, writing directly to the destination before publishing its change event. */
+    /**
+     * Copies and closes the stream, writing directly to the destination before publishing its change event.
+     */
     public void fileWritten(Path file,
                             InputStream content,
                             long modifiedAtMillis) {
@@ -131,7 +140,18 @@ public final class FileHelper {
                                    Path previousFile) {
         Path url = file.toAbsolutePath().normalize();
         Path previousUrl = previousFile == null ? null : previousFile.toAbsolutePath().normalize();
-        eventPublisher.publishEvent(new FileChangeEvent(sourcePluginId, operation, url, previousUrl));
+        String key = operation + ":" + url + (previousUrl == null ? "" : ":" + previousUrl);
+        FileChangeEvent event = new FileChangeEvent(sourcePluginId, operation, url, previousUrl);
+        // 首条事件占用 5 秒缓冲位并调度送达；期间完全相同的重复事件不再入池，由这条统一代表。
+        if (bufferedFileEvents.putIfAbsent(key, Boolean.TRUE) != null) {
+            return;
+        }
+        CompletableFuture.delayedExecutor(FILE_EVENT_BUFFER_SECONDS, TimeUnit.SECONDS).execute(() -> {
+            if (bufferedFileEvents.remove(key) == null) {
+                return;
+            }
+            eventPublisher.publishEvent(event);
+        });
     }
 
     private void createParentDirectories(Path file) throws IOException {

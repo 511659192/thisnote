@@ -146,6 +146,80 @@ function closePreview() {
   previewCard.value = null
 }
 
+// ---------------------------------------------------------------- 预览图片缩放拖移
+
+/** 滚轮缩放 + 左键拖移作用于预览浮层内的图片；状态挂在图片元素上，浮层关闭随 DOM 一起丢弃。 */
+const PREVIEW_IMG_MIN_SCALE = 0.2
+const PREVIEW_IMG_MAX_SCALE = 8
+type PreviewImgTransform = { scale: number; x: number; y: number }
+const previewImgTransforms = new WeakMap<HTMLImageElement, PreviewImgTransform>()
+let previewImgDrag: {
+  image: HTMLImageElement
+  startX: number
+  startY: number
+  baseX: number
+  baseY: number
+} | null = null
+
+function transformOf(image: HTMLImageElement): PreviewImgTransform {
+  let transform = previewImgTransforms.get(image)
+  if (!transform) {
+    transform = { scale: 1, x: 0, y: 0 }
+    previewImgTransforms.set(image, transform)
+  }
+  return transform
+}
+
+function applyImgTransform(image: HTMLImageElement) {
+  const { scale, x, y } = transformOf(image)
+  // translate 在 scale 之前，保证拖移位移始终按屏幕像素计算
+  image.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
+}
+
+function onPreviewWheel(event: WheelEvent) {
+  const image = (event.target as HTMLElement).closest?.('img')
+  if (!image) return
+  event.preventDefault()
+  const transform = transformOf(image)
+  const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2
+  transform.scale = Math.min(PREVIEW_IMG_MAX_SCALE, Math.max(PREVIEW_IMG_MIN_SCALE, transform.scale * factor))
+  applyImgTransform(image)
+}
+
+function onPreviewMouseDown(event: MouseEvent) {
+  if (event.button !== 0) return
+  const image = (event.target as HTMLElement).closest?.('img')
+  if (!image) return
+  event.preventDefault()
+  const transform = transformOf(image)
+  previewImgDrag = {
+    image,
+    startX: event.clientX,
+    startY: event.clientY,
+    baseX: transform.x,
+    baseY: transform.y,
+  }
+  image.classList.add('rv-img-grabbing')
+  window.addEventListener('mousemove', onPreviewMouseMove)
+  window.addEventListener('mouseup', onPreviewMouseUp)
+}
+
+function onPreviewMouseMove(event: MouseEvent) {
+  if (!previewImgDrag) return
+  const transform = transformOf(previewImgDrag.image)
+  transform.x = previewImgDrag.baseX + (event.clientX - previewImgDrag.startX)
+  transform.y = previewImgDrag.baseY + (event.clientY - previewImgDrag.startY)
+  applyImgTransform(previewImgDrag.image)
+}
+
+function onPreviewMouseUp() {
+  if (!previewImgDrag) return
+  previewImgDrag.image.classList.remove('rv-img-grabbing')
+  previewImgDrag = null
+  window.removeEventListener('mousemove', onPreviewMouseMove)
+  window.removeEventListener('mouseup', onPreviewMouseUp)
+}
+
 /**
  * 插件被全局停用时，本页不能假装「只是没有到期的卡片」——那会误导用户以为一切正常。
  * 直接说清原因并给出恢复入口；同时跳过取数，免得白打一串 409。
@@ -243,7 +317,11 @@ onMounted(async () => {
   }
   window.addEventListener('keydown', onKeydown)
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('mousemove', onPreviewMouseMove)
+  window.removeEventListener('mouseup', onPreviewMouseUp)
+})
 
 const GRADES: { grade: Grade; label: string }[] = [
   { grade: 1, label: '忘记' },
@@ -378,6 +456,7 @@ const GRADES: { grade: Grade; label: string }[] = [
           v-for="card in enabledCards"
           :key="card.cardId"
           class="rv-enabled-card"
+          @click="openPreview(card)"
         >
           <div class="rv-enabled-content">
             <button
@@ -412,7 +491,12 @@ const GRADES: { grade: Grade; label: string }[] = [
           </div>
           <button class="btn sm ghost" aria-label="关闭预览" @click="closePreview">×</button>
         </header>
-        <div class="rv-preview-content">
+        <div
+          class="rv-preview-content"
+          @wheel="onPreviewWheel"
+          @mousedown="onPreviewMouseDown"
+          @dragstart.prevent
+        >
           <component :is="MarkdownView" :content="previewCard.contentMd" />
         </div>
       </section>
@@ -585,6 +669,12 @@ const GRADES: { grade: Grade; label: string }[] = [
   min-height: 24px;
   overflow-x: hidden;
 }
+/* 复习卡较宽：图片随卡片宽度自适应，并放宽 MarkdownView 默认的 320px 高度上限 */
+.rv-content :deep(.md-preview img) {
+  max-width: 100%;
+  max-height: 65vh;
+  margin-inline: auto;
+}
 .rv-actions {
   display: flex;
   gap: var(--space-2);
@@ -666,5 +756,19 @@ const GRADES: { grade: Grade; label: string }[] = [
   max-height: calc(80vh - 64px);
   overflow: auto;
   padding: var(--space-4);
+}
+/* 已开启卡片按图片实际大小展示，不套用 MarkdownView 默认的 320px 高度上限；
+   预览浮层完全按自然尺寸，超出部分滚动，列表卡仍受列宽约束以免三列布局破版 */
+.rv-enabled-content :deep(.md-preview img) {
+  max-height: none;
+}
+.rv-preview-content :deep(.md-preview img) {
+  max-width: none;
+  max-height: none;
+  cursor: grab;
+  user-select: none;
+}
+.rv-preview-content :deep(.md-preview img.rv-img-grabbing) {
+  cursor: grabbing;
 }
 </style>

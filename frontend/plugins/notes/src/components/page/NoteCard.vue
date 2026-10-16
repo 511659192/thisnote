@@ -36,7 +36,7 @@ const emit = defineEmits<{
   (e: 'end-edit'): void
   (e: 'toggle-collapse', id: string): void
   (e: 'focus', id: string): void
-  (e: 'fit-height', p: { cardId: string; h: number; w?: number; fitImage?: boolean }): void
+  (e: 'fit-height', p: { cardId: string; h: number; w?: number; fitImage?: boolean; force?: boolean }): void
 }>()
 
 const draft = ref('')
@@ -52,6 +52,8 @@ const textarea = ref<HTMLTextAreaElement | null>(null)
 const measure = ref<HTMLElement | null>(null)
 /** 预览态的渲染容器：量它里面内容根节点的自然高度。 */
 const readBody = ref<HTMLElement | null>(null)
+/** 卡片根元素：用「渲染宽 / 逻辑宽」折算画布缩放，供行宽测量换算回世界像素。 */
+const rootEl = ref<HTMLElement | null>(null)
 
 const card = computed(() => props.view.card)
 const content = computed(() => props.view.contentMd ?? '')
@@ -279,35 +281,131 @@ function onKeydown(e: KeyboardEvent) {
   e.stopPropagation()
 }
 
+/** 预览态内容的最长可见行宽（折算回世界像素）：文本按 Range 行盒量，图片/代码块/表格按元素盒量。 */
+function measureLongestLine(): number {
+  const body = readBody.value
+  const root = rootEl.value
+  if (!body || !root) return 0
+  const zoom = root.getBoundingClientRect().width / card.value.w
+  if (!Number.isFinite(zoom) || zoom <= 0) return 0
+  let maxExtent = 0
+  const range = document.createRange()
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+  let current = walker.nextNode()
+  while (current) {
+    const text = current as Text
+    if (text.textContent && text.textContent.trim()) {
+      range.selectNodeContents(text)
+      const rects = range.getClientRects()
+      for (let i = 0; i < rects.length; i++) {
+        if (rects[i].width > maxExtent) maxExtent = rects[i].width
+      }
+    }
+    current = walker.nextNode()
+  }
+  for (const el of body.querySelectorAll('img, pre, table')) {
+    const rect = el.getBoundingClientRect()
+    if (rect.width > maxExtent) maxExtent = rect.width
+  }
+  return maxExtent / zoom
+}
+
 /**
  * 让卡片高度贴合内容，双向：长文长高、删改后收缩 —— 卡片下部不再留大片空白。
  * 展示上限（长文到浏览器底缘、超出滚动）由页面在 onFitHeight 里按视口折算。
  *
  * <p>编辑态量**屏外 twin**：textarea 会撑满卡片，量它自己等于"自己量自己"，只会越量越高。
- * 预览态直接量渲染出来的内容根节点（它的高度是自然的，不被卡片裁剪）。8px 迟滞防止
- * 一次输入恰好跨过阈值时反复拉扯；88px 下限与页面的 BLOCK_MIN_H 一致。
+ * 预览态量内容根节点的自然高度再补容器 padding——滚动容器的 scrollHeight 会被自身
+ * client 高度兜底，量它永远缩不回去。8px 迟滞防止一次输入恰好跨过阈值时
+ * 反复拉扯；88px 下限与页面的 BLOCK_MIN_H 一致。宽度只扩不缩：内容超出右缘才贴过去。
  */
-function fitHeight() {
+function fitHeight(force = false) {
   if (card.value.collapsed) return
   const el = contentEl()
   if (!el) return
   // 有了真实信号才挂观察器（见 armFitObserver）：避免"每次打开笔记都贴合一次"。
   armFitObserver()
-  const needed = Math.round(el.scrollHeight) + 24
-  const target = Math.max(BLOCK_MIN_H, needed)
-  const images = Array.from(el.querySelectorAll('img')).filter((image) => image.naturalWidth > 0)
-  if (autoFitImageWidth.value && images.length) {
-    const imageWidth = Math.max(...images.map((image) => image.naturalWidth)) + 32
-    autoFitImageWidth.value = false
-    if (imageWidth > card.value.w) {
-      emit('fit-height', { cardId: card.value.cardId, h: target, w: imageWidth, fitImage: true })
-      return
+
+  const images = Array.from(el.querySelectorAll('img'))
+  const pendingImages = images.filter((image) => !image.complete)
+  if (pendingImages.length) {
+    // MarkdownView 的图片异步加载：加载完成前量的高度不含图片。
+    // 不消费一次性贴合信号，等最后一张就位（或确认失败）后带 force 重贴。
+    for (const image of pendingImages) {
+      if (image.dataset.fitRefitArmed) continue
+      image.dataset.fitRefitArmed = '1'
+      image.addEventListener('load', () => fitHeight(true), { once: true })
+      image.addEventListener('error', () => fitHeight(true), { once: true })
+    }
+    return
+  }
+  const loadedImages = images.filter((image) => image.naturalWidth > 0)
+
+  // 高度基准：量**内容根节点的自然高度**——.body.read 是滚动容器，scrollHeight 会被
+  // 自身 client 高度兜底，直接量它高度永远缩不回去（贴合后底部仍大片空白的原因）。
+  // 内容自然高度 + 容器真实竖向 padding（预览态 30/12，编辑态按 textarea 计算样式）+ 边框。
+  let needed: number
+  if (props.editing && textarea.value) {
+    const boxStyle = getComputedStyle(textarea.value)
+    const verticalPadding = parseFloat(boxStyle.paddingTop) + parseFloat(boxStyle.paddingBottom)
+    needed = Math.ceil(el.offsetHeight + verticalPadding) + 2
+  } else if (readBody.value) {
+    const bodyStyle = getComputedStyle(readBody.value)
+    const verticalPadding = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
+    needed = Math.ceil(el.offsetHeight + verticalPadding) + 2
+  } else {
+    return
+  }
+  let target = Math.max(BLOCK_MIN_H, needed)
+
+  // 宽度贴合只在显式触发时做（⤢ / 图片粘贴）：日常输入若跟随内容调宽，卡片会随键击抖动。
+  // 只扩不缩的 scrollWidth 量不出换行文本的最长行，这里改量**最长可见行**的实际渲染宽度，
+  // 双向贴合：短行多的卡收窄贴右边框，长行/代码/图片的卡扩到放得下。
+  let width: number | undefined
+  if ((force || autoFitImageWidth.value) && readBody.value) {
+    const desiredWidths: number[] = []
+    if (autoFitImageWidth.value && loadedImages.length) {
+      desiredWidths.push(Math.max(...loadedImages.map((image) => image.naturalWidth)) + 32)
+    }
+    const longestLine = measureLongestLine()
+    if (longestLine > 0) desiredWidths.push(Math.ceil(longestLine) + 30)
+    if (desiredWidths.length) {
+      autoFitImageWidth.value = false
+      const desired = Math.max(...desiredWidths)
+      // 4px 容差避免分数像素来回拉扯；上限由页面侧 maxCardWidth 钳制
+      if (Math.abs(desired - card.value.w) > 4) width = desired
     }
   }
-  if (Math.abs(target - card.value.h) > 8) {
-    emit('fit-height', { cardId: card.value.cardId, h: target, fitImage: fitPastedImage.value })
+
+  // 宽度变化时图片渲染高度随 max-width 缩放：上面量的 scrollHeight 反映旧宽度，
+  // 按各图片纵横比把目标高度折算到新宽度，避免「宽度贴合了、高度还是旧宽度的高度」。
+  if (width !== undefined && rootEl.value) {
+    const zoom = rootEl.value.getBoundingClientRect().width / card.value.w
+    if (Number.isFinite(zoom) && zoom > 0) {
+      const innerOld = Math.max(1, card.value.w - 30)
+      const innerNew = Math.max(1, width - 30)
+      let delta = 0
+      for (const image of loadedImages) {
+        const oldHeight = image.getBoundingClientRect().height / zoom
+        const oldWidth = Math.min(image.naturalWidth, innerOld)
+        if (oldWidth <= 0 || oldHeight <= 0) continue
+        delta += oldHeight * (Math.min(image.naturalWidth, innerNew) / oldWidth) - oldHeight
+      }
+      target = Math.max(BLOCK_MIN_H, Math.round(target + delta))
+    }
   }
-  if (!props.editing && images.length) fitPastedImage.value = false
+
+  if (width !== undefined || Math.abs(target - card.value.h) > 8 || force) {
+    emit('fit-height', { cardId: card.value.cardId, h: target, w: width, fitImage: fitPastedImage.value, force })
+  }
+  if (!props.editing && loadedImages.length) fitPastedImage.value = false
+}
+
+/** 「自动调整」：解除手动高度锁定，并立即按当前内容贴合（含图片宽度自适应）。 */
+function autoFit() {
+  autoFitImageWidth.value = true
+  fitPastedImage.value = true
+  fitHeight(true)
 }
 
 /** 当前要量的内容节点：编辑态是屏外 twin，预览态是渲染出来的内容根节点。 */
@@ -351,6 +449,7 @@ onBeforeUnmount(() => {
 
 <template>
   <article
+    ref="rootEl"
     class="card"
     :data-card-id="card.cardId"
     :class="{ selected, editing, collapsed: card.collapsed, focused }"
@@ -368,6 +467,12 @@ onBeforeUnmount(() => {
     <!-- Card tools are overlaid in the top-right corner so they cost no layout space. -->
     <div class="card-tools">
       <template v-if="!card.collapsed">
+        <button
+          class="auto-fit"
+          title="自动调整：按内容贴合卡片尺寸"
+          @pointerdown.stop
+          @click.stop="autoFit()"
+        >⤢</button>
         <component
           :is="plugin.cardComponent"
           v-for="plugin in activeCardPlugins()"
@@ -594,6 +699,31 @@ onBeforeUnmount(() => {
   color: var(--accent);
 }
 .collapse.active {
+  color: var(--accent);
+}
+/* 「自动调整」与折叠按钮同排同款，悬停显形 */
+.auto-fit {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.card:hover .auto-fit,
+.card.selected .auto-fit,
+.card.focused .auto-fit,
+.card.editing .auto-fit {
+  opacity: 1;
+}
+.auto-fit:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
 

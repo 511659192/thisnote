@@ -175,6 +175,12 @@ export const usePageStore = defineStore('notePage', () => {
   function markManualHeight(cardId: string) {
     manualHeights.value = new Set(manualHeights.value).add(cardId)
   }
+  /** 「自动调整」由用户显式触发时解除锁定，交还给内容决定高度。 */
+  function clearManualHeight(cardId: string) {
+    const next = new Set(manualHeights.value)
+    next.delete(cardId)
+    manualHeights.value = next
+  }
   function isManualHeight(cardId: string) {
     return manualHeights.value.has(cardId)
   }
@@ -593,6 +599,7 @@ export const usePageStore = defineStore('notePage', () => {
     clampWidths,
     writeContent,
     markManualHeight,
+    clearManualHeight,
     isManualHeight,
     setColor,
     screenToWorld,

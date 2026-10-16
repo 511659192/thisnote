@@ -51,6 +51,8 @@ const confirmDialog = ref<{
   action: (() => void | Promise<void>) | null
 }>({ open: false, title: '', message: '', confirmLabel: '删除', action: null })
 const renaming = ref(false)
+/** 列表面板是否收起到左缘；默认不收缩。 */
+const listCollapsed = ref(false)
 const titleDraft = ref('')
 let titleDraftNoteId: string | null = null
 const titleInput = ref<HTMLInputElement | null>(null)
@@ -375,7 +377,6 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
       })
       entries.push({ separator: true })
     }
-    entries.push({ label: '编辑卡片内容', action: () => void pageRef.value?.beginEdit(view) })
     const cardPlugins = activeCardPlugins()
     if (cardPlugins.length) {
       entries.push({ separator: true })
@@ -389,8 +390,9 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
         })
       }
     }
+    // 「编辑卡片内容」已移除，菜单可能为空或以分隔线开头，删除卡片前按需补分隔线
+    if (entries.length) entries.push({ separator: true })
     entries.push(
-      { separator: true },
       { label: '删除卡片', danger: true, action: () => requestDeleteCard(view) },
     )
   } else {
@@ -410,9 +412,7 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
 // ---------------------------------------------------------------- node context menu
 
 function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
-  const entries: MenuEntry[] = [
-    { label: '打开', action: () => openNode(payload.node.noteId) },
-  ]
+  const entries: MenuEntry[] = []
   if (allowNoteManagement.value) {
     entries.push(
       { label: '修改标题', action: () => void noteListRef.value?.startRename(payload.node) },
@@ -420,6 +420,8 @@ function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
       { label: '删除笔记', danger: true, action: () => requestDeleteNote(payload.node.noteId) },
     )
   }
+  // 「打开」入口移除后，管理被隐藏（插件筛选）时不再有条目，此时不弹空菜单
+  if (!entries.length) return
   menu.value = { open: true, x: payload.x, y: payload.y, entries }
 }
 
@@ -465,16 +467,24 @@ onBeforeUnmount(() => {
     <div class="view-body">
       <!-- The list stays put next to the page: opening a note must not take the list away,
            or getting back to a neighbour means going through the sidebar again. -->
-      <NoteList
-        ref="noteListRef"
-        :nodes="nodes.notesView"
-        :loading="nodes.loadingList"
-        :current-id="nodes.currentId"
-        :allow-note-management="allowNoteManagement"
-        @open="openNode"
-        @context="onNodeContext"
-        @remove="requestDeleteNote"
-      />
+      <div class="list-dock" :class="{ collapsed: listCollapsed }">
+        <NoteList
+          v-show="!listCollapsed"
+          ref="noteListRef"
+          :nodes="nodes.notesView"
+          :loading="nodes.loadingList"
+          :current-id="nodes.currentId"
+          :allow-note-management="allowNoteManagement"
+          @open="openNode"
+          @context="onNodeContext"
+          @remove="requestDeleteNote"
+        />
+        <button
+          class="list-rail-toggle"
+          :title="listCollapsed ? '展开笔记列表' : '收起笔记列表'"
+          @click="listCollapsed = !listCollapsed"
+        >{{ listCollapsed ? '»' : '«' }}</button>
+      </div>
 
       <template v-if="nodes.current">
         <div class="page-column">
@@ -638,6 +648,42 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   min-height: 0;
+}
+/* 列表面板泊位：默认全宽展示，收起后只剩贴左缘的窄轨 */
+.list-dock {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  min-height: 0;
+}
+.list-dock.collapsed {
+  width: 22px;
+  border-right: 1px solid var(--c-border);
+}
+.list-rail-toggle {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 6;
+  width: 18px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.list-dock.collapsed .list-rail-toggle {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.list-rail-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .page-column {
   flex: 1;

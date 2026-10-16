@@ -422,18 +422,16 @@ function onToggleCollapse(cardId: string) {
   void page.commit([{ cardId: view.card.cardId, collapsed: !view.card.collapsed }])
 }
 
-function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: boolean }) {
+function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: boolean; force?: boolean }) {
   const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (!view) return
+  // 「自动调整」由用户显式触发：先解除手动高度锁定，再照常贴合。
+  if (p.force) page.clearManualHeight(p.cardId)
   // 用户手动定过长度的卡片不再自动贴合（说了算的是用户，不是内容）。
-  if (page.isManualHeight(p.cardId) && !p.fitImage) return
+  else if (page.isManualHeight(p.cardId) && !p.fitImage) return
   const width = p.w === undefined
     ? view.card.w
     : Math.max(BLOCK_MIN_W, Math.min(p.w, maxCardWidth(size.width)))
-  if (width !== view.card.w) {
-    void page.commit([{ cardId: view.card.cardId, w: width }]).catch(() => undefined)
-    return
-  }
   // 双向贴合（长高也缩回），再按视口封顶：卡片最高长到**浏览器底缘**，
   // 再多的内容在卡片内滚动，而不是把卡片撑出好几屏、在画布上够不着。
   const rect = root.value?.getBoundingClientRect()
@@ -443,8 +441,57 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
     Math.round((window.innerHeight - screenTop - 12) / Math.max(page.viewport.zoom, 0.01)),
   )
   const next = Math.min(Math.round(p.h), available)
-  if (next === view.card.h) return
-  void page.commit([{ cardId: view.card.cardId, h: next }]).catch(() => undefined)
+  // 宽高合成一次提交：早先「宽度先落、高度跳过等观察器补偿」，图片卡会停在
+  // 「宽已变、高仍旧」的中间态；现在宽高（含卡片侧折算好的新高度）原子生效。
+  const updates: CardUpdate[] = []
+  if (width !== view.card.w) updates.push({ cardId: view.card.cardId, w: width })
+  if (next !== view.card.h) updates.push({ cardId: view.card.cardId, h: next })
+  if (updates.length) void page.commit(updates).catch(() => undefined)
+}
+
+/**
+ * 一键自动布局：按阅读顺序（y 容差分出「行」，行内自左向右）确定卡片次序，
+ * 然后优先左右并排铺满当前可视画布宽，一行放不下再换行；宽高保持原样。
+ */
+function autoLayout() {
+  const cards = page.cards.map((b) => b.card)
+  if (cards.length === 0) return
+  const ROW_TOLERANCE = 48
+  const GAP = 24
+  const byY = [...cards].sort((a, b) => a.y - b.y || a.x - b.x)
+  const order: typeof byY = []
+  let row: typeof byY = []
+  let rowTop = 0
+  for (const card of byY) {
+    if (row.length && card.y >= rowTop + ROW_TOLERANCE) {
+      order.push(...row.sort((a, b) => a.x - b.x))
+      row = []
+    }
+    if (!row.length) rowTop = card.y
+    row.push(card)
+  }
+  order.push(...row.sort((a, b) => a.x - b.x))
+
+  // 可视画布的世界宽度：行内从左往右排，超出可视范围才换行
+  const zoom = Math.max(page.viewport.zoom, 0.01)
+  const surfaceWidth = Math.max(320, Math.round(size.width / zoom) - 48)
+  const left = Math.min(...cards.map((c) => c.x))
+  const top = Math.min(...cards.map((c) => c.y))
+  let cursorX = left
+  let cursorY = top
+  let rowBottom = top
+  const updates = order.map((card) => {
+    // 行内已有卡片且这张放不下 → 换行
+    if (cursorX > left && cursorX + card.w > left + surfaceWidth) {
+      cursorX = left
+      cursorY = rowBottom + GAP
+    }
+    rowBottom = Math.max(rowBottom, cursorY + card.h)
+    const update = { cardId: card.cardId, x: cursorX, y: cursorY }
+    cursorX += card.w + GAP
+    return update
+  })
+  void page.commit(updates)
 }
 
 /** Double-click empty space: a card whose top-left corner is the clicked point. */
@@ -639,6 +686,7 @@ defineExpose({ size, beginEdit, finishEditing })
       <span class="small mono zoom-label">{{ Math.round(page.viewport.zoom * 100) }}%</span>
       <button class="btn sm" title="放大" @click="page.zoomAt({ x: size.width / 2, y: size.height / 2 }, 1.15)">＋</button>
       <button class="btn sm" title="适应全部卡片 (Ctrl+1)" @click="page.fit(size)">适应</button>
+      <button class="btn sm" title="按阅读顺序单列重排全部卡片" @click="autoLayout">自动布局</button>
       <button class="btn sm" title="重置 (Ctrl+0)" @click="page.resetView()">1:1</button>
       <button class="btn sm" :class="{ active: page.snapToGrid }" title="尺寸吸附" @click="page.toggleSnap()">吸附</button>
     </div>
