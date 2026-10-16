@@ -22,6 +22,7 @@
 - 纯重启只停启服务，不默认 clean/package/前端构建（纠正：用户要求从流程中移除构建步骤）；仅在用户要求或源码/产物变更时构建（实测 clean 0.5s / package 11s / 前端 5s）。
 
 ## 前端 UI
+- 【硬规则】输入框"关闭编辑态后卸载引发的 blur"会二次进入 commit 类函数（纠正：用户报告改标题发出两次 /api/notes/update，NoteView.vue commitTitle；同文件 Escape 曾因此误保存）：Enter 提交先置 renaming=false → v-if 卸载 → blur 带同一草稿重入，而首次请求未返回、current.title 仍旧值，"同值跳过"守卫失效。下次凡「Enter 与 blur 共用提交函数且提交会关闭编辑态」的实现，入口必须可重入防护（如 `if (!renaming) return` 或在途标记）；NoteList 的 savingNoteId 是已验证的同类守卫。
 - 【硬规则】UI 指代先定位具体组件层，不从截图或旧界面推断，指代不清先确认：页眉（`.rv-head`）、页签导航（`.rv-tabs`）、卡片元数据（`.rv-note-title`）是不同目标（曾删错层）。
 - 复习评分预览按用户明确给出的间隔实现（纠正：曾按截图误判为 1 分钟阈值）：忘记=轮询、困难=1 天、良好=2 天、简单=3 天；预览与实际评分复用同一调度规则（`SrsService.previewDue` 复制状态复用 `apply`）。
 - 计数徽标的数据须在进入页面时加载，或加载期显示占位，不能等点击页签才出现计数（曾只在页签点击时 `loadEnabledCardList()`）。

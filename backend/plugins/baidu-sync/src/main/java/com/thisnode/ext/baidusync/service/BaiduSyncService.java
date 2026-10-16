@@ -107,7 +107,7 @@ public class BaiduSyncService {
         Set<Path> changedPaths = Sets.newLinkedHashSet();
         changedPaths.add(event.url());
         Optional.ofNullable(event.previousUrl()).ifPresent(changedPaths::add);
-        log.info("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}", event.sourcePluginId(), event.operation(), event.url(), event.previousUrl());
+        log.warn("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}", event.sourcePluginId(), event.operation(), event.url(), event.previousUrl());
 
         status = new BaiduSyncStatus(true, 0, 0, 0, 0, "");
         log.info("百度网盘文件变更同步开始：{}", Joiner.on(",").join(changedPaths));
@@ -255,11 +255,11 @@ public class BaiduSyncService {
             Map<String, BaiduPanEntry> remoteFiles = listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths);
             List<FileChange> changes = planChangedFileOperations(relativePaths, localFiles, remoteFiles);
 
-            uploadChanges(accessToken, remoteRoot, changes, counters);
-            deleteRemoteChanges(accessToken, changes, counters);
+            uploadChanges(accessToken, remoteRoot, changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList(), counters);
+            deleteRemoteChanges(accessToken, changes.stream().filter(change -> change.action() == FileAction.DELETE_REMOTE).toList(), counters);
             saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, relativePaths);
             status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
-            log.warn("百度网盘文件变更同步完成：上传 {} 删除 {}（{} 个路径）", counters.uploaded, counters.deleted, relativePaths.size());
+            log.warn("百度网盘文件变更同步完成：上传 {} 删除 {}（路径{}）", counters.uploaded, counters.deleted, JSON.toJSONString(changedPaths));
         } catch (Exception e) {
             log.info("百度网盘文件变更同步异常", e);
             failSync(counters, e);

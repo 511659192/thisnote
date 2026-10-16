@@ -269,6 +269,9 @@ function cancelRename() {
 }
 
 async function commitTitle() {
+  // Enter 提交会先关闭编辑态并卸载输入框，卸载引发的 blur 会带着同一份草稿再进本函数；
+  // 此时首次保存尚未返回、current.title 仍是旧值，放行会发出第二个相同的更新请求。
+  if (!renaming.value) return
   renaming.value = false
   if (!allowNoteManagement.value) {
     titleDraft.value = nodes.current?.title ?? ''

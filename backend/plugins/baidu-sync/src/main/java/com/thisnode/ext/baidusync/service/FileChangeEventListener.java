@@ -1,5 +1,6 @@
 package com.thisnode.ext.baidusync.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.thisnode.ext.baidusync.BaiduSyncPlugin;
 import com.thisnode.plugin.api.event.FileChangeEvent;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +27,7 @@ public class FileChangeEventListener
         try {
             // 忽略本插件触发的变更，避免同步写入反复唤起自身。
             if (!BaiduSyncPlugin.PLUGIN_ID.equals(change.sourcePluginId())) {
-                log.info("监听到文件变更时间 同步开始");
+                log.info("监听到文件变更时间 同步开始 {}", JSON.toJSONString(change));
                 syncService.requestSyncAfterChange(change);
             }
         } catch (RuntimeException e) {
