@@ -26,6 +26,7 @@ public class FileChangeEventListener
         try {
             // 忽略本插件触发的变更，避免同步写入反复唤起自身。
             if (!BaiduSyncPlugin.PLUGIN_ID.equals(change.sourcePluginId())) {
+                log.info("监听到文件变更时间 同步开始");
                 syncService.requestSyncAfterChange(change);
             }
         } catch (RuntimeException e) {

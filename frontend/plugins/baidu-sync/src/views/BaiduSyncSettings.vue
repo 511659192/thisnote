@@ -2,7 +2,6 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   baiduSyncApi,
-  type BaiduSyncConnectionProbe,
   type BaiduSyncPreview,
   type BaiduSyncPreviewItem,
   type BaiduSyncSettingsView,
@@ -11,7 +10,6 @@ import {
 
 const settings = ref<BaiduSyncSettingsView | null>(null)
 const status = ref<BaiduSyncStatus | null>(null)
-const connectionResult = ref<BaiduSyncConnectionProbe | null>(null)
 const previewResult = ref<BaiduSyncPreview | null>(null)
 const appName = ref('')
 const appKey = ref('')
@@ -85,19 +83,6 @@ async function startSync() {
   error.value = ''
   try {
     status.value = await baiduSyncApi.sync()
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = ''
-  }
-}
-
-async function probeConnection() {
-  busy.value = '正在探测百度网盘连接'
-  error.value = ''
-  connectionResult.value = null
-  try {
-    connectionResult.value = await baiduSyncApi.probeConnection()
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -197,21 +182,12 @@ onBeforeUnmount(() => {
       {{ settings?.authorized ? '百度网盘已授权' : '尚未完成百度网盘授权' }}
     </p>
 
-    <div class="probe-row">
-      <button class="btn sm" :disabled="!!busy || status?.running || !settings?.authorized" @click="probeConnection">
-        探测连接
-      </button>
+    <div class="sync-row">
       <button class="btn sm" :disabled="!!busy || status?.running || !settings?.authorized" @click="previewSync">
         预览文件差异
       </button>
     </div>
     <p class="small muted security-note">差异预览只列出文件操作，不会上传、下载或删除文件。</p>
-    <p v-if="connectionResult" class="small probe-result ok">
-      连接探测成功：{{ connectionResult.remoteDirectory }}；
-      {{ connectionResult.remoteDirectoryExists
-        ? `根目录下 ${connectionResult.remoteFileCount} 个文件、${connectionResult.remoteDirectoryCount} 个子目录`
-        : '目标目录尚未创建' }}。
-    </p>
     <section v-if="previewResult" class="preview-result">
       <p v-if="!previewResult.remoteDirectoryExists" class="small muted status">
         网盘目标目录尚未创建，差异按空网盘目录计算。
@@ -261,11 +237,10 @@ onBeforeUnmount(() => {
 .field { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 10px; }
 .field i { color: var(--c-text-3); font-style: normal; }
 .security-note { margin: 0; }
-.auth-row, .sync-row, .probe-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.auth-row, .sync-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .auth-code { flex: 1; min-width: 180px; }
 .auto-sync { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .status { margin: 0; }
-.probe-result { margin: 0; }
 .preview-result { display: flex; flex-direction: column; gap: 7px; }
 .preview-list { display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow: auto; padding: 8px; border: 1px solid var(--c-border); border-radius: 6px; }
 .preview-item { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-size: 12px; }

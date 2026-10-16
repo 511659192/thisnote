@@ -22,17 +22,14 @@ public class BaiduSyncStateRepository {
     public BaiduSyncStateRepository(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot,
                                     FileHelper fileHelper) {
         this.fileHelper = fileHelper;
-        this.file = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("baidu-sync")
-                .resolve("sync-state.json");
+        this.file = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("baidu-sync").resolve("sync-state.json");
     }
 
     public synchronized BaiduSyncState get(String root,
                                            String remoteRoot) {
         try {
             BaiduSyncState state = read();
-            if (state == null || state.notesRoot() == null
-                    || !Path.of(state.notesRoot()).equals(Path.of(root))
-                    || !remoteRoot.equals(state.remoteRoot())) {
+            if (state == null || state.notesRoot() == null || !Path.of(state.notesRoot()).equals(Path.of(root)) || !remoteRoot.equals(state.remoteRoot())) {
                 return BaiduSyncState.empty(root, remoteRoot);
             }
             return state;

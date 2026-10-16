@@ -22,13 +22,6 @@ export interface BaiduSyncStatus {
   error: string
 }
 
-export interface BaiduSyncConnectionProbe {
-  remoteDirectory: string
-  remoteDirectoryExists: boolean
-  remoteFileCount: number
-  remoteDirectoryCount: number
-}
-
 export interface BaiduSyncPreviewItem {
   path: string
   action: 'upload' | 'download' | 'delete-local' | 'delete-remote' | 'overwrite-local' | 'overwrite-remote'
@@ -56,6 +49,5 @@ export const baiduSyncApi = {
     http.post<BaiduSyncSettingsView>(`${BASE}/update-auto-sync`, {}, { value }),
   sync: () => http.post<BaiduSyncStatus>(`${BASE}/sync`),
   status: () => http.get<BaiduSyncStatus>(`${BASE}/get-sync-status`),
-  probeConnection: () => http.get<BaiduSyncConnectionProbe>(`${BASE}/get-connection-probe`),
   preview: () => http.get<BaiduSyncPreview>(`${BASE}/get-diff-preview`),
 }

@@ -125,27 +125,6 @@ public class BaiduPanClient {
         return items;
     }
 
-    public boolean directoryExists(String accessToken,
-                                   String directoryPath) {
-        int slash = directoryPath.lastIndexOf('/');
-        String parent = slash <= 0 ? "/" : directoryPath.substring(0, slash);
-        List<BaiduPanEntry> items;
-        try {
-            items = listDirectory(accessToken, parent);
-        } catch (BaiduPanException e) {
-            if (e.errno() == -9) {
-                return false;
-            }
-            throw e;
-        }
-        return items.stream().filter(item -> item.path().equals(directoryPath)).findFirst().map(item -> {
-            if (!item.directory()) {
-                throw new IllegalStateException("百度网盘目标路径不是目录：" + directoryPath);
-            }
-            return true;
-        }).orElse(false);
-    }
-
     public void createDirectory(String accessToken,
                                 String path) {
         Map<String, String> form = new LinkedHashMap<>();
@@ -155,20 +134,6 @@ public class BaiduPanClient {
         form.put("block_list", "[]");
         form.put("rtype", "0");
         postJson(fileApi + "?" + query(Map.of("method", "create", "access_token", accessToken)), form);
-    }
-
-    public void delete(String accessToken,
-                       String path) {
-        try {
-            List<FileManagerFailure> failures = deleteBatch(accessToken, List.of(path));
-            if (!failures.isEmpty()) {
-                FileManagerFailure failure = failures.get(0);
-                BaiduPanException exception = failure.exception();
-                throw new IllegalStateException("删除百度网盘文件失败：" + path + "；" + exception.getMessage(), exception);
-            }
-        } catch (BaiduPanException e) {
-            throw new IllegalStateException("删除百度网盘文件失败：" + path + "；" + e.getMessage(), e);
-        }
     }
 
     public List<FileManagerFailure> deleteBatch(String accessToken,

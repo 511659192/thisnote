@@ -1,5 +1,9 @@
 package com.thisnode.ext.baidusync.service;
 
+import cn.hutool.core.collection.CollectionUtil;
+import com.alibaba.fastjson2.JSON;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Sets;
 import com.thisnode.ext.baidusync.client.BaiduOAuthClient;
 import com.thisnode.ext.baidusync.client.BaiduPanClient;
 import com.thisnode.ext.baidusync.client.BaiduPanEntry;
@@ -10,6 +14,7 @@ import com.thisnode.ext.baidusync.repository.BaiduSyncStateRepository;
 import com.thisnode.plugin.api.event.FileChangeEvent;
 import com.thisnode.plugin.api.util.FileHelper;
 import jakarta.annotation.PostConstruct;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,6 +25,8 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -34,8 +41,9 @@ public class BaiduSyncService {
     private final Path notesRoot;
     private final Path baiduSyncDirectory;
     private volatile BaiduSyncStatus status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
-    private final Object remoteDirectoryInitializationLock = new Object();
     private CompletableFuture<Void> remoteDirectoryInitialization = CompletableFuture.completedFuture(null);
+    private String remoteRoot;
+    private BaiduSyncSettings settings;
 
     // 示例：dataRoot 为 ~/.thisnode 时，笔记根目录为 ~/.thisnode/notes。
     public BaiduSyncService(BaiduSyncSettingsRepository settingsRepository,
@@ -54,7 +62,19 @@ public class BaiduSyncService {
         this.baiduSyncDirectory = root.resolve("notes").resolve("plugins").resolve("baidu-sync");
     }
 
+    @SneakyThrows
     @PostConstruct
+    public void init() {
+        BaiduSyncSettings settings = settingsRepository.get();
+        validateSettings(settings);
+        this.settings = settings;
+
+        String remoteRoot = "/apps/" + settings.appName() + "/notes";
+        this.remoteRoot = remoteRoot;
+
+        initializeRemoteDirectories();
+    }
+
     // 示例：启动时本地存在 cards/，则初始化任务在网盘创建 notes/cards。
     public void initializeRemoteDirectories() throws IOException {
         BaiduSyncSettings settings = settingsRepository.get();
@@ -68,72 +88,37 @@ public class BaiduSyncService {
                 .map(directory -> "/apps/" + settings.appName() + "/notes/" + directory)
                 .toList();
 
-        synchronized (remoteDirectoryInitializationLock) {
-            if (!remoteDirectoryInitialization.isDone()) {
-                return;
+        if (!remoteDirectoryInitialization.isDone()) {
+            return;
+        }
+        remoteDirectoryInitialization = CompletableFuture.runAsync(() -> {
+            String accessToken = oauthClient.accessToken();
+            createRemoteDirectory(accessToken, "/apps", settings.appName() + "/notes");
+            remoteDirectories.forEach(directory -> createRemoteDirectoryPath(accessToken, directory));
+        }).whenComplete((ignored, error) -> {
+            if (error != null) {
+                log.error("初始化百度网盘目录失败", error);
             }
-            remoteDirectoryInitialization = CompletableFuture.runAsync(() -> {
-                String accessToken = oauthClient.accessToken();
-                createRemoteDirectory(accessToken, "/apps", settings.appName() + "/notes");
-                remoteDirectories.forEach(directory -> createRemoteDirectoryPath(accessToken, directory));
-            }).whenComplete((ignored, error) -> {
-                if (error != null) {
-                    log.error("初始化百度网盘目录失败", error);
-                }
-            });
-        }
-    }
-
-    // 示例：文件同步开始前若目录初始化仍在执行，就等待它完成。
-    private void awaitRemoteDirectoryInitialization() {
-        CompletableFuture<Void> initialization;
-        synchronized (remoteDirectoryInitializationLock) {
-            initialization = remoteDirectoryInitialization;
-        }
-        initialization.join();
+        });
     }
 
     // 示例：重命名事件带旧、新路径时，两条路径都会进入变更同步。
     public void requestSyncAfterChange(FileChangeEvent event) {
-        Set<Path> changedPaths = new LinkedHashSet<>();
-        Optional.ofNullable(filterNotesPath(event.url(), notesRoot)).ifPresent(changedPaths::add);
-        Optional.ofNullable(filterNotesPath(event.previousUrl(), notesRoot)).ifPresent(changedPaths::add);
-        if (changedPaths.isEmpty()) {
-            return;
-        }
-        log.debug("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}", event.sourcePluginId(), event.operation(), event.url(), event.previousUrl());
+        Set<Path> changedPaths = Sets.newLinkedHashSet();
+        changedPaths.add(event.url());
+        Optional.ofNullable(event.previousUrl()).ifPresent(changedPaths::add);
+        log.info("收到文件变更事件：sourcePluginId={}, operation={}, url={}, previousUrl={}", event.sourcePluginId(), event.operation(), event.url(), event.previousUrl());
 
-        startFileChangeSync(changedPaths);
-    }
-
-    // 示例：notes/cards/a.md 返回原路径，插件数据目录或 notes 外路径返回 null。
-    private Path filterNotesPath(Path path,
-                                 Path notesRoot) {
-        if (path == null) {
-            return null;
-        }
-        if (!path.equals(notesRoot) && path.startsWith(notesRoot)) {
-            return path;
-        }
-
-        return null;
-    }
-
-    // 示例：收到 cards/a.md 变更后，仅按该路径执行文件同步。
-    private void startFileChangeSync(Set<Path> changedPaths) {
-        awaitRemoteDirectoryInitialization();
         status = new BaiduSyncStatus(true, 0, 0, 0, 0, "");
-        log.info("百度网盘文件变更同步开始：{} 个路径", changedPaths.size());
+        log.info("百度网盘文件变更同步开始：{}", Joiner.on(",").join(changedPaths));
         syncChangedFiles(changedPaths);
     }
 
     // 示例：手动或定时触发时扫描本地与网盘文件并规划全量差异。
     public BaiduSyncStatus startSync() {
-        awaitRemoteDirectoryInitialization();
-        long startedAt = System.currentTimeMillis();
         status = new BaiduSyncStatus(true, 0, 0, 0, 0, "");
         log.info("百度网盘同步开始");
-        sync(startedAt);
+        sync();
         return status;
     }
 
@@ -142,35 +127,19 @@ public class BaiduSyncService {
         return status;
     }
 
-    // 示例：notes 目录存在时返回远端文件数和目录数，不存在时返回未连接状态。
-    public BaiduSyncConnectionProbe probeConnection() {
-        ensureSyncIdle();
-        String remoteRoot = validatedRemoteRoot();
-        String accessToken = oauthClient.accessToken();
-        if (!panClient.directoryExists(accessToken, remoteRoot)) {
-            return new BaiduSyncConnectionProbe(remoteRoot, false, 0, 0);
-        }
-        List<BaiduPanEntry> items = panClient.listDirectory(accessToken, remoteRoot);
-        int files = (int) items.stream().filter(item -> !item.directory()).count();
-        int directories = (int) items.stream().filter(BaiduPanEntry::directory).count();
-        return new BaiduSyncConnectionProbe(remoteRoot, true, files, directories);
-    }
-
     // 示例：本地与网盘都含 a.md 且指纹一致时，预览将其计入一致文件数。
     public BaiduSyncPreview preview() throws IOException {
         ensureSyncIdle();
-        String remoteRoot = validatedRemoteRoot();
-        String accessToken = oauthClient.accessToken();
-        Path notesRoot = this.notesRoot;
-        LocalSnapshot localSnapshot = Files.exists(notesRoot) ? scanLocalSnapshot(notesRoot, baiduSyncDirectory) : LocalSnapshot.empty();
+        LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
         Map<String, LocalItem> local = localSnapshot.files();
 
-        boolean remoteExists = panClient.directoryExists(accessToken, remoteRoot);
-        RemoteSnapshot remote = remoteExists ? scanRemote(accessToken, remoteRoot) : new RemoteSnapshot(Map.of(), Set.of());
+        String accessToken = oauthClient.accessToken();
+        RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
+
         BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
         List<FileChange> changes = planFileChanges(local, remote, baseline);
         int consistent = countConsistentFiles(local, remote.files());
-        return createPreview(remoteExists, consistent, changes);
+        return createPreview(consistent, changes);
     }
 
     // 示例：local 与 remote 对应 a.md 的大小和秒级修改时间相同，计数加一。
@@ -194,15 +163,10 @@ public class BaiduSyncService {
     }
 
     // 示例：changes 含 2 个上传和 1 个删除时，预览汇总数并生成 3 条明细。
-    private BaiduSyncPreview createPreview(boolean remoteExists,
-                                           int consistent,
+    private BaiduSyncPreview createPreview(int consistent,
                                            List<FileChange> changes) {
         List<BaiduSyncPreviewItem> items = new ArrayList<>();
-        int uploads = 0;
-        int downloads = 0;
-        int deletions = 0;
-        int overwrites = 0;
-        int conflicts = 0;
+        int uploads = 0, downloads = 0, deletions = 0, overwrites = 0, conflicts = 0;
         for (FileChange change : changes) {
             if (change.action() == FileAction.UPLOAD) {
                 uploads++;
@@ -219,7 +183,7 @@ public class BaiduSyncService {
             }
             items.add(new BaiduSyncPreviewItem(change.relative(), change.previewAction(), change.conflict()));
         }
-        return new BaiduSyncPreview(remoteExists, uploads, downloads, deletions, overwrites, conflicts, consistent, items);
+        return new BaiduSyncPreview(true, uploads, downloads, deletions, overwrites, conflicts, consistent, items);
     }
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 300_000)
@@ -231,66 +195,34 @@ public class BaiduSyncService {
     }
 
     // 示例：比较本地 cards/a.md、网盘同名文件和基线后执行全量计划。
-    private void sync(long startedAt) {
+    private void sync() {
         SyncCounters counters = new SyncCounters();
         try {
-            String remoteRoot = validatedRemoteRoot();
             String accessToken = oauthClient.accessToken();
-            Path notesRoot = this.notesRoot;
-            Files.createDirectories(notesRoot);
 
             LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
             Map<String, LocalItem> local = localSnapshot.files();
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
             BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
+
             List<FileChange> changes = planFileChanges(local, remote, baseline);
+            log.info("change size:{}", CollectionUtil.size(changes));
+
             counters.conflicts = (int) changes.stream().filter(FileChange::conflict).count();
-            uploadChanges(accessToken, remoteRoot, changes, counters);
-            completeSyncAfterUploads(startedAt, counters, accessToken, notesRoot, remoteRoot, changes, remote, baseline);
+            uploadChanges(accessToken, remoteRoot, changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList(), counters);
+            downloadChanges(accessToken, notesRoot, changes.stream().filter(change -> change.action() == FileAction.DOWNLOAD).toList(), counters);
+            deleteLocalChanges(changes.stream().filter(change -> change.action() == FileAction.DELETE_LOCAL).toList(), counters);
+            deleteRemoteChanges(accessToken, changes.stream().filter(change -> change.action() == FileAction.DELETE_REMOTE).toList(), counters);
+
+            // 传入同步前已知的全部路径而不是仅 changes：双端一致但基线缺失的路径不会进入 changes，
+            // 只有覆盖全部路径，逐路径写基线的结果才等价于原先的全量重建。
+            Set<String> allPaths = Stream.of(localSnapshot.files.keySet(), remote.files.keySet(), baseline.files().keySet()).flatMap(Set::stream).collect(Collectors.toSet());
+            saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, allPaths);
+            status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
+            log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts);
         } catch (Exception e) {
             failSync(counters, e);
         }
-    }
-
-    // 示例：上传、下载、删除完成后重新扫描两端并保存匹配文件的基线。
-    private void completeSyncAfterUploads(long startedAt,
-                                          SyncCounters counters,
-                                          String accessToken,
-                                          Path notesRoot,
-                                          String remoteRoot,
-                                          List<FileChange> changes,
-                                          RemoteSnapshot remote,
-                                          BaiduSyncState baseline) throws IOException {
-        downloadChanges(accessToken, notesRoot, changes, counters);
-        for (FileChange change : changes) {
-            if (change.action() == FileAction.DELETE_LOCAL) {
-                log.debug("删除本地 {}", change.relative());
-                if (fileHelper.fileDeleted(change.local().file())) {
-                    counters.deleted++;
-                }
-            }
-        }
-        deleteRemoteChanges(accessToken, changes, counters);
-
-        LocalSnapshot localAfterTransfer = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
-        syncDirectories(accessToken, notesRoot, remoteRoot, localAfterTransfer.files().keySet(), localAfterTransfer.directories(), remote.directories(), baseline.directories());
-        LocalSnapshot finalLocalSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
-        Map<String, LocalItem> finalLocal = finalLocalSnapshot.files();
-        RemoteSnapshot finalRemote = scanRemote(accessToken, remoteRoot);
-        Map<String, String> finalFiles = new LinkedHashMap<>();
-        for (Map.Entry<String, LocalItem> entry : finalLocal.entrySet()) {
-            BaiduPanEntry cloud = finalRemote.files().get(entry.getKey());
-            if (cloud != null) {
-                FileFingerprint fingerprint = matchingFingerprint(entry.getValue(), cloud);
-                if (fingerprint != null) {
-                    finalFiles.put(entry.getKey(), fingerprint.toStorage());
-                }
-            }
-        }
-        Set<String> directories = new LinkedHashSet<>(finalLocalSnapshot.directories());
-        stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), finalFiles, directories));
-        status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
-        log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}（耗时 {} ms）", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, System.currentTimeMillis() - startedAt);
     }
 
     // 示例：上传 2 个文件后第 3 个失败，状态保留已完成计数并记录错误信息。
@@ -301,7 +233,7 @@ public class BaiduSyncService {
         if (failureMessage == null || failureMessage.isBlank()) {
             failureMessage = "同步失败";
         }
-        log.warn("百度网盘同步失败：{}", failureMessage, failure);
+        log.error("百度网盘同步失败：{}", failureMessage, failure);
         status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, failureMessage);
     }
 
@@ -309,11 +241,10 @@ public class BaiduSyncService {
     private void syncChangedFiles(Set<Path> changedPaths) {
         SyncCounters counters = new SyncCounters();
         try {
-            String remoteRoot = validatedRemoteRoot();
-
             Set<String> relativePaths = relativeChangedPaths(notesRoot, changedPaths);
             if (relativePaths.isEmpty()) {
                 status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
+                log.debug("relativePaths size:{}", CollectionUtil.size(relativePaths));
                 return;
             }
 
@@ -328,8 +259,9 @@ public class BaiduSyncService {
             deleteRemoteChanges(accessToken, changes, counters);
             saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, relativePaths);
             status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
-            log.info("百度网盘文件变更同步完成：上传 {} 删除 {}（{} 个路径）", counters.uploaded, counters.deleted, relativePaths.size());
+            log.warn("百度网盘文件变更同步完成：上传 {} 删除 {}（{} 个路径）", counters.uploaded, counters.deleted, relativePaths.size());
         } catch (Exception e) {
+            log.info("百度网盘文件变更同步异常", e);
             failSync(counters, e);
         }
     }
@@ -473,12 +405,11 @@ public class BaiduSyncService {
                                String remoteRoot,
                                List<FileChange> changes,
                                SyncCounters counters) {
-        List<FileChange> changesToUpload = changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList();
-        if (changesToUpload.isEmpty()) {
+        if (changes.isEmpty()) {
             return;
         }
 
-        for (FileChange change : changesToUpload) {
+        for (FileChange change : changes) {
             log.debug("上传 {}", change.relative());
             panClient.upload(accessToken, change.local().file(), remoteRoot + "/" + change.relative());
             counters.uploaded++;
@@ -488,9 +419,8 @@ public class BaiduSyncService {
     // 示例：计划中 a.md 为 DOWNLOAD 时，下载到本地 notes/a.md。
     private void downloadChanges(String accessToken,
                                  Path notesRoot,
-                                 List<FileChange> changes,
+                                 List<FileChange> changesToDownload,
                                  SyncCounters counters) {
-        List<FileChange> changesToDownload = changes.stream().filter(change -> change.action() == FileAction.DOWNLOAD).toList();
         if (changesToDownload.isEmpty()) {
             return;
         }
@@ -503,11 +433,20 @@ public class BaiduSyncService {
         }
     }
 
+    private void deleteLocalChanges(List<FileChange> changes,
+                                    SyncCounters counters) {
+        for (FileChange change : changes) {
+            log.debug("删除本地 {}", change.relative());
+            if (fileHelper.fileDeleted(change.local().file())) {
+                counters.deleted++;
+            }
+        }
+    }
+
     // 示例：远端待删路径超过 50 个时，按文件管理 API 上限分批删除。
     private void deleteRemoteChanges(String accessToken,
-                                     List<FileChange> changes,
+                                     List<FileChange> changesToDelete,
                                      SyncCounters counters) {
-        List<FileChange> changesToDelete = changes.stream().filter(change -> change.action() == FileAction.DELETE_REMOTE).toList();
         for (int start = 0; start < changesToDelete.size(); start += BaiduPanClient.FILE_MANAGER_BATCH_SIZE) {
             List<FileChange> batch = changesToDelete.subList(start, Math.min(start + BaiduPanClient.FILE_MANAGER_BATCH_SIZE, changesToDelete.size()));
             List<String> paths = batch.stream().map(change -> change.remote().path()).toList();
@@ -645,46 +584,6 @@ public class BaiduSyncService {
         return changes;
     }
 
-    // 示例：已在基线中的本地目录 cards/ 若仅在网盘消失，不在本次流程补建远端目录。
-    private void syncDirectories(String accessToken,
-                                 Path localRoot,
-                                 String remoteRoot,
-                                 Set<String> localFiles,
-                                 Set<String> localDirs,
-                                 Set<String> remoteDirsBefore,
-                                 Set<String> baseline) throws IOException {
-        // 初始化阶段负责创建远端目录；同步期间只对账已有目录并处理删除。
-        for (String directory : remoteDirsBefore) {
-            if (!localDirs.contains(directory) && !baseline.contains(directory)) {
-                Files.createDirectories(resolveLocal(localRoot, directory));
-            }
-        }
-
-        Set<String> remoteDirs = scanRemote(accessToken, remoteRoot).directories();
-        Set<String> allDirs = new LinkedHashSet<>(localDirs);
-        allDirs.addAll(remoteDirs);
-        allDirs.addAll(baseline);
-        List<String> ordered = new ArrayList<>(allDirs);
-        // 按路径长度倒序，例如 a/b 会先于 a 处理，避免先删除仍含子目录的父目录。
-        ordered.sort((left, right) -> Integer.compare(right.length(), left.length()));
-        for (String directory : ordered) {
-            boolean localExists = Files.exists(resolveLocal(localRoot, directory));
-            boolean remoteExists = remoteDirs.contains(directory);
-            if (localExists && remoteExists) {
-                continue;
-            }
-            if (!baseline.contains(directory)) {
-                if (!localExists && remoteExists) {
-                    Files.createDirectories(resolveLocal(localRoot, directory));
-                }
-            } else if (!localExists && remoteExists) {
-                panClient.delete(accessToken, remoteRoot + "/" + directory);
-            } else if (localExists && !remoteExists && !localFiles.stream().anyMatch(path -> path.equals(directory) || path.startsWith(directory + "/"))) {
-                Files.deleteIfExists(resolveLocal(localRoot, directory));
-            }
-        }
-    }
-
     // 示例：remoteRoot=/apps/app、relative=notes/cards 时依次创建两级目录。
     private void createRemoteDirectory(String accessToken,
                                        String remoteRoot,
@@ -719,13 +618,6 @@ public class BaiduSyncService {
         if (settings.appName().isBlank()) {
             throw new IllegalStateException("请先填写百度应用名称");
         }
-    }
-
-    // 示例：appName 为 my-note 时返回 /apps/my-note/notes。
-    private String validatedRemoteRoot() {
-        BaiduSyncSettings settings = settingsRepository.get();
-        validateSettings(settings);
-        return "/apps/" + settings.appName() + "/notes";
     }
 
     // 示例：同步进行中请求预览时抛出提示，避免读取中间状态。
@@ -795,10 +687,6 @@ public class BaiduSyncService {
     }
 
     private record LocalSnapshot(Map<String, LocalItem> files, Set<String> directories) {
-        // 示例：本地 notes 根目录不存在时，用空文件集和空目录集表示快照。
-        private static LocalSnapshot empty() {
-            return new LocalSnapshot(Map.of(), Set.of());
-        }
     }
 
     private record LocalItem(Path file, String relative, long modifiedAt, long size) {

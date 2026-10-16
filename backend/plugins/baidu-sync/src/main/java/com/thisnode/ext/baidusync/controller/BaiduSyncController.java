@@ -1,7 +1,6 @@
 package com.thisnode.ext.baidusync.controller;
 
 import com.thisnode.ext.baidusync.client.BaiduOAuthClient;
-import com.thisnode.ext.baidusync.model.BaiduSyncConnectionProbe;
 import com.thisnode.ext.baidusync.model.BaiduSyncPreview;
 import com.thisnode.ext.baidusync.model.BaiduSyncSettings;
 import com.thisnode.ext.baidusync.model.BaiduSyncStatus;
@@ -69,11 +68,6 @@ public class BaiduSyncController {
     @GetMapping("/get-sync-status")
     public BaiduSyncStatus syncStatus() {
         return baiduSyncService.status();
-    }
-
-    @GetMapping("/get-connection-probe")
-    public BaiduSyncConnectionProbe connectionProbe() {
-        return baiduSyncService.probeConnection();
     }
 
     @GetMapping("/get-diff-preview")
