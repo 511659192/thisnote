@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.util.IdUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.model.Notebook;
+import com.thisnode.ext.notes.model.NotebookPO;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,60 +24,60 @@ public class NotebookRepository {
     private final FileHelper fileHelper;
 
     public void initializeDefaultGroup() {
-        List<Notebook> notebooks = getAll();
-        if (getOne(notebooks, Notebook.DEFAULT_GROUP_ID) == null) {
-            notebooks.add(Notebook.newNotebook(Notebook.DEFAULT_GROUP_ID, Notebook.TYPE_NOTEBOOK, Notebook.DEFAULT_GROUP_TITLE, "📥", 0, System.currentTimeMillis()));
+        List<NotebookPO> notebooks = getAll();
+        if (getOne(notebooks, NotebookPO.DEFAULT_GROUP_ID) == null) {
+            notebooks.add(NotebookPO.newNotebook(NotebookPO.DEFAULT_GROUP_ID, NotebookPO.TYPE_NOTEBOOK, NotebookPO.DEFAULT_GROUP_TITLE, "📥", 0, System.currentTimeMillis()));
             save(notebooks);
         }
     }
 
-    private List<Notebook> getAll() {
+    private List<NotebookPO> getAll() {
         Path file = notesConfig.getNotebookDir().resolve("notebooks.json");
-        return Notebook.parse(file);
+        return NotebookPO.parse(file);
     }
 
-    private void save(List<Notebook> notebooks) {
+    private void save(List<NotebookPO> notebooks) {
         Path file = notesConfig.getNotebookDir().resolve("notebooks.json");
         fileHelper.fileWritten(file, notebooks);
     }
 
-    public List<Notebook> getAll(String type) {
-        String wantedType = type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type;
+    public List<NotebookPO> getAll(String type) {
+        String wantedType = type == null || type.isBlank() ? NotebookPO.TYPE_NOTEBOOK : type;
         return getAll().stream()
                        .filter(notebook -> notebook.getType().equals(wantedType))
-                       .sorted(Comparator.comparingInt(Notebook::getSortOrder).thenComparing(Notebook::getTitle, String.CASE_INSENSITIVE_ORDER))
+                       .sorted(Comparator.comparingInt(NotebookPO::getSortOrder).thenComparing(NotebookPO::getTitle, String.CASE_INSENSITIVE_ORDER))
                        .toList();
     }
 
-    public Notebook getOne(String id) {
+    public NotebookPO getOne(String id) {
         return getOne(getAll(), id);
     }
 
     public String create(String title,
                          String icon,
                          String type) {
-        List<Notebook> notebooks = getAll();
+        List<NotebookPO> notebooks = getAll();
         String id = IdUtil.randomUUID();
         long now = System.currentTimeMillis();
         int max = 0;
-        for (Notebook notebook : notebooks) {
+        for (NotebookPO notebook : notebooks) {
             max = Math.max(max, notebook.getSortOrder());
         }
-        notebooks.add(Notebook.newNotebook(id, type == null || type.isBlank() ? Notebook.TYPE_NOTEBOOK : type, title, icon, max + 1, now));
+        notebooks.add(NotebookPO.newNotebook(id, type == null || type.isBlank() ? NotebookPO.TYPE_NOTEBOOK : type, title, icon, max + 1, now));
         save(notebooks);
         return id;
     }
 
-    public Notebook update(String id,
+    public NotebookPO update(String id,
                            String title,
                            String icon,
                            Integer sortOrder) {
-        List<Notebook> notebooks = getAll();
-        Notebook current = getOne(notebooks, id);
+        List<NotebookPO> notebooks = getAll();
+        NotebookPO current = getOne(notebooks, id);
         if (current == null) {
             throw new IllegalArgumentException("分组不存在：" + id);
         }
-        Notebook updated = new Notebook(current.getV(),
+        NotebookPO updated = new NotebookPO(current.getV(),
                                         id,
                                         current.getType(),
                                         title == null || title.isBlank() ? current.getTitle() : title.trim(),
@@ -99,17 +99,17 @@ public class NotebookRepository {
         if (id == null) {
             return;
         }
-        List<Notebook> notebooks = getAll();
+        List<NotebookPO> notebooks = getAll();
         notebooks.removeIf(notebook -> id.equals(notebook.getId()));
         save(notebooks);
     }
 
-    private static Notebook getOne(List<Notebook> notebooks,
+    private static NotebookPO getOne(List<NotebookPO> notebooks,
                                    String id) {
         if (id == null) {
             return null;
         }
-        for (Notebook notebook : notebooks) {
+        for (NotebookPO notebook : notebooks) {
             if (id.equals(notebook.getId())) {
                 return notebook;
             }

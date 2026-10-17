@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.repository;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.model.NoteMeta;
+import com.thisnode.ext.notes.model.NoteMetaPO;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -32,11 +32,11 @@ public class NoteRepository {
     private final IdFileIndex fileIndex;
     private final FileHelper fileHelper;
 
-    public String saveNew(NoteMeta note) {
+    public String saveNew(NoteMetaPO note) {
         String noteId = IdUtil.randomUUID();
         String fileName = "tmp-" + noteId + ".json";
         Path file = notesConfig.getNoteMetaDir().resolve(fileName);
-        writeJson(file, note.setNoteId(noteId));
+        fileHelper.fileWritten(file, note.setNoteId(noteId));
         fileIndex.addNote(noteId, fileName);
         return noteId;
     }
@@ -45,7 +45,7 @@ public class NoteRepository {
      * Rename only the physical metadata file; the noteMeta ID remains stable.
      */
     @SneakyThrows
-    public void onNewTitle(NoteMeta noteMeta,
+    public void onNewTitle(NoteMetaPO noteMeta,
                            String newTitle) {
         String noteId = noteMeta.getNoteId();
         String oldFileName = fileIndex.noteFileName(noteId);
@@ -56,23 +56,23 @@ public class NoteRepository {
         Path oldFile = notesConfig.getNoteMetaDir().resolve(oldFileName);
         Path newFile = notesConfig.getNoteMetaDir().resolve(newFileName);
         fileHelper.fileMoved(oldFile, newFile);
-        writeJson(newFile, noteMeta);
+        fileHelper.fileWritten(newFile, noteMeta);
         fileIndex.updateNoteFileName(noteId, newFileName);
     }
 
-    public void save(NoteMeta noteMeta) {
+    public void save(NoteMetaPO noteMeta) {
         if (noteMeta == null || StrUtil.isBlank(noteMeta.getNoteId())) return;
         rewrite(noteMeta);
     }
 
     /** Rewrite note metadata and refresh its filesystem modification time. */
-    public void rewrite(NoteMeta noteMeta) {
+    public void rewrite(NoteMetaPO noteMeta) {
         if (noteMeta == null || StrUtil.isBlank(noteMeta.getNoteId())) return;
         String fileName = fileIndex.noteFileName(noteMeta.getNoteId());
         if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteMeta.getNoteId());
 
         Path file = notesConfig.getNoteMetaDir().resolve(fileName);
-        writeJson(file, noteMeta);
+        fileHelper.fileWritten(file, noteMeta);
     }
 
     /**
@@ -87,7 +87,7 @@ public class NoteRepository {
     }
 
     @SneakyThrows
-    public List<NoteMeta> getAll() {
+    public List<NoteMetaPO> getAll() {
         Path metaDir = notesConfig.getNoteMetaDir();
         List<Path> files = new ArrayList<>();
         Map<Path, FileTime> modifiedTimes = new HashMap<>();
@@ -106,9 +106,9 @@ public class NoteRepository {
         }
         files.sort(Comparator.comparing(modifiedTimes::get).reversed());
 
-        List<NoteMeta> notes = new ArrayList<>();
+        List<NoteMetaPO> notes = new ArrayList<>();
         for (Path file : files) {
-            NoteMeta note = NoteMeta.parse(file);
+            NoteMetaPO note = NoteMetaPO.parse(file);
             if (note != null) notes.add(note);
         }
         return notes;
@@ -117,14 +117,10 @@ public class NoteRepository {
     /**
      * Read one note's metadata through the persistent ID-to-filename index.
      */
-    public NoteMeta getOne(String noteId) {
+    public NoteMetaPO getOne(String noteId) {
         if (StrUtil.isBlank(noteId)) return null;
         String fileName = fileIndex.noteFileName(noteId);
-        return fileName == null ? null : NoteMeta.parse(notesConfig.getNoteMetaDir().resolve(fileName));
-    }
-
-    private void writeJson(Path file, Object value) {
-        fileHelper.fileWritten(file, value);
+        return fileName == null ? null : NoteMetaPO.parse(notesConfig.getNoteMetaDir().resolve(fileName));
     }
 
 }

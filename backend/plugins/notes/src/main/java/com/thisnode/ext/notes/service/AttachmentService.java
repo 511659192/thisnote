@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.model.Card;
+import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
@@ -90,7 +90,7 @@ public class AttachmentService {
         if (candidates == null || candidates.isEmpty()) return;
 
         Set<String> stillReferenced = new HashSet<>();
-        for (Card card : cardRepository.getAllIndexed()) {
+        for (CardPO card : cardRepository.getAllIndexed()) {
             stillReferenced.addAll(referencedFileNames(card.getContent()));
         }
 

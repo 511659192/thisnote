@@ -2,7 +2,9 @@ package com.thisnode.ext.notes;
 
 import com.thisnode.ext.notes.repository.NotebookRepository;
 import com.thisnode.ext.notes.service.AttachmentService;
-import com.thisnode.ext.notes.service.CardAttachmentCleanupListener;
+import com.thisnode.ext.notes.service.listener.CardAttachmentCleanupListener;
+import com.thisnode.ext.notes.service.listener.CardCreateRequestListener;
+import com.thisnode.ext.notes.service.listener.CardQueryEventListener;
 import com.thisnode.ext.notes.service.CardService;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.service.NotebookService;
@@ -19,7 +21,7 @@ import org.pf4j.PluginWrapper;
  * 管理、共享 DataSource 与界面产物托管，不带业务。业务领域以插件形态交付：本插件在自己的
  * Spring 子容器里运行，控制器由 SBP 挂进主 MVC（外部路径不变，仍是 {@code /api/**}）。
  *
- * <p>运行期与兄弟插件没有业务依赖：favorite / memory-cycle 仍各自管理状态与界面；
+ * <p>favorite / memory-cycle 仍各自管理状态与界面；card-importer 通过 plugin-api 事件查询卡片。
  * 笔记与卡片 ID 独立于物理文件名，标题改名只更新文件索引。
  *
  * <p><b>本插件不允许停用/在线重载</b>（覆写 {@code undeactivatable()}）：管理面直接拒绝
@@ -30,6 +32,8 @@ public class NotesPlugin extends SpringBootPlugin {
     public static final String PLUGIN_ID = "notes";
 
     private CardAttachmentCleanupListener attachmentCleanupListener;
+    private CardCreateRequestListener cardCreateRequestListener;
+    private CardQueryEventListener cardQueryEventListener;
 
     public NotesPlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -57,7 +61,11 @@ public class NotesPlugin extends SpringBootPlugin {
         ctx.getBean(NoteService.class).setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(NotebookService.class).setMainEventPublisher(getMainApplicationContext());
         attachmentCleanupListener = new CardAttachmentCleanupListener(ctx.getBean(AttachmentService.class));
+        cardCreateRequestListener = new CardCreateRequestListener(ctx.getBean(CardService.class), ctx.getBean(NoteService.class));
+        cardQueryEventListener = new CardQueryEventListener(ctx.getBean(CardService.class));
         getMainApplicationContext().addApplicationListener(attachmentCleanupListener);
+        getMainApplicationContext().addApplicationListener(cardCreateRequestListener);
+        getMainApplicationContext().addApplicationListener(cardQueryEventListener);
     }
 
     @Override
@@ -65,6 +73,14 @@ public class NotesPlugin extends SpringBootPlugin {
         if (attachmentCleanupListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentCleanupListener);
             attachmentCleanupListener = null;
+        }
+        if (cardCreateRequestListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardCreateRequestListener);
+            cardCreateRequestListener = null;
+        }
+        if (cardQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardQueryEventListener);
+            cardQueryEventListener = null;
         }
         super.stop();
     }

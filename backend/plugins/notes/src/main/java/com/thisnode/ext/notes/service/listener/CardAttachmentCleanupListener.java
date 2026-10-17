@@ -1,5 +1,6 @@
-package com.thisnode.ext.notes.service;
+package com.thisnode.ext.notes.service.listener;
 
+import com.thisnode.ext.notes.service.AttachmentService;
 import com.thisnode.plugin.api.event.CardChangedEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;

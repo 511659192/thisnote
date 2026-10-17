@@ -127,7 +127,6 @@ try {
 
   for (let index = 1; index <= NOTE_COUNT; index += 1) {
     const note = await request('POST', '/api/notes/create', {
-      type: 'note',
       notebookId: 'grp-default',
     })
 

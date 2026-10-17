@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.model.request;
 
 /** Note-list query parameters, normalized at the API boundary. */
-public record NoteListQuery(String notebookId, String type, String text, int limit, int offset) {
+public record NoteListQuery(String notebookId, String text, int limit, int offset) {
 
     public NoteListQuery {
         limit = Math.max(1, Math.min(limit <= 0 ? 500 : limit, 2000));
@@ -9,6 +9,6 @@ public record NoteListQuery(String notebookId, String type, String text, int lim
     }
 
     public static NoteListQuery defaults() {
-        return new NoteListQuery(null, null, null, 500, 0);
+        return new NoteListQuery(null, null, 500, 0);
     }
 }

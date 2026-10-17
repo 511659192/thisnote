@@ -14,8 +14,6 @@ export interface Notebook {
   updatedAt: number
 }
 
-export type NoteType = 'note' | 'daily' | 'template'
-
 /** Card metadata returned by the backend inside the Card domain object. */
 export interface CardMeta {
   v: number
@@ -58,7 +56,6 @@ export interface NoteMeta {
   v: number
   noteId: string
   title: string
-  type: NoteType
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
   notebookId?: string | null
   /** 卡片 ID 清单（顺序即阅读顺序）。 */

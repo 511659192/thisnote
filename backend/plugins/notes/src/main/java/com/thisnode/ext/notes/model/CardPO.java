@@ -1,6 +1,7 @@
 package com.thisnode.ext.notes.model;
 
 import com.alibaba.fastjson2.JSON;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -19,13 +20,29 @@ import java.util.Map;
 @Setter
 @AllArgsConstructor
 @Accessors(chain = true)
-public class Card {
+public class CardPO {
 
     public static final String META_PREFIX = "<!-- thisnode:meta ";
     public static final String META_SUFFIX = " -->";
 
     private CardMeta meta;
     private String content;
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private transient String sourceFileName;
+
+    public CardPO(CardMeta meta, String content) {
+        this(meta, content, null);
+    }
+
+    public String sourceFileName() {
+        return sourceFileName;
+    }
+
+    public CardPO withSourceFileName(String sourceFileName) {
+        this.sourceFileName = sourceFileName;
+        return this;
+    }
 
     public static CardMeta parseMeta(Path file) throws IOException {
         try (var reader = new BufferedReader(
@@ -35,11 +52,11 @@ public class Card {
         }
     }
 
-    public static Card parse(Path file) throws IOException {
+    public static CardPO parse(Path file) throws IOException {
         String raw = Files.readString(file, StandardCharsets.UTF_8);
         CardMeta cardMeta = meta(raw);
-        String content = content(raw);
-        return new Card(cardMeta, content);
+        String cardContent = cardMeta == null ? raw : content(raw);
+        return new CardPO(cardMeta, cardContent).withSourceFileName(file.getFileName().toString());
     }
 
     private static String headerLine(String fileContent) {

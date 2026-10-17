@@ -21,7 +21,7 @@ for (let i = 0; i < 2000; i++) {
     fs.writeFileSync(path.join(CARDS, file), '<!-- thisnode:meta ' + JSON.stringify(meta) + ' -->\n' + body(i, c))
     cardPath.push(file)
   }
-  fs.writeFileSync(path.join(META, noteId + '.json'), JSON.stringify({ v: 2, id: noteId, title: '笔记 ' + i, type: 'note', notebookId: 'grp-default', cardPath, createdAt: now, updatedAt: now }))
+  fs.writeFileSync(path.join(META, noteId + '.json'), JSON.stringify({ v: 2, id: noteId, title: '笔记 ' + i, notebookId: 'grp-default', cardPath, createdAt: now, updatedAt: now }))
 }
 fs.writeFileSync(path.join(META, 'notebooks.json'), JSON.stringify({ v: 1, notebooks: [{ v: 1, id: 'grp-default', type: 'notebook', title: '收集箱', parentId: null, icon: null, sortOrder: 0, createdAt: now, updatedAt: now }] }))
 let bytes = 0

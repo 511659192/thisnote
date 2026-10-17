@@ -59,13 +59,13 @@ public class PluginStateService {
      * 让它在本次运行里立即生效；随后才通知插件本体。
      *
      * @throws ConflictException 拒绝停用核心插件（notes）——
-     *         它承载整个应用的笔记领域，停用等于把主体下线；管理页对它不展示停用按钮，
-     *         这里是最后一道闸。
+     *                           它承载整个应用的笔记领域，停用等于把主体下线；管理页对它不展示停用按钮，
+     *                           这里是最后一道闸。
      */
-    public void setActive(String pluginId, boolean active) {
+    public void setActive(String pluginId,
+                          boolean active) {
         if (!active && registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
-            throw new ConflictException(
-                    "「" + registry.title(pluginId) + "」承载主体业务，不允许停用");
+            throw new ConflictException("「" + registry.title(pluginId) + "」承载主体业务，不允许停用");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
         if (manager != null && manager.getPlugin(pluginId) != null) {
@@ -92,10 +92,9 @@ public class PluginStateService {
      */
     public void reload(String pluginId) {
         if (registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
-            // 不可停用的插件是全部业务端点的宿主：重载会重建它的 Spring 子容器，期间路由与索引短暂缺失。
-            // （早先的理由是"兄弟插件共享它导入的门面"，那层共享已经不存在了。）拒绝并提示重启。
-            throw new ConflictException(
-                    "「" + registry.title(pluginId) + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
+            // 不可停用的插件承载全部业务端点，并向 card-importer 提供 Notes 元数据接口；重载会短暂移除这些能力。
+            // 拒绝并提示重启。
+            throw new ConflictException("「" + registry.title(pluginId) + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
         if (manager instanceof org.laxture.sbp.SpringBootPluginManager sbp) {
@@ -103,8 +102,7 @@ public class PluginStateService {
             if (state == null) {
                 // SBP 在"重新装载这个插件失败"时返回 null（例如新 jar 的描述符坏掉）。
                 // 抛出去让 API 给出 409 与原因，而不是假装成功。
-                throw new IllegalStateException("重载插件「" + pluginId + "」失败：新的插件包无法装载，"
-                        + "请检查它的 plugin.properties 与 plugins/ 目录（旧版本可能已被卸载）");
+                throw new IllegalStateException("重载插件「" + pluginId + "」失败：新的插件包无法装载，" + "请检查它的 plugin.properties 与 plugins/ 目录（旧版本可能已被卸载）");
             }
             log.info("插件 {} 已重载，状态 {}", pluginId, state);
         } else {
@@ -127,8 +125,7 @@ public class PluginStateService {
         }
         org.pf4j.PluginWrapper wrapper = manager.getPlugin(pluginId);
         // 描述符查找器在 PF4J 里是 protected，SBP 的管理器把它放开了 —— 这里用 SBP 的类型。
-        if (wrapper == null || wrapper.getPluginPath() == null
-                || !(manager instanceof org.laxture.sbp.SpringBootPluginManager sbp)) {
+        if (wrapper == null || wrapper.getPluginPath() == null || !(manager instanceof org.laxture.sbp.SpringBootPluginManager sbp)) {
             return null;
         }
         try {
@@ -170,7 +167,9 @@ public class PluginStateService {
      * {@code stop()} 生命周期已经通知过它了，所以这里直接跳过，不让管理请求失败。
      * 启动时同理：管理上停用的插件根本没起容器，不该被通知（否则启动就炸）。
      */
-    public void notifyGlobalState(String pluginId, boolean active) {        if (!active && isExternal(pluginId)) {
+    public void notifyGlobalState(String pluginId,
+                                  boolean active) {
+        if (!active && isExternal(pluginId)) {
             return;
         }
         try {
@@ -180,7 +179,9 @@ public class PluginStateService {
         }
     }
 
-    /** 该 id 是不是 PF4J/SBP 装载的外置插件（内置插件没有自己的类加载器）。 */
+    /**
+     * 该 id 是不是 PF4J/SBP 装载的外置插件（内置插件没有自己的类加载器）。
+     */
     private boolean isExternal(String pluginId) {
         return registry.pluginClassLoader(pluginId) != null;
     }

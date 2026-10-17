@@ -3,7 +3,7 @@ package com.thisnode.plugin.api.lifecycle;
 import org.pf4j.ExtensionPoint;
 
 /**
- * 插件向平台贡献的全部能力（**唯一的扩展点**）。
+ * 插件向平台提供的管理页与生命周期信息。领域能力可以通过 plugin-api 中的专用扩展点提供。
  *
  * <p>本平台的插件契约几乎全是 PF4J 原生机制：插件是 {@code plugins/*.jar}，身份/版本/provider
  * 来自 {@code plugin.properties}（PF4J 的 {@code PropertiesPluginDescriptorFinder}），契约版本用
@@ -24,7 +24,7 @@ public interface PluginRegister extends ExtensionPoint {
      *
      * <p>修改公开插件契约时递增它。
      */
-    String CONTRACT_VERSION = "5.0.0";
+    String CONTRACT_VERSION = "5.1.0";
 
     /** 管理页上的显示名。 */
     String title();

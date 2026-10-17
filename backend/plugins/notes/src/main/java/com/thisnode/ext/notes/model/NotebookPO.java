@@ -26,7 +26,7 @@ import java.util.List;
 @NoArgsConstructor
 @Accessors(chain = true)
 @Slf4j
-public class Notebook {
+public class NotebookPO {
 
     public static final int SCHEMA = 1;
     public static final String TYPE_NOTEBOOK = "notebook";
@@ -42,7 +42,7 @@ public class Notebook {
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
 
-    public Notebook(int v,
+    public NotebookPO(int v,
                     String id,
                     String type,
                     String title,
@@ -73,26 +73,26 @@ public class Notebook {
         }
     }
 
-    public static Notebook newNotebook(String id,
+    public static NotebookPO newNotebook(String id,
                                        String type,
                                        String title,
                                        String icon,
                                        int sortOrder,
                                        long now) {
-        return new Notebook(SCHEMA, id, type, title, icon, sortOrder, now, now);
+        return new NotebookPO(SCHEMA, id, type, title, icon, sortOrder, now, now);
     }
 
-    public static List<Notebook> parse(Path file) {
+    public static List<NotebookPO> parse(Path file) {
         try {
             String json = Files.readString(file, StandardCharsets.UTF_8);
             if (json.isBlank()) {
                 return new ArrayList<>();
             }
-            List<Notebook> loaded = JSON.parseArray(json, Notebook.class);
+            List<NotebookPO> loaded = JSON.parseArray(json, NotebookPO.class);
             if (loaded == null) {
                 return new ArrayList<>();
             }
-            for (Notebook notebook : loaded) {
+            for (NotebookPO notebook : loaded) {
                 if (notebook != null) {
                     notebook.normalize();
                 }

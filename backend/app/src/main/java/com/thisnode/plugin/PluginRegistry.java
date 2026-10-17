@@ -44,7 +44,9 @@ public class PluginRegistry {
 
     // ------------------------------------------------------------------ PF4J 直通
 
-    /** 当前装载且满足契约版本的插件，按 id 索引；每次调用都实时查询。 */
+    /**
+     * 当前装载且满足契约版本的插件，按 id 索引；每次调用都实时查询。
+     */
     private Map<String, PluginWrapper> loaded() {
         Map<String, PluginWrapper> out = new LinkedHashMap<>();
         PluginManager manager = pluginManager.getIfAvailable();
@@ -73,21 +75,23 @@ public class PluginRegistry {
             return true;
         }
         PluginManager manager = pluginManager.getIfAvailable();
-        boolean ok = manager != null
-                && manager.getVersionManager().checkVersionConstraint(PluginRegister.CONTRACT_VERSION, requires);
+        boolean ok = manager != null && manager.getVersionManager().checkVersionConstraint(PluginRegister.CONTRACT_VERSION, requires);
         if (!ok) {
-            log.warn("插件 {} 要求 plugin.requires={}，本核心契约版本是 {} —— 已跳过",
-                    wrapper.getDescriptor().getPluginId(), requires, PluginRegister.CONTRACT_VERSION);
+            log.warn("插件 {} 要求 plugin.requires={}，本核心契约版本是 {} —— 已跳过", wrapper.getDescriptor().getPluginId(), requires, PluginRegister.CONTRACT_VERSION);
         }
         return ok;
     }
 
-    /** 全部插件（PF4J 的 wrapper）；管理面与启动报告从这里取。 */
+    /**
+     * 全部插件（PF4J 的 wrapper）；管理面与启动报告从这里取。
+     */
     public List<PluginWrapper> all() {
         return List.copyOf(loaded().values());
     }
 
-    /** PF4J 原生描述符（身份/版本/说明/provider/requires）。 */
+    /**
+     * PF4J 原生描述符（身份/版本/说明/provider/requires）。
+     */
     public PluginDescriptor descriptor(String pluginId) {
         return get(pluginId).getDescriptor();
     }
@@ -107,7 +111,9 @@ public class PluginRegistry {
         return loaded().containsKey(pluginId);
     }
 
-    /** 诊断用：已装载插件的 id（顺序稳定）。 */
+    /**
+     * 诊断用：已装载插件的 id（顺序稳定）。
+     */
     public List<String> ids() {
         return new ArrayList<>(loaded().keySet());
     }
@@ -131,7 +137,7 @@ public class PluginRegistry {
     /**
      * 取插件的 {@link PluginRegister} 扩展（PF4J 原生 {@code getExtensions(type, pluginId)}）。
      *
-     * <p>它承载插件的全部能力；插件没提供时返回 {@code null}，各访问器按默认语义回落。
+     * <p>它承载插件的管理页与生命周期信息；插件没提供时返回 {@code null}，各访问器按默认语义回落。
      */
     private PluginRegister register(String pluginId) {
         PluginManager manager = pluginManager.getIfAvailable();
@@ -142,7 +148,9 @@ public class PluginRegistry {
         return found.isEmpty() ? null : found.get(0);
     }
 
-    /** 管理页显示名：来自 {@link PluginRegister}；没有该扩展时回落为插件 id。 */
+    /**
+     * 管理页显示名：来自 {@link PluginRegister}；没有该扩展时回落为插件 id。
+     */
     public String title(String pluginId) {
         PluginRegister register = register(pluginId);
         return register == null ? pluginId : register.title();
@@ -161,20 +169,27 @@ public class PluginRegistry {
         return fromDescriptor == null ? "" : fromDescriptor;
     }
 
-    /** 是否不可停用/不可在线重载（承载主体业务领域的插件）。 */
+    /**
+     * 是否不可停用/不可在线重载（承载主体业务领域的插件）。
+     */
     public boolean undeactivatable(String pluginId) {
         PluginRegister register = register(pluginId);
         return register != null && register.undeactivatable();
     }
 
-    /** 插件自报健康；没提供扩展即视为「运行正常」。 */
+    /**
+     * 插件自报健康；没提供扩展即视为「运行正常」。
+     */
     public PluginHealth health(String pluginId) {
         PluginRegister register = register(pluginId);
         return register == null ? PluginHealth.ok("运行正常") : register.health();
     }
 
-    /** 通知插件的全局启停（尽力而为：没有提供扩展就跳过）。 */
-    public void globalStateChanged(String pluginId, boolean enabled) {
+    /**
+     * 通知插件的全局启停（尽力而为：没有提供扩展就跳过）。
+     */
+    public void globalStateChanged(String pluginId,
+                                   boolean enabled) {
         PluginRegister register = register(pluginId);
         if (register != null) {
             register.onGlobalStateChanged(enabled);

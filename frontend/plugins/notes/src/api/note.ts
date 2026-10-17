@@ -3,7 +3,6 @@ import type { NoteMeta } from './types'
 
 export interface NoteQuery {
   notebookId?: string
-  type?: string
   text?: string
   limit?: number
   offset?: number
@@ -14,7 +13,6 @@ export const noteApi = {
   get: (noteId: string) => http.get<NoteMeta>('/api/notes/get-detail', { noteId }),
 
   create: (payload: {
-    type?: string
     notebookId?: string
   }) => http.post<NoteMeta>('/api/notes/create', payload),
 

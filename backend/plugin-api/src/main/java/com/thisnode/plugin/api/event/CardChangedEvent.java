@@ -1,5 +1,7 @@
 package com.thisnode.plugin.api.event;
 
+import com.thisnode.plugin.api.notes.dto.CardDTO;
+
 import java.util.Set;
 
 /**
@@ -18,16 +20,37 @@ import java.util.Set;
  * （{@code publishEvent(Object)} ↔ {@code ApplicationListener<PayloadApplicationEvent<CardChangedEvent>>}），
  * 不必让事件类继承 {@code ApplicationEvent}。
  */
-public record CardChangedEvent(String cardId, Kind kind, Set<String> removedAttachmentFileNames) {
+public record CardChangedEvent(String cardId,
+                               Kind kind,
+                               Set<String> removedAttachmentFileNames,
+                               CardCreateRequest createRequest) {
 
     public CardChangedEvent {
         removedAttachmentFileNames = removedAttachmentFileNames == null
                 ? Set.of()
                 : Set.copyOf(removedAttachmentFileNames);
+        if (kind == Kind.REQUEST && createRequest == null) {
+            throw new IllegalArgumentException("REQUEST 事件必须包含卡片创建申请载荷");
+        }
+        if (kind != Kind.REQUEST && createRequest != null) {
+            throw new IllegalArgumentException("非 REQUEST 事件不能包含卡片创建申请载荷");
+        }
     }
 
     public CardChangedEvent(String cardId, Kind kind) {
-        this(cardId, kind, Set.of());
+        this(cardId, kind, Set.of(), null);
+    }
+
+    public CardChangedEvent(String cardId, Kind kind, Set<String> removedAttachmentFileNames) {
+        this(cardId, kind, removedAttachmentFileNames, null);
+    }
+
+    public static CardChangedEvent requestCardCreate(CardDTO card,
+                                                     String noteTitle,
+                                                     String notebookId) {
+        String cardId = card.meta() == null ? null : card.meta().cardId();
+        return new CardChangedEvent(cardId, Kind.REQUEST, Set.of(),
+                new CardCreateRequest(card, noteTitle, notebookId));
     }
 
     public enum Kind {
@@ -36,6 +59,13 @@ public record CardChangedEvent(String cardId, Kind kind, Set<String> removedAtta
         /** 卡片内容或元数据变了。 */
         UPDATED,
         /** 卡片没了（用户删除，或外部把 md 文件删掉）。 */
-        DELETED
+        DELETED,
+        /** 导入插件申请 Notes 创建卡片。 */
+        REQUEST
+    }
+
+    public record CardCreateRequest(CardDTO card,
+                                    String noteTitle,
+                                    String notebookId) {
     }
 }

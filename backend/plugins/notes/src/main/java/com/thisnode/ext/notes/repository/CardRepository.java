@@ -1,19 +1,20 @@
 package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.model.Card;
-import com.thisnode.ext.notes.model.Card.CardMeta;
+import com.thisnode.ext.notes.model.CardPO;
+import com.thisnode.ext.notes.model.CardPO.CardMeta;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,30 +30,49 @@ public class CardRepository {
     private final FileHelper fileHelper;
 
     @SneakyThrows
-    public Card getOne(String cardId) {
+    public CardPO getOne(String cardId) {
         if (cardId == null || cardId.isBlank()) return null;
         String fileName = fileIndex.cardFileName(cardId);
         if (fileName == null) return null;
         Path file = notesConfig.getCardsDir().resolve(fileName);
         try {
-            return Card.parse(file);
+            return CardPO.parse(file);
         } catch (NoSuchFileException e) {
             return null;
         }
     }
 
-    public List<Card> getAll(List<String> cardIds) {
+    public List<CardPO> getAll(List<String> cardIds) {
         if (cardIds == null || cardIds.isEmpty()) return List.of();
-        List<Card> cards = new ArrayList<>(cardIds.size());
+        List<CardPO> cards = new ArrayList<>(cardIds.size());
         for (String cardId : cardIds) {
-            Card card = getOne(cardId);
+            CardPO card = getOne(cardId);
             if (card != null && card.getMeta() != null) cards.add(card);
         }
         return cards;
     }
 
-    public List<Card> getAllIndexed() {
+    public List<CardPO> getAllIndexed() {
         return getAll(new ArrayList<>(fileIndex.cardFiles().keySet()));
+    }
+
+    public List<CardPO> listAllFiles() throws IOException {
+        Path cardsDir = notesConfig.getCardsDir();
+        if (!Files.isDirectory(cardsDir)) return List.of();
+
+        List<Path> paths = new ArrayList<>();
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(cardsDir, "*.md")) {
+            for (Path file : files) {
+                if (Files.isRegularFile(file)) paths.add(file);
+            }
+        }
+        paths.sort(Comparator.comparing((Path path) -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER).thenComparing(path -> path.getFileName().toString()));
+
+        List<CardPO> cards = new ArrayList<>(paths.size());
+        for (Path path : paths) {
+            cards.add(CardPO.parse(path));
+        }
+        return List.copyOf(cards);
     }
 
     /**
@@ -68,7 +88,7 @@ public class CardRepository {
         Path dir = notesConfig.getCardsDir();
         Files.createDirectories(dir);
         String prefix = title == null || title.isBlank() ? "tmp-" + cardId : title;
-        String cardContent = Card.compose(meta, content);
+        String cardContent = CardPO.compose(meta, content);
         for (int number = 1; ; number++) {
             String suffix = "_" + number;
             String fileName = prefix + suffix + ".md";
@@ -78,6 +98,38 @@ public class CardRepository {
             fileIndex.addCard(cardId, fileName);
             return cardId;
         }
+    }
+
+    public void saveWithMetadata(String fileName,
+                                 String cardId,
+                                 String markdown) {
+        if (fileName == null || fileName.isBlank() || !fileName.endsWith(".md")) {
+            throw new IllegalArgumentException("卡片文件名必须是 Markdown 文件名：" + fileName);
+        }
+        if (cardId == null || cardId.isBlank()) {
+            throw new IllegalArgumentException("卡片 ID 不能为空");
+        }
+        Path dir = notesConfig.getCardsDir().toAbsolutePath().normalize();
+        Path file = dir.resolve(fileName).normalize();
+        if (!fileName.equals(file.getFileName().toString()) || !dir.equals(file.getParent())) {
+            throw new IllegalArgumentException("卡片文件名必须是 cards 目录下的文件名：" + fileName);
+        }
+        fileHelper.fileWritten(file, markdown);
+        fileIndex.addCard(cardId, fileName);
+    }
+
+    public void indexExisting(String cardId,
+                              String fileName) {
+        if (fileName == null || !fileName.endsWith(".md") || !fileName.equals(Path.of(fileName).getFileName().toString())) {
+            throw new IllegalArgumentException("卡片文件名必须是 cards 目录下的 Markdown 文件名：" + fileName);
+        }
+        if (cardId == null || cardId.isBlank()) {
+            throw new IllegalArgumentException("卡片 ID 不能为空");
+        }
+        if (!Files.isRegularFile(notesConfig.getCardsDir().resolve(fileName))) {
+            throw new IllegalArgumentException("卡片文件不存在：" + fileName);
+        }
+        fileIndex.addCard(cardId, fileName);
     }
 
     @SneakyThrows
@@ -115,13 +167,13 @@ public class CardRepository {
         String fileName = fileIndex.cardFileName(cardId);
         if (fileName == null) throw new IllegalStateException("卡片 ID 不在文件索引中：" + cardId);
         Path file = notesConfig.getCardsDir().resolve(fileName);
-        fileHelper.fileWritten(file, Card.compose(meta, contentMd));
+        fileHelper.fileWritten(file, CardPO.compose(meta, contentMd));
         return cardId;
     }
 
     public void save(CardMeta meta,
                      String cardId) {
-        Card card = getOne(cardId);
+        CardPO card = getOne(cardId);
         String body = card == null ? "" : card.getContent();
         this.save(meta, body, cardId);
     }

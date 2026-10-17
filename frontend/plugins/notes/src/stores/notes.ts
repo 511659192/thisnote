@@ -209,7 +209,6 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   async function createNode(payload: {
-    type?: string
     notebookId?: string
   }): Promise<NoteMeta | null> {
     try {
