@@ -19,7 +19,7 @@ public class CardQueryEventListener
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<CardQueryEvent> event) {
         try {
-            List<CardDTO> cards = cardService.listCards(event.getPayload().since());
+            List<CardDTO> cards = cardService.listUnowned();
             event.getPayload().result().complete(cards);
         } catch (IOException | RuntimeException e) {
             event.getPayload().result().completeExceptionally(e);

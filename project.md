@@ -41,7 +41,7 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNODE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
 | 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117` | `frontend/host/src/plugins/devPorts.ts:8-16` |
 | 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:18-20` |
-| 插件契约版本 | `5.3.0` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
+| 插件契约版本 | `0.0.1` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
@@ -165,9 +165,9 @@ host（qiankun 主应用，:5173）
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
 | `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED/REQUEST` |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
-| `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>> + since`：发布方等结果，notes 侧监听填充 |
-| `event/AttachmentQueryEvent` | `CompletableFuture<Set<String>>`：被任意卡片引用的附件文件名快照，notes 侧监听填充（5.2.0 新增） |
-| `event/PluginStateResetEvent` | 状态重置通知（`sourcePluginId`）：state-reset 插件手动发布，各插件清理并重建自己的状态（5.3.0 新增） |
+| `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
+| `event/AttachmentQueryEvent` | `CompletableFuture<Set<String>>`：被任意卡片引用的附件文件名快照，notes 侧监听填充 |
+| `event/PluginStateResetEvent` | 状态重置通知（`sourcePluginId`）：state-reset 插件手动发布，各插件清理并重建自己的状态 |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
@@ -185,13 +185,13 @@ host（qiankun 主应用，:5173）
 
 | id | 角色 | 不可停用 | `plugin.requires` | 依赖插件 | 自有存储 |
 |---|---|---|---|---|---|
-| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=5.3.0` | 无 | `<data-root>/notes/**` |
-| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=5.3.0` | 无 | `notes/plugins/favorite/favorites.properties` |
-| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=5.3.0` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
-| `baidu-sync` | 百度网盘双向同步 | 否 | `>=5.3.0` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
-| `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=5.1.0` | `notes` | 无（只通过事件协作） |
-| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=5.3.0` | `notes` | `notes/plugins/attachment-importer/imported.json`（仅导入状态） |
-| `state-reset` | 手动发出状态重置事件 | 否 | `>=5.3.0` | 无 | 无（事件触发器） |
+| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=0.0.1` | 无 | `<data-root>/notes/**` |
+| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=0.0.1` | 无 | `notes/plugins/favorite/favorites.properties` |
+| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
+| `baidu-sync` | 百度网盘双向同步 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
+| `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（只通过事件协作） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | `notes/plugins/attachment-importer/imported.json`（仅导入状态） |
+| `state-reset` | 手动发出状态重置事件 | 否 | `>=0.0.1` | 无 | 无（事件触发器） |
 
 出处：各模块 `src/main/resources/plugin.properties`。
 
@@ -366,8 +366,8 @@ host（qiankun 主应用，:5173）
 - 同步进行中请求预览会被拒绝（`ensureSyncIdle`）；路径越界、符号链接一律拒绝（`:617-638`）。
 
 **card-importer**
-- 每 10 秒扫描最近 1 小时内改动过、且 `meta.noteId` 为空的卡片；对每张发
-  `CardChangedEvent.requestCardCreate`，标题取文件名去掉 `.md`，落到默认分组（`CardImporterService.java:19-65`）。
+- 每 10 秒查询无主卡片（cards 目录里、卡片索引中没有的 md）；对每张发
+  `CardChangedEvent.requestCardCreate`，标题取文件名去掉 `.md`，落到默认分组（`CardImporterService.java`）。
 - notes 侧 `CardCreateRequestListener` 收到后**新建笔记 + 以固定文件名建卡**，并沿用 `CardDTO.meta` 里的 `w/h` 作为初始尺寸（`CardCreateRequestListener.java:23-35`）。
 - 它通过事件查询卡片，不直接读 notes 目录（`.agent/mem/lessons.md:29`；`CardQueryEventListener.java:20-27`）。
 
@@ -382,7 +382,7 @@ host（qiankun 主应用，:5173）
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
-- 各订阅方自行清理：favorite 删 `favorites.properties`；memory-cycle 删 `scheduling.json`；baidu-sync 删 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；attachment-importer 删 `imported.json`（未引用附件下一轮重新导入）；notes 不订阅（笔记数据与索引都不清）；card-importer 无状态。
+- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；attachment-importer → 空 `imported.json`（未引用附件下一轮重新导入）；notes → 把 `.note-index.json` 与 `.card-index.json` 重写为空 map（**卡片 md 保留**，随后会被 card-importer 当成无主卡片重新导入）；card-importer / state-reset 无状态文件，只记日志。
 
 ---
 
@@ -629,8 +629,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 
 ### 改动公开契约时
 
-- 修改 `plugin-api` 的公开类型/扩展点 → 递增 `PluginRegister.CONTRACT_VERSION`，
-  并同步各插件 `plugin.properties` 的 `plugin.requires`。
+- `PluginRegister.CONTRACT_VERSION` 只有明确要求时才修改，**不随公开类型/扩展点改动自动递增**；
+  若确实修改，同步各插件 `plugin.properties` 的 `plugin.requires`。
 - 改 DTO 字段名 → 后端控制器/服务、`plugin-api` DTO、**每个前端消费点的属性访问**一起改
   （`.agent/mem/lessons.md:13,32` 记录了两次踩坑）。
 - 改端点形态（GET/POST、参数名、返回包裹）→ 同步 `frontend/plugins/*/src/api/*.ts` 与

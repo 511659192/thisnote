@@ -56,9 +56,9 @@ public class CardScheduleRepository {
         return true;
     }
 
-    /** 状态重置：删除整份排期文件。 */
+    /** 状态重置：把排期文件重置为空 map。 */
     public synchronized void clear() {
-        fileHelper.fileDeleted(file);
+        writeJson(new LinkedHashMap<>());
     }
 
     public synchronized Map<String, CardSchedule> loadAll() {

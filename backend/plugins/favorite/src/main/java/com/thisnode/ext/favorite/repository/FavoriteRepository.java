@@ -88,10 +88,10 @@ public class FavoriteRepository {
         }
     }
 
-    /** 清空全部收藏：删除状态文件（状态重置用）。 */
+    /** 状态重置：把收藏文件重置为空。 */
     public void clear() {
         synchronized (lock) {
-            fileHelper.fileDeleted(file);
+            writeProperties(new Properties());
         }
     }
 

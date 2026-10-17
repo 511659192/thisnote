@@ -44,6 +44,15 @@ public class NoteService {
         this.mainEventPublisher = publisher;
     }
 
+    /**
+     * 状态重置：把笔记索引与卡片索引重写为空（卡片 md 文件保留）。
+     */
+    public synchronized void resetIndexes() {
+        noteRepository.reset();
+        cardRepository.reset();
+        log.info("笔记索引与卡片索引已重置");
+    }
+
     public NoteDTO create(CreateNoteRequest req) {
         return create("", req.bookId(), List.of());
     }

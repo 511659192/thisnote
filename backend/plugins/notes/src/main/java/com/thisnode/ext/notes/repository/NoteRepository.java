@@ -108,6 +108,13 @@ public class NoteRepository {
     }
 
     /**
+     * 状态重置：把笔记索引重写为空 map。
+     */
+    public synchronized void reset() {
+        fileHelper.fileWritten(nodesIndexFile, new LinkedHashMap<>());
+    }
+
+    /**
      * 读取 {@code noteId → NotePO} 的 map。
      */
     private Map<String, NotePO> readNotesIndex() {

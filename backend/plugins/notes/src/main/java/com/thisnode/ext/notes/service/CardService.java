@@ -21,7 +21,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.*;
 
 @Service
@@ -40,8 +39,8 @@ public class CardService {
         this.mainEventPublisher = publisher;
     }
 
-    public List<CardDTO> listCards(Instant since) throws IOException {
-        return cardRepository.listChangedFiles(since).stream().map(notesMapper::toCardDTO).toList();
+    public List<CardDTO> listUnowned() throws IOException {
+        return cardRepository.listUnowned().stream().map(notesMapper::toCardDTO).toList();
     }
 
     public List<CardDTO> cards(String noteId,

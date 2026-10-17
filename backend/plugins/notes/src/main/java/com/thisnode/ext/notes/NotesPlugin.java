@@ -6,6 +6,7 @@ import com.thisnode.ext.notes.service.listener.AttachmentQueryEventListener;
 import com.thisnode.ext.notes.service.listener.CardAttachmentCleanupListener;
 import com.thisnode.ext.notes.service.listener.CardCreateRequestListener;
 import com.thisnode.ext.notes.service.listener.CardQueryEventListener;
+import com.thisnode.ext.notes.service.listener.PluginStateResetListener;
 import com.thisnode.ext.notes.service.CardService;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.ext.notes.service.BookService;
@@ -36,6 +37,7 @@ public class NotesPlugin extends SpringBootPlugin {
     private CardCreateRequestListener cardCreateRequestListener;
     private CardQueryEventListener cardQueryEventListener;
     private AttachmentQueryEventListener attachmentQueryEventListener;
+    private PluginStateResetListener stateResetListener;
 
     public NotesPlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -66,10 +68,12 @@ public class NotesPlugin extends SpringBootPlugin {
         cardCreateRequestListener = new CardCreateRequestListener(ctx.getBean(CardService.class), ctx.getBean(NoteService.class));
         cardQueryEventListener = new CardQueryEventListener(ctx.getBean(CardService.class));
         attachmentQueryEventListener = new AttachmentQueryEventListener(ctx.getBean(AttachmentService.class));
+        stateResetListener = new PluginStateResetListener(ctx.getBean(NoteService.class));
         getMainApplicationContext().addApplicationListener(attachmentCleanupListener);
         getMainApplicationContext().addApplicationListener(cardCreateRequestListener);
         getMainApplicationContext().addApplicationListener(cardQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
@@ -89,6 +93,10 @@ public class NotesPlugin extends SpringBootPlugin {
         if (attachmentQueryEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentQueryEventListener);
             attachmentQueryEventListener = null;
+        }
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
         }
         super.stop();
     }

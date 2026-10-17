@@ -9,7 +9,7 @@ public class StateResetRegister implements PluginRegister {
 
     @Override
     public String description() {
-        return "手动触发一次初始化事件，各插件清理并重建自己的状态（笔记数据不动）";
+        return "手动触发一次初始化事件，各插件把状态文件重置为初始内容";
     }
 
     @Override

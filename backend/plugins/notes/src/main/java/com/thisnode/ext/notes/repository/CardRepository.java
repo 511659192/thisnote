@@ -14,8 +14,6 @@ import org.springframework.stereotype.Repository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -50,7 +48,7 @@ public class CardRepository {
         if (cardId == null || cardId.isBlank()) return null;
 
         // 先读取meta
-        CardMeta meta = indexMeta(cardId);
+        CardMeta meta = cardIndexMeta(cardId);
         if (meta == null || meta.getFileName() == null) return null;
 
         // 组合meta card
@@ -87,24 +85,27 @@ public class CardRepository {
         return cards;
     }
 
-    public synchronized List<CardPO> listChangedFiles(Instant since) throws IOException {
+    /**
+     * cards 目录里、卡片索引中没有的 md 就是「无主卡片」：meta 为 null，交给导入插件处理。
+     */
+    public synchronized List<CardPO> listUnowned() throws IOException {
         Path cardsDir = notesConfig.getRootDir().resolve("cards");
         if (!Files.isDirectory(cardsDir)) return List.of();
 
-        DirectoryStream.Filter<Path> filter = allOf(markdownFiles(), changedSince(since));
+        Map<String, CardMeta> metaByFileName = metaByFileName();
         List<Path> paths = new ArrayList<>();
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(cardsDir, filter)) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(cardsDir, markdownFiles())) {
             for (Path file : files) {
-                paths.add(file);
+                if (!metaByFileName.containsKey(file.getFileName().toString())) {
+                    paths.add(file);
+                }
             }
         }
         paths.sort(Comparator.comparing((Path path) -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER).thenComparing(path -> path.getFileName().toString()));
 
-        // 没有索引条目的 md 就是「无主卡片」：meta 为 null，交给导入插件处理。
-        Map<String, CardMeta> metaByFileName = metaByFileName();
         List<CardPO> cards = new ArrayList<>(paths.size());
         for (Path path : paths) {
-            cards.add(readCard(path, metaByFileName.get(path.getFileName().toString())));
+            cards.add(readCard(path, null));
         }
         return List.copyOf(cards);
     }
@@ -115,25 +116,6 @@ public class CardRepository {
     private static DirectoryStream.Filter<Path> markdownFiles() {
         PathMatcher markdown = FileSystems.getDefault().getPathMatcher("glob:*.md");
         return entry -> markdown.matches(entry.getFileName()) && Files.isRegularFile(entry);
-    }
-
-    /**
-     * 时间过滤器：只留 since 之后有改动（写入或迁入）的卡片。
-     */
-    private static DirectoryStream.Filter<Path> changedSince(Instant since) {
-        return entry -> {
-            BasicFileAttributes attributes = Files.readAttributes(entry, BasicFileAttributes.class);
-            // 迁移（复制/下载）会保留源文件的修改时间，因此同时看创建时间（Unix 上为状态变更时间）
-            return !attributes.lastModifiedTime().toInstant().isBefore(since) || !attributes.creationTime().toInstant().isBefore(since);
-        };
-    }
-
-    /**
-     * 两个过滤器依次判定，都命中才算数。
-     */
-    private static DirectoryStream.Filter<Path> allOf(DirectoryStream.Filter<Path> first,
-                                                      DirectoryStream.Filter<Path> second) {
-        return entry -> first.accept(entry) && second.accept(entry);
     }
 
     /**
@@ -168,10 +150,15 @@ public class CardRepository {
 
         meta.setFileName(fileName);
         fileHelper.fileWritten(dir.resolve(fileName), content == null ? "" : content);
-        putIndexMeta(meta);
+        putCardIndexMeta(meta);
         return meta.getCardId();
     }
 
+    /**
+     * note输入标题后 对应的card文件重命名
+     * @param cardIds
+     * @param noteTitle
+     */
     public synchronized void renameFiles(List<String> cardIds,
                                          String noteTitle) {
         if (cardIds == null || cardIds.isEmpty()) return;
@@ -179,7 +166,7 @@ public class CardRepository {
         Path dir = notesConfig.getRootDir().resolve("cards");
         boolean draftTitle = noteTitle == null || noteTitle.isBlank();
         for (String cardId : cardIds) {
-            CardMeta meta = indexMeta(cardId);
+            CardMeta meta = cardIndexMeta(cardId);
             if (meta == null || meta.getFileName() == null) continue;
 
             String oldFileName = meta.getFileName();
@@ -189,7 +176,7 @@ public class CardRepository {
 
             fileHelper.rename(dir.resolve(oldFileName), dir.resolve(newFileName));
             meta.setFileName(newFileName);
-            putIndexMeta(meta);
+            putCardIndexMeta(meta);
         }
     }
 
@@ -199,13 +186,13 @@ public class CardRepository {
     public synchronized String update(CardMeta meta,
                                       String contentMd,
                                       String cardId) {
-        CardMeta indexed = indexMeta(cardId);
+        CardMeta indexed = cardIndexMeta(cardId);
         if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
         meta.setFileName(indexed.getFileName());
         fileHelper.fileWritten(notesConfig.getRootDir().resolve("cards").resolve(indexed.getFileName()), contentMd == null ? "" : contentMd);
-        putIndexMeta(meta);
+        putCardIndexMeta(meta);
         return cardId;
     }
 
@@ -214,18 +201,19 @@ public class CardRepository {
      */
     public synchronized void update(CardMeta meta,
                                     String cardId) {
-        CardMeta indexed = indexMeta(cardId);
+        CardMeta indexed = cardIndexMeta(cardId);
         if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
         meta.setFileName(indexed.getFileName());
-        putIndexMeta(meta);
+        putCardIndexMeta(meta);
     }
 
     public synchronized void delete(List<String> cardIds) {
         if (cardIds == null) return;
+
         for (String cardId : cardIds) {
-            CardMeta meta = indexMeta(cardId);
+            CardMeta meta = cardIndexMeta(cardId);
             if (meta == null) continue;
             deleteIndexMeta(cardId);
             if (meta.getFileName() != null) {
@@ -240,7 +228,7 @@ public class CardRepository {
         return card;
     }
 
-    private CardMeta indexMeta(String cardId) {
+    private CardMeta cardIndexMeta(String cardId) {
         return cardId == null ? null : readCardIndex().get(cardId);
     }
 
@@ -254,7 +242,7 @@ public class CardRepository {
         return byFileName;
     }
 
-    private void putIndexMeta(CardMeta meta) {
+    private void putCardIndexMeta(CardMeta meta) {
         if (meta == null || meta.getCardId() == null || meta.getCardId().isBlank()) {
             throw new IllegalArgumentException("卡片 ID 不能为空");
         }
@@ -271,6 +259,13 @@ public class CardRepository {
         if (metas.remove(cardId) != null) {
             fileHelper.fileWritten(cardIndexFile, metas);
         }
+    }
+
+    /**
+     * 状态重置：把卡片索引重写为空 map（md 文件保留）。
+     */
+    public synchronized void reset() {
+        fileHelper.fileWritten(cardIndexFile, new LinkedHashMap<>());
     }
 
     private Map<String, CardMeta> readCardIndex() {

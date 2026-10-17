@@ -22,9 +22,9 @@ public interface PluginRegister extends ExtensionPoint {
      * 版本（支持 semver 范围，例如 {@code >=3.0.0}），平台拿这个常量交给 PF4J 的
      * {@code VersionManager} 校验 —— 版本机制完全走框架，没有自定义的 apiVersion 字段。
      *
-     * <p>修改公开插件契约时递增它。
+     * <p>只有明确要求时才修改它：不随公开契约的改动自动递增。
      */
-    String CONTRACT_VERSION = "5.3.0";
+    String CONTRACT_VERSION = "0.0.1";
 
     /** 管理页上的显示名。 */
     String title();

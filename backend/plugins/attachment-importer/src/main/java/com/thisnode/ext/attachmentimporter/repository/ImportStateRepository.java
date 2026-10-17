@@ -59,8 +59,8 @@ public class ImportStateRepository {
         fileHelper.fileWritten(file, state);
     }
 
-    /** 状态重置：删除导入记录（下次扫描会重新导入未引用附件）。 */
+    /** 状态重置：把导入记录重置为空状态。 */
     public synchronized void clear() {
-        fileHelper.fileDeleted(file);
+        save(new ImportState());
     }
 }
