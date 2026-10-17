@@ -1,7 +1,7 @@
 package com.thisnode.ext.notes.controller;
 
 import com.thisnode.ext.notes.model.request.CreateNoteRequest;
-import com.thisnode.ext.notes.model.request.NoteListQuery;
+import com.thisnode.ext.notes.model.request.NoteListRequest;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
 import com.thisnode.ext.notes.service.NoteService;
 import com.thisnode.plugin.api.notes.dto.NoteDTO;
@@ -23,7 +23,7 @@ public class NoteController {
                                   @RequestParam(required = false) String text,
                                   @RequestParam(defaultValue = "500") int limit,
                                   @RequestParam(defaultValue = "0") int offset) {
-        return noteService.list(new NoteListQuery(bookId, text, limit, offset));
+        return noteService.list(new NoteListRequest(bookId, text, limit, offset));
     }
 
     @PostMapping("/create")

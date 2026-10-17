@@ -1,8 +1,6 @@
 package com.thisnode.ext.notes;
 
-import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.repository.BookRepository;
-import com.thisnode.ext.notes.repository.NotebookToBookMigration;
 import com.thisnode.ext.notes.service.AttachmentService;
 import com.thisnode.ext.notes.service.listener.CardAttachmentCleanupListener;
 import com.thisnode.ext.notes.service.listener.CardCreateRequestListener;
@@ -57,7 +55,6 @@ public class NotesPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        new NotebookToBookMigration(ctx.getBean(NotesConfig.class), ctx.getBean(FileHelper.class)).migrateIfNeeded();
         BookRepository bookRepository = ctx.getBean(BookRepository.class);
         bookRepository.initializeDefaultGroup();
         ctx.getBean(CardService.class).setMainEventPublisher(getMainApplicationContext());

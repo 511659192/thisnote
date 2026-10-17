@@ -5,7 +5,7 @@ import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.ext.notes.model.NotesMapper;
 import com.thisnode.ext.notes.model.request.CreateNoteRequest;
-import com.thisnode.ext.notes.model.request.NoteListQuery;
+import com.thisnode.ext.notes.model.request.NoteListRequest;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
@@ -52,7 +52,7 @@ public class NoteService {
                                        String bookId,
                                        List<String> cardIds) {
         NotePO note = new NotePO().setTitle(title).setBookId(bookId).setCardIds(cardIds);
-        String noteId = noteRepository.saveNew(note);
+        String noteId = noteRepository.save(note);
         mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, note.getTitle(), cardIds));
         log.info("创建笔记 {}（notebook={}）", noteId, bookId);
         return notesMapper.toNoteDTO(note);
@@ -60,13 +60,14 @@ public class NoteService {
 
     public NoteDTO update(String noteId,
                           UpdateNoteRequest req) {
-        NotePO meta = getPO(noteId);
+        NotePO meta = noteRepository.getOne(noteId);
+        if (meta == null) throw new NotFoundException("node " + noteId);
         String title = req.title();
         if (title != null && !title.equals(meta.getTitle())) {
             boolean duplicateTitle = !title.isBlank() && noteRepository.getAll().stream().anyMatch(other -> !noteId.equals(other.getNoteId()) && title.equalsIgnoreCase(other.getTitle()));
             if (duplicateTitle) throw new IllegalArgumentException("笔记标题已存在：" + title);
 
-            noteRepository.newTitle(meta, title);
+            noteRepository.update(meta, title);
             cardRepository.renameFiles(meta.getCardIds(), title);
             for (String cardId : meta.getCardIds()) {
                 mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
@@ -101,19 +102,13 @@ public class NoteService {
     }
 
     public NoteDTO get(String id) {
-        return notesMapper.toNoteDTO(getPO(id));
-    }
-
-    private NotePO getPO(String id) {
         NotePO meta = noteRepository.getOne(id);
-        if (meta == null) {
-            throw new NotFoundException("node " + id);
-        }
-        return meta;
+        if (meta == null) throw new NotFoundException("node " + id);
+        return notesMapper.toNoteDTO(meta);
     }
 
-    public List<NoteDTO> list(NoteListQuery q) {
-        NoteListQuery query = q == null ? NoteListQuery.defaults() : q;
+    public List<NoteDTO> list(NoteListRequest q) {
+        NoteListRequest query = q == null ? NoteListRequest.defaults() : q;
 
         List<NotePO> matched = new ArrayList<>();
         for (NotePO note : noteRepository.getAll()) {
@@ -131,7 +126,7 @@ public class NoteService {
     }
 
     private boolean matches(NotePO meta,
-                            NoteListQuery query) {
+                            NoteListRequest query) {
         if (query.bookId() != null && !query.bookId().isBlank() && !query.bookId().equals(meta.getBookId())) {
             return false;
         }

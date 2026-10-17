@@ -9,12 +9,7 @@ import lombok.SneakyThrows;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,20 +25,16 @@ public class CardRepository {
     public static final int MIN_H = 88;
 
     private final NotesConfig notesConfig;
-    private final CardFileIndex fileIndex;
+    private final IdFileIndexRepository.CardFileIndexRepository cardFileIndexRepository;
     private final FileHelper fileHelper;
 
     @SneakyThrows
     public CardPO getOne(String cardId) {
         if (cardId == null || cardId.isBlank()) return null;
-        String fileName = fileIndex.cardFileName(cardId);
+        String fileName = cardFileIndexRepository.getOne(cardId);
         if (fileName == null) return null;
         Path file = notesConfig.getCardsDir().resolve(fileName);
-        try {
-            return CardPO.parse(file);
-        } catch (NoSuchFileException e) {
-            return null;
-        }
+        return CardPO.parse(file);
     }
 
     public List<CardPO> getAll(List<String> cardIds) {
@@ -57,7 +48,7 @@ public class CardRepository {
     }
 
     public List<CardPO> getAllIndexed() {
-        return getAll(new ArrayList<>(fileIndex.cardFiles().keySet()));
+        return getAll(new ArrayList<>(cardFileIndexRepository.getAll().keySet()));
     }
 
     public List<CardPO> listChangedFiles(Instant since) throws IOException {
@@ -93,12 +84,7 @@ public class CardRepository {
      */
     private static DirectoryStream.Filter<Path> changedSince(Instant since) {
         return entry -> {
-            BasicFileAttributes attributes;
-            try {
-                attributes = Files.readAttributes(entry, BasicFileAttributes.class);
-            } catch (NoSuchFileException e) {
-                return false;
-            }
+            BasicFileAttributes attributes = Files.readAttributes(entry, BasicFileAttributes.class);
             // 迁移（复制/下载）会保留源文件的修改时间，因此同时看创建时间（Unix 上为状态变更时间）
             return !attributes.lastModifiedTime().toInstant().isBefore(since) || !attributes.creationTime().toInstant().isBefore(since);
         };
@@ -119,10 +105,10 @@ public class CardRepository {
      * fileName 非空 = 显式命名：必须是 cards 目录下的 Markdown 文件名。
      * 最终文件名都会回填到 meta.sourceFileName。
      */
-    public String saveNew(CardMeta meta,
-                          String content,
-                          String fileName,
-                          String title) {
+    public String save(CardMeta meta,
+                       String content,
+                       String fileName,
+                       String title) {
         if (meta.getCardId() == null || meta.getCardId().isBlank()) {
             meta.setCardId(UUID.randomUUID().toString());
         }
@@ -149,7 +135,7 @@ public class CardRepository {
         }
 
         meta.setSourceFileName(fileName);
-        fileIndex.addCard(meta.getCardId(), fileName);
+        cardFileIndexRepository.add(meta.getCardId(), fileName);
         return meta.getCardId();
     }
 
@@ -161,7 +147,7 @@ public class CardRepository {
         Path dir = notesConfig.getCardsDir();
         boolean draftTitle = noteTitle == null || noteTitle.isBlank();
         for (String cardId : cardIds) {
-            String oldFileName = fileIndex.cardFileName(cardId);
+            String oldFileName = cardFileIndexRepository.getOne(cardId);
             if (oldFileName == null) continue;
 
             String prefix = draftTitle ? "draft-" + cardId : noteTitle;
@@ -173,7 +159,7 @@ public class CardRepository {
 
                 Path oldFile = dir.resolve(oldFileName);
                 fileHelper.fileMoved(oldFile, newFile);
-                fileIndex.updateCardFileName(cardId, newFileName);
+                cardFileIndexRepository.update(cardId, newFileName);
                 break;
             }
         }
@@ -182,29 +168,29 @@ public class CardRepository {
     /**
      * Rewrite the card content using its stable ID to resolve the physical path.
      */
-    public String save(CardMeta meta,
-                       String contentMd,
-                       String cardId) {
-        String fileName = fileIndex.cardFileName(cardId);
+    public String update(CardMeta meta,
+                         String contentMd,
+                         String cardId) {
+        String fileName = cardFileIndexRepository.getOne(cardId);
         if (fileName == null) throw new IllegalStateException("卡片 ID 不在文件索引中：" + cardId);
         Path file = notesConfig.getCardsDir().resolve(fileName);
         fileHelper.fileWritten(file, CardPO.compose(meta, contentMd));
         return cardId;
     }
 
-    public void save(CardMeta meta,
-                     String cardId) {
+    public void update(CardMeta meta,
+                       String cardId) {
         CardPO card = getOne(cardId);
         String body = card == null ? "" : card.getContent();
-        this.save(meta, body, cardId);
+        this.update(meta, body, cardId);
     }
 
     public void delete(List<String> cardIds) {
         if (cardIds == null) return;
         for (String cardId : cardIds) {
-            String fileName = fileIndex.cardFileName(cardId);
+            String fileName = cardFileIndexRepository.getOne(cardId);
             if (fileName == null) continue;
-            fileIndex.removeCard(cardId);
+            cardFileIndexRepository.delete(cardId);
             Path file = notesConfig.getCardsDir().resolve(fileName);
             fileHelper.fileDeleted(file);
         }

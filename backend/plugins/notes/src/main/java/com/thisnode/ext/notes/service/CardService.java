@@ -76,12 +76,12 @@ public class CardService {
         double h = Math.max(CardRepository.MIN_H, req.h());
 
         CardMeta card = new CardMeta().setX(x).setY(y).setW(w).setH(h).setColor(req.color()).setNoteId(note.getNoteId());
-        cardRepository.saveNew(card, content, fixedFileName, note.getTitle());
+        cardRepository.save(card, content, fixedFileName, note.getTitle());
 
         List<String> cardIds = new ArrayList<>(note.getCardIds());
         cardIds.add(card.getCardId());
         note.setCardIds(cardIds);
-        noteRepository.rewrite(note);
+        noteRepository.update(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(card.getCardId(), CardChangedEvent.Kind.CREATED));
         log.info("笔记 {} 新建卡片 {}", noteId, card.getCardId());
         return notesMapper.toCardDTO(new CardPO(card, content));
@@ -108,8 +108,8 @@ public class CardService {
         String body = contentMd == null ? "" : contentMd;
         Set<String> removedAttachments = new HashSet<>(AttachmentService.referencedFileNames(current));
         removedAttachments.removeAll(AttachmentService.referencedFileNames(body));
-        cardRepository.save(cardMeta, body, cardId);
-        noteRepository.rewrite(note);
+        cardRepository.update(cardMeta, body, cardId);
+        noteRepository.update(note);
         attachmentService.deleteIfUnreferenced(removedAttachments);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         log.debug("卡片 {} 内容已保存（{} 字符）", cardId, body.length());
@@ -144,7 +144,7 @@ public class CardService {
         Optional.ofNullable(changes.color()).ifPresent(meta::setColor);
         Optional.ofNullable(changes.status()).ifPresent(meta::setStatus);
         Optional.ofNullable(changes.collapsed()).ifPresent(meta::setCollapsed);
-        cardRepository.save(meta, cardId);
+        cardRepository.update(meta, cardId);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         log.debug("卡片 {} 元数据已更新", cardId);
         return meta;
@@ -168,7 +168,7 @@ public class CardService {
 
         cardRepository.delete(List.of(cardId));
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
-        noteRepository.rewrite(note);
+        noteRepository.update(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED, removedAttachments));
         log.info("笔记 {} 删除卡片 {}", noteId, cardId);
     }

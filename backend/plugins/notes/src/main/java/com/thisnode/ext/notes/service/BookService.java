@@ -74,7 +74,7 @@ public class BookService {
         for (NotePO note : noteRepository.getAll()) {
             if (id.equals(note.getBookId())) {
                 note.setBookId(BookPO.DEFAULT_GROUP_ID);
-                noteRepository.rewrite(note);
+                noteRepository.update(note);
                 movedNoteIds.add(note.getNoteId());
             }
         }

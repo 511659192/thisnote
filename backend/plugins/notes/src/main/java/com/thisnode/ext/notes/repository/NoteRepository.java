@@ -29,17 +29,17 @@ import java.util.Map;
 public class NoteRepository {
 
     private final NotesConfig notesConfig;
-    private final NoteFileIndex fileIndex;
+    private final IdFileIndexRepository.NoteFileIndexRepository fileIndex;
     private final FileHelper fileHelper;
 
-    public String saveNew(NotePO note) {
+    public String save(NotePO note) {
         String noteId = IdUtil.randomUUID();
         String baseName = StrUtil.isBlank(note.getTitle()) ? "tmp-" + noteId : note.getTitle();
         String fileName = baseName + ".json";
         Path metaDir = notesConfig.getMetaDir();
         Path file = metaDir.resolve(fileName);
         fileHelper.fileWritten(file, note.setNoteId(noteId));
-        fileIndex.addNote(noteId, fileName);
+        fileIndex.add(noteId, fileName);
         return noteId;
     }
 
@@ -47,10 +47,10 @@ public class NoteRepository {
      * Rename only the physical metadata file; the noteMeta ID remains stable.
      */
     @SneakyThrows
-    public void newTitle(NotePO note,
-                         String newTitle) {
+    public void update(NotePO note,
+                       String newTitle) {
         String noteId = note.getNoteId();
-        String oldFileName = fileIndex.noteFileName(noteId);
+        String oldFileName = fileIndex.getOne(noteId);
         if (oldFileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteId);
 
         note.setTitle(newTitle);
@@ -59,13 +59,13 @@ public class NoteRepository {
         Path newFile = notesConfig.getMetaDir().resolve(newFileName);
         fileHelper.fileMoved(oldFile, newFile);
         fileHelper.fileWritten(newFile, note);
-        fileIndex.updateNoteFileName(noteId, newFileName);
+        fileIndex.update(noteId, newFileName);
     }
 
     /** Rewrite note metadata and refresh its filesystem modification time. */
-    public void rewrite(NotePO note) {
+    public void update(NotePO note) {
         if (note == null || StrUtil.isBlank(note.getNoteId())) return;
-        String fileName = fileIndex.noteFileName(note.getNoteId());
+        String fileName = fileIndex.getOne(note.getNoteId());
         if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + note.getNoteId());
 
         Path file = notesConfig.getMetaDir().resolve(fileName);
@@ -76,9 +76,9 @@ public class NoteRepository {
      * Delete only the note meta; CardService removes its card files first.
      */
     public void delete(String noteId) {
-        String fileName = fileIndex.noteFileName(noteId);
+        String fileName = fileIndex.getOne(noteId);
         if (fileName == null) return;
-        fileIndex.removeNote(noteId);
+        fileIndex.delete(noteId);
         Path file = notesConfig.getMetaDir().resolve(fileName);
         fileHelper.fileDeleted(file);
     }
@@ -88,7 +88,7 @@ public class NoteRepository {
         Path metaDir = notesConfig.getMetaDir();
         List<Path> files = new ArrayList<>();
         Map<Path, FileTime> modifiedTimes = new HashMap<>();
-        for (String fileName : fileIndex.noteFiles().values()) {
+        for (String fileName : fileIndex.getAll().values()) {
             Path file = metaDir.resolve(fileName);
             FileTime modifiedTime;
             try {
@@ -116,7 +116,7 @@ public class NoteRepository {
      */
     public NotePO getOne(String noteId) {
         if (StrUtil.isBlank(noteId)) return null;
-        String fileName = fileIndex.noteFileName(noteId);
+        String fileName = fileIndex.getOne(noteId);
         return fileName == null ? null : NotePO.parse(notesConfig.getMetaDir().resolve(fileName));
     }
 
