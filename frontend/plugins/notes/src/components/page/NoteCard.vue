@@ -319,7 +319,8 @@ function onKeydown(e: KeyboardEvent) {
  * 不在当前渲染上量行宽——按当前换行量、缩完再换行会死循环，把难看的断行锁死。
  */
 function measureMaxContentWidth(): number {
-  const body = readBody.value
+  // 编辑态 readBody 不渲染：量屏外 twin（与 textarea 同字体宽度），同样是「最长一行」的宽度。
+  const body = readBody.value ?? measure.value
   if (!body) return 0
   const clone = body.cloneNode(true) as HTMLElement
   clone.style.cssText += ';position:fixed;left:-10000px;top:0;width:max-content;max-width:none;overflow:visible;'
@@ -384,9 +385,9 @@ function fitHeight(force = false) {
   // 只扩不缩的 scrollWidth 量不出换行文本的最长行，这里改量**最长可见行**的实际渲染宽度，
   // 双向贴合：短行多的卡收窄贴右边框，长行/代码/图片的卡扩到放得下。
   let width: number | undefined
-  if ((force || autoFitImageWidth.value) && readBody.value) {
+  if (force || autoFitImageWidth.value) {
     const desiredWidths: number[] = []
-    if (autoFitImageWidth.value && loadedImages.length) {
+    if (!force && autoFitImageWidth.value && loadedImages.length) {
       desiredWidths.push(Math.max(...loadedImages.map((image) => image.naturalWidth)) + 32)
     }
     const maxContentWidth = measureMaxContentWidth()
@@ -424,7 +425,7 @@ function fitHeight(force = false) {
   if (!props.editing && loadedImages.length) fitPastedImage.value = false
 }
 
-/** 「自动调整」：解除手动高度锁定，并立即按当前内容贴合（含图片宽度自适应）。 */
+/** 「自动调整」：解除手动高度锁定，并立即按当前内容贴合。 */
 function autoFit() {
   autoFitImageWidth.value = true
   fitPastedImage.value = true
@@ -502,7 +503,7 @@ onBeforeUnmount(() => {
       <template v-if="!card.collapsed">
         <button
           class="auto-fit"
-          title="1:1：按内容原始尺寸贴合卡片"
+          title="1:1：宽度贴合文本最大宽度"
           @pointerdown.stop
           @click.stop="chooseFitWidth(null)"
         >1:1</button>

@@ -2,6 +2,7 @@ package com.thisnode.ext.notes;
 
 import com.thisnode.ext.notes.repository.BookRepository;
 import com.thisnode.ext.notes.service.AttachmentService;
+import com.thisnode.ext.notes.service.listener.AttachmentQueryEventListener;
 import com.thisnode.ext.notes.service.listener.CardAttachmentCleanupListener;
 import com.thisnode.ext.notes.service.listener.CardCreateRequestListener;
 import com.thisnode.ext.notes.service.listener.CardQueryEventListener;
@@ -34,6 +35,7 @@ public class NotesPlugin extends SpringBootPlugin {
     private CardAttachmentCleanupListener attachmentCleanupListener;
     private CardCreateRequestListener cardCreateRequestListener;
     private CardQueryEventListener cardQueryEventListener;
+    private AttachmentQueryEventListener attachmentQueryEventListener;
 
     public NotesPlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -63,9 +65,11 @@ public class NotesPlugin extends SpringBootPlugin {
         attachmentCleanupListener = new CardAttachmentCleanupListener(ctx.getBean(AttachmentService.class));
         cardCreateRequestListener = new CardCreateRequestListener(ctx.getBean(CardService.class), ctx.getBean(NoteService.class));
         cardQueryEventListener = new CardQueryEventListener(ctx.getBean(CardService.class));
+        attachmentQueryEventListener = new AttachmentQueryEventListener(ctx.getBean(AttachmentService.class));
         getMainApplicationContext().addApplicationListener(attachmentCleanupListener);
         getMainApplicationContext().addApplicationListener(cardCreateRequestListener);
         getMainApplicationContext().addApplicationListener(cardQueryEventListener);
+        getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
     }
 
     @Override
@@ -81,6 +85,10 @@ public class NotesPlugin extends SpringBootPlugin {
         if (cardQueryEventListener != null) {
             getMainApplicationContext().removeApplicationListener(cardQueryEventListener);
             cardQueryEventListener = null;
+        }
+        if (attachmentQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(attachmentQueryEventListener);
+            attachmentQueryEventListener = null;
         }
         super.stop();
     }

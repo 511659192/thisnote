@@ -1,7 +1,7 @@
 # thisnote 项目基线
 
 > 本文是**后续开发的基线文档**：记录本仓库的结构、架构、契约、运行方式与已知问题。
-> 结论均来自仓库内代码（含 `文件:行号`）；行号以本次记录时的工作区为准（HEAD `ac52a2e` + 当时未提交的改动），代码变动后可能漂移。
+> 结论均来自仓库内代码（含 `文件:行号`）；行号以本次记录时的工作区为准（HEAD `31eed8b` + 后续未提交改动），代码变动后可能漂移。
 > 标注「未运行验证」的内容是静态阅读得出的判断，未经实际启动/测试确认。
 > **改架构、契约、端口、数据路径或交付方式后，请同步更新本文。**
 
@@ -39,9 +39,9 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 |---|---|---|
 | 后端端口 | `45917`（可用 `THISNODE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNODE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
-| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115` | `frontend/host/src/plugins/devPorts.ts:8-14` |
+| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116` | `frontend/host/src/plugins/devPorts.ts:8-15` |
 | 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:26-32` |
-| 插件契约版本 | `5.1.0` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
+| 插件契约版本 | `5.2.0` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
@@ -62,7 +62,7 @@ thisnote/
 ├── backend/                  Maven 反应堆（从 backend/ 构建，仓库根不放 Maven 文件）
 │   ├── pom.xml               父 POM：模块、版本、plugin.properties 过滤 profile
 │   ├── plugin-api/           插件契约（扩展点 / 事件 / DTO / 异常 / FileHelper）
-│   ├── plugins/              5 个插件模块（各产出一个独立 jar）
+│   ├── plugins/              6 个插件模块（各产出一个独立 jar）
 │   ├── app/                  平台主体（纯 API，无业务、无数据库）
 │   ├── runtime/plugins/      后端交付目录：<pluginId>.jar + disabled.txt（不入库）
 │   ├── plugins-dev/          dev 模式插件目录（目录联接，不入库）
@@ -70,7 +70,7 @@ thisnote/
 ├── frontend/                 pnpm 工作区（界面侧）
 │   ├── host/                 主应用（qiankun 宿主 + 设置页 + 壳）
 │   ├── plugin-api/           界面侧插件契约（**注意：目前未被 git 跟踪，见 §9**）
-│   ├── plugins/              5 个微应用源码
+│   ├── plugins/              6 个微应用源码
 │   ├── runtime/plugins/      界面交付目录（不入库）
 │   └── tools/deliver.mjs     dist → runtime/plugins 的交付脚本
 └── scripts/seed-notes.mjs    压测/造数据脚本（通过 HTTP API 灌 1000 篇笔记）
@@ -98,7 +98,8 @@ thisnote/
                         │   plugin-api    │              │ runtime/plugins/*.jar         │
                         │ PluginRegister  │              │ notes / favorite /            │
                         │ 事件 / DTO / 异常│              │ memory-cycle / baidu-sync /   │
-                        │ FileHelper      │              │ card-importer                 │
+                        │ FileHelper      │              │ card-importer /               │
+                        │                 │              │ attachment-importer           │
                         └─────────────────┘              └───────────────────────────────┘
 ```
 
@@ -160,10 +161,11 @@ host（qiankun 主应用，:5173）
 | `lifecycle/PluginRegister` | 唯一 PF4J 扩展点：`title/description/health/undeactivatable/onGlobalStateChanged`，除显示名与说明外都有默认实现 |
 | `lifecycle/PluginHealth` | `ok / degraded / error / unknown` + 一句话；**刻意不发起网络请求** |
 | `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`） |
-| `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用） |
+| `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
 | `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED/REQUEST` |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>> + since`：发布方等结果，notes 侧监听填充 |
+| `event/AttachmentQueryEvent` | `CompletableFuture<Set<String>>`：被任意卡片引用的附件文件名快照，notes 侧监听填充（5.2.0 新增） |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
@@ -181,11 +183,12 @@ host（qiankun 主应用，:5173）
 
 | id | 角色 | 不可停用 | `plugin.requires` | 依赖插件 | 自有存储 |
 |---|---|---|---|---|---|
-| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=5.1.0` | 无 | `<data-root>/notes/**` |
+| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=5.2.0` | 无 | `<data-root>/notes/**` |
 | `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=5.0.0` | 无 | `notes/plugins/favorite/favorites.properties` |
 | `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=5.0.0` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
 | `baidu-sync` | 百度网盘双向同步 | 否 | `>=5.0.0` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=5.1.0` | `notes` | 无（只通过事件协作） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=5.2.0` | `notes` | `notes/plugins/attachment-importer/imported.json`（仅导入状态） |
 
 出处：各模块 `src/main/resources/plugin.properties`。
 
@@ -313,6 +316,8 @@ host（qiankun 主应用，:5173）
 
 **card-importer**：无端点（只有 `@Scheduled` 任务）。
 
+**attachment-importer**：无端点（只有 `@Scheduled` 任务；设置页是静态说明，不读后端）。
+
 ### 5.9 各插件业务规则（读代码得到的事实）
 
 **notes**
@@ -350,8 +355,17 @@ host（qiankun 主应用，:5173）
 **card-importer**
 - 每 10 秒扫描最近 1 小时内改动过、且 `meta.noteId` 为空的卡片；对每张发
   `CardChangedEvent.requestCardCreate`，标题取文件名去掉 `.md`，落到默认分组（`CardImporterService.java:19-65`）。
-- notes 侧 `CardCreateRequestListener` 收到后**新建笔记 + 以固定文件名建卡**（`CardCreateRequestListener.java:23-30`）。
+- notes 侧 `CardCreateRequestListener` 收到后**新建笔记 + 以固定文件名建卡**，并沿用 `CardDTO.meta` 里的 `w/h` 作为初始尺寸（`CardCreateRequestListener.java:23-35`）。
 - 它通过事件查询卡片，不直接读 notes 目录（`.agent/mem/lessons.md:29`；`CardQueryEventListener.java:20-27`）。
+
+**attachment-importer**
+- 候选 = 状态文件里没有 + 文件已存在 ≥10 秒 + 未被任何卡片引用；不建历史基线，状态文件缺失时当前未引用图片都会被导入
+  （`AttachmentImporterService.java`）。
+- 非 UUID 文件名原地改名为 `<uuid>.<ext>`（经 `FileHelper.fileMoved`），原文件名作笔记标题；生成失败则把名字改回去。
+- 通过 `CardChangedEvent.requestCardCreate` 交给 notes 建笔记/卡片，归入 `grp-default`；本插件不写笔记数据。
+- 卡片初始框体按图片像素尺寸折算：宽 = min(图片宽, 650) + 30（下限 240、上限 680），高 = 等比高度 + 44（下限 88）；
+  ImageIO 读不到尺寸（webp/avif、损坏文件）时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
+- 附件引用快照由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.allReferencedFileNames()`），本插件不解析卡片内容。
 
 ---
 
@@ -359,7 +373,7 @@ host（qiankun 主应用，:5173）
 
 ### 6.1 工作区
 
-`frontend/pnpm-workspace.yaml:1-8`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,memory-cycle,notes}`。
+`frontend/pnpm-workspace.yaml:1-9`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,memory-cycle,notes}`。
 
 | 包 | 作用 |
 |---|---|
@@ -455,6 +469,7 @@ host（qiankun 主应用，:5173）
 | memory-cycle | 卡片工具 🧠（`loadState/isEnabled/toggle/cardComponent`）+ 侧栏入口（order 1，徽标=到期数）+ `/review` 路由 | `frontend/plugins/memory-cycle/index.ts:16-47` |
 | baidu-sync | 设置面板 + 侧栏入口（order 2）+ `/baidu-sync` 路由 | `frontend/plugins/baidu-sync/index.ts:11-28` |
 | card-importer | 只有设置面板 | `frontend/plugins/card-importer/index.ts:6-8` |
+| attachment-importer | 只有设置面板（静态说明，不读后端） | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
 复习页（`ReviewView.vue`）：到期队列逐张评分，四档按钮标注「下次出现」；短周期卡在队列内轮询重现，长周期卡移出视图；
@@ -505,7 +520,7 @@ pnpm -r build                                   # 各包构建（插件 build �
 
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
-| `backend/app/src/test/java/com/thisnode/plugin/PluginJarContractTest.java` | 3 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
+| `backend/app/src/test/java/com/thisnode/plugin/PluginJarContractTest.java` | 4 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
 | `frontend/host/tests/markdown.test.ts` | HTML 转义、标题/列表/表格/任务项、`plainText`/`firstHeading`/`wordCount` | `pnpm --filter thisnode-frontend test` |
 | `frontend/host/tests/plugin_boundary.test.ts` | 插件界面不得出现 `from '@/…'`（只检查 memory-cycle、favorite 两个目录） | 同上 |
 | `frontend/host/tools/*.mjs` | 约 20 个 Playwright/HTTP 手动探针（卡片模式、拖拽、标题改名、插件管理、qiankun 冒烟等） | 手工 `node tools/xxx.mjs`，**未接进 `test` 脚本** |
@@ -557,6 +572,10 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
     （`MemoryCyclePlugin.java:64-73`）。当前只有主容器那份会收到事件（事件由主容器发布），但读代码时容易误会。
 14. **历史日志不能当现状依据**：`backend/app/backend-run.log` 与各处 `*.log` 是 2026-10-12 的运行记录，
     里面还是 `memory-curve`、契约版本 `4.0.0`（`backend-run.log:31-37`）。
+15. **`notes` 新建笔记没有重名校验**：`NoteRepository.save` 直接用标题写 `<title>.json`
+    （`NoteRepository.java:35-44`），重名检查只做在改名路径上（`NoteService.java:67`）。自动导入
+    （card-importer、attachment-importer）用文件名作标题，若与已有笔记同名会覆盖那份 meta ——
+    旧笔记的 `cardIds` 清单随之丢失。改动导入逻辑前先想清楚标题去重。
 
 ---
 

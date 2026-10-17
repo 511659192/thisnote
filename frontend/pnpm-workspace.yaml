@@ -6,6 +6,7 @@ packages:
   - 'plugins/card-importer'
   - 'plugins/memory-cycle'
   - 'plugins/notes'
+  - 'plugins/attachment-importer'
 
 allowBuilds:
   esbuild: true

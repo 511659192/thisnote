@@ -56,11 +56,12 @@ class PluginJarContractTest {
     @CsvSource({
             "notes,plugin-notes,notes,true",
             "favorite,plugin-favorite,favorite,true",
-            "memory-cycle,plugin-memory-cycle,memory-cycle,true"
+            "memory-cycle,plugin-memory-cycle,memory-cycle,true",
+            "attachment-importer,plugin-attachment-importer,attachment-importer,true"
     })
     void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasAssets) throws Exception {
         // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——
-        // 三个插件都有界面产物，全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
+        // 四个插件都有界面产物，全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
 
         try (ZipFile zip = new ZipFile(jar.toFile())) {

@@ -86,6 +86,19 @@ public class AttachmentService {
         return fileNames;
     }
 
+    /**
+     * 当前被任意已索引卡片引用的附件文件名（只读快照）。
+     *
+     * <p>给「附件导入」这类插件查询用：它们不解析卡片内容，只按这份结果判断哪些附件还没有归属。
+     */
+    public Set<String> allReferencedFileNames() {
+        Set<String> fileNames = new HashSet<>();
+        for (CardPO card : cardRepository.getAllIndexed()) {
+            fileNames.addAll(referencedFileNames(card.getContent()));
+        }
+        return fileNames;
+    }
+
     public void deleteIfUnreferenced(Set<String> candidates) {
         if (candidates == null || candidates.isEmpty()) return;
 

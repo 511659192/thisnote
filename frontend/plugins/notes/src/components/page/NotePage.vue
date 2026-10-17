@@ -439,9 +439,12 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
   const widthCap = p.force
     ? fitCardMaxWidth(size.width, page.viewport.zoom)
     : maxCardWidth(size.width)
+  // 1:1 是内容驱动的显式贴合：宽度下限放宽（突破拖拽下限 240）以贴住短文本，
+  // 卡片过窄时右侧工具行会被裁剪，拖拽右下角即可恢复常规宽度。
+  const minWidth = p.force ? 88 : BLOCK_MIN_W
   const width = p.w === undefined
     ? view.card.w
-    : Math.max(BLOCK_MIN_W, Math.min(p.w, widthCap))
+    : Math.max(minWidth, Math.min(p.w, widthCap))
   // 双向贴合（长高也缩回），再按视口封顶：卡片最高长到**浏览器底缘**，
   // 再多的内容在卡片内滚动，而不是把卡片撑出好几屏、在画布上够不着。
   const rect = root.value?.getBoundingClientRect()
