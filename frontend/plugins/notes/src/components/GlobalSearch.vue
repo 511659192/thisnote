@@ -14,7 +14,7 @@ import { http } from '@thisnode/plugin-api'
  * 打开结果即跳 `/notes/:id`（笔记域路由，由 notes 微应用登记）。
  */
 
-interface NoteMetaLite {
+interface NoteDtoLite {
   noteId: string
   title: string
   summary?: string
@@ -29,13 +29,13 @@ const active = ref(0)
 const loading = ref(false)
 
 const CACHE_TTL = 10_000
-let notesCache: { at: number; data: NoteMetaLite[] } | null = null
+let notesCache: { at: number; data: NoteDtoLite[] } | null = null
 
-async function allNotes(): Promise<NoteMetaLite[]> {
+async function allNotes(): Promise<NoteDtoLite[]> {
   if (notesCache && Date.now() - notesCache.at < CACHE_TTL) return notesCache.data
   loading.value = true
   try {
-    const data = await http.get<NoteMetaLite[]>('/api/notes/get', { limit: 2000 })
+    const data = await http.get<NoteDtoLite[]>('/api/notes/get', { limit: 2000 })
     notesCache = { at: Date.now(), data }
     return data
   } finally {
@@ -44,7 +44,7 @@ async function allNotes(): Promise<NoteMetaLite[]> {
 }
 
 /** 命中：每个查询词都出现在 title+summary 里；返回 0..2 的排序权重（标题命中优先）。 */
-function matchScore(note: NoteMetaLite, tokens: string[]): number {
+function matchScore(note: NoteDtoLite, tokens: string[]): number {
   const title = (note.title ?? '').toLowerCase()
   const summary = (note.summary ?? '').toLowerCase()
   let score = 0
@@ -58,7 +58,7 @@ function matchScore(note: NoteMetaLite, tokens: string[]): number {
   return score
 }
 
-const results = ref<Array<{ note: NoteMetaLite; score: number }>>([])
+const results = ref<Array<{ note: NoteDtoLite; score: number }>>([])
 
 function runQuery(q: string): void {
   const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -143,7 +143,7 @@ function titleSegments(title: string): Array<{ text: string; hit: boolean }> {
 }
 
 /** 摘要片段：围绕首个命中词取前后 ~40 字。 */
-function summarySnippet(note: NoteMetaLite): string {
+function summarySnippet(note: NoteDtoLite): string {
   const summary = note.summary ?? ''
   const t = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)[0]
   if (!t) return summary.slice(0, 80)

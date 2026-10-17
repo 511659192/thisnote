@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.repository;
 
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.CardPO;
-import com.thisnode.ext.notes.model.NoteMetaPO;
+import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -118,11 +118,11 @@ public class IdFileIndex {
      */
     private IndexData scanExistingFiles() {
         IndexData index = new IndexData();
-        Path metaDir = notesConfig.getNoteMetaDir();
+        Path metaDir = notesConfig.getMetaDir();
         if (Files.exists(metaDir)) {
             try (DirectoryStream<Path> files = Files.newDirectoryStream(metaDir, "*.json")) {
                 for (Path file : files) {
-                    NoteMetaPO note = NoteMetaPO.parse(file);
+                    NotePO note = NotePO.parse(file);
                     if (note == null || note.getNoteId() == null || note.getNoteId().isBlank()) {
                         throw new IllegalStateException("无法为笔记文件建立 ID 索引：" + file);
                     }

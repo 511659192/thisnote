@@ -36,7 +36,7 @@ async function createNote() {
     const failure = await router.push('/notes')
     if (failure) return
   }
-  const detail = await nodes.createNode({ notebookId: nodes.activeNotebookId ?? undefined })
+  const detail = await nodes.createNode({ bookId: nodes.activeBookId ?? undefined })
   if (detail) await router.push(`/notes/${detail.noteId}`)
 }
 

@@ -2,7 +2,7 @@ package com.thisnode.ext.notes.service;
 
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.model.CardPO;
-import com.thisnode.ext.notes.model.NoteMetaPO;
+import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.ext.notes.model.NotesMapper;
 import com.thisnode.ext.notes.model.request.CreateNoteRequest;
 import com.thisnode.ext.notes.model.request.NoteListQuery;
@@ -11,7 +11,7 @@ import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.plugin.api.event.CardChangedEvent;
 import com.thisnode.plugin.api.event.NoteChangedEvent;
-import com.thisnode.plugin.api.notes.dto.NoteMetaDTO;
+import com.thisnode.plugin.api.notes.dto.NoteDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,27 +44,27 @@ public class NoteService {
         this.mainEventPublisher = publisher;
     }
 
-    public NoteMetaDTO create(CreateNoteRequest req) {
-        return create("", req.notebookId(), List.of());
+    public NoteDTO create(CreateNoteRequest req) {
+        return create("", req.bookId(), List.of());
     }
 
-    public synchronized NoteMetaDTO create(String title,
-                                           String notebookId,
+    public synchronized NoteDTO create(String title,
+                                           String bookId,
                                            List<String> cardIds) {
         if (cardIds != null && cardIds.stream().anyMatch(id -> id == null || id.isBlank())) {
             throw new IllegalArgumentException("笔记包含无效的卡片 ID");
         }
 
-        NoteMetaPO noteMeta = new NoteMetaPO().setTitle(title).setNotebookId(notebookId).setCardIds(cardIds);
-        String noteId = noteRepository.saveNew(noteMeta);
-        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, noteMeta.getTitle(), cardIds));
-        log.info("创建笔记 {}（notebook={}）", noteId, notebookId);
-        return notesMapper.toNoteMetaDTO(noteMeta);
+        NotePO note = new NotePO().setTitle(title).setBookId(bookId).setCardIds(cardIds);
+        String noteId = noteRepository.saveNew(note);
+        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, note.getTitle(), cardIds));
+        log.info("创建笔记 {}（notebook={}）", noteId, bookId);
+        return notesMapper.toNoteDTO(note);
     }
 
-    public NoteMetaDTO update(String noteId,
+    public NoteDTO update(String noteId,
                               UpdateNoteRequest req) {
-        NoteMetaPO meta = getPO(noteId);
+        NotePO meta = getPO(noteId);
         String title = req.title();
         if (title != null && !title.equals(meta.getTitle())) {
             boolean duplicateTitle = !title.isBlank() && noteRepository.getAll().stream().anyMatch(other -> !noteId.equals(other.getNoteId()) && title.equalsIgnoreCase(other.getTitle()));
@@ -78,11 +78,11 @@ public class NoteService {
             mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TITLE_CHANGED, title, List.of()));
             log.info("笔记 {} 标题改为「{}」（联动重命名 {} 张卡片）", noteId, title, meta.getCardIds().size());
         }
-        return notesMapper.toNoteMetaDTO(meta);
+        return notesMapper.toNoteDTO(meta);
     }
 
     public void delete(String id) {
-        NoteMetaPO meta = noteRepository.getOne(id);
+        NotePO meta = noteRepository.getOne(id);
         if (meta == null) {
             return;
         }
@@ -104,39 +104,39 @@ public class NoteService {
         log.info("删除笔记 {}「{}」及 {} 张卡片", id, meta.getTitle(), deletedCardIds.size());
     }
 
-    public NoteMetaDTO get(String id) {
-        return notesMapper.toNoteMetaDTO(getPO(id));
+    public NoteDTO get(String id) {
+        return notesMapper.toNoteDTO(getPO(id));
     }
 
-    private NoteMetaPO getPO(String id) {
-        NoteMetaPO meta = noteRepository.getOne(id);
+    private NotePO getPO(String id) {
+        NotePO meta = noteRepository.getOne(id);
         if (meta == null) {
             throw new NotFoundException("node " + id);
         }
         return meta;
     }
 
-    public List<NoteMetaDTO> list(NoteListQuery q) {
+    public List<NoteDTO> list(NoteListQuery q) {
         NoteListQuery query = q == null ? NoteListQuery.defaults() : q;
 
-        List<NoteMetaPO> matched = new ArrayList<>();
-        for (NoteMetaPO noteMeta : noteRepository.getAll()) {
-            if (matches(noteMeta, query)) {
-                matched.add(noteMeta);
+        List<NotePO> matched = new ArrayList<>();
+        for (NotePO note : noteRepository.getAll()) {
+            if (matches(note, query)) {
+                matched.add(note);
             }
         }
         int limit = query.limit();
         int offset = query.offset();
-        List<NoteMetaPO> page = new ArrayList<>();
+        List<NotePO> page = new ArrayList<>();
         for (int i = offset; i < matched.size() && page.size() < limit; i++) {
             page.add(matched.get(i));
         }
-        return page.stream().map(notesMapper::toNoteMetaDTO).toList();
+        return page.stream().map(notesMapper::toNoteDTO).toList();
     }
 
-    private boolean matches(NoteMetaPO meta,
+    private boolean matches(NotePO meta,
                             NoteListQuery query) {
-        if (query.notebookId() != null && !query.notebookId().isBlank() && !query.notebookId().equals(meta.getNotebookId())) {
+        if (query.bookId() != null && !query.bookId().isBlank() && !query.bookId().equals(meta.getBookId())) {
             return false;
         }
         if (query.text() != null && !query.text().isBlank()) {

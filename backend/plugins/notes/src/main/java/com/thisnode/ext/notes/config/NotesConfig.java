@@ -15,19 +15,19 @@ public class NotesConfig {
 
     private final Path rootDir;
 
-    private final Path noteMetaDir;
+    private final Path metaDir;
 
     private final Path cardsDir;
 
-    private final Path notebookDir;
+    private final Path bookDir;
 
     private final Path attachmentsDir;
 
     public NotesConfig(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
         this.rootDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes");
-        this.noteMetaDir = rootDir.resolve("meta");
+        this.metaDir = rootDir.resolve("meta");
         this.cardsDir = rootDir.resolve("cards");
-        this.notebookDir = rootDir.resolve("notebook");
+        this.bookDir = rootDir.resolve("book");
         this.attachmentsDir = rootDir.resolve("attachments");
     }
 }

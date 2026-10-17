@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import { notebookApi } from '@/api'
+import { bookApi } from '@/api'
 import {
   activeListFilter_,
   activeNavEntries,
@@ -16,7 +16,7 @@ import {
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import type { Notebook } from '@/api/types'
+import type { Book } from '@/api/types'
 
 /**
  * 笔记域的侧栏主面板：新建、视图筛选、分组列表、插件筛选与插件入口。
@@ -110,7 +110,7 @@ function openAll() {
   void router.push('/notes')
 }
 
-function openNotebook(id: string) {
+function openBook(id: string) {
   clearActiveListFilter()
   nodes.openGroup(id)
   void router.push('/notes')
@@ -184,9 +184,9 @@ async function confirmAction() {
   if (action) await action()
 }
 
-function onGroupContext(e: MouseEvent, group: Notebook) {
+function onGroupContext(e: MouseEvent, group: Book) {
   const entries: MenuEntry[] = [
-    { label: '打开', action: () => openNotebook(group.id) },
+    { label: '打开', action: () => openBook(group.id) },
     { label: '重命名', action: () => void renameGroup(group.id, group.title) },
     { separator: true },
     {
@@ -200,7 +200,7 @@ function onGroupContext(e: MouseEvent, group: Notebook) {
 }
 
 watch(
-  () => nodes.notebooks.length,
+  () => nodes.books.length,
   (len) => {
     if (len === 0) void nodes.refreshMeta()
   },
@@ -214,7 +214,7 @@ watch(
       <div class="group-title">笔记</div>
       <button
         class="nav-item"
-        :class="{ active: !isPluginPage && !nodes.activeNotebookId && !activePluginFilter }"
+        :class="{ active: !isPluginPage && !nodes.activeBookId && !activePluginFilter }"
         @click="openAll()"
       >
         <!-- 图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
@@ -233,16 +233,16 @@ watch(
 
         <template v-if="nodes.groupsShown">
           <button
-            v-for="group in nodes.notebooks"
+            v-for="group in nodes.books"
             :key="group.id"
             class="nav-item group-item"
-            :class="{ active: nodes.activeNotebookId === group.id }"
+            :class="{ active: nodes.activeBookId === group.id }"
             :title="group.title"
-            @click="openNotebook(group.id)"
+            @click="openBook(group.id)"
             @contextmenu.prevent="onGroupContext($event, group)"
           >
             <span class="label">{{ group.title }}</span>
-            <span v-if="nodes.notebookCounts[group.id]" class="count">{{ nodes.notebookCounts[group.id] }}</span>
+            <span v-if="nodes.bookCounts[group.id]" class="count">{{ nodes.bookCounts[group.id] }}</span>
           </button>
         </template>
 

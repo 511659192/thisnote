@@ -7,13 +7,13 @@ import java.util.List;
  *
  * @param movedNoteIds note IDs reassigned to the default notebook when deleted; empty otherwise
  */
-public record NotebookChangedEvent(String notebookId,
+public record BookChangedEvent(String bookId,
                                    Kind kind,
                                    String title,
                                    String type,
                                    List<String> movedNoteIds) {
 
-    public NotebookChangedEvent {
+    public BookChangedEvent {
         movedNoteIds = movedNoteIds == null ? List.of() : List.copyOf(movedNoteIds);
     }
 

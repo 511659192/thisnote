@@ -16,7 +16,7 @@ import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import type { NoteMeta, CardView } from '@/api/types'
+import type { NoteDto, CardView } from '@/api/types'
 import { copyImageToClipboard } from '@/components/page/clipboardImage'
 
 const route = useRoute()
@@ -72,12 +72,12 @@ let resolveTitlePrompt: ((canLeave: boolean) => void) | null = null
  * discarding it. The flag makes "cancel" reach the blur handler.
  */
 let renameCancelled = false
-let pendingTitleCommit: Promise<NoteMeta | null> | null = null
+let pendingTitleCommit: Promise<NoteDto | null> | null = null
 function openNode(id: string) {
   void router.push(`/notes/${id}`)
 }
 
-async function saveTitle(title: string): Promise<NoteMeta | null> {
+async function saveTitle(title: string): Promise<NoteDto | null> {
   const pending = nodes.updateCurrent({ title })
   pendingTitleCommit = pending
   try {
@@ -87,7 +87,7 @@ async function saveTitle(title: string): Promise<NoteMeta | null> {
   }
 }
 
-function requestTitlePrompt(note: NoteMeta): Promise<boolean> {
+function requestTitlePrompt(note: NoteDto): Promise<boolean> {
   if (titlePromptPromise) return titlePromptPromise
 
   titlePromptNoteId = note.noteId
@@ -411,7 +411,7 @@ function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?
 
 // ---------------------------------------------------------------- node context menu
 
-function onNodeContext(payload: { node: NoteMeta; x: number; y: number }) {
+function onNodeContext(payload: { node: NoteDto; x: number; y: number }) {
   const entries: MenuEntry[] = []
   if (allowNoteManagement.value) {
     entries.push(

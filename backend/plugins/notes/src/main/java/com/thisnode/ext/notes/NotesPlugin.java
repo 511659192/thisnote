@@ -1,13 +1,15 @@
 package com.thisnode.ext.notes;
 
-import com.thisnode.ext.notes.repository.NotebookRepository;
+import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.repository.BookRepository;
+import com.thisnode.ext.notes.repository.NotebookToBookMigration;
 import com.thisnode.ext.notes.service.AttachmentService;
 import com.thisnode.ext.notes.service.listener.CardAttachmentCleanupListener;
 import com.thisnode.ext.notes.service.listener.CardCreateRequestListener;
 import com.thisnode.ext.notes.service.listener.CardQueryEventListener;
 import com.thisnode.ext.notes.service.CardService;
 import com.thisnode.ext.notes.service.NoteService;
-import com.thisnode.ext.notes.service.NotebookService;
+import com.thisnode.ext.notes.service.BookService;
 import com.thisnode.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -55,11 +57,12 @@ public class NotesPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        NotebookRepository notebookRepository = ctx.getBean(NotebookRepository.class);
-        notebookRepository.initializeDefaultGroup();
+        new NotebookToBookMigration(ctx.getBean(NotesConfig.class), ctx.getBean(FileHelper.class)).migrateIfNeeded();
+        BookRepository bookRepository = ctx.getBean(BookRepository.class);
+        bookRepository.initializeDefaultGroup();
         ctx.getBean(CardService.class).setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(NoteService.class).setMainEventPublisher(getMainApplicationContext());
-        ctx.getBean(NotebookService.class).setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(BookService.class).setMainEventPublisher(getMainApplicationContext());
         attachmentCleanupListener = new CardAttachmentCleanupListener(ctx.getBean(AttachmentService.class));
         cardCreateRequestListener = new CardCreateRequestListener(ctx.getBean(CardService.class), ctx.getBean(NoteService.class));
         cardQueryEventListener = new CardQueryEventListener(ctx.getBean(CardService.class));

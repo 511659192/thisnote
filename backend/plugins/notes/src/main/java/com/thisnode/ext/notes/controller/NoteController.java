@@ -4,7 +4,7 @@ import com.thisnode.ext.notes.model.request.CreateNoteRequest;
 import com.thisnode.ext.notes.model.request.NoteListQuery;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
 import com.thisnode.ext.notes.service.NoteService;
-import com.thisnode.plugin.api.notes.dto.NoteMetaDTO;
+import com.thisnode.plugin.api.notes.dto.NoteDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,25 +19,25 @@ public class NoteController {
     private final NoteService noteService;
 
     @GetMapping("/get")
-    public List<NoteMetaDTO> list(@RequestParam(required = false) String notebookId,
+    public List<NoteDTO> list(@RequestParam(required = false) String bookId,
                                   @RequestParam(required = false) String text,
                                   @RequestParam(defaultValue = "500") int limit,
                                   @RequestParam(defaultValue = "0") int offset) {
-        return noteService.list(new NoteListQuery(notebookId, text, limit, offset));
+        return noteService.list(new NoteListQuery(bookId, text, limit, offset));
     }
 
     @PostMapping("/create")
-    public NoteMetaDTO create(@RequestBody CreateNoteRequest req) {
+    public NoteDTO create(@RequestBody CreateNoteRequest req) {
         return noteService.create(req);
     }
 
     @GetMapping("/get-detail")
-    public NoteMetaDTO detail(@RequestParam String noteId) {
+    public NoteDTO detail(@RequestParam String noteId) {
         return noteService.get(noteId);
     }
 
     @PostMapping("/update")
-    public NoteMetaDTO update(@RequestParam String noteId,
+    public NoteDTO update(@RequestParam String noteId,
                               @RequestBody UpdateNoteRequest req) {
         return noteService.update(noteId, req);
     }

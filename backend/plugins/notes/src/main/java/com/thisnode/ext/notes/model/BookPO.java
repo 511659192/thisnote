@@ -26,23 +26,23 @@ import java.util.List;
 @NoArgsConstructor
 @Accessors(chain = true)
 @Slf4j
-public class NotebookPO {
+public class BookPO {
 
     public static final int SCHEMA = 1;
-    public static final String TYPE_NOTEBOOK = "notebook";
+    public static final String TYPE_BOOK = "book";
     public static final String DEFAULT_GROUP_ID = "grp-default";
     public static final String DEFAULT_GROUP_TITLE = "收集箱";
 
     private int v = SCHEMA;
     private String id;
-    private String type = TYPE_NOTEBOOK;
+    private String type = TYPE_BOOK;
     private String title = "";
     private String icon;
     private int sortOrder;
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
 
-    public NotebookPO(int v,
+    public BookPO(int v,
                     String id,
                     String type,
                     String title,
@@ -66,35 +66,35 @@ public class NotebookPO {
             v = SCHEMA;
         }
         if (type == null || type.isBlank()) {
-            type = TYPE_NOTEBOOK;
+            type = TYPE_BOOK;
         }
         if (title == null) {
             title = "";
         }
     }
 
-    public static NotebookPO newNotebook(String id,
+    public static BookPO newBook(String id,
                                        String type,
                                        String title,
                                        String icon,
                                        int sortOrder,
                                        long now) {
-        return new NotebookPO(SCHEMA, id, type, title, icon, sortOrder, now, now);
+        return new BookPO(SCHEMA, id, type, title, icon, sortOrder, now, now);
     }
 
-    public static List<NotebookPO> parse(Path file) {
+    public static List<BookPO> parse(Path file) {
         try {
             String json = Files.readString(file, StandardCharsets.UTF_8);
             if (json.isBlank()) {
                 return new ArrayList<>();
             }
-            List<NotebookPO> loaded = JSON.parseArray(json, NotebookPO.class);
+            List<BookPO> loaded = JSON.parseArray(json, BookPO.class);
             if (loaded == null) {
                 return new ArrayList<>();
             }
-            for (NotebookPO notebook : loaded) {
-                if (notebook != null) {
-                    notebook.normalize();
+            for (BookPO book : loaded) {
+                if (book != null) {
+                    book.normalize();
                 }
             }
             return new ArrayList<>(loaded);

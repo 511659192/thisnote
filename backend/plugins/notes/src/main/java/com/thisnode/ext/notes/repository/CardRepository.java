@@ -76,46 +76,44 @@ public class CardRepository {
     }
 
     /**
-     * Create a card with a stable ID and a human-readable, title-derived filename.
+     * Write a card into the cards directory and register it in the index, returning its ID.
+     *
+     * <p>fileName 为空 = 新建：补齐稳定 ID，并按标题派生唯一文件名（标题_1.md…）；
+     * fileName 非空 = 显式命名：必须是 cards 目录下的 Markdown 文件名。
+     * 最终文件名都会回填到 meta.sourceFileName。
      */
-    @SneakyThrows
     public String saveNew(CardMeta meta,
                           String content,
+                          String fileName,
                           String title) {
-        String cardId = meta.getCardId() == null || meta.getCardId().isBlank() ? UUID.randomUUID().toString() : meta.getCardId();
-        meta.setCardId(cardId);
+        if (meta.getCardId() == null || meta.getCardId().isBlank()) {
+            meta.setCardId(UUID.randomUUID().toString());
+        }
 
         Path dir = notesConfig.getCardsDir();
-        String prefix = title == null || title.isBlank() ? "tmp-" + cardId : title;
-        for (int number = 1; ; number++) {
-            String suffix = "_" + number;
-            String fileName = prefix + suffix + ".md";
-            Path file = dir.resolve(fileName);
-            if (Files.exists(file)) continue;
-
-            meta.setSourceFileName(fileName);
+        if (fileName == null || fileName.isBlank()) {
+            String prefix = title == null || title.isBlank() ? "tmp-" + meta.getCardId() : title;
+            for (int number = 1; ; number++) {
+                fileName = prefix + "_" + number + ".md";
+                if (Files.exists(dir.resolve(fileName))) continue;
+                break;
+            }
+            fileHelper.fileWritten(dir.resolve(fileName), CardPO.compose(meta, content));
+        } else {
+            if (!fileName.endsWith(".md")) {
+                throw new IllegalArgumentException("卡片文件名必须是 Markdown 文件名：" + fileName);
+            }
+            Path safeDir = dir.toAbsolutePath().normalize();
+            Path file = safeDir.resolve(fileName).normalize();
+            if (!fileName.equals(file.getFileName().toString()) || !safeDir.equals(file.getParent())) {
+                throw new IllegalArgumentException("卡片文件名必须是 cards 目录下的文件名：" + fileName);
+            }
             fileHelper.fileWritten(file, CardPO.compose(meta, content));
-            fileIndex.addCard(cardId, fileName);
-            return cardId;
         }
-    }
 
-    public void saveWithMetadata(String fileName,
-                                 String cardId,
-                                 String markdown) {
-        if (fileName == null || fileName.isBlank() || !fileName.endsWith(".md")) {
-            throw new IllegalArgumentException("卡片文件名必须是 Markdown 文件名：" + fileName);
-        }
-        if (cardId == null || cardId.isBlank()) {
-            throw new IllegalArgumentException("卡片 ID 不能为空");
-        }
-        Path dir = notesConfig.getCardsDir().toAbsolutePath().normalize();
-        Path file = dir.resolve(fileName).normalize();
-        if (!fileName.equals(file.getFileName().toString()) || !dir.equals(file.getParent())) {
-            throw new IllegalArgumentException("卡片文件名必须是 cards 目录下的文件名：" + fileName);
-        }
-        fileHelper.fileWritten(file, markdown);
-        fileIndex.addCard(cardId, fileName);
+        meta.setSourceFileName(fileName);
+        fileIndex.addCard(meta.getCardId(), fileName);
+        return meta.getCardId();
     }
 
     @SneakyThrows

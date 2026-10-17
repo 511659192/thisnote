@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   baiduSyncApi,
   type BaiduSyncPreview,
@@ -19,6 +20,11 @@ const code = ref('')
 const busy = ref('')
 const error = ref('')
 let pollTimer: number | undefined
+const router = useRouter()
+
+function backToNotes() {
+  void router.push('/notes')
+}
 
 async function refresh() {
   try {
@@ -143,7 +149,10 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="baidu-settings">
-    <h3>百度网盘双向同步</h3>
+    <header class="page-head">
+      <h3>百度网盘双向同步</h3>
+      <button class="btn sm ghost" @click="backToNotes">返回笔记</button>
+    </header>
     <p class="muted small">
       同步笔记根目录中的文件和文件夹；应用配置、认证信息与同步清单目录会排除在同步外。
     </p>
@@ -229,8 +238,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.baidu-settings { display: flex; flex-direction: column; gap: 9px; max-width: 760px; }
+.baidu-settings { display: flex; flex-direction: column; gap: 9px; width: 100%; max-width: 760px; min-height: 100%; box-sizing: border-box; padding: var(--space-4); }
 .baidu-settings h3 { margin: 4px 0 0; }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .muted { color: var(--c-text-3); }
 .small { font-size: 12px; }
 .path { margin: 0; overflow-wrap: anywhere; }

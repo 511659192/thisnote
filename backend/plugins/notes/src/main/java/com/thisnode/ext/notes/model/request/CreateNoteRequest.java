@@ -1,9 +1,9 @@
 package com.thisnode.ext.notes.model.request;
 
-import com.thisnode.ext.notes.model.NotebookPO;
+import com.thisnode.ext.notes.model.BookPO;
 
-public record CreateNoteRequest(String notebookId) {
+public record CreateNoteRequest(String bookId) {
     public CreateNoteRequest {
-        notebookId = notebookId == null || notebookId.isBlank() ? NotebookPO.DEFAULT_GROUP_ID : notebookId;
+        bookId = bookId == null || bookId.isBlank() ? BookPO.DEFAULT_GROUP_ID : bookId;
     }
 }

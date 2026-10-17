@@ -1,21 +1,21 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
-import { notebookApi } from '@/api'
-import type { NoteMeta, Notebook } from '@/api/types'
+import { bookApi } from '@/api'
+import type { NoteDto, Book } from '@/api/types'
 import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter, toast } from '@thisnode/plugin-api'
 
 /** Notes: list, selection, notebook navigation and title updates. */
 export const useNoteStore = defineStore('notes', () => {
 
-  const nodes = ref<NoteMeta[]>([])
-  const current = ref<NoteMeta | null>(null)
+  const nodes = ref<NoteDto[]>([])
+  const current = ref<NoteDto | null>(null)
   const loadingList = ref(false)
   const loadingNode = ref(false)
-  const notebooks = ref<Notebook[]>([])
-  const notebookCounts = ref<Record<string, number>>({})
+  const books = ref<Book[]>([])
+  const bookCounts = ref<Record<string, number>>({})
 
-  const activeNotebookId = ref<string | null>(null)
+  const activeBookId = ref<string | null>(null)
   const listQuery = ref('')
   const selectedIds = ref<string[]>([])
 
@@ -27,7 +27,7 @@ export const useNoteStore = defineStore('notes', () => {
     loadingList.value = true
     try {
       nodes.value = await noteApi.list({
-        notebookId: activeNotebookId.value ?? undefined,
+        bookId: activeBookId.value ?? undefined,
         text: listQuery.value || undefined,
       })
     } catch (e) {
@@ -90,13 +90,13 @@ export const useNoteStore = defineStore('notes', () => {
     if (!ids) return nodes.value
     return nodes.value.filter((n) => ids.has(n.noteId))
   })
-  async function countNotesByNotebook(): Promise<Record<string, number>> {
+  async function countNotesByBook(): Promise<Record<string, number>> {
     const counts: Record<string, number> = {}
     const pageSize = 500
     for (let offset = 0; ; offset += pageSize) {
       const page = await noteApi.list({ limit: pageSize, offset })
       for (const note of page) {
-        if (note.notebookId) counts[note.notebookId] = (counts[note.notebookId] ?? 0) + 1
+        if (note.bookId) counts[note.bookId] = (counts[note.bookId] ?? 0) + 1
       }
       if (page.length < pageSize) return counts
     }
@@ -108,9 +108,9 @@ export const useNoteStore = defineStore('notes', () => {
     }
     metaInflight = (async () => {
       try {
-        const [loadedNotebooks, counts] = await Promise.all([notebookApi.list(), countNotesByNotebook()])
-        notebooks.value = loadedNotebooks
-        notebookCounts.value = counts
+        const [loadedBooks, counts] = await Promise.all([bookApi.list(), countNotesByBook()])
+        books.value = loadedBooks
+        bookCounts.value = counts
       } catch (e) {
         /* meta refresh is best-effort */
       } finally {
@@ -126,12 +126,12 @@ export const useNoteStore = defineStore('notes', () => {
 
   /** 回到「全部笔记」：清掉分组限定，重新拉列表。 */
   function showAll() {
-    activeNotebookId.value = null
+    activeBookId.value = null
     void loadList()
   }
 
-  function setNotebook(id: string | null) {
-    activeNotebookId.value = id
+  function setBook(id: string | null) {
+    activeBookId.value = id
     void loadList()
   }
 
@@ -140,27 +140,27 @@ export const useNoteStore = defineStore('notes', () => {
   /** 侧栏可折叠的扁平分组列表。 */
   const groupsShown = ref(true)
 
-  async function createGroup(title: string): Promise<Notebook> {
-    const created = await notebookApi.create(title)
+  async function createGroup(title: string): Promise<Book> {
+    const created = await bookApi.create(title)
     await refreshMeta()
     groupsShown.value = true
     return created
   }
 
   async function renameGroup(id: string, title: string) {
-    await notebookApi.update(id, { title })
+    await bookApi.update(id, { title })
     await refreshMeta()
   }
 
   async function deleteGroup(id: string) {
-    await notebookApi.remove(id)
-    if (activeNotebookId.value === id) setNotebook(null)
+    await bookApi.remove(id)
+    if (activeBookId.value === id) setBook(null)
     await refreshMeta()
   }
 
   function openGroup(id: string) {
     groupsShown.value = true
-    setNotebook(id)
+    setBook(id)
   }
 
   function setListQuery(q: string) {
@@ -194,7 +194,7 @@ export const useNoteStore = defineStore('notes', () => {
     await refreshMeta()
   }
 
-  async function updateCurrent(changes: { title?: string }): Promise<NoteMeta | null> {
+  async function updateCurrent(changes: { title?: string }): Promise<NoteDto | null> {
     if (!current.value) return null
     const id = current.value.noteId
     try {
@@ -209,8 +209,8 @@ export const useNoteStore = defineStore('notes', () => {
   }
 
   async function createNode(payload: {
-    notebookId?: string
-  }): Promise<NoteMeta | null> {
+    bookId?: string
+  }): Promise<NoteDto | null> {
     try {
       const detail = await noteApi.create(payload)
       await Promise.all([loadList(), refreshMeta()])
@@ -247,16 +247,16 @@ export const useNoteStore = defineStore('notes', () => {
     currentId,
     loadingList,
     loadingNode,
-    notebooks,
-    notebookCounts,
-    activeNotebookId,
+    books,
+    bookCounts,
+    activeBookId,
     listQuery,
     selectedIds,
     loadList,
     refreshMeta,
     refreshAll,
     showAll,
-    setNotebook,
+    setBook,
     setListQuery,
     // 分组列表
     groupsShown,

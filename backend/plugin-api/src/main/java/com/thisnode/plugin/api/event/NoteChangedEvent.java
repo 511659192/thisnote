@@ -27,9 +27,9 @@ public record NoteChangedEvent(String noteId,
 
     public static NoteChangedEvent requestNoteCreate(CardDTO card,
                                                      String noteTitle,
-                                                     String notebookId) {
+                                                     String bookId) {
         return new NoteChangedEvent(null, Kind.REQUEST, noteTitle, List.of(),
-                new NoteCreateRequest(card, noteTitle, notebookId));
+                new NoteCreateRequest(card, noteTitle, bookId));
     }
 
     public enum Kind {
@@ -41,6 +41,6 @@ public record NoteChangedEvent(String noteId,
 
     public record NoteCreateRequest(CardDTO card,
                                    String noteTitle,
-                                   String notebookId) {
+                                   String bookId) {
     }
 }

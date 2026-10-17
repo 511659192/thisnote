@@ -3,7 +3,7 @@
  * Keep both sides in sync when the API changes.
  */
 
-export interface Notebook {
+export interface Book {
   v: number
   id: string
   type: string
@@ -46,20 +46,15 @@ export interface CardView {
   selected?: boolean
 }
 
-export interface NoteDto {
-  noteMeta: NoteMeta
-  cards: Card[]
-}
-
 /**
  * 一篇笔记的 meta（后端原样返回的列表行）：没有正文体，摘要与计数是后端写入时算好的缓存。
  */
-export interface NoteMeta {
+export interface NoteDto {
   v: number
   noteId: string
   title: string
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */
-  notebookId?: string | null
+  bookId?: string | null
   /** 卡片 ID 清单（顺序即阅读顺序）。 */
   cardIds: string[]
 }

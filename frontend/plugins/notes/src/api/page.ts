@@ -1,5 +1,5 @@
 import { http } from '@thisnode/plugin-api'
-import type { Card, CardMeta, NoteDto } from './types'
+import type { Card, CardMeta } from './types'
 
 export interface CardUpdate {
   cardId: string
@@ -23,7 +23,7 @@ export interface CardUpdate {
 export const pageApi = {
   /** cardIds 省略 = 整页：卡片几何 + 它自己的正文。 */
   get: (noteId: string, cardIds?: string[]) =>
-    http.get<NoteDto>('/api/notes/cards/get', {
+    http.get<Card[]>('/api/notes/cards/get', {
       noteId,
       cardIds: cardIds && cardIds.length ? cardIds.join(',') : undefined,
     }),

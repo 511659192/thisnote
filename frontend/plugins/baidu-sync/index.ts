@@ -1,10 +1,30 @@
-import { registerPluginSettings, unregisterPlugin } from '@thisnode/plugin-api'
+import {
+  registerNavEntry,
+  registerPluginRoute,
+  registerPluginSettings,
+  unregisterPlugin,
+} from '@thisnode/plugin-api'
 import BaiduSyncSettings from './src/views/BaiduSyncSettings.vue'
 
 const PLUGIN_ID = 'baidu-sync'
 
 export function register(): void {
+  // 设置面板仍供「插件管理 → 设置」内嵌使用；入口在侧栏「复习」之下（order 排序），
+  // 插件停用随 unmount 注销，侧栏入口与路由一起消失。
   registerPluginSettings({ pluginId: PLUGIN_ID, component: BaiduSyncSettings })
+  registerNavEntry({
+    pluginId: PLUGIN_ID,
+    label: '百度网盘同步',
+    glyph: '☁️',
+    to: '/baidu-sync',
+    order: 2,
+  })
+  registerPluginRoute({
+    pluginId: PLUGIN_ID,
+    path: 'baidu-sync',
+    name: 'baidu-sync',
+    component: () => import('./src/views/BaiduSyncSettings.vue'),
+  })
 }
 
 export async function bootstrap() {}
@@ -21,7 +41,7 @@ if (!window.__POWERED_BY_QIANKUN__) {
   register()
   document.getElementById('plugin-root')?.replaceChildren(
     Object.assign(document.createElement('p'), {
-      textContent: '百度网盘同步插件设置由 thisnote 宿主承载。',
+      textContent: '百度网盘同步插件独立预览：完整界面（网盘同步配置）渲染在 thisnote 宿主里。',
     }),
   )
 }

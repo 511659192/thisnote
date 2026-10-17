@@ -4,10 +4,10 @@ import { listHeaders_, toast } from '@thisnode/plugin-api'
 import { noteApi } from '@/api/note'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
-import type { NoteMeta } from '@/api/types'
+import type { NoteDto } from '@/api/types'
 
 const props = withDefaults(defineProps<{
-  nodes: NoteMeta[]
+  nodes: NoteDto[]
   loading?: boolean
   currentId?: string | null
   allowNoteManagement?: boolean
@@ -20,7 +20,7 @@ const visibleListHeaders = computed(() =>
 )
 const emit = defineEmits<{
   (e: 'open', id: string): void
-  (e: 'context', payload: { node: NoteMeta; x: number; y: number }): void
+  (e: 'context', payload: { node: NoteDto; x: number; y: number }): void
   (e: 'remove', id: string): void
 }>()
 
@@ -43,7 +43,7 @@ function openNote(noteId: string) {
   emit('open', noteId)
 }
 
-function onTitleClick(event: MouseEvent, note: NoteMeta) {
+function onTitleClick(event: MouseEvent, note: NoteDto) {
   event.stopPropagation()
   if (event.detail > 1) {
     clearTitleOpenTimer()
@@ -56,7 +56,7 @@ function onTitleClick(event: MouseEvent, note: NoteMeta) {
   }, 250)
 }
 
-function onTitleDoubleClick(event: MouseEvent, note: NoteMeta) {
+function onTitleDoubleClick(event: MouseEvent, note: NoteDto) {
   event.stopPropagation()
   event.preventDefault()
   if (props.allowNoteManagement) {
@@ -67,7 +67,7 @@ function onTitleDoubleClick(event: MouseEvent, note: NoteMeta) {
   emit('open', note.noteId)
 }
 
-async function startRename(note: NoteMeta) {
+async function startRename(note: NoteDto) {
   if (!props.allowNoteManagement) return
   clearTitleOpenTimer()
   renamingId.value = note.noteId
@@ -85,7 +85,7 @@ function cancelRename(noteId: string) {
   titleDraft.value = ''
 }
 
-async function commitRename(note: NoteMeta) {
+async function commitRename(note: NoteDto) {
   if (!props.allowNoteManagement) {
     renamingId.value = null
     titleDraft.value = ''
@@ -125,20 +125,20 @@ async function commitRename(note: NoteMeta) {
 onBeforeUnmount(clearTitleOpenTimer)
 
 // 列表接口的 notebooks 只带归属 id（笔记 meta 里的字段），标题用这里已加载的台账解析。
-const notebookTitle = (id: string) => store.notebooks.find((nb) => nb.id === id)?.title ?? id
+const bookTitle = (id: string) => store.books.find((nb) => nb.id === id)?.title ?? id
 
 /**
  * 空列表提示。列表只剩「全部笔记」一个视图，所以文案固定。
  */
 const emptyState = '这里还没有笔记'
 
-function onContext(e: MouseEvent, node: NoteMeta) {
+function onContext(e: MouseEvent, node: NoteDto) {
   e.preventDefault()
   emit('context', { node, x: e.clientX, y: e.clientY })
 }
 
 /** Ask the parent to confirm before permanently deleting the note and its cards. */
-function askRemove(node: NoteMeta) {
+function askRemove(node: NoteDto) {
   if (!props.allowNoteManagement) return
   emit('remove', node.noteId)
 }
@@ -202,8 +202,8 @@ function askRemove(node: NoteMeta) {
         <!--
           归属分组：笔记必须有归属（默认是「收集箱」），后端只回 id，标题从侧栏台账解析。
         -->
-        <div v-if="n.notebookId" class="row-2 groups">
-          <span class="chip group-chip" title="所属分组">▣ {{ notebookTitle(n.notebookId) }}</span>
+        <div v-if="n.bookId" class="row-2 groups">
+          <span class="chip group-chip" title="所属分组">▣ {{ bookTitle(n.bookId) }}</span>
         </div>
       </div>
     </div>

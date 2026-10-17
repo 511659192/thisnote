@@ -18,7 +18,7 @@ public class CardImporterService {
 
     private static final Logger log = LoggerFactory.getLogger(CardImporterService.class);
     private static final long SCAN_INTERVAL_MILLIS = 10_000;
-    private static final String DEFAULT_NOTEBOOK_ID = "grp-default";
+    private static final String DEFAULT_BOOK_ID = "grp-default";
 
     private ApplicationEventPublisher mainEventPublisher;
 
@@ -47,7 +47,7 @@ public class CardImporterService {
         for (CardDTO card : cards) {
             if (card.meta() != null && card.meta().noteId() != null) continue;
             String noteTitle = title(card.sourceFileName());
-            mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(card, noteTitle, DEFAULT_NOTEBOOK_ID));
+            mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(card, noteTitle, DEFAULT_BOOK_ID));
         }
     }
 

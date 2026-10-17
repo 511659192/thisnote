@@ -33,6 +33,7 @@ export function register(): void {
     label: '复习',
     glyph: '🧠',
     to: '/review',
+    order: 1,
     badge: async () => (await memoryCycleApi.due(50)).length,
   })
 

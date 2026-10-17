@@ -42,10 +42,10 @@ async function trackNewNote() {
 }
 
 async function cleanup() {
-  const groups = (await api('GET', '/api/notebooks')).body ?? []
+  const groups = (await api('GET', '/api/books')).body ?? []
   for (const g of groups) {
     if (g.title.startsWith('测试分组') || g.title.startsWith('子分组') || g.title.startsWith('重命名')) {
-      await api('DELETE', `/api/notebooks/${g.id}`)
+      await api('DELETE', `/api/books/${g.id}`)
     }
   }
   for (const id of createdNotes) {
@@ -112,7 +112,7 @@ const noteId = await win.evaluate(() => {
   const row = document.querySelector('.note-row')
   return row ? row.getAttribute('data-node-id') : null
 })
-const rootId = ((await api('GET', '/api/notebooks')).body ?? []).find((g) => g.title === ROOT)?.id
+const rootId = ((await api('GET', '/api/books')).body ?? []).find((g) => g.title === ROOT)?.id
 
 if (noteId && rootId) {
   await win.evaluate(({ mime, value, groupTitle }) => {
@@ -171,23 +171,23 @@ check('笔记列表显示归属分组', chipTexts.length > 0,
 // 在某个分组里新建 → 自动落进这个分组
 await groupRow(ROOT).click()
 await win.waitForTimeout(1500)
-const beforeCount = ((await api('GET', '/api/notebooks')).body ?? []).find((g) => g.id === rootId)?.count ?? 0
+const beforeCount = ((await api('GET', '/api/books')).body ?? []).find((g) => g.id === rootId)?.count ?? 0
 await win.locator('.new-note').click()
 await win.waitForTimeout(2000)
 await trackNewNote()
-const afterGroup = ((await api('GET', '/api/notebooks')).body ?? []).find((g) => g.id === rootId)
+const afterGroup = ((await api('GET', '/api/books')).body ?? []).find((g) => g.id === rootId)
 check('在分组里新建：笔记自动带入当前分组', (afterGroup?.count ?? 0) === beforeCount + 1,
   `${beforeCount} → ${afterGroup?.count ?? '?'}`)
 
 // 顶层新建 → 落进默认分组（走用户路径：点「全部笔记」，它会清掉当前分组）
 await allRow.click()
 await win.waitForTimeout(1800)
-const inboxBefore = ((await api('GET', '/api/notebooks')).body ?? [])
+const inboxBefore = ((await api('GET', '/api/books')).body ?? [])
   .find((g) => g.id === 'grp-default')?.count ?? 0
 await win.locator('.new-note').click()
 await win.waitForTimeout(2000)
 await trackNewNote()
-const inboxAfter = ((await api('GET', '/api/notebooks')).body ?? [])
+const inboxAfter = ((await api('GET', '/api/books')).body ?? [])
   .find((g) => g.id === 'grp-default')?.count ?? 0
 check('顶层新建：落进默认分组「收集箱」', inboxAfter === inboxBefore + 1,
   `${inboxBefore} → ${inboxAfter}`)

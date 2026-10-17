@@ -45,9 +45,9 @@ public record CardChangedEvent(String cardId, Kind kind, Set<String> removedAtta
 
     public static CardChangedEvent requestCardCreate(CardDTO card,
                                                      String noteTitle,
-                                                     String notebookId) {
+                                                     String bookId) {
         String cardId = card.meta() == null ? null : card.meta().cardId();
-        return new CardChangedEvent(cardId, Kind.REQUEST, Set.of(), new CardCreateRequest(card, noteTitle, notebookId));
+        return new CardChangedEvent(cardId, Kind.REQUEST, Set.of(), new CardCreateRequest(card, noteTitle, bookId));
     }
 
     public enum Kind {
@@ -69,6 +69,6 @@ public record CardChangedEvent(String cardId, Kind kind, Set<String> removedAtta
         REQUEST
     }
 
-    public record CardCreateRequest(CardDTO card, String noteTitle, String notebookId) {
+    public record CardCreateRequest(CardDTO card, String noteTitle, String bookId) {
     }
 }

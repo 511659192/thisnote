@@ -99,7 +99,7 @@ export const usePageStore = defineStore('notePage', () => {
     return lowest + 160
   })
 
-  async function load(id: string, cardIds?: string[], emptyNoteTitle = '') {
+  async function load(id: string, cardIds?: string[], title = '') {
     loading.value = true
     try {
       cards.value = []
@@ -108,7 +108,7 @@ export const usePageStore = defineStore('notePage', () => {
       pendingCardIds.value = all.slice(PAGE_SIZE)
       if (cardIds?.length === 0) {
         noteId.value = id
-        noteTitle.value = emptyNoteTitle
+        noteTitle.value = title
         selection.value = []
         raisedCardIds.value = []
         editingCardId.value = null
@@ -116,15 +116,15 @@ export const usePageStore = defineStore('notePage', () => {
         return null
       }
       const page = await pageApi.get(id, first.length ? first : undefined)
-      noteId.value = page.noteMeta.noteId
-      noteTitle.value = page.noteMeta.title
-      cards.value = page.cards.map(toCardView)
+      noteId.value = id
+      noteTitle.value = title
+      cards.value = page.map(toCardView)
       const loaded = new Set(cards.value.map((view) => view.card.cardId))
       pendingCardIds.value = pendingCardIds.value.filter((cardId) => !loaded.has(cardId))
       selection.value = []
       raisedCardIds.value = []
       editingCardId.value = null
-      restoreViewport(page.noteMeta.noteId)
+      restoreViewport(id)
       return page
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -142,14 +142,14 @@ export const usePageStore = defineStore('notePage', () => {
     try {
       const page = await pageApi.get(id, batch)
       const seen = new Set(cards.value.map((view) => view.card.cardId))
-      for (const card of page.cards) {
+      for (const card of page) {
         const view = toCardView(card)
         if (!seen.has(view.card.cardId)) {
           cards.value.push(view)
           seen.add(view.card.cardId)
         }
       }
-      const arrived = new Set(page.cards.map((card) => card.meta.cardId))
+      const arrived = new Set(page.map((card) => card.meta.cardId))
       pendingCardIds.value = pendingCardIds.value
         .slice(PAGE_SIZE)
         .filter((cardId) => !arrived.has(cardId))
@@ -167,10 +167,9 @@ export const usePageStore = defineStore('notePage', () => {
     if (!cardIds.length && !pendingCardIds.value.length) return
     const cardIdSet = new Set(cardIds)
     const page = await pageApi.get(noteId.value, cardIds.length ? cardIds : undefined)
-    const refreshed = page.cards.map(toCardView)
+    const refreshed = page.map(toCardView)
     const extra = refreshed.filter((view) => !cardIdSet.has(view.card.cardId))
     cards.value = [...refreshed, ...extra]
-    noteTitle.value = page.noteMeta.title
   }
 
   // ---------------------------------------------------------------- selection

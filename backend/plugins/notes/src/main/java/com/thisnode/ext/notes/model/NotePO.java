@@ -18,18 +18,18 @@ import java.util.List;
 @NoArgsConstructor
 @Accessors(chain = true)
 @Slf4j
-public class NoteMetaPO {
+public class NotePO {
 
     private int v;
     private String noteId;
     private String title;
-    private String notebookId;
+    private String bookId;
     private List<String> cardIds = List.of();
 
-    public static NoteMetaPO parse(Path filePath) {
+    public static NotePO parse(Path filePath) {
         try {
             String json = Files.readString(filePath, StandardCharsets.UTF_8);
-            return json.isBlank() ? null : com.alibaba.fastjson2.JSON.parseObject(json, NoteMetaPO.class);
+            return json.isBlank() ? null : com.alibaba.fastjson2.JSON.parseObject(json, NotePO.class);
         } catch (NoSuchFileException e) {
             return null;
         } catch (IOException | RuntimeException e) {

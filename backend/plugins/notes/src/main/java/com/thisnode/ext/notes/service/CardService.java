@@ -3,7 +3,7 @@ package com.thisnode.ext.notes.service;
 import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.model.CardPO.CardMeta;
-import com.thisnode.ext.notes.model.NoteMetaPO;
+import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.ext.notes.model.NotesMapper;
 import com.thisnode.ext.notes.model.request.BatchUpdateCardsRequest;
 import com.thisnode.ext.notes.model.request.CreateCardRequest;
@@ -14,8 +14,6 @@ import com.thisnode.plugin.api.event.CardChangedEvent;
 import com.thisnode.plugin.api.exception.ConflictException;
 import com.thisnode.plugin.api.notes.dto.CardDTO;
 import com.thisnode.plugin.api.notes.dto.CardMetaDTO;
-import com.thisnode.plugin.api.notes.dto.CardResponseDTO;
-import com.thisnode.plugin.api.notes.dto.NoteDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +39,7 @@ public class CardService {
         this.mainEventPublisher = publisher;
     }
 
-    private List<CardPO> cards(NoteMetaPO note) {
+    private List<CardPO> cards(NotePO note) {
         return note.getCardIds().stream().map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
     }
 
@@ -49,61 +47,55 @@ public class CardService {
         return cardRepository.listAllFiles().stream().map(notesMapper::toCardDTO).toList();
     }
 
-    public NoteDTO cards(String noteId,
+    public List<CardDTO> cards(String noteId,
                          List<String> cardIds) {
-        NoteMetaPO noteMeta = getNoteMeta(noteId);
+        NotePO note = getNote(noteId);
         List<CardPO> cards;
         if (cardIds == null) {
-            cards = cards(noteMeta);
+            cards = cards(note);
         } else {
             Set<String> wanted = new HashSet<>(cardIds);
-            cards = noteMeta.getCardIds().stream().filter(wanted::contains).map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
+            cards = note.getCardIds().stream().filter(wanted::contains).map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
         }
-        return notesMapper.toNoteDTO(noteMeta, cards);
+        return cards.stream().map(notesMapper::toCardDTO).toList();
     }
 
-    public CardResponseDTO create(String noteId,
+    public CardDTO create(String noteId,
                                   CreateCardRequest req) {
         return create(noteId, req, null);
     }
 
-    public CardResponseDTO create(String noteId,
+    public CardDTO create(String noteId,
                                   CreateCardRequest req,
                                   String fixedFileName) {
         if (req.x() == null || req.y() == null) {
             throw new IllegalArgumentException("创建卡片需要 x/y 坐标（页面上的落点）");
         }
-        NoteMetaPO noteMeta = getNoteMeta(noteId);
+        NotePO note = getNote(noteId);
         String content = req.content();
         double x = Math.max(0, req.x());
         double y = Math.max(0, req.y());
         double w = Math.max(CardRepository.MIN_W, req.w());
         double h = Math.max(CardRepository.MIN_H, req.h());
 
-        CardMeta card = new CardMeta().setX(x).setY(y).setW(w).setH(h).setColor(req.color()).setNoteId(noteMeta.getNoteId());
-        if (fixedFileName == null) {
-            cardRepository.saveNew(card, content, noteMeta.getTitle());
-        } else {
-            card.setCardId(UUID.randomUUID().toString());
-            card.setSourceFileName(fixedFileName);
-            cardRepository.saveWithMetadata(fixedFileName, card.getCardId(), CardPO.compose(card, content));
-        }
+        CardMeta card = new CardMeta().setX(x).setY(y).setW(w).setH(h).setColor(req.color()).setNoteId(note.getNoteId());
+        cardRepository.saveNew(card, content, fixedFileName, note.getTitle());
 
-        List<String> cardIds = new ArrayList<>(noteMeta.getCardIds());
+        List<String> cardIds = new ArrayList<>(note.getCardIds());
         cardIds.add(card.getCardId());
-        noteMeta.setCardIds(cardIds);
-        noteRepository.save(noteMeta);
+        note.setCardIds(cardIds);
+        noteRepository.save(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(card.getCardId(), CardChangedEvent.Kind.CREATED));
         log.info("笔记 {} 新建卡片 {}", noteId, card.getCardId());
-        return notesMapper.toCardResponseDTO(new CardPO(card, content));
+        return notesMapper.toCardDTO(new CardPO(card, content));
     }
 
     // Card metadata and body share one Markdown file, so serialize their read-modify-write paths.
-    public synchronized CardResponseDTO writeContent(String noteId,
+    public synchronized CardDTO writeContent(String noteId,
                                                      String cardId,
                                                      String contentMd,
                                                      String baseContentMd) {
-        NoteMetaPO noteMeta = noteContainingCard(noteId, cardId);
+        NotePO note = noteContainingCard(noteId, cardId);
 
         CardPO card = cardRepository.getOne(cardId);
         if (card == null || card.getMeta() == null) {
@@ -120,24 +112,24 @@ public class CardService {
         Set<String> removedAttachments = new HashSet<>(AttachmentService.referencedFileNames(current));
         removedAttachments.removeAll(AttachmentService.referencedFileNames(body));
         cardRepository.save(cardMeta, body, cardId);
-        noteRepository.save(noteMeta);
+        noteRepository.save(note);
         attachmentService.deleteIfUnreferenced(removedAttachments);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         log.debug("卡片 {} 内容已保存（{} 字符）", cardId, body.length());
         CardPO saved = cardRepository.getOne(cardId);
-        return notesMapper.toCardResponseDTO(saved == null ? new CardPO(cardMeta, body) : saved);
+        return notesMapper.toCardDTO(saved == null ? new CardPO(cardMeta, body) : saved);
     }
 
     public synchronized CardMetaDTO update(String noteId,
                                            String cardId,
                                            UpdateCardRequest changes) {
-        return notesMapper.toCardMetaDTO(update(getNoteMeta(noteId), cardId, changes));
+        return notesMapper.toCardMetaDTO(update(getNote(noteId), cardId, changes));
     }
 
-    private CardMeta update(NoteMetaPO noteMeta,
+    private CardMeta update(NotePO note,
                             String cardId,
                             UpdateCardRequest changes) {
-        noteContainingCard(noteMeta, cardId);
+        noteContainingCard(note, cardId);
         CardPO card = cardRepository.getOne(cardId);
         if (card == null || card.getMeta() == null) {
             throw new NotFoundException("card " + cardId);
@@ -162,7 +154,7 @@ public class CardService {
     }
 
     public synchronized void batchUpdate(BatchUpdateCardsRequest req) {
-        NoteMetaPO note = getNoteMeta(req.noteId());
+        NotePO note = getNote(req.noteId());
         for (UpdateCardRequest update : req.cards()) {
             if (update != null && update.cardId() != null) {
                 update(noteContainingCard(note, update.cardId()), update.cardId(), update);
@@ -172,7 +164,7 @@ public class CardService {
 
     public void delete(String noteId,
                        String cardId) {
-        NoteMetaPO note = noteContainingCard(noteId, cardId);
+        NotePO note = noteContainingCard(noteId, cardId);
         CardPO card = cardRepository.getOne(cardId);
 
         Set<String> removedAttachments = AttachmentService.referencedFileNames(card == null ? "" : card.getContent());
@@ -184,20 +176,20 @@ public class CardService {
         log.info("笔记 {} 删除卡片 {}", noteId, cardId);
     }
 
-    private NoteMetaPO noteContainingCard(String noteId,
+    private NotePO noteContainingCard(String noteId,
                                           String cardId) {
-        return noteContainingCard(getNoteMeta(noteId), cardId);
+        return noteContainingCard(getNote(noteId), cardId);
     }
 
-    private NoteMetaPO getNoteMeta(String noteId) {
-        NoteMetaPO noteMeta = noteRepository.getOne(noteId);
-        if (noteMeta == null) {
+    private NotePO getNote(String noteId) {
+        NotePO note = noteRepository.getOne(noteId);
+        if (note == null) {
             throw new NotFoundException("node " + noteId);
         }
-        return noteMeta;
+        return note;
     }
 
-    private NoteMetaPO noteContainingCard(NoteMetaPO note,
+    private NotePO noteContainingCard(NotePO note,
                                           String cardId) {
         if (!note.getCardIds().contains(cardId)) {
             throw new NotFoundException("card " + cardId);
