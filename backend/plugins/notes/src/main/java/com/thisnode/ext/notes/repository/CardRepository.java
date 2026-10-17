@@ -1,17 +1,17 @@
 package com.thisnode.ext.notes.repository;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.notes.config.NotesConfig;
-import com.thisnode.ext.notes.model.CardIndex;
 import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.model.CardPO.CardMeta;
+import com.thisnode.ext.notes.util.FileNameUtil;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -26,9 +26,6 @@ import java.util.UUID;
 /**
  * 卡片存储：正文在 {@code cards/*.md}，元数据在 {@code plugins/notes/.card-index.json}
  * （{@code cardId → CardMeta}，文件名就是 {@code meta.sourceFileName}）。
- *
- * <p>旧索引（notes 根目录的 {@code .card-file-index.json}）只有 cardId → 文件名、
- * 没有元数据；按约定不做历史迁移，首次读取时直接换成空的新索引。
  */
 @Slf4j
 @Repository
@@ -39,32 +36,36 @@ public class CardRepository {
 
     private final NotesConfig notesConfig;
     private final FileHelper fileHelper;
-    private final Path indexFile;
-    private final Path legacyIndexFile;
+    private final Path cardIndexFile;
 
     public CardRepository(NotesConfig notesConfig,
                           FileHelper fileHelper) {
         this.notesConfig = notesConfig;
         this.fileHelper = fileHelper;
-        this.indexFile = notesConfig.getNotesPluginDir().resolve(".card-index.json");
-        this.legacyIndexFile = notesConfig.getRootDir().resolve(".card-file-index.json");
+        this.cardIndexFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".card-index.json");
     }
 
     @SneakyThrows
     public synchronized CardPO getOne(String cardId) {
         if (cardId == null || cardId.isBlank()) return null;
+
+        // 先读取meta
         CardMeta meta = indexMeta(cardId);
-        if (meta == null || meta.getSourceFileName() == null) return null;
-        return readCard(notesConfig.getCardsDir().resolve(meta.getSourceFileName()), meta);
+        if (meta == null || meta.getFileName() == null) return null;
+
+        // 组合meta card
+        return readCard(notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName()), meta);
     }
 
     public List<CardPO> getAll(List<String> cardIds) {
         if (cardIds == null || cardIds.isEmpty()) return List.of();
+
         List<CardPO> cards = new ArrayList<>(cardIds.size());
         for (String cardId : cardIds) {
             CardPO card = getOne(cardId);
             if (card != null) cards.add(card);
         }
+
         return cards;
     }
 
@@ -73,21 +74,21 @@ public class CardRepository {
      */
     public synchronized List<CardPO> getAllIndexed() {
         List<CardPO> cards = new ArrayList<>();
-        for (CardMeta meta : readIndex().getCards().values()) {
-            if (meta == null || meta.getSourceFileName() == null) continue;
+        Map<String, CardMeta> cardMetaMap = readCardIndex();
+        for (CardMeta meta : cardMetaMap.values()) {
+            if (meta == null || meta.getFileName() == null) continue;
+
             try {
-                cards.add(readCard(notesConfig.getCardsDir().resolve(meta.getSourceFileName()), meta));
-            } catch (NoSuchFileException e) {
-                // 文件被外部删掉：跳过，下一次扫描会把它当成无主卡片
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
+                cards.add(readCard(notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName()), meta));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         }
         return cards;
     }
 
     public synchronized List<CardPO> listChangedFiles(Instant since) throws IOException {
-        Path cardsDir = notesConfig.getCardsDir();
+        Path cardsDir = notesConfig.getRootDir().resolve("cards");
         if (!Files.isDirectory(cardsDir)) return List.of();
 
         DirectoryStream.Filter<Path> filter = allOf(markdownFiles(), changedSince(since));
@@ -150,14 +151,10 @@ public class CardRepository {
             meta.setCardId(UUID.randomUUID().toString());
         }
 
-        Path dir = notesConfig.getCardsDir();
+        Path dir = notesConfig.getRootDir().resolve("cards");
         if (fileName == null || fileName.isBlank()) {
             String prefix = title == null || title.isBlank() ? "tmp-" + meta.getCardId() : title;
-            for (int number = 1; ; number++) {
-                fileName = prefix + "_" + number + ".md";
-                if (Files.exists(dir.resolve(fileName))) continue;
-                break;
-            }
+            fileName = FileNameUtil.nextAvailable(dir, prefix, ".md", null);
         } else {
             if (!fileName.endsWith(".md")) {
                 throw new IllegalArgumentException("卡片文件名必须是 Markdown 文件名：" + fileName);
@@ -169,7 +166,7 @@ public class CardRepository {
             }
         }
 
-        meta.setSourceFileName(fileName);
+        meta.setFileName(fileName);
         fileHelper.fileWritten(dir.resolve(fileName), content == null ? "" : content);
         putIndexMeta(meta);
         return meta.getCardId();
@@ -179,26 +176,20 @@ public class CardRepository {
                                          String noteTitle) {
         if (cardIds == null || cardIds.isEmpty()) return;
 
-        Path dir = notesConfig.getCardsDir();
+        Path dir = notesConfig.getRootDir().resolve("cards");
         boolean draftTitle = noteTitle == null || noteTitle.isBlank();
         for (String cardId : cardIds) {
             CardMeta meta = indexMeta(cardId);
-            if (meta == null || meta.getSourceFileName() == null) continue;
+            if (meta == null || meta.getFileName() == null) continue;
 
-            String oldFileName = meta.getSourceFileName();
+            String oldFileName = meta.getFileName();
             String prefix = draftTitle ? "draft-" + cardId : noteTitle;
-            for (int number = 1; ; number++) {
-                String newFileName = prefix + "_" + number + ".md";
-                if (newFileName.equals(oldFileName)) break;
-                Path newFile = dir.resolve(newFileName);
-                if (Files.exists(newFile)) continue;
+            String newFileName = FileNameUtil.nextAvailable(dir, prefix, ".md", oldFileName);
+            if (newFileName.equals(oldFileName)) continue;
 
-                Path oldFile = dir.resolve(oldFileName);
-                fileHelper.fileMoved(oldFile, newFile);
-                meta.setSourceFileName(newFileName);
-                putIndexMeta(meta);
-                break;
-            }
+            fileHelper.rename(dir.resolve(oldFileName), dir.resolve(newFileName));
+            meta.setFileName(newFileName);
+            putIndexMeta(meta);
         }
     }
 
@@ -209,11 +200,11 @@ public class CardRepository {
                                       String contentMd,
                                       String cardId) {
         CardMeta indexed = indexMeta(cardId);
-        if (indexed == null || indexed.getSourceFileName() == null) {
+        if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
-        meta.setSourceFileName(indexed.getSourceFileName());
-        fileHelper.fileWritten(notesConfig.getCardsDir().resolve(indexed.getSourceFileName()), contentMd == null ? "" : contentMd);
+        meta.setFileName(indexed.getFileName());
+        fileHelper.fileWritten(notesConfig.getRootDir().resolve("cards").resolve(indexed.getFileName()), contentMd == null ? "" : contentMd);
         putIndexMeta(meta);
         return cardId;
     }
@@ -224,10 +215,10 @@ public class CardRepository {
     public synchronized void update(CardMeta meta,
                                     String cardId) {
         CardMeta indexed = indexMeta(cardId);
-        if (indexed == null || indexed.getSourceFileName() == null) {
+        if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
-        meta.setSourceFileName(indexed.getSourceFileName());
+        meta.setFileName(indexed.getFileName());
         putIndexMeta(meta);
     }
 
@@ -237,8 +228,8 @@ public class CardRepository {
             CardMeta meta = indexMeta(cardId);
             if (meta == null) continue;
             deleteIndexMeta(cardId);
-            if (meta.getSourceFileName() != null) {
-                fileHelper.fileDeleted(notesConfig.getCardsDir().resolve(meta.getSourceFileName()));
+            if (meta.getFileName() != null) {
+                fileHelper.fileDeleted(notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName()));
             }
         }
     }
@@ -249,17 +240,15 @@ public class CardRepository {
         return card;
     }
 
-    // ------------------------------------------------------------------ 卡片索引
-
     private CardMeta indexMeta(String cardId) {
-        return cardId == null ? null : readIndex().getCards().get(cardId);
+        return cardId == null ? null : readCardIndex().get(cardId);
     }
 
     private Map<String, CardMeta> metaByFileName() {
         Map<String, CardMeta> byFileName = new LinkedHashMap<>();
-        for (CardMeta meta : readIndex().getCards().values()) {
-            if (meta != null && meta.getSourceFileName() != null) {
-                byFileName.put(meta.getSourceFileName(), meta);
+        for (CardMeta meta : readCardIndex().values()) {
+            if (meta != null && meta.getFileName() != null) {
+                byFileName.put(meta.getFileName(), meta);
             }
         }
         return byFileName;
@@ -269,64 +258,32 @@ public class CardRepository {
         if (meta == null || meta.getCardId() == null || meta.getCardId().isBlank()) {
             throw new IllegalArgumentException("卡片 ID 不能为空");
         }
-        if (meta.getSourceFileName() == null || meta.getSourceFileName().isBlank()) {
+        if (meta.getFileName() == null || meta.getFileName().isBlank()) {
             throw new IllegalArgumentException("卡片文件名不能为空：" + meta.getCardId());
         }
-        CardIndex index = readIndex();
-        index.getCards().put(meta.getCardId(), meta);
-        writeIndex(index);
+        Map<String, CardMeta> metas = readCardIndex();
+        metas.put(meta.getCardId(), meta);
+        fileHelper.fileWritten(cardIndexFile, metas);
     }
 
     private void deleteIndexMeta(String cardId) {
-        CardIndex index = readIndex();
-        if (index.getCards().remove(cardId) != null) {
-            writeIndex(index);
+        Map<String, CardMeta> metas = readCardIndex();
+        if (metas.remove(cardId) != null) {
+            fileHelper.fileWritten(cardIndexFile, metas);
         }
     }
 
-    private CardIndex readIndex() {
-        relocateLegacyIndex();
+    private Map<String, CardMeta> readCardIndex() {
         try {
-            String json = Files.readString(indexFile, StandardCharsets.UTF_8);
+            String json = Files.readString(cardIndexFile, StandardCharsets.UTF_8);
             if (json.isBlank()) {
-                return new CardIndex();
+                return new LinkedHashMap<>();
             }
-            CardIndex index = JSON.parseObject(json, CardIndex.class);
-            if (index == null) {
-                return new CardIndex();
-            }
-            if (index.getCards() == null) {
-                index.setCards(new LinkedHashMap<>());
-            }
-            return index;
-        } catch (NoSuchFileException e) {
-            return new CardIndex();
-        } catch (IOException | RuntimeException e) {
-            log.error("卡片索引无法解析：{}", indexFile, e);
-            throw new IllegalStateException("卡片索引无法解析 " + indexFile, e);
-        }
-    }
-
-    private void writeIndex(CardIndex index) {
-        fileHelper.fileWritten(indexFile, index);
-    }
-
-    private void relocateLegacyIndex() {
-        if (Files.exists(indexFile) || Files.notExists(legacyIndexFile)) {
-            return;
-        }
-        try {
-            // 旧索引只有 cardId → 文件名，没有元数据；新格式每条就是元数据本身。
-            // 按约定不做历史迁移：换成空索引，旧映射不保留。
-            fileHelper.fileWritten(indexFile, new CardIndex());
-            try {
-                Files.deleteIfExists(legacyIndexFile);
-            } catch (IOException e) {
-                log.warn("旧卡片索引已替换，但删除旧文件失败：{}", legacyIndexFile, e);
-            }
-            log.info("旧卡片索引已替换为 {}（新格式，旧映射未迁移）", indexFile);
-        } catch (RuntimeException e) {
-            throw new IllegalStateException("旧卡片索引转移失败：" + legacyIndexFile, e);
+            Map<String, CardMeta> metas = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, CardMeta>>() { });
+            return metas == null ? new LinkedHashMap<>() : metas;
+        } catch (Exception e) {
+            log.error("卡片索引无法解析：{}", cardIndexFile, e);
+            throw new IllegalStateException("卡片索引无法解析 " + cardIndexFile, e);
         }
     }
 }

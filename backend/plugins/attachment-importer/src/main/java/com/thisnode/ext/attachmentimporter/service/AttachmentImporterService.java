@@ -74,7 +74,7 @@ public class AttachmentImporterService {
     private static final double CARD_HORIZONTAL_CHROME = 30d;
     private static final double CARD_VERTICAL_CHROME = 44d;
     /**
-     * 与 notes 的 CardMeta.SCHEMA 对齐；建卡时只消费 w/h。
+     * CardMetaDTO 的版本字段；建卡时只消费 w/h，这个值不参与。
      */
     private static final int CARD_META_SCHEMA = 2;
 
@@ -169,7 +169,7 @@ public class AttachmentImporterService {
         Path target = attachmentsDir.resolve(canonicalName);
         if (renamed) {
             try {
-                fileHelper.fileMoved(file, target);
+                fileHelper.rename(file, target);
             } catch (RuntimeException e) {
                 log.warn("附件 {} 规范化文件名失败，下一轮重试", fileName, e);
                 return;
@@ -213,7 +213,7 @@ public class AttachmentImporterService {
     private void rollback(Path target,
                           Path original) {
         try {
-            fileHelper.fileMoved(target, original);
+            fileHelper.rename(target, original);
         } catch (RuntimeException e) {
             log.warn("附件文件名回滚失败：{} → {}", target, original, e);
         }

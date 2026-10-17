@@ -21,7 +21,7 @@ export const noteApi = {
     payload: {
       title?: string
     },
-  ) => http.post<NoteDto>('/api/notes/update', payload, { noteId }),
+  ) => http.post<NoteDto>('/api/notes/update', { ...payload, noteId }),
 
   delete: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
 

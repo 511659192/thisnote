@@ -62,6 +62,7 @@ public class NoteService {
                           UpdateNoteRequest req) {
         NotePO meta = noteRepository.getOne(noteId);
         if (meta == null) throw new NotFoundException("node " + noteId);
+
         String title = req.title();
         if (title != null && !title.equals(meta.getTitle())) {
             boolean duplicateTitle = !title.isBlank() && noteRepository.getAll().stream().anyMatch(other -> !noteId.equals(other.getNoteId()) && title.equalsIgnoreCase(other.getTitle()));

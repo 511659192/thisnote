@@ -123,7 +123,7 @@ public class AttachmentService {
 
     private Path imagePathOrNull(String fileName) {
         if (fileName == null || !IMAGE_FILE_NAME_PATTERN.matcher(fileName).matches()) return null;
-        Path directory = notesConfig.getAttachmentsDir().toAbsolutePath().normalize();
+        Path directory = notesConfig.getRootDir().resolve("attachments").toAbsolutePath().normalize();
         Path path = directory.resolve(fileName).normalize();
         return path.startsWith(directory) ? path : null;
     }

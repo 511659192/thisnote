@@ -20,9 +20,9 @@ public class NoteController {
 
     @GetMapping("/get")
     public List<NoteDTO> list(@RequestParam(required = false) String bookId,
-                                  @RequestParam(required = false) String text,
-                                  @RequestParam(defaultValue = "500") int limit,
-                                  @RequestParam(defaultValue = "0") int offset) {
+                              @RequestParam(required = false) String text,
+                              @RequestParam(defaultValue = "500") int limit,
+                              @RequestParam(defaultValue = "0") int offset) {
         return noteService.list(new NoteListRequest(bookId, text, limit, offset));
     }
 
@@ -37,9 +37,8 @@ public class NoteController {
     }
 
     @PostMapping("/update")
-    public NoteDTO update(@RequestParam String noteId,
-                              @RequestBody UpdateNoteRequest req) {
-        return noteService.update(noteId, req);
+    public NoteDTO update(@RequestBody UpdateNoteRequest req) {
+        return noteService.update(req.noteId(), req);
     }
 
     @PostMapping("/delete")

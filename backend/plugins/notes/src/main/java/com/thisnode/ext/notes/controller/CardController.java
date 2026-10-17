@@ -28,9 +28,8 @@ public class CardController {
     }
 
     @PostMapping("/create")
-    public CardDTO create(@RequestParam String noteId,
-                                  @RequestBody(required = false) CreateCardRequest req) {
-        return cardService.create(noteId, req == null ? new CreateCardRequest() : req);
+    public CardDTO create(@RequestBody CreateCardRequest req) {
+        return cardService.create(req.noteId(), req);
     }
 
     /**

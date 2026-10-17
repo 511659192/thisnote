@@ -13,7 +13,6 @@ import java.util.List;
 @Accessors(chain = true)
 public class NotePO {
 
-    private int v;
     private String noteId;
     private String title;
     private String bookId;

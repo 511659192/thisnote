@@ -40,7 +40,7 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 | 后端端口 | `45917`（可用 `THISNODE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNODE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
 | 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117` | `frontend/host/src/plugins/devPorts.ts:8-16` |
-| 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:27-32` |
+| 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:18-20` |
 | 插件契约版本 | `5.3.0` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
@@ -250,26 +250,25 @@ host（qiankun 主应用，:5173）
 ├── attachments/                <uuid>.<png|jpg|gif|webp|bmp|avif>
 ├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
-    ├── notes/.note-index.json   { v, notes: { noteId → NotePO } }
-    ├── notes/.card-index.json   cardId → meta（meta.sourceFileName 即文件名）
+    ├── notes/.note-index.json   noteId → NotePO（扁平 map）
+    ├── notes/.card-index.json   cardId → meta（扁平 map；meta.sourceFileName 即文件名）
     └── <pluginId>/              其它插件自己的数据
 ```
 
 - **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
   `notes/plugins/notes/.card-index.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
-  （`CardPO.java:73-96`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
+  （`CardPO.java:50-70`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
 - **笔记与卡片都是 ID → 数据**：笔记元数据（title/bookId/cardIds/updatedAt）在
   `notes/plugins/notes/.note-index.json` 的 map 里（`NoteRepository.java`），卡片元数据在
   `.card-index.json` 里；两者都不依赖物理文件名，标题改名只改数据（卡片文件仍按标题重命名）。
 - **笔记列表顺序**：按 `NotePO.updatedAt` 倒序（原来用 meta 文件 mtime）；创建/更新时刷新。
-- **旧格式不迁移**：笔记改成 map 后，旧 `notes/meta/*.json` 与 `.note-file-index.json` 不再读取（C 约定）；
-  卡片旧索引 `.card-file-index.json` 首次读取时换成空的新索引。旧卡片没有 meta → 按「无主卡片」处理；
-  旧 md 首行的 `<!-- thisnode:meta … -->` 读取时被剥掉（`CardPO.java:51-69`）。
+- **旧格式完全不兼容**：`notes/meta/*.json`、`.note-file-index.json`、`.card-file-index.json` 都不读取、不迁移；
+  旧卡片 md 首行的 `<!-- thisnode:meta … -->` 也不再剥离，按普通正文处理。
 - **几何更新只写索引**：拖动/缩放卡片不再改写 md，md 的 mtime 只在正文变化时更新；代价是每次
   几何提交都会重写整份 `.card-index.json`（卡片数量大时写入量随之增长）。
 - **md 只是正文**：外部把卡片 md 改名后，索引按文件名找不到它 → 该卡片按「无主卡片」处理
   （元数据仍留在索引里成为孤儿条目）。
-- **笔记必须有归属分组**：默认分组固定 `grp-default` / 标题「收集箱」（`BookPO.java:33-34`）；
+- **笔记必须有归属分组**：默认分组固定 `grp-default` / 标题「收集箱」（`BookPO.java:32-33`）；
   删除分组时把其笔记改归默认分组（`BookService.java:68-91`）；默认分组不可删。
 - **改名联动**：笔记改标题只更新 map 数据，并重命名它的全部卡片文件、发布事件
   （`NoteService.java:61-79`、`CardRepository.java:159`）；标题重复（忽略大小写）直接 400。
@@ -302,10 +301,10 @@ host（qiankun 主应用，:5173）
 | GET | `/api/notes/get?bookId=&text=&limit=500&offset=0` | 列表；`text` 同时匹配标题与卡片正文 |
 | POST | `/api/notes/create` | body `{bookId}`（标题可为空，离开前会提示补） |
 | GET | `/api/notes/get-detail?noteId=` | 单篇 meta |
-| POST | `/api/notes/update?noteId=` | body `{title}` |
+| POST | `/api/notes/update` | body `{noteId, title}` |
 | POST | `/api/notes/delete?id=` | 连同卡片与无引用附件一起删 |
 | GET | `/api/notes/cards/get?noteId=&cardIds=a,b` | 省略 `cardIds` = 整页（**返回数组**） |
-| POST | `/api/notes/cards/create?noteId=` | body 含 `x/y/w/h/content/color` |
+| POST | `/api/notes/cards/create` | body 含 `noteId/x/y/w/h/content/color` |
 | POST | `/api/notes/cards/update-content` | body `{noteId, cardId, contentMd, baseContentMd}` |
 | POST | `/api/notes/cards/batch-update` | body `{noteId, cards:[{cardId,x,y,w,h,color,status,collapsed}]}` |
 | POST | `/api/notes/cards/update` | 单卡几何/状态 |

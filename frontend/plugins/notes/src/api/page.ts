@@ -38,7 +38,7 @@ export const pageApi = {
       content?: string
       color?: string
     },
-  ) => http.post<Card>('/api/notes/cards/create', payload, { noteId }),
+  ) => http.post<Card>('/api/notes/cards/create', { ...payload, noteId }),
 
   updateBlocks: (noteId: string, cards: CardUpdate[]) =>
     http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { noteId, cards }),

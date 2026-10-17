@@ -134,12 +134,13 @@ try {
     if (!activeNoteId) throw new Error('Create-note response did not include noteId')
 
     const title = `Seed-${runId}-${String(index).padStart(4, '0')}`
-    await request('POST', `/api/notes/update?noteId=${encodeURIComponent(activeNoteId)}`, { title })
+    await request('POST', '/api/notes/update', { noteId: activeNoteId, title })
 
     const cardCount = randomInt(1, 5)
     for (let cardIndex = 0; cardIndex < cardCount; cardIndex += 1) {
       const { content, format } = makeContent()
-      await request('POST', `/api/notes/cards/create?noteId=${encodeURIComponent(activeNoteId)}`, {
+      await request('POST', '/api/notes/cards/create', {
+        noteId: activeNoteId,
         x: 80 + (cardIndex % 2) * 620,
         y: 80 + Math.floor(cardIndex / 2) * 340,
         w: 560,

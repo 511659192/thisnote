@@ -32,12 +32,12 @@ public class BookRepository {
     }
 
     private List<BookPO> getAll() {
-        Path file = notesConfig.getBookDir().resolve("books.json");
+        Path file = notesConfig.getRootDir().resolve("book").resolve("books.json");
         return BookPO.parse(file);
     }
 
     private void save(List<BookPO> books) {
-        Path file = notesConfig.getBookDir().resolve("books.json");
+        Path file = notesConfig.getRootDir().resolve("book").resolve("books.json");
         fileHelper.fileWritten(file, books);
     }
 
@@ -77,14 +77,13 @@ public class BookRepository {
         if (current == null) {
             throw new IllegalArgumentException("分组不存在：" + id);
         }
-        BookPO updated = new BookPO(current.getV(),
-                                        id,
-                                        current.getType(),
-                                        title == null || title.isBlank() ? current.getTitle() : title.trim(),
-                                        icon == null ? current.getIcon() : icon,
-                                        sortOrder == null ? current.getSortOrder() : sortOrder,
-                                        current.getCreatedAt(),
-                                        System.currentTimeMillis());
+        BookPO updated = new BookPO(id,
+                                    current.getType(),
+                                    title == null || title.isBlank() ? current.getTitle() : title.trim(),
+                                    icon == null ? current.getIcon() : icon,
+                                    sortOrder == null ? current.getSortOrder() : sortOrder,
+                                    current.getCreatedAt(),
+                                    System.currentTimeMillis());
         for (int i = 0; i < books.size(); i++) {
             if (id.equals(books.get(i).getId())) {
                 books.set(i, updated);

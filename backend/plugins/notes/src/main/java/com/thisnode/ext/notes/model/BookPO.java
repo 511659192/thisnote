@@ -28,12 +28,10 @@ import java.util.List;
 @Slf4j
 public class BookPO {
 
-    public static final int SCHEMA = 1;
     public static final String TYPE_BOOK = "book";
     public static final String DEFAULT_GROUP_ID = "grp-default";
     public static final String DEFAULT_GROUP_TITLE = "收集箱";
 
-    private int v = SCHEMA;
     private String id;
     private String type = TYPE_BOOK;
     private String title = "";
@@ -42,15 +40,13 @@ public class BookPO {
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
 
-    public BookPO(int v,
-                    String id,
-                    String type,
-                    String title,
-                    String icon,
-                    int sortOrder,
-                    long createdAt,
-                    long updatedAt) {
-        this.v = v;
+    public BookPO(String id,
+                  String type,
+                  String title,
+                  String icon,
+                  int sortOrder,
+                  long createdAt,
+                  long updatedAt) {
         this.id = id;
         this.type = type;
         this.title = title;
@@ -62,9 +58,6 @@ public class BookPO {
     }
 
     private void normalize() {
-        if (v <= 0) {
-            v = SCHEMA;
-        }
         if (type == null || type.isBlank()) {
             type = TYPE_BOOK;
         }
@@ -79,7 +72,7 @@ public class BookPO {
                                        String icon,
                                        int sortOrder,
                                        long now) {
-        return new BookPO(SCHEMA, id, type, title, icon, sortOrder, now, now);
+        return new BookPO(id, type, title, icon, sortOrder, now, now);
     }
 
     public static List<BookPO> parse(Path file) {

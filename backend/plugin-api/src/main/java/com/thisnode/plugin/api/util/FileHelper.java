@@ -104,9 +104,9 @@ public final class FileHelper {
         }
     }
 
-    public Path fileMoved(Path previousFile,
-                          Path file,
-                          CopyOption... options) {
+    public Path rename(Path previousFile,
+                       Path file,
+                       CopyOption... options) {
         Path moved;
         try {
             moved = Files.move(previousFile, file, options);

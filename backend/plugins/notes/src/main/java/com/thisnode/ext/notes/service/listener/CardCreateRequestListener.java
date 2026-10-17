@@ -31,6 +31,6 @@ public class CardCreateRequestListener
         CardMetaDTO meta = request.card().meta();
         Double width = meta == null || meta.w() <= 0 ? null : meta.w();
         Double height = meta == null || meta.h() <= 0 ? null : meta.h();
-        cardService.create(note.noteId(), new CreateCardRequest(0d, 0d, width, height, request.card().content(), null), request.card().sourceFileName());
+        cardService.create(note.noteId(), new CreateCardRequest(null, 0d, 0d, width, height, request.card().content(), null), request.card().sourceFileName());
     }
 }
