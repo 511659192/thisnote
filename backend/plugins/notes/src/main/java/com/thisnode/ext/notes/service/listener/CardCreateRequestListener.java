@@ -12,6 +12,8 @@ import org.springframework.context.PayloadApplicationEvent;
 
 import java.util.List;
 
+import static com.thisnode.plugin.api.event.CardChangedEvent.*;
+
 
 @RequiredArgsConstructor
 public class CardCreateRequestListener
@@ -22,10 +24,10 @@ public class CardCreateRequestListener
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<CardChangedEvent> event) {
-        CardChangedEvent change = event.getPayload();
-        if (change.kind() != CardChangedEvent.Kind.REQUEST) return;
+        CardChangedEvent cardChangedEvent = event.getPayload();
+        if (cardChangedEvent.kind() != Kind.REQUEST) return;
 
-        CardChangedEvent.CardCreateRequest request = change.createRequest();
+        CardCreateRequest request = cardChangedEvent.createRequest();
         NoteDTO note = noteService.create(request.noteTitle(), request.bookId(), List.of());
         // 申请方可以在 meta 里给出初始宽高（附件导入按图片尺寸算）；缺失时用默认 720×260。
         CardMetaDTO meta = request.card().meta();

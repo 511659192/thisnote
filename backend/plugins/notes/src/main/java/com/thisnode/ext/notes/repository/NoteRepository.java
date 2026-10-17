@@ -43,7 +43,7 @@ public class NoteRepository {
         note.setNoteId(noteId).setUpdatedAt(System.currentTimeMillis());
 
         // 获取既有索引
-        Map<String, NotePO> notes = readNotesIndex();
+        Map<String, NotePO> notes = noteIndex();
         notes.put(noteId, note);
 
         // 替换索引
@@ -73,7 +73,7 @@ public class NoteRepository {
      * Delete the note metadata; CardService removes its card files first.
      */
     public synchronized void delete(String noteId) {
-        Map<String, NotePO> notes = readNotesIndex();
+        Map<String, NotePO> notes = noteIndex();
         if (notes.remove(noteId) != null) {
             fileHelper.fileWritten(nodesIndexFile, notes);
         }
@@ -83,7 +83,7 @@ public class NoteRepository {
      * 全部笔记，按最近更新倒序。
      */
     public synchronized List<NotePO> getAll() {
-        List<NotePO> notes = new ArrayList<>(readNotesIndex().values());
+        List<NotePO> notes = new ArrayList<>(noteIndex().values());
         notes.sort(Comparator.comparingLong(NotePO::getUpdatedAt).reversed());
         return notes;
     }
@@ -93,7 +93,7 @@ public class NoteRepository {
      */
     public synchronized NotePO getOne(String noteId) {
         if (StrUtil.isBlank(noteId)) return null;
-        return readNotesIndex().get(noteId);
+        return noteIndex().get(noteId);
     }
 
     /**
@@ -101,7 +101,7 @@ public class NoteRepository {
      * @param note
      */
     private void put(NotePO note) {
-        Map<String, NotePO> notes = readNotesIndex();
+        Map<String, NotePO> notes = noteIndex();
         notes.put(note.getNoteId(), note);
 
         fileHelper.fileWritten(nodesIndexFile, notes);
@@ -117,7 +117,7 @@ public class NoteRepository {
     /**
      * 读取 {@code noteId → NotePO} 的 map。
      */
-    private Map<String, NotePO> readNotesIndex() {
+    private Map<String, NotePO> noteIndex() {
         try {
             String json = Files.readString(nodesIndexFile, StandardCharsets.UTF_8);
             Map<String, NotePO> notes = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, NotePO>>() { });

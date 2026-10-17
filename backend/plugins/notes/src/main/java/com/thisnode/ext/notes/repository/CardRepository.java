@@ -48,7 +48,7 @@ public class CardRepository {
         if (cardId == null || cardId.isBlank()) return null;
 
         // 先读取meta
-        CardMeta meta = cardIndexMeta(cardId);
+        CardMeta meta = readCardIndex(cardId);
         if (meta == null || meta.getFileName() == null) return null;
 
         // 组合meta card
@@ -166,7 +166,7 @@ public class CardRepository {
         Path dir = notesConfig.getRootDir().resolve("cards");
         boolean draftTitle = noteTitle == null || noteTitle.isBlank();
         for (String cardId : cardIds) {
-            CardMeta meta = cardIndexMeta(cardId);
+            CardMeta meta = readCardIndex(cardId);
             if (meta == null || meta.getFileName() == null) continue;
 
             String oldFileName = meta.getFileName();
@@ -186,7 +186,7 @@ public class CardRepository {
     public synchronized String update(CardMeta meta,
                                       String contentMd,
                                       String cardId) {
-        CardMeta indexed = cardIndexMeta(cardId);
+        CardMeta indexed = readCardIndex(cardId);
         if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
@@ -201,7 +201,7 @@ public class CardRepository {
      */
     public synchronized void update(CardMeta meta,
                                     String cardId) {
-        CardMeta indexed = cardIndexMeta(cardId);
+        CardMeta indexed = readCardIndex(cardId);
         if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
@@ -213,7 +213,7 @@ public class CardRepository {
         if (cardIds == null) return;
 
         for (String cardId : cardIds) {
-            CardMeta meta = cardIndexMeta(cardId);
+            CardMeta meta = readCardIndex(cardId);
             if (meta == null) continue;
             deleteIndexMeta(cardId);
             if (meta.getFileName() != null) {
@@ -228,7 +228,7 @@ public class CardRepository {
         return card;
     }
 
-    private CardMeta cardIndexMeta(String cardId) {
+    private CardMeta readCardIndex(String cardId) {
         return cardId == null ? null : readCardIndex().get(cardId);
     }
 
