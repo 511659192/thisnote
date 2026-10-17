@@ -39,9 +39,9 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 |---|---|---|
 | 后端端口 | `45917`（可用 `THISNODE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNODE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
-| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116` | `frontend/host/src/plugins/devPorts.ts:8-15` |
-| 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:26-32` |
-| 插件契约版本 | `5.2.0` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
+| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117` | `frontend/host/src/plugins/devPorts.ts:8-16` |
+| 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:27-32` |
+| 插件契约版本 | `5.3.0` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
@@ -62,7 +62,7 @@ thisnote/
 ├── backend/                  Maven 反应堆（从 backend/ 构建，仓库根不放 Maven 文件）
 │   ├── pom.xml               父 POM：模块、版本、plugin.properties 过滤 profile
 │   ├── plugin-api/           插件契约（扩展点 / 事件 / DTO / 异常 / FileHelper）
-│   ├── plugins/              6 个插件模块（各产出一个独立 jar）
+│   ├── plugins/              7 个插件模块（各产出一个独立 jar）
 │   ├── app/                  平台主体（纯 API，无业务、无数据库）
 │   ├── runtime/plugins/      后端交付目录：<pluginId>.jar + disabled.txt（不入库）
 │   ├── plugins-dev/          dev 模式插件目录（目录联接，不入库）
@@ -70,7 +70,7 @@ thisnote/
 ├── frontend/                 pnpm 工作区（界面侧）
 │   ├── host/                 主应用（qiankun 宿主 + 设置页 + 壳）
 │   ├── plugin-api/           界面侧插件契约（**注意：目前未被 git 跟踪，见 §9**）
-│   ├── plugins/              6 个微应用源码
+│   ├── plugins/              7 个微应用源码
 │   ├── runtime/plugins/      界面交付目录（不入库）
 │   └── tools/deliver.mjs     dist → runtime/plugins 的交付脚本
 └── scripts/seed-notes.mjs    压测/造数据脚本（通过 HTTP API 灌 1000 篇笔记）
@@ -99,7 +99,8 @@ thisnote/
                         │ PluginRegister  │              │ notes / favorite /            │
                         │ 事件 / DTO / 异常│              │ memory-cycle / baidu-sync /   │
                         │ FileHelper      │              │ card-importer /               │
-                        │                 │              │ attachment-importer           │
+                        │                 │              │ attachment-importer /         │
+                        │                 │              │ state-reset                   │
                         └─────────────────┘              └───────────────────────────────┘
 ```
 
@@ -166,6 +167,7 @@ host（qiankun 主应用，:5173）
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>> + since`：发布方等结果，notes 侧监听填充 |
 | `event/AttachmentQueryEvent` | `CompletableFuture<Set<String>>`：被任意卡片引用的附件文件名快照，notes 侧监听填充（5.2.0 新增） |
+| `event/PluginStateResetEvent` | 状态重置通知（`sourcePluginId`）：state-reset 插件手动发布，各插件清理并重建自己的状态（5.3.0 新增） |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
@@ -183,12 +185,13 @@ host（qiankun 主应用，:5173）
 
 | id | 角色 | 不可停用 | `plugin.requires` | 依赖插件 | 自有存储 |
 |---|---|---|---|---|---|
-| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=5.2.0` | 无 | `<data-root>/notes/**` |
-| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=5.0.0` | 无 | `notes/plugins/favorite/favorites.properties` |
-| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=5.0.0` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
-| `baidu-sync` | 百度网盘双向同步 | 否 | `>=5.0.0` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
+| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=5.3.0` | 无 | `<data-root>/notes/**` |
+| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=5.3.0` | 无 | `notes/plugins/favorite/favorites.properties` |
+| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=5.3.0` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
+| `baidu-sync` | 百度网盘双向同步 | 否 | `>=5.3.0` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=5.1.0` | `notes` | 无（只通过事件协作） |
-| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=5.2.0` | `notes` | `notes/plugins/attachment-importer/imported.json`（仅导入状态） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=5.3.0` | `notes` | `notes/plugins/attachment-importer/imported.json`（仅导入状态） |
+| `state-reset` | 手动发出状态重置事件 | 否 | `>=5.3.0` | 无 | 无（事件触发器） |
 
 出处：各模块 `src/main/resources/plugin.properties`。
 
@@ -241,26 +244,35 @@ host（qiankun 主应用，:5173）
 
 ```
 <data-root>/notes/
-├── meta/                       笔记 meta（JSON，一篇一个文件）
-│   └── <标题>.json             {v, noteId, title, bookId, cardIds[]}
-├── cards/                      卡片（Markdown，一张一个文件）
-│   └── <标题>_<n>.md           首行 meta 注释 + 换行 + 正文
+├── cards/                      卡片（Markdown，一张一个文件，只含正文）
+│   └── <标题>_<n>.md
 ├── book/books.json             分组台账（数组）
 ├── attachments/                <uuid>.<png|jpg|gif|webp|bmp|avif>
-├── .note-file-index.json       noteId → 物理文件名
-├── .card-file-index.json       cardId → 物理文件名
-└── plugins/<pluginId>/         各插件自己的数据
+├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
+└── plugins/
+    ├── notes/.note-index.json   { v, notes: { noteId → NotePO } }
+    ├── notes/.card-index.json   cardId → meta（meta.sourceFileName 即文件名）
+    └── <pluginId>/              其它插件自己的数据
 ```
 
-- **卡片文件格式**：首行 `<!-- thisnode:meta {…JSON…} -->`，换行后是正文
-  （`CardPO.java:25-26,74-78`）。`CardMeta` 字段：`v(SCHEMA=2)/cardId/sourceFileName/noteId/x/y/w/h/z/color/status/collapsed/ext`
-  （`CardPO.java:106-129`）。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:26-27`）。
-- **稳定 ID 与物理文件名解耦**：ID → 文件名靠两份 JSON 索引（`IdFileIndexRepository.java`），
-  标题改名只改索引与文件名，不动 ID；索引里 ID 重复会抛 `IllegalStateException`（`:96-99`）。
+- **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
+  `notes/plugins/notes/.card-index.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
+  （`CardPO.java:73-96`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
+- **笔记与卡片都是 ID → 数据**：笔记元数据（title/bookId/cardIds/updatedAt）在
+  `notes/plugins/notes/.note-index.json` 的 map 里（`NoteRepository.java`），卡片元数据在
+  `.card-index.json` 里；两者都不依赖物理文件名，标题改名只改数据（卡片文件仍按标题重命名）。
+- **笔记列表顺序**：按 `NotePO.updatedAt` 倒序（原来用 meta 文件 mtime）；创建/更新时刷新。
+- **旧格式不迁移**：笔记改成 map 后，旧 `notes/meta/*.json` 与 `.note-file-index.json` 不再读取（C 约定）；
+  卡片旧索引 `.card-file-index.json` 首次读取时换成空的新索引。旧卡片没有 meta → 按「无主卡片」处理；
+  旧 md 首行的 `<!-- thisnode:meta … -->` 读取时被剥掉（`CardPO.java:51-69`）。
+- **几何更新只写索引**：拖动/缩放卡片不再改写 md，md 的 mtime 只在正文变化时更新；代价是每次
+  几何提交都会重写整份 `.card-index.json`（卡片数量大时写入量随之增长）。
+- **md 只是正文**：外部把卡片 md 改名后，索引按文件名找不到它 → 该卡片按「无主卡片」处理
+  （元数据仍留在索引里成为孤儿条目）。
 - **笔记必须有归属分组**：默认分组固定 `grp-default` / 标题「收集箱」（`BookPO.java:33-34`）；
   删除分组时把其笔记改归默认分组（`BookService.java:68-91`）；默认分组不可删。
-- **改名联动**：笔记改标题会同时重命名 meta 文件与它的全部卡片文件，并发布事件
-  （`NoteService.java:61-79`、`CardRepository.java:144-168`）；标题重复（忽略大小写）直接 400。
+- **改名联动**：笔记改标题只更新 map 数据，并重命名它的全部卡片文件、发布事件
+  （`NoteService.java:61-79`、`CardRepository.java:159`）；标题重复（忽略大小写）直接 400。
 - **内容保存的并发基线**：`update-content` 带 `baseContentMd`，磁盘上已不是这一份就回 409，
   **磁盘优先**，不覆盖外部编辑器（Obsidian/VS Code）的改动（`CardService.java:91-118`；
   前端处理见 `frontend/plugins/notes/src/stores/notePage.ts:388-423`）。
@@ -318,6 +330,8 @@ host（qiankun 主应用，:5173）
 
 **attachment-importer**：无端点（只有 `@Scheduled` 任务；设置页是静态说明，不读后端）。
 
+**state-reset**：`POST /api/plugins/state-reset/reset`（手动触发一次状态重置，见 §5.9）。
+
 ### 5.9 各插件业务规则（读代码得到的事实）
 
 **notes**
@@ -367,13 +381,17 @@ host（qiankun 主应用，:5173）
   ImageIO 读不到尺寸（webp/avif、损坏文件）时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
 - 附件引用快照由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.allReferencedFileNames()`），本插件不解析卡片内容。
 
+**state-reset**
+- 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
+- 各订阅方自行清理：favorite 删 `favorites.properties`；memory-cycle 删 `scheduling.json`；baidu-sync 删 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；attachment-importer 删 `imported.json`（未引用附件下一轮重新导入）；notes 不订阅（笔记数据与索引都不清）；card-importer 无状态。
+
 ---
 
 ## 6. 界面侧
 
 ### 6.1 工作区
 
-`frontend/pnpm-workspace.yaml:1-9`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,memory-cycle,notes}`。
+`frontend/pnpm-workspace.yaml:1-10`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes}`。
 
 | 包 | 作用 |
 |---|---|
@@ -470,6 +488,7 @@ host（qiankun 主应用，:5173）
 | baidu-sync | 设置面板 + 侧栏入口（order 2）+ `/baidu-sync` 路由 | `frontend/plugins/baidu-sync/index.ts:11-28` |
 | card-importer | 只有设置面板 | `frontend/plugins/card-importer/index.ts:6-8` |
 | attachment-importer | 只有设置面板（静态说明，不读后端） | `frontend/plugins/attachment-importer/index.ts:6-8` |
+| state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
 复习页（`ReviewView.vue`）：到期队列逐张评分，四档按钮标注「下次出现」；短周期卡在队列内轮询重现，长周期卡移出视图；
@@ -520,7 +539,7 @@ pnpm -r build                                   # 各包构建（插件 build �
 
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
-| `backend/app/src/test/java/com/thisnode/plugin/PluginJarContractTest.java` | 4 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
+| `backend/app/src/test/java/com/thisnode/plugin/PluginJarContractTest.java` | 5 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
 | `frontend/host/tests/markdown.test.ts` | HTML 转义、标题/列表/表格/任务项、`plainText`/`firstHeading`/`wordCount` | `pnpm --filter thisnode-frontend test` |
 | `frontend/host/tests/plugin_boundary.test.ts` | 插件界面不得出现 `from '@/…'`（只检查 memory-cycle、favorite 两个目录） | 同上 |
 | `frontend/host/tools/*.mjs` | 约 20 个 Playwright/HTTP 手动探针（卡片模式、拖拽、标题改名、插件管理、qiankun 冒烟等） | 手工 `node tools/xxx.mjs`，**未接进 `test` 脚本** |

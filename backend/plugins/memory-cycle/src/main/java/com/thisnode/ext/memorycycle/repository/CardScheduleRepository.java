@@ -56,6 +56,11 @@ public class CardScheduleRepository {
         return true;
     }
 
+    /** 状态重置：删除整份排期文件。 */
+    public synchronized void clear() {
+        fileHelper.fileDeleted(file);
+    }
+
     public synchronized Map<String, CardSchedule> loadAll() {
         try {
             String json;

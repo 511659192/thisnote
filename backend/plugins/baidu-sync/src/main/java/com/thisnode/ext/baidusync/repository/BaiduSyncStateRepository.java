@@ -42,6 +42,11 @@ public class BaiduSyncStateRepository {
         fileHelper.fileWritten(file, state);
     }
 
+    /** 状态重置：删除同步基线（授权凭据在另一个文件里，不受影响）。 */
+    public synchronized void clear() {
+        fileHelper.fileDeleted(file);
+    }
+
     private BaiduSyncState read() throws IOException {
         String json;
         try {

@@ -2,6 +2,7 @@ package com.thisnode.ext.favorite;
 
 import com.thisnode.ext.favorite.service.FavoriteService;
 import com.thisnode.ext.favorite.service.NoteChangedEventListener;
+import com.thisnode.ext.favorite.service.PluginStateResetListener;
 import com.thisnode.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -23,6 +24,7 @@ public class FavoritePlugin extends SpringBootPlugin {
     public static final String PLUGIN_ID = "favorite";
 
     private NoteChangedEventListener noteCleanupListener;
+    private PluginStateResetListener stateResetListener;
 
     public FavoritePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -45,7 +47,9 @@ public class FavoritePlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
         noteCleanupListener = new NoteChangedEventListener(ctx.getBean(FavoriteService.class));
+        stateResetListener = new PluginStateResetListener(ctx.getBean(FavoriteService.class));
         getMainApplicationContext().addApplicationListener(noteCleanupListener);
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
@@ -53,6 +57,10 @@ public class FavoritePlugin extends SpringBootPlugin {
         if (noteCleanupListener != null) {
             getMainApplicationContext().removeApplicationListener(noteCleanupListener);
             noteCleanupListener = null;
+        }
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
         }
         super.stop();
     }

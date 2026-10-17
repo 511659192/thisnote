@@ -2,122 +2,132 @@ package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.thisnode.ext.notes.config.NotesConfig;
+import com.thisnode.ext.notes.model.NoteIndex;
 import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.plugin.api.util.FileHelper;
-import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Persists note metadata only. Card files and card-content operations belong to CardRepository.
+ * 笔记存储：全部笔记元数据在一份 {@code plugins/notes/.note-index.json} 的 map 里
+ * （{@code noteId → NotePO}），没有「一篇一个文件」也不再需要 ID → 文件名映射。
+ *
+ * <p>旧 {@code notes/meta/*.json} 不迁移、不读取（按约定不做历史迁移）。
  */
+@Slf4j
 @Repository
-@RequiredArgsConstructor
 public class NoteRepository {
 
-    private final NotesConfig notesConfig;
-    private final IdFileIndexRepository.NoteFileIndexRepository fileIndex;
     private final FileHelper fileHelper;
+    private final Path indexFile;
 
-    public String save(NotePO note) {
+    public NoteRepository(NotesConfig notesConfig,
+                          FileHelper fileHelper) {
+        this.fileHelper = fileHelper;
+        this.indexFile = notesConfig.getNotesPluginDir().resolve(".note-index.json");
+    }
+
+    public synchronized String save(NotePO note) {
         String noteId = IdUtil.randomUUID();
-        String baseName = StrUtil.isBlank(note.getTitle()) ? "tmp-" + noteId : note.getTitle();
-        String fileName = baseName + ".json";
-        Path metaDir = notesConfig.getMetaDir();
-        Path file = metaDir.resolve(fileName);
-        fileHelper.fileWritten(file, note.setNoteId(noteId));
-        fileIndex.add(noteId, fileName);
+        note.setNoteId(noteId).setUpdatedAt(System.currentTimeMillis());
+        NoteIndex index = readIndex();
+        index.getNotes().put(noteId, note);
+        writeIndex(index);
         return noteId;
     }
 
     /**
-     * Rename only the physical metadata file; the noteMeta ID remains stable.
+     * 只改标题：更新 map 里的数据（不再重命名文件）。
      */
-    @SneakyThrows
-    public void update(NotePO note,
-                       String newTitle) {
-        String noteId = note.getNoteId();
-        String oldFileName = fileIndex.getOne(noteId);
-        if (oldFileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteId);
-
-        note.setTitle(newTitle);
-        String newFileName = newTitle + ".json";
-        Path oldFile = notesConfig.getMetaDir().resolve(oldFileName);
-        Path newFile = notesConfig.getMetaDir().resolve(newFileName);
-        fileHelper.fileMoved(oldFile, newFile);
-        fileHelper.fileWritten(newFile, note);
-        fileIndex.update(noteId, newFileName);
-    }
-
-    /** Rewrite note metadata and refresh its filesystem modification time. */
-    public void update(NotePO note) {
-        if (note == null || StrUtil.isBlank(note.getNoteId())) return;
-        String fileName = fileIndex.getOne(note.getNoteId());
-        if (fileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + note.getNoteId());
-
-        Path file = notesConfig.getMetaDir().resolve(fileName);
-        fileHelper.fileWritten(file, note);
+    public synchronized void update(NotePO note,
+                                    String newTitle) {
+        note.setTitle(newTitle).setUpdatedAt(System.currentTimeMillis());
+        put(note);
     }
 
     /**
-     * Delete only the note meta; CardService removes its card files first.
+     * 覆写一条笔记元数据（卡片清单变更等）。
      */
-    public void delete(String noteId) {
-        String fileName = fileIndex.getOne(noteId);
-        if (fileName == null) return;
-        fileIndex.delete(noteId);
-        Path file = notesConfig.getMetaDir().resolve(fileName);
-        fileHelper.fileDeleted(file);
+    public synchronized void update(NotePO note) {
+        if (note == null || StrUtil.isBlank(note.getNoteId())) return;
+        note.setUpdatedAt(System.currentTimeMillis());
+        put(note);
     }
 
-    @SneakyThrows
-    public List<NotePO> getAll() {
-        Path metaDir = notesConfig.getMetaDir();
-        List<Path> files = new ArrayList<>();
-        Map<Path, FileTime> modifiedTimes = new HashMap<>();
-        for (String fileName : fileIndex.getAll().values()) {
-            Path file = metaDir.resolve(fileName);
-            FileTime modifiedTime;
-            try {
-                modifiedTime = Files.getLastModifiedTime(file);
-            } catch (NoSuchFileException e) {
-                continue;
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            files.add(file);
-            modifiedTimes.put(file, modifiedTime);
+    /**
+     * Delete the note metadata; CardService removes its card files first.
+     */
+    public synchronized void delete(String noteId) {
+        NoteIndex index = readIndex();
+        if (index.getNotes().remove(noteId) != null) {
+            writeIndex(index);
         }
-        files.sort(Comparator.comparing(modifiedTimes::get).reversed());
+    }
 
-        List<NotePO> notes = new ArrayList<>();
-        for (Path file : files) {
-            NotePO note = NotePO.parse(file);
-            if (note != null) notes.add(note);
-        }
+    /**
+     * 全部笔记，按最近更新倒序。
+     */
+    public synchronized List<NotePO> getAll() {
+        List<NotePO> notes = new ArrayList<>(readIndex().getNotes().values());
+        notes.sort(Comparator.comparingLong(NotePO::getUpdatedAt).reversed());
         return notes;
     }
 
     /**
-     * Read one note's metadata through the persistent ID-to-filename index.
+     * Read one note's metadata from the map.
      */
-    public NotePO getOne(String noteId) {
+    public synchronized NotePO getOne(String noteId) {
         if (StrUtil.isBlank(noteId)) return null;
-        String fileName = fileIndex.getOne(noteId);
-        return fileName == null ? null : NotePO.parse(notesConfig.getMetaDir().resolve(fileName));
+        return readIndex().getNotes().get(noteId);
     }
 
+    private void put(NotePO note) {
+        NoteIndex index = readIndex();
+        index.getNotes().put(note.getNoteId(), note);
+        writeIndex(index);
+    }
+
+    private NoteIndex readIndex() {
+        try {
+            String json = Files.readString(indexFile, StandardCharsets.UTF_8);
+            if (json.isBlank()) {
+                return new NoteIndex();
+            }
+            // 旧格式（noteId → 文件名）没有 notes 字段：按 C 约定不迁移，视为空索引。
+            JSONObject root = JSON.parseObject(json);
+            if (root == null || !root.containsKey("notes")) {
+                return new NoteIndex();
+            }
+            NoteIndex index = JSON.parseObject(json, NoteIndex.class);
+            if (index == null) {
+                return new NoteIndex();
+            }
+            if (index.getNotes() == null) {
+                index.setNotes(new LinkedHashMap<>());
+            }
+            return index;
+        } catch (NoSuchFileException e) {
+            return new NoteIndex();
+        } catch (IOException | RuntimeException e) {
+            log.error("笔记索引无法解析：{}", indexFile, e);
+            throw new IllegalStateException("笔记索引无法解析 " + indexFile, e);
+        }
+    }
+
+    private void writeIndex(NoteIndex index) {
+        fileHelper.fileWritten(indexFile, index);
+    }
 }

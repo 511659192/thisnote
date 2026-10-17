@@ -24,7 +24,7 @@ public interface PluginRegister extends ExtensionPoint {
      *
      * <p>修改公开插件契约时递增它。
      */
-    String CONTRACT_VERSION = "5.2.0";
+    String CONTRACT_VERSION = "5.3.0";
 
     /** 管理页上的显示名。 */
     String title();

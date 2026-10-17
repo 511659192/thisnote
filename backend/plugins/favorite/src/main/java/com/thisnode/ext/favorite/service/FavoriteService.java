@@ -34,4 +34,10 @@ public class FavoriteService {
         log.info("笔记 {} 取消收藏（原收藏={}）", noteId, removed);
         return removed;
     }
+
+    /** 状态重置：清空全部收藏。 */
+    public void clear() {
+        favoriteRepository.clear();
+        log.info("收藏状态已清空");
+    }
 }

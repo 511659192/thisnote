@@ -5,6 +5,6 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "dev:host": "pnpm --filter thisnode-frontend dev",
-    "dev:plugins": "pnpm --filter @thisnode/plugin-favorite --filter @thisnode/plugin-memory-cycle --filter @thisnode/plugin-baidu-sync --filter @thisnode/plugin-card-importer --filter @thisnode/plugin-attachment-importer --parallel dev"
+    "dev:plugins": "pnpm --filter @thisnode/plugin-favorite --filter @thisnode/plugin-memory-cycle --filter @thisnode/plugin-baidu-sync --filter @thisnode/plugin-card-importer --filter @thisnode/plugin-attachment-importer --filter @thisnode/plugin-state-reset --parallel dev"
   }
 }

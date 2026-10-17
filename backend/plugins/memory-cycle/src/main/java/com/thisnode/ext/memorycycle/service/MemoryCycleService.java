@@ -199,6 +199,12 @@ public class MemoryCycleService {
         return removed;
     }
 
+    /** 状态重置：清空全部排期（「已开启」即存在排期）。 */
+    public synchronized void clearAll() {
+        scheduleRepository.clear();
+        log.info("记忆周期排期已清空");
+    }
+
     private void fillResponseFields(CardSchedule schedule,
                                     boolean enabled,
                                     long now) {

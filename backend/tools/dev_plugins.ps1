@@ -23,6 +23,7 @@ $plugins = [ordered]@{
     'baidu-sync'   = 'plugins/baidu-sync'
     'card-importer' = 'plugins/card-importer'
     'attachment-importer' = 'plugins/attachment-importer'
+    'state-reset' = 'plugins/state-reset'
 }
 
 foreach ($id in $plugins.Keys) {

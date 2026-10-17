@@ -58,4 +58,9 @@ public class ImportStateRepository {
     public synchronized void save(ImportState state) {
         fileHelper.fileWritten(file, state);
     }
+
+    /** 状态重置：删除导入记录（下次扫描会重新导入未引用附件）。 */
+    public synchronized void clear() {
+        fileHelper.fileDeleted(file);
+    }
 }

@@ -88,6 +88,13 @@ public class FavoriteRepository {
         }
     }
 
+    /** 清空全部收藏：删除状态文件（状态重置用）。 */
+    public void clear() {
+        synchronized (lock) {
+            fileHelper.fileDeleted(file);
+        }
+    }
+
     private Properties readProperties() {
         Properties properties = new Properties();
         if (Files.notExists(file)) return properties;

@@ -127,6 +127,17 @@ public class BaiduSyncService {
         return status;
     }
 
+    /** 状态重置：清空同步基线并复位本次运行的状态（授权凭据保留）。 */
+    public void clearSyncState() {
+        if (status.running()) {
+            log.warn("同步进行中，跳过同步基线清理");
+            return;
+        }
+        stateRepository.clear();
+        status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
+        log.info("百度网盘同步基线已清理（授权凭据保留）");
+    }
+
     // 示例：本地与网盘都含 a.md 且指纹一致时，预览将其计入一致文件数。
     public BaiduSyncPreview preview() throws IOException {
         ensureSyncIdle();

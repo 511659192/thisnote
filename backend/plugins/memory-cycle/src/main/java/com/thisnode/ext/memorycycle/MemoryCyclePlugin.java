@@ -4,6 +4,7 @@ import com.thisnode.ext.memorycycle.service.MemoryCycleStateChangedEventListener
 import com.thisnode.ext.memorycycle.service.NoteChangedEventListener;
 import com.thisnode.ext.memorycycle.service.CardChangedEventListener;
 import com.thisnode.ext.memorycycle.service.MemoryCycleService;
+import com.thisnode.ext.memorycycle.service.PluginStateResetListener;
 import com.thisnode.plugin.api.util.FileHelper;
 
 import org.laxture.sbp.SpringBootPlugin;
@@ -30,6 +31,7 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     private CardChangedEventListener listener;
     private NoteChangedEventListener noteChangedEventListener;
     private MemoryCycleStateChangedEventListener stateListener;
+    private PluginStateResetListener resetListener;
 
     public MemoryCyclePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -68,9 +70,11 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
         listener = new CardChangedEventListener(srs);
         noteChangedEventListener = new NoteChangedEventListener(srs);
         stateListener = new MemoryCycleStateChangedEventListener(srs);
+        resetListener = new PluginStateResetListener(srs);
         getMainApplicationContext().addApplicationListener(listener);
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
         getMainApplicationContext().addApplicationListener(stateListener);
+        getMainApplicationContext().addApplicationListener(resetListener);
     }
 
     /**
@@ -90,6 +94,10 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
         if (stateListener != null) {
             getMainApplicationContext().removeApplicationListener(stateListener);
             stateListener = null;
+        }
+        if (resetListener != null) {
+            getMainApplicationContext().removeApplicationListener(resetListener);
+            resetListener = null;
         }
         super.stop();
     }

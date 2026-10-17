@@ -101,6 +101,12 @@ public class AttachmentImporterService {
         this.mainEventPublisher = Objects.requireNonNull(publisher);
     }
 
+    /** 状态重置：清空导入记录，未引用附件会在下一轮扫描重新导入。 */
+    public void clearState() {
+        stateRepository.clear();
+        log.info("附件导入状态已清空");
+    }
+
     @Scheduled(fixedDelay = SCAN_INTERVAL_MILLIS, initialDelay = SCAN_INTERVAL_MILLIS)
     public void scan() {
         try {

@@ -1,15 +1,12 @@
 package com.thisnode.ext.notes.model;
 
-import com.alibaba.fastjson2.JSON;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,8 +19,12 @@ import java.util.Map;
 @Accessors(chain = true)
 public class CardPO {
 
-    public static final String META_PREFIX = "<!-- thisnode:meta ";
-    public static final String META_SUFFIX = " -->";
+    /**
+     * 旧格式元数据注释的前缀/后缀：元数据现在存 {@code .card-index.json}，
+     * 读到旧卡片的首行时把它剥掉（旧卡片不做历史迁移）。
+     */
+    private static final String LEGACY_META_PREFIX = "<!-- thisnode:meta ";
+    private static final String LEGACY_META_SUFFIX = " -->";
 
     private CardMeta meta;
     private String content;
@@ -44,58 +45,24 @@ public class CardPO {
         return this;
     }
 
-    public static CardMeta parseMeta(Path file) throws IOException {
-        try (var reader = new BufferedReader(
-                new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8))) {
-            String header = reader.readLine();
-            return header == null ? null : meta(header);
-        }
-    }
-
+    /**
+     * 读取卡片正文。元数据由 {@code CardRepository} 的卡片索引提供，不在文件里。
+     */
     public static CardPO parse(Path file) throws IOException {
         String raw = Files.readString(file, StandardCharsets.UTF_8);
-        CardMeta cardMeta = meta(raw);
-        String cardContent = cardMeta == null ? raw : content(raw);
-        return new CardPO(cardMeta, cardContent).withSourceFileName(file.getFileName().toString());
-    }
-
-    private static String headerLine(String fileContent) {
-        if (fileContent == null) {
-            return "";
-        }
-        int newline = fileContent.indexOf('\n');
-        String first = newline < 0 ? fileContent : fileContent.substring(0, newline);
-        return first.strip();
+        return new CardPO(null, stripLegacyHeader(raw)).withSourceFileName(file.getFileName().toString());
     }
 
     /**
-     * 磁盘上的卡片内容 = meta 注释 + 换行 + 正文。
+     * 兼容旧格式：首行如果是 {@code <!-- thisnode:meta ... -->} 就剥掉，只留正文。
      */
-    public static String compose(CardMeta meta,
-                                 String content) {
-        String json = JSON.toJSONString(meta).replace("\r", " ").replace("\n", " ");
-        return META_PREFIX + json + META_SUFFIX + "\n" + (content == null ? "" : content);
-    }
-
-    public static CardMeta meta(String fileContent) {
-        String firstLine = headerLine(fileContent);
-        if (!firstLine.startsWith(META_PREFIX) || !firstLine.endsWith(META_SUFFIX) || firstLine.length() < META_PREFIX.length() + META_SUFFIX.length()) {
-            return null;
-        }
-        String json = firstLine.substring(META_PREFIX.length(), firstLine.length() - META_SUFFIX.length()).strip();
-        try {
-            return JSON.parseObject(json, CardMeta.class);
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
-
-    public static String content(String fileContent) {
+    private static String stripLegacyHeader(String fileContent) {
         if (fileContent == null) {
             return "";
         }
         int newline = fileContent.indexOf('\n');
-        if (!headerLine(fileContent).startsWith(META_PREFIX)) {
+        String firstLine = (newline < 0 ? fileContent : fileContent.substring(0, newline)).strip();
+        if (!firstLine.startsWith(LEGACY_META_PREFIX) || !firstLine.endsWith(LEGACY_META_SUFFIX)) {
             return fileContent;
         }
         return newline < 0 ? "" : fileContent.substring(newline + 1);
