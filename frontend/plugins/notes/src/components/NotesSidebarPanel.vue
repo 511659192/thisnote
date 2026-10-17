@@ -1,3 +1,10 @@
+.sidebar-panel.collapsed {
+  width: 46px;
+}
+.sidebar-panel.collapsed .nav-item {
+  justify-content: center;
+  padding: 5px 0;
+}
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -11,6 +18,7 @@ import {
   navBadges,
   refreshPluginAvailability,
   setActiveListFilter,
+  shellState,
   type NoteListFilter,
   toast,
 } from '@thisnode/plugin-api'
@@ -34,6 +42,8 @@ const route = useRoute()
  * 现在只面向注册器：入口由插件登记，徽标数量由插件自己算，这里一个具体插件都不认识。
  */
 const pluginNav = computed(() => activeNavEntries())
+
+const collapsed = computed(() => shellState.sidebarCollapsed)
 
 /** 当前是否停在某个插件页面上：入口与核心视图同级，同一时刻只该有一行是亮的。 */
 const isPluginPage = computed(() => pluginNav.value.some((entry) => route.path === entry.to))
@@ -209,29 +219,31 @@ watch(
 </script>
 
 <template>
-  <aside class="sidebar-panel">
+<aside class="sidebar-panel" :class="{ collapsed }">
     <nav class="section scroll">
-      <div class="group-title">笔记</div>
+      <div v-if="!collapsed" class="group-title">笔记</div>
       <button
         class="nav-item"
         :class="{ active: !isPluginPage && !nodes.activeBookId && !activePluginFilter }"
         @click="openAll()"
+        :title="collapsed ? '全部笔记' : undefined"
       >
         <!-- 图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
         <span class="ico-swap" title="新建分组" @click.stop="promptNewGroup()">
           <span class="ico base">▤</span>
           <span class="ico add">＋</span>
         </span>
-        <span class="label">全部笔记</span>
+        <span v-if="!collapsed" class="label">全部笔记</span>
         <!-- 「全部笔记」下方显示扁平分组列表。 -->
         <span
+          v-if="!collapsed"
           class="caret root-caret"
           :title="nodes.groupsShown ? '收起分组' : '展开分组'"
           @click.stop="nodes.groupsShown = !nodes.groupsShown"
         >{{ nodes.groupsShown ? '▾' : '▸' }}</span>
       </button>
 
-        <template v-if="nodes.groupsShown">
+      <template v-if="!collapsed && nodes.groupsShown">
           <button
             v-for="group in nodes.books"
             :key="group.id"
@@ -254,8 +266,8 @@ watch(
         :class="{ active: !isPluginPage && activePluginFilter?.pluginId === pf.pluginId && activePluginFilter?.id === pf.id }"
         @click="openPluginFilter(pf)"
       >
-        <span class="ico">{{ pf.icon || '★' }}</span>
-        <span class="label">{{ pf.label }}</span>
+        <span class="ico" :title="collapsed ? pf.label : undefined">{{ pf.icon || '★' }}</span>
+        <span v-if="!collapsed" class="label">{{ pf.label }}</span>
       </button>
 
       <!--
@@ -270,8 +282,8 @@ watch(
         :class="{ active: route.path === entry.to }"
         @click="openPluginEntry(entry.to)"
       >
-        <span class="ico">{{ entry.glyph }}</span>
-        <span class="label">{{ entry.label }}</span>
+        <span class="ico" :title="collapsed ? entry.label : undefined">{{ entry.glyph }}</span>
+        <span v-if="!collapsed" class="label">{{ entry.label }}</span>
         <span v-if="(badges[entry.pluginId] ?? 0) > 0" class="count">
           {{ (badges[entry.pluginId] ?? 0) > 50 ? '50+' : badges[entry.pluginId] }}
         </span>
@@ -401,4 +413,11 @@ watch(
   color: var(--c-text-3);
 }
 
+.sidebar-panel.collapsed {
+  width: 46px;
+}
+.sidebar-panel.collapsed .nav-item {
+  justify-content: center;
+  padding: 5px 0;
+}
 </style>

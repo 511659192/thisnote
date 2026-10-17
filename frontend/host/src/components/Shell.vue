@@ -43,7 +43,7 @@ const ui = useUiStore()
 
     <div class="body">
       <!-- 侧栏容器：内容全部来自登记的业务面板（notes 列表面板内含插件入口行） -->
-      <aside class="sidebar" v-show="!ui.sidebarCollapsed">
+      <aside class="sidebar">
         <template v-for="panel in sidebarPanels_()" :key="panel.pluginId">
           <component :is="panel.component" />
         </template>

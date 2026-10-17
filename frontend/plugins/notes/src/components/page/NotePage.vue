@@ -609,7 +609,7 @@ async function onDoubleClick(e: MouseEvent) {
   // its width is sized to the visible page so a blank strip always remains.
   const created = await page.addBlock(
     { x: Math.round(world.x), y: Math.round(world.y) },
-    { surfaceWidth: size.width / page.viewport.zoom },
+    { surfaceWidth: size.width / page.viewport.zoom, surfaceHeight: size.height / page.viewport.zoom },
   )
   if (created) await beginEdit(created)
 }

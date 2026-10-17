@@ -468,7 +468,7 @@ function armFitObserver() {
 watch([() => props.editing, () => card.value.w], () => {
   void nextTick(() => fitHeight())
 })
-watch(() => content.value, () => fitHeight())
+watch(() => content.value, () => void nextTick(() => fitHeight()))
 onBeforeUnmount(() => {
   cancelPendingPreview()
   for (const markdown of pendingImageAttachments) {

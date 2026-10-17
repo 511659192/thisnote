@@ -22,10 +22,8 @@ export const GRID = 24
  * Card geometry bounds.
  *
  * Cards are wide enough to write in, but never so wide that the page runs out of blank space
- * to click. The default column is ~62% of the visible page: comfortable for writing, and it
- * always leaves a clear strip of empty page to aim at.
  */
-const LIMITS = { maxW: BLOCK_MAX_W, defaultH: 260, widthRatio: 0.62, minVisibleGap: 140 }
+const LIMITS = { maxW: BLOCK_MAX_W, minVisibleGap: 140 }
 
 export function maxCardWidth(surfaceWidth: number): number {
   return Math.max(320, Math.min(LIMITS.maxW, surfaceWidth - LIMITS.minVisibleGap))
@@ -261,19 +259,15 @@ export const usePageStore = defineStore('notePage', () => {
   }
 
   /**
-   * Card width for new cards.
-   *
-   * Cards are wide enough to write in, but never so wide that the page has no blank area left
-   * to click: the layout keeps at least ~120px of free space, and a margin on the right so the
-   * card's resize handle stays reachable.
+   * Default size for a new card: 50% of the visible width, 30% of the visible height
+   * (world pixels; callers pass surface size divided by zoom).
    */
   function defaultCardWidth(surfaceWidth = 1100): number {
-    const usable = surfaceWidth - LIMITS.minVisibleGap
-    return Math.round(Math.max(320, Math.min(LIMITS.maxW, usable * LIMITS.widthRatio)))
+    return Math.round(Math.max(BLOCK_MIN_W, surfaceWidth * 0.5))
   }
 
-  function defaultCardHeight(): number {
-    return LIMITS.defaultH
+  function defaultCardHeight(surfaceHeight = 700): number {
+    return Math.round(Math.max(BLOCK_MIN_H, surfaceHeight * 0.3))
   }
 
   /** Clamp every card to the current surface width (called when the viewport resizes). */
@@ -294,7 +288,7 @@ export const usePageStore = defineStore('notePage', () => {
 
   async function addBlock(
     at: { x: number; y: number },
-    opts: { contentMd?: string; w?: number; h?: number; surfaceWidth?: number } = {},
+    opts: { contentMd?: string; w?: number; h?: number; surfaceWidth?: number; surfaceHeight?: number } = {},
   ): Promise<CardView | null> {
     if (!noteId.value) return null
     try {
@@ -302,7 +296,7 @@ export const usePageStore = defineStore('notePage', () => {
         x: Math.round(at.x),
         y: Math.round(at.y),
         w: opts.w ?? defaultCardWidth(opts.surfaceWidth),
-        h: opts.h ?? defaultCardHeight(),
+        h: opts.h ?? defaultCardHeight(opts.surfaceHeight),
         content: opts.contentMd ?? '',
       })
       await reload()

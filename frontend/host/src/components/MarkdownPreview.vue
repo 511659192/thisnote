@@ -64,3 +64,11 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 </style>
+<style>
+.md-preview > :first-child {
+  margin-top: 0;
+}
+.md-preview > :last-child {
+  margin-bottom: 0;
+}
+</style>
