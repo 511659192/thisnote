@@ -94,12 +94,12 @@ public class PluginLifecycle implements SmartInitializingSingleton {
         log.info("[插件启动 3/4 激活] 启用 {}/{}（停用的插件其端点会被闸门拦下）", activeCount, plugins.size());
 
         // 4) 健康检查：只报告，不让某个插件把整个应用拦在启动之外
-        for (int i = 0; i < plugins.size(); i++) {
-            PluginHealth health = states.healthOf((String) described.get(i).get("id"));
-            described.get(i).put("health", health.status());
-            described.get(i).put("healthMessage", health.message());
+        for (Map<String, Object> row : described) {
+            PluginHealth health = states.healthOf((String) row.get("id"));
+            row.put("health", health.status());
+            row.put("healthMessage", health.message());
             if (!"ok".equals(health.status())) {
-                log.warn("[插件启动 4/4 健康检查] {} 状态 {}：{}", described.get(i).get("id"), health.status(), health.message());
+                log.warn("[插件启动 4/4 健康检查] {} 状态 {}：{}", row.get("id"), health.status(), health.message());
             }
         }
         log.info("[插件启动 4/4 健康检查] 完成");

@@ -1,6 +1,5 @@
 package com.thisnode.ext.favorite.repository;
 
-import cn.hutool.core.io.file.PathUtil;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -16,7 +15,6 @@ import java.io.Reader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -38,7 +36,7 @@ public class FavoriteRepository {
     }
 
     public boolean isFavorite(String noteId) {
-        Optional.ofNullable(noteId).filter(StringUtils::isNotBlank).orElseThrow(() -> new IllegalArgumentException("noteId 不能为空"));
+        requireNoteId(noteId);
         synchronized (lock) {
             return Boolean.parseBoolean(readProperties().getProperty(noteId));
         }
@@ -60,7 +58,7 @@ public class FavoriteRepository {
 
     public void setFavorite(String noteId,
                             boolean favorite) {
-        Optional.ofNullable(noteId).filter(StringUtils::isNotBlank).orElseThrow(() -> new IllegalArgumentException("noteId 不能为空"));
+        requireNoteId(noteId);
         synchronized (lock) {
             Properties properties = readProperties();
             boolean current = Boolean.parseBoolean(properties.getProperty(noteId));
@@ -77,7 +75,7 @@ public class FavoriteRepository {
     }
 
     public boolean removeFavorite(String noteId) {
-        Optional.ofNullable(noteId).filter(StringUtils::isNotBlank).orElseThrow(() -> new IllegalArgumentException("noteId 不能为空"));
+        requireNoteId(noteId);
 
         synchronized (lock) {
             Properties properties = readProperties();
@@ -108,6 +106,12 @@ public class FavoriteRepository {
             fileHelper.fileWritten(file, writer.toString());
         } catch (IOException e) {
             log.error("写入收藏文件失败 file:{}", file, e);
+        }
+    }
+
+    private static void requireNoteId(String noteId) {
+        if (StringUtils.isBlank(noteId)) {
+            throw new IllegalArgumentException("noteId 不能为空");
         }
     }
 }

@@ -39,10 +39,6 @@ public class CardService {
         this.mainEventPublisher = publisher;
     }
 
-    private List<CardPO> cards(NotePO note) {
-        return note.getCardIds().stream().map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
-    }
-
     public List<CardDTO> listCards() throws IOException {
         return cardRepository.listAllFiles().stream().map(notesMapper::toCardDTO).toList();
     }
@@ -50,14 +46,13 @@ public class CardService {
     public List<CardDTO> cards(String noteId,
                          List<String> cardIds) {
         NotePO note = getNote(noteId);
-        List<CardPO> cards;
-        if (cardIds == null) {
-            cards = cards(note);
-        } else {
-            Set<String> wanted = new HashSet<>(cardIds);
-            cards = note.getCardIds().stream().filter(wanted::contains).map(cardRepository::getOne).filter(card -> card != null && card.getMeta() != null).toList();
-        }
-        return cards.stream().map(notesMapper::toCardDTO).toList();
+        Set<String> wanted = cardIds == null ? null : new HashSet<>(cardIds);
+        return note.getCardIds().stream()
+                .filter(cardId -> wanted == null || wanted.contains(cardId))
+                .map(cardRepository::getOne)
+                .filter(card -> card != null && card.getMeta() != null)
+                .map(notesMapper::toCardDTO)
+                .toList();
     }
 
     public CardDTO create(String noteId,
@@ -84,7 +79,7 @@ public class CardService {
         List<String> cardIds = new ArrayList<>(note.getCardIds());
         cardIds.add(card.getCardId());
         note.setCardIds(cardIds);
-        noteRepository.save(note);
+        noteRepository.rewrite(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(card.getCardId(), CardChangedEvent.Kind.CREATED));
         log.info("笔记 {} 新建卡片 {}", noteId, card.getCardId());
         return notesMapper.toCardDTO(new CardPO(card, content));
@@ -112,7 +107,7 @@ public class CardService {
         Set<String> removedAttachments = new HashSet<>(AttachmentService.referencedFileNames(current));
         removedAttachments.removeAll(AttachmentService.referencedFileNames(body));
         cardRepository.save(cardMeta, body, cardId);
-        noteRepository.save(note);
+        noteRepository.rewrite(note);
         attachmentService.deleteIfUnreferenced(removedAttachments);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         log.debug("卡片 {} 内容已保存（{} 字符）", cardId, body.length());
@@ -171,7 +166,7 @@ public class CardService {
 
         cardRepository.delete(List.of(cardId));
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
-        noteRepository.save(note);
+        noteRepository.rewrite(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED, removedAttachments));
         log.info("笔记 {} 删除卡片 {}", noteId, cardId);
     }

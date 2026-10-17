@@ -51,10 +51,6 @@ public class NoteService {
     public synchronized NoteDTO create(String title,
                                            String bookId,
                                            List<String> cardIds) {
-        if (cardIds != null && cardIds.stream().anyMatch(id -> id == null || id.isBlank())) {
-            throw new IllegalArgumentException("笔记包含无效的卡片 ID");
-        }
-
         NotePO note = new NotePO().setTitle(title).setBookId(bookId).setCardIds(cardIds);
         String noteId = noteRepository.saveNew(note);
         mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, note.getTitle(), cardIds));

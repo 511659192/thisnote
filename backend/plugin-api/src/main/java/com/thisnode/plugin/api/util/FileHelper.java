@@ -17,7 +17,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -45,7 +44,6 @@ public final class FileHelper {
 
     public void fileWritten(Path file,
                             String content) {
-        Objects.requireNonNull(content, "content");
         boolean previouslyExisted = Files.exists(file);
         try {
             createParentDirectories(file);
@@ -73,27 +71,12 @@ public final class FileHelper {
         log.info("保存图片附件 {}", destination.getFileName());
     }
 
-    public void fileWritten(Path file,
-                            Path stagedFile) {
-        Objects.requireNonNull(stagedFile, "stagedFile");
-        boolean previouslyExisted = Files.exists(file);
-        try {
-            createParentDirectories(file);
-            Files.move(stagedFile, file);
-        } catch (IOException e) {
-            log.warn("无法写入文件 {}", file, e);
-            throw new UncheckedIOException("写入文件失败 " + file, e);
-        }
-        publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
-    }
-
     /**
      * Copies and closes the stream, writing directly to the destination before publishing its change event.
      */
     public void fileWritten(Path file,
                             InputStream content,
                             long modifiedAtMillis) {
-        Objects.requireNonNull(content, "content");
         boolean previouslyExisted = Files.exists(file);
         try (InputStream input = content) {
             createParentDirectories(file);

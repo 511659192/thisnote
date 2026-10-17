@@ -29,7 +29,7 @@ import java.util.Map;
 public class NoteRepository {
 
     private final NotesConfig notesConfig;
-    private final IdFileIndex fileIndex;
+    private final NoteFileIndex fileIndex;
     private final FileHelper fileHelper;
 
     public String saveNew(NotePO note) {
@@ -60,11 +60,6 @@ public class NoteRepository {
         fileHelper.fileMoved(oldFile, newFile);
         fileHelper.fileWritten(newFile, note);
         fileIndex.updateNoteFileName(noteId, newFileName);
-    }
-
-    public void save(NotePO note) {
-        if (note == null || StrUtil.isBlank(note.getNoteId())) return;
-        rewrite(note);
     }
 
     /** Rewrite note metadata and refresh its filesystem modification time. */

@@ -48,7 +48,7 @@ public class BookService {
         String id = bookRepository.create(title, icon, type);
         String savedTitle = title == null ? "" : title;
         String savedType = type == null || type.isBlank() ? BookPO.TYPE_BOOK : type;
-        requireMainEventPublisher().publishEvent(new BookChangedEvent(
+        mainEventPublisher.publishEvent(new BookChangedEvent(
                 id, BookChangedEvent.Kind.CREATED, savedTitle, savedType, List.of()));
         log.info("创建分组「{}」（type={}，id={}）", title, type, id);
         return notesMapper.toBookDTO(bookRepository.getOne(id));
@@ -59,16 +59,13 @@ public class BookService {
                            String icon,
                            Integer sortOrder) {
         BookPO updated = bookRepository.update(id, title, icon, sortOrder);
-        requireMainEventPublisher().publishEvent(new BookChangedEvent(
+        mainEventPublisher.publishEvent(new BookChangedEvent(
                 id, BookChangedEvent.Kind.UPDATED, updated.getTitle(), updated.getType(), List.of()));
         log.info("更新分组 {}（title={}，icon={}，sortOrder={}）", id, title, icon, sortOrder);
         return notesMapper.toBookDTO(updated);
     }
 
     public void delete(String id) {
-        if (id == null) {
-            return;
-        }
         if (BookPO.DEFAULT_GROUP_ID.equals(id)) {
             throw new IllegalArgumentException("「" + BookPO.DEFAULT_GROUP_TITLE + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
         }
@@ -77,13 +74,13 @@ public class BookService {
         for (NotePO note : noteRepository.getAll()) {
             if (id.equals(note.getBookId())) {
                 note.setBookId(BookPO.DEFAULT_GROUP_ID);
-                noteRepository.save(note);
+                noteRepository.rewrite(note);
                 movedNoteIds.add(note.getNoteId());
             }
         }
         bookRepository.delete(id);
         if (deleted != null) {
-            requireMainEventPublisher().publishEvent(new BookChangedEvent(
+            mainEventPublisher.publishEvent(new BookChangedEvent(
                     id,
                     BookChangedEvent.Kind.DELETED,
                     deleted.getTitle(),
@@ -92,14 +89,5 @@ public class BookService {
         }
         log.info("删除分组 {}，{} 篇笔记归入默认分组", id, movedNoteIds.size());
     }
-
-    private ApplicationEventPublisher requireMainEventPublisher() {
-        ApplicationEventPublisher publisher = mainEventPublisher;
-        if (publisher == null) {
-            throw new IllegalStateException("主容器事件发布器尚未就绪");
-        }
-        return publisher;
-    }
-
 
 }

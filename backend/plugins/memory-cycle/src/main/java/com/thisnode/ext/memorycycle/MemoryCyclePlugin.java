@@ -55,19 +55,6 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     }
 
     /**
-     * 插件的服务来自**插件自己的容器**（不是主容器）：SBP 启动插件时才会 refresh 它，
-     * 所以这里按需从插件上下文取，而不是在构造期注入。
-     */
-    private MemoryCycleService srs() {
-        return getApplicationContext().getBean(MemoryCycleService.class);
-    }
-
-    /**
-     * 【spike，验证完即删】对照组：把同一个 listener 分别注册到**插件自己的容器**与**主容器**。
-     *
-     * <p>如果"事件只在本容器广播"成立，那么只有注册在主容器的那份会收到 notes 发的事件。
-     */
-    /**
      * 把排期清理器挂到**主容器**上：跨插件容器的事件不会传播，发布方（notes）也是往主容器发的。
      *
      * <p>此刻 {@code getApplicationContext()} 仍是 null（SBP 还没把它赋给插件），所以插件容器里的

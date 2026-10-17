@@ -50,11 +50,10 @@ public class MemoryCycleController {
     @PostMapping("/review")
     public CardStateView review(@RequestParam String cardId,
                                 @RequestBody ReviewRequest request) {
-        if (request == null || request.grade() == null) {
+        if (request.grade() == null) {
             throw new IllegalArgumentException("缺少 grade");
         }
-        memoryCycleService.review(cardId, request.grade());
-        return cardStateView(memoryCycleService.cardState(cardId));
+        return cardStateView(memoryCycleService.review(cardId, request.grade()));
     }
 
     /**

@@ -56,7 +56,7 @@ public class CardScheduleRepository {
         return true;
     }
 
-    private Map<String, CardSchedule> loadAll() {
+    public synchronized Map<String, CardSchedule> loadAll() {
         try {
             String json;
             try {

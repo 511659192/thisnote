@@ -1,7 +1,6 @@
 package com.thisnode.ext.memorycycle.service;
 
 import com.thisnode.ext.memorycycle.model.CardSchedule;
-import com.thisnode.ext.memorycycle.model.view.ScheduleView;
 import com.thisnode.ext.memorycycle.repository.CardScheduleRepository;
 import com.thisnode.plugin.api.event.MemoryCycleStateChangedEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -35,22 +34,18 @@ public class MemoryCycleService {
      * Enabled + schedule for one card. Schedule is {@code null} until the first review.
      */
     public synchronized CardSchedule cardState(String cardId) {
-        CardSchedule schedule = scheduleRepository.getOne(cardId);
-        boolean enabled = schedule != null;
-        if (!enabled) {
-            schedule = newCardSchedule(cardId);
-        }
-        fillResponseFields(schedule, enabled, System.currentTimeMillis());
-        return schedule;
+        return stateOf(scheduleRepository.loadAll(), cardId, System.currentTimeMillis());
     }
 
     /**
      * Enabled + schedule for many cards, so a page costs one request.
      */
     public synchronized List<CardSchedule> cardStates(List<String> cardIds) {
+        Map<String, CardSchedule> schedules = scheduleRepository.loadAll();
+        long now = System.currentTimeMillis();
         List<CardSchedule> out = new ArrayList<>(cardIds.size());
         for (String cardId : cardIds) {
-            out.add(cardState(cardId));
+            out.add(stateOf(schedules, cardId, now));
         }
         return out;
     }
@@ -65,6 +60,18 @@ public class MemoryCycleService {
         return s;
     }
 
+    private CardSchedule stateOf(Map<String, CardSchedule> schedules,
+                                 String cardId,
+                                 long now) {
+        CardSchedule schedule = schedules.get(cardId);
+        boolean enabled = schedule != null;
+        if (!enabled) {
+            schedule = newCardSchedule(cardId);
+        }
+        fillResponseFields(schedule, enabled, now);
+        return schedule;
+    }
+
     public void setMainEventPublisher(ApplicationEventPublisher publisher) {
         this.mainEventPublisher = publisher;
     }
@@ -76,18 +83,13 @@ public class MemoryCycleService {
                                         boolean enabled) {
         boolean wasEnabled = scheduleRepository.getOne(cardId) != null;
         boolean changed = wasEnabled != enabled;
-        ApplicationEventPublisher publisher = mainEventPublisher;
-        if (changed && publisher == null) {
-            throw new IllegalStateException("主容器事件发布器尚未就绪");
-        }
-
         if (enabled) {
             createIfAbsent(cardId);
         } else if (changed) {
             scheduleRepository.delete(cardId);
         }
         if (changed) {
-            publisher.publishEvent(new MemoryCycleStateChangedEvent(cardId, enabled));
+            mainEventPublisher.publishEvent(new MemoryCycleStateChangedEvent(cardId, enabled));
             log.info("卡片 {} 记忆周期 → {}", cardId, enabled ? "开启" : "关闭");
         }
     }
@@ -112,7 +114,7 @@ public class MemoryCycleService {
     /**
      * Grade a card: 1=忘记 2=困难 3=良好 4=简单. Returns the updated state.
      */
-    public synchronized ScheduleView review(String cardId,
+    public synchronized CardSchedule review(String cardId,
                                             int grade) {
         if (grade < 1 || grade > 4) {
             throw new IllegalArgumentException("评分必须是 1..4");
@@ -128,7 +130,8 @@ public class MemoryCycleService {
         scheduleRepository.save(s);
         log.info("卡片 {} 评分 {} → 状态 {}，下次复习 {}（level={}）",
                 cardId, grade, s.getState(), s.getDueAt(), s.getLevel());
-        return scheduleView(s);
+        fillResponseFields(s, true, now);
+        return s;
     }
 
     private void apply(CardSchedule s,
@@ -194,20 +197,6 @@ public class MemoryCycleService {
             log.debug("卡片 {} 的记忆周期排期已删除", cardId);
         }
         return removed;
-    }
-
-    private ScheduleView scheduleView(CardSchedule schedule) {
-        long now = System.currentTimeMillis();
-        long dueAt = isShortPhase(schedule.getState()) ? now : schedule.getDueAt().getTime();
-        Long lastReviewedAt = schedule.getLastReviewedAt() == null ? null : schedule.getLastReviewedAt().getTime();
-        return new ScheduleView(schedule.getCardId(),
-                                schedule.getState(),
-                                schedule.getLevel(),
-                                dueAt,
-                                lastReviewedAt,
-                                schedule.getReps(),
-                                schedule.getLapses(),
-                                dueAt <= now);
     }
 
     private void fillResponseFields(CardSchedule schedule,

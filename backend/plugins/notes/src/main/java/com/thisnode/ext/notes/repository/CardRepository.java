@@ -26,7 +26,7 @@ public class CardRepository {
     public static final int MIN_H = 88;
 
     private final NotesConfig notesConfig;
-    private final IdFileIndex fileIndex;
+    private final CardFileIndex fileIndex;
     private final FileHelper fileHelper;
 
     @SneakyThrows

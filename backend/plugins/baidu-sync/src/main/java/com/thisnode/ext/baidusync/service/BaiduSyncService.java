@@ -405,10 +405,6 @@ public class BaiduSyncService {
                                String remoteRoot,
                                List<FileChange> changes,
                                SyncCounters counters) {
-        if (changes.isEmpty()) {
-            return;
-        }
-
         for (FileChange change : changes) {
             log.debug("上传 {}", change.relative());
             panClient.upload(accessToken, change.local().file(), remoteRoot + "/" + change.relative());
@@ -421,9 +417,6 @@ public class BaiduSyncService {
                                  Path notesRoot,
                                  List<FileChange> changesToDownload,
                                  SyncCounters counters) {
-        if (changesToDownload.isEmpty()) {
-            return;
-        }
         List<BaiduPanEntry> entries = changesToDownload.stream().map(FileChange::remote).toList();
         Map<Long, String> downloadUrls = panClient.downloadUrls(accessToken, entries);
         for (FileChange change : changesToDownload) {

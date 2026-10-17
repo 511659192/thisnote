@@ -52,14 +52,6 @@ public class BaiduPanClient {
     private final HttpClient http;
     private final String fileApi;
 
-    public BaiduPanClient() {
-        this(FILE_API, null);
-    }
-
-    BaiduPanClient(String fileApi) {
-        this(fileApi, null);
-    }
-
     @Autowired
     public BaiduPanClient(FileHelper fileHelper) {
         this(FILE_API, fileHelper);
@@ -139,9 +131,6 @@ public class BaiduPanClient {
     public List<FileManagerFailure> deleteBatch(String accessToken,
                                                 List<String> paths) {
         requireFileManagerBatchSize(paths.size());
-        if (paths.isEmpty()) {
-            return List.of();
-        }
         List<Map<String, String>> items = paths.stream().map(path -> Map.of("path", path)).toList();
         return fileManagerFailures(fileManager(accessToken, "delete", items));
     }
@@ -179,13 +168,6 @@ public class BaiduPanClient {
         if (size > FILE_MANAGER_BATCH_SIZE) {
             throw new IllegalArgumentException("百度网盘单次文件管理操作最多处理 " + FILE_MANAGER_BATCH_SIZE + " 个文件");
         }
-    }
-
-    public void download(String accessToken,
-                         BaiduPanEntry item,
-                         Path destination) {
-        String downloadUrl = downloadUrls(accessToken, List.of(item)).get(item.fsId());
-        downloadWithUrl(accessToken, item, destination, downloadUrl);
     }
 
     public Map<Long, String> downloadUrls(String accessToken,
