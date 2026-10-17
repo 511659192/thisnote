@@ -7,7 +7,7 @@ import {
   activeListFilter_,
   activeNoteListFilters,
   activeNoteTools,
-  primaryLabel,
+  modifierLabel,
   toast,
 } from '@thisnode/plugin-api'
 import { usePageStore } from '@/stores/notePage'
@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
       <div v-else class="empty">
         <h3>选择一篇笔记开始</h3>
         <p v-if="allowNoteManagement" class="small">
-          或按 <span class="kbd">{{ primaryLabel() }}</span> <span class="kbd">N</span> 新建一篇。
+          或按 <span class="kbd">{{ modifierLabel() }}</span> <span class="kbd">N</span> 新建一篇。
         </p>
       </div>
     </div>

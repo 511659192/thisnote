@@ -35,7 +35,7 @@ export interface BaiduSyncPreview {
   deleteCount: number
   overwriteCount: number
   conflictCount: number
-  consistentCount?: number
+  consistentCount: number
   items: BaiduSyncPreviewItem[]
 }
 

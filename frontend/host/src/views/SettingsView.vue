@@ -270,9 +270,6 @@ onMounted(async () => {
             <component :is="pluginSettings(plugin.id)" v-if="pluginSettings(plugin.id)" />
             <p v-else class="small muted">这个插件没有自己的设置面板。</p>
 
-            <p v-if="plugin.migrationLocation" class="small muted mono plugin-migration">
-              自带迁移：{{ plugin.migrationLocation }}
-            </p>
           </div>
         </div>
       </section>

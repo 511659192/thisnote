@@ -1,5 +1,5 @@
 import { http } from '@thisnode/plugin-api'
-import type { Card, CardMeta } from './types'
+import type { Card } from './types'
 
 export interface CardUpdate {
   cardId: string
@@ -42,9 +42,6 @@ export const pageApi = {
 
   updateBlocks: (noteId: string, cards: CardUpdate[]) =>
     http.post<{ ok: boolean }>('/api/notes/cards/batch-update', { noteId, cards }),
-
-  updateBlock: (noteId: string, cardId: string, changes: CardUpdate) =>
-    http.post<CardMeta>('/api/notes/cards/update', { ...changes, noteId, cardId }),
 
   /**
    * Write markdown typed inside a card back into the note.

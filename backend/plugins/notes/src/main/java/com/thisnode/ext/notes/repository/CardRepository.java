@@ -17,6 +17,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
+import static com.thisnode.ext.notes.repository.IdFileIndexRepository.*;
+
 @Repository
 @RequiredArgsConstructor
 public class CardRepository {
@@ -25,7 +27,7 @@ public class CardRepository {
     public static final int MIN_H = 88;
 
     private final NotesConfig notesConfig;
-    private final IdFileIndexRepository.CardFileIndexRepository cardFileIndexRepository;
+    private final CardFileIndexRepository cardFileIndexRepository;
     private final FileHelper fileHelper;
 
     @SneakyThrows

@@ -34,3 +34,5 @@
 ## 其他
 - 表达业务约束不用布尔 `!=`/`==` 压成异或式校验，拆成直观的独立 `if`，让每种非法组合及其错误信息一眼可读。
 - 交付表述区分「源码已实现」与「运行中已生效」：新响应字段未构建/重载前不声称界面已呈现；前端对旧响应缺字段显示明确「不可用」提示，不留空或伪报 0。
+- 【硬规则】pwsh 按锚点批量删代码块，删除前必须先校验块尾边界（闭括号所在行号与缩进）再 RemoveRange；小文件优先 read→write 全量重写。依据：2026-10-17 删 utils.ts 死函数时越界删掉下一函数签名，用户手工修复并改名（primaryLabel→modifierLabel）。
+- `frontend/plugin-api/` 目录未被 git 追踪（host/plugins 已追踪）：编辑它没有 diff 保护网，改后必须 read 复验；`git status --short <path>` 的 pathspec 行为曾误报「frontend 不受追踪」，用 `git ls-files <path>` 判定。
