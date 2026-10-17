@@ -217,6 +217,10 @@ public class BaiduSyncService {
             BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
 
             List<FileChange> changes = planFileChanges(local, remote, baseline);
+            if (CollectionUtil.isEmpty(changes)) {
+                status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
+                return;
+            }
             log.info("change size:{}", CollectionUtil.size(changes));
 
             counters.conflicts = (int) changes.stream().filter(FileChange::conflict).count();

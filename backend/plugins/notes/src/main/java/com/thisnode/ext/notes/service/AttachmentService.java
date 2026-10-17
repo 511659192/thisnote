@@ -21,35 +21,17 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AttachmentService {
 
-    private static final String IMAGE_FILE_NAME = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|gif|webp|bmp|avif)";
+    private static final String IMAGE_FILE_NAME = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg)";
     private static final Pattern IMAGE_FILE_NAME_PATTERN = Pattern.compile(IMAGE_FILE_NAME);
     private static final Pattern IMAGE_REFERENCE_PATTERN = Pattern.compile("\\.\\./attachments/(" + IMAGE_FILE_NAME + ")");
     private static final Map<String, String> EXTENSIONS_BY_MEDIA_TYPE = Map.of("image/png",
                                                                                "png",
                                                                                "image/jpeg",
-                                                                               "jpg",
-                                                                               "image/gif",
-                                                                               "gif",
-                                                                               "image/webp",
-                                                                               "webp",
-                                                                               "image/bmp",
-                                                                               "bmp",
-                                                                               "image/x-ms-bmp",
-                                                                               "bmp",
-                                                                               "image/avif",
-                                                                               "avif");
+                                                                               "jpg");
     private static final Map<String, String> MEDIA_TYPES_BY_EXTENSION = Map.of("png",
                                                                                "image/png",
                                                                                "jpg",
-                                                                               "image/jpeg",
-                                                                               "gif",
-                                                                               "image/gif",
-                                                                               "webp",
-                                                                               "image/webp",
-                                                                               "bmp",
-                                                                               "image/bmp",
-                                                                               "avif",
-                                                                               "image/avif");
+                                                                               "image/jpeg");
 
     private final NotesConfig notesConfig;
     private final CardRepository cardRepository;
@@ -64,7 +46,7 @@ public class AttachmentService {
         if (extension == null) throw new IllegalArgumentException("不支持的图片格式");
 
         String fileName = UUID.randomUUID() + "." + extension;
-        Path destination = imagePath(fileName);
+        Path destination = notesConfig.getRootDir().resolve("attachments").resolve(fileName);
         fileHelper.fileWritten(destination, file);
         return "../attachments/" + fileName;
     }
@@ -102,11 +84,7 @@ public class AttachmentService {
     public void deleteIfUnreferenced(Set<String> candidates) {
         if (candidates == null || candidates.isEmpty()) return;
 
-        Set<String> stillReferenced = new HashSet<>();
-        for (CardPO card : cardRepository.getAllIndexed()) {
-            stillReferenced.addAll(referencedFileNames(card.getContent()));
-        }
-
+        Set<String> stillReferenced = allReferencedFileNames();
         for (String fileName : candidates) {
             if (stillReferenced.contains(fileName)) continue;
             Path path = imagePathOrNull(fileName);
@@ -115,16 +93,11 @@ public class AttachmentService {
         }
     }
 
-    private Path imagePath(String fileName) {
-        Path path = imagePathOrNull(fileName);
-        if (path == null) throw new IllegalArgumentException("图片附件文件名无效");
-        return path;
-    }
-
+    /**
+     * 文件名必须严格匹配 UUID + 图片扩展名，因此不会再含路径分隔符或 `..`。
+     */
     private Path imagePathOrNull(String fileName) {
         if (fileName == null || !IMAGE_FILE_NAME_PATTERN.matcher(fileName).matches()) return null;
-        Path directory = notesConfig.getRootDir().resolve("attachments").toAbsolutePath().normalize();
-        Path path = directory.resolve(fileName).normalize();
-        return path.startsWith(directory) ? path : null;
+        return notesConfig.getRootDir().resolve("attachments").resolve(fileName);
     }
 }

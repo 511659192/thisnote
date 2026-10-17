@@ -26,7 +26,7 @@ const defaultImage =
 
 md.renderer.rules.image = (tokens, idx, options, env, self) => {
   const src = tokens[idx].attrGet('src') ?? ''
-  const match = /^\.\.\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:png|jpg|gif|webp|bmp|avif))$/.exec(src)
+  const match = /^\.\.\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:png|jpg))$/.exec(src)
   if (match) {
     tokens[idx].attrSet('data-thisnode-attachment', match[1])
     tokens[idx].attrSet('src', 'about:blank')

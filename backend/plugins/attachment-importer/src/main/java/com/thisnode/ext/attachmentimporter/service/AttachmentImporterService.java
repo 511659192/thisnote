@@ -46,7 +46,7 @@ import java.util.regex.Pattern;
  * + 没有被任何卡片引用（向 notes 查询，见 {@link AttachmentQueryEvent}）。
  * 不建历史基线：状态文件缺失时（首次运行/被删除），当前目录里未被引用的图片都会被导入。
  *
- * <p>附件只有 {@code <uuid>.<png|jpg|gif|webp|bmp|avif>} 才能被界面渲染，所以非规范名会原地改名，
+ * <p>附件只有 {@code <uuid>.<png|jpg>} 才能被界面渲染，所以非规范名会原地改名，
  * 原文件名保留为笔记标题；生成失败时把文件名回滚。
  */
 @Slf4j
@@ -58,7 +58,7 @@ public class AttachmentImporterService {
     private static final long REFERENCE_QUERY_TIMEOUT_SECONDS = 10L;
     private static final String DEFAULT_BOOK_ID = "grp-default";
 
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg", "jpeg", "gif", "webp", "bmp", "avif");
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg");
 
     /**
      * 与界面侧卡片几何保持一致（frontend/plugins/notes/src/stores/notePage.ts 的
@@ -81,7 +81,7 @@ public class AttachmentImporterService {
     /**
      * 与 {@code AttachmentService.IMAGE_FILE_NAME}、界面侧 Markdown 渲染识别的名字保持一致。
      */
-    private static final Pattern CANONICAL_FILE_NAME = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg|gif|webp|bmp|avif)");
+    private static final Pattern CANONICAL_FILE_NAME = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg)");
 
     private final ImportStateRepository stateRepository;
     private final FileHelper fileHelper;
@@ -267,7 +267,7 @@ public class AttachmentImporterService {
     }
 
     /**
-     * 已是规范名就原样使用；否则生成 UUID 名（{@code jpeg} 归一成 {@code jpg}，与附件服务一致）。
+     * 已是规范名就原样使用；否则生成 UUID 名。
      */
     private static String canonicalName(String fileName) {
         if (CANONICAL_FILE_NAME.matcher(fileName).matches()) {
@@ -277,8 +277,7 @@ public class AttachmentImporterService {
     }
 
     private static String extensionOf(String fileName) {
-        String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
-        return "jpeg".equals(extension) ? "jpg" : extension;
+        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
     }
 
     private static String titleOf(String fileName) {

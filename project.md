@@ -247,7 +247,7 @@ host（qiankun 主应用，:5173）
 ├── cards/                      卡片（Markdown，一张一个文件，只含正文）
 │   └── <标题>_<n>.md
 ├── book/books.json             分组台账（数组）
-├── attachments/                <uuid>.<png|jpg|gif|webp|bmp|avif>
+├── attachments/                <uuid>.<png|jpg>
 ├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
     ├── notes/.note-index.json   noteId → NotePO（扁平 map）
@@ -275,8 +275,8 @@ host（qiankun 主应用，:5173）
 - **内容保存的并发基线**：`update-content` 带 `baseContentMd`，磁盘上已不是这一份就回 409，
   **磁盘优先**，不覆盖外部编辑器（Obsidian/VS Code）的改动（`CardService.java:91-118`；
   前端处理见 `frontend/plugins/notes/src/stores/notePage.ts:388-423`）。
-- **附件**：只接受 png/jpeg/gif/webp/bmp/avif；文件名必须匹配 UUID 正则且解析后仍在 attachments 目录内
-  （防目录穿越）；删除只发生在「全库索引里没有其它卡片引用」时（`AttachmentService.java:58-116`）。
+- **附件**：只接受 png/jpg；文件名必须严格匹配 UUID 正则（不含路径分隔符）
+  （删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
   正文引用写法是 `../attachments/<uuid>.<ext>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
   `frontend/host/src/components/MarkdownPreview.vue:21-42`）。
 
@@ -377,7 +377,7 @@ host（qiankun 主应用，:5173）
 - 非 UUID 文件名原地改名为 `<uuid>.<ext>`（经 `FileHelper.fileMoved`），原文件名作笔记标题；生成失败则把名字改回去。
 - 通过 `CardChangedEvent.requestCardCreate` 交给 notes 建笔记/卡片，归入 `grp-default`；本插件不写笔记数据。
 - 卡片初始框体按图片像素尺寸折算：宽 = min(图片宽, 650) + 30（下限 240、上限 680），高 = 等比高度 + 44（下限 88）；
-  ImageIO 读不到尺寸（webp/avif、损坏文件）时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
+  ImageIO 读不到尺寸（损坏文件）时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
 - 附件引用快照由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.allReferencedFileNames()`），本插件不解析卡片内容。
 
 **state-reset**

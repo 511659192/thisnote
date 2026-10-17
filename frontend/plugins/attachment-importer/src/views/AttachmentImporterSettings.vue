@@ -13,7 +13,7 @@
       </li>
       <li>不建历史基线：状态文件（<code>plugins/attachment-importer/imported.json</code>）缺失时，当前未被引用的图片都会导入；删除它即可让未引用图片重新导入。</li>
       <li>卡片框体按图片原始尺寸生成（宽度上限 680），打开时图片铺满卡片，不留大片空白。</li>
-      <li>只处理 png / jpg / gif / webp / bmp / avif，其它文件与非普通文件一律跳过。</li>
+      <li>只处理 png / jpg，其它文件与非普通文件一律跳过。</li>
     </ul>
   </section>
 </template>
