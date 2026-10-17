@@ -88,13 +88,13 @@ public class CardRepository {
         Path dir = notesConfig.getCardsDir();
         Files.createDirectories(dir);
         String prefix = title == null || title.isBlank() ? "tmp-" + cardId : title;
-        String cardContent = CardPO.compose(meta, content);
         for (int number = 1; ; number++) {
             String suffix = "_" + number;
             String fileName = prefix + suffix + ".md";
             Path file = dir.resolve(fileName);
             if (Files.exists(file)) continue;
-            fileHelper.fileWritten(file, cardContent);
+            meta.setSourceFileName(fileName);
+            fileHelper.fileWritten(file, CardPO.compose(meta, content));
             fileIndex.addCard(cardId, fileName);
             return cardId;
         }

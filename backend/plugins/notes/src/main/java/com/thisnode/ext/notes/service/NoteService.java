@@ -80,7 +80,7 @@ public class NoteService {
             boolean duplicateTitle = !title.isBlank() && noteRepository.getAll().stream().anyMatch(other -> !noteId.equals(other.getNoteId()) && title.equalsIgnoreCase(other.getTitle()));
             if (duplicateTitle) throw new IllegalArgumentException("笔记标题已存在：" + title);
 
-            noteRepository.onNewTitle(meta, title);
+            noteRepository.newTitle(meta, title);
             cardRepository.renameFiles(meta.getCardIds(), title);
             for (String cardId : meta.getCardIds()) {
                 mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));

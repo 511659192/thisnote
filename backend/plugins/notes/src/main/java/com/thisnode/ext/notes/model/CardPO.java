@@ -115,6 +115,8 @@ public class CardPO {
 
         private int v = SCHEMA;
         private String cardId;
+        private String sourceFileName;
+        private String noteId;
         private double x = 0d;
         private double y = 0d;
         private double w = DEFAULT_W;

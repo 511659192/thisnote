@@ -34,8 +34,16 @@ public class NoteRepository {
 
     public String saveNew(NoteMetaPO note) {
         String noteId = IdUtil.randomUUID();
-        String fileName = "tmp-" + noteId + ".json";
-        Path file = notesConfig.getNoteMetaDir().resolve(fileName);
+        String title = note.getTitle();
+        String baseName = StrUtil.isBlank(title) ? "tmp-" + noteId : title;
+        String fileName = baseName + ".json";
+        Path metaDir = notesConfig.getNoteMetaDir();
+        Path file = metaDir.resolve(fileName);
+        List<String> indexedFileNames = new ArrayList<>(fileIndex.noteFiles().values());
+        for (int number = 1; Files.exists(file) || indexedFileNames.contains(fileName); number++) {
+            fileName = baseName + "_" + number + ".json";
+            file = metaDir.resolve(fileName);
+        }
         fileHelper.fileWritten(file, note.setNoteId(noteId));
         fileIndex.addNote(noteId, fileName);
         return noteId;
@@ -45,8 +53,8 @@ public class NoteRepository {
      * Rename only the physical metadata file; the noteMeta ID remains stable.
      */
     @SneakyThrows
-    public void onNewTitle(NoteMetaPO noteMeta,
-                           String newTitle) {
+    public void newTitle(NoteMetaPO noteMeta,
+                         String newTitle) {
         String noteId = noteMeta.getNoteId();
         String oldFileName = fileIndex.noteFileName(noteId);
         if (oldFileName == null) throw new IllegalStateException("笔记 ID 不在文件索引中：" + noteId);

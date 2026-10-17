@@ -85,11 +85,13 @@ public class CardService {
         .setY(y)
         .setW(w)
         .setH(h)
-        .setColor(req.color());
+        .setColor(req.color())
+        .setNoteId(noteMeta.getNoteId());
         if (fixedFileName == null) {
             cardRepository.saveNew(card, content, noteMeta.getTitle());
         } else {
             card.setCardId(UUID.randomUUID().toString());
+            card.setSourceFileName(fixedFileName);
             cardRepository.saveWithMetadata(fixedFileName, card.getCardId(), CardPO.compose(card, content));
         }
 

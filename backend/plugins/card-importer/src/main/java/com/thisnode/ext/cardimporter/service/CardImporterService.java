@@ -33,7 +33,6 @@ public class CardImporterService {
     @Scheduled(fixedDelay = SCAN_INTERVAL_MILLIS)
     public void scan() {
         try {
-            log.info("扫描 notes/cards 提交导入申请开始 {}", new DateTime());
             requestCardImports();
         } catch (RuntimeException e) {
             log.warn("扫描 notes/cards 提交导入申请失败", e);
@@ -45,11 +44,10 @@ public class CardImporterService {
         CompletableFuture<List<CardDTO>> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new CardQueryEvent(result));
         List<CardDTO> cards = result.join();
-        log.info("扫描 notes/cards 提交导入申请结束 {}, 共 {} 个卡片", new DateTime(), cards.size());
         if (cards.isEmpty()) return;
 
         for (CardDTO card : cards) {
-            if (card.meta() != null) continue;
+            if (card.meta() != null && card.meta().noteId() != null) continue;
             String noteTitle = title(card.sourceFileName());
             mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(card, noteTitle, DEFAULT_NOTEBOOK_ID));
         }

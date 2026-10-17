@@ -4,6 +4,8 @@ import java.util.Map;
 
 public record CardMetaDTO(int v,
                           String cardId,
+                          String sourceFileName,
+                          String noteId,
                           double x,
                           double y,
                           double w,

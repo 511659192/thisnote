@@ -18,6 +18,8 @@ export interface Notebook {
 export interface CardMeta {
   v: number
   cardId: string
+  sourceFileName?: string | null
+  noteId?: string | null
   x: number
   y: number
   w: number
