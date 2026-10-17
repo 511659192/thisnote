@@ -21,6 +21,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 
 @Service
@@ -39,15 +40,16 @@ public class CardService {
         this.mainEventPublisher = publisher;
     }
 
-    public List<CardDTO> listCards() throws IOException {
-        return cardRepository.listAllFiles().stream().map(notesMapper::toCardDTO).toList();
+    public List<CardDTO> listCards(Instant since) throws IOException {
+        return cardRepository.listChangedFiles(since).stream().map(notesMapper::toCardDTO).toList();
     }
 
     public List<CardDTO> cards(String noteId,
-                         List<String> cardIds) {
+                               List<String> cardIds) {
         NotePO note = getNote(noteId);
         Set<String> wanted = cardIds == null ? null : new HashSet<>(cardIds);
-        return note.getCardIds().stream()
+        return note.getCardIds()
+                .stream()
                 .filter(cardId -> wanted == null || wanted.contains(cardId))
                 .map(cardRepository::getOne)
                 .filter(card -> card != null && card.getMeta() != null)
@@ -56,13 +58,13 @@ public class CardService {
     }
 
     public CardDTO create(String noteId,
-                                  CreateCardRequest req) {
+                          CreateCardRequest req) {
         return create(noteId, req, null);
     }
 
     public CardDTO create(String noteId,
-                                  CreateCardRequest req,
-                                  String fixedFileName) {
+                          CreateCardRequest req,
+                          String fixedFileName) {
         if (req.x() == null || req.y() == null) {
             throw new IllegalArgumentException("创建卡片需要 x/y 坐标（页面上的落点）");
         }
@@ -87,9 +89,9 @@ public class CardService {
 
     // Card metadata and body share one Markdown file, so serialize their read-modify-write paths.
     public synchronized CardDTO writeContent(String noteId,
-                                                     String cardId,
-                                                     String contentMd,
-                                                     String baseContentMd) {
+                                             String cardId,
+                                             String contentMd,
+                                             String baseContentMd) {
         NotePO note = noteContainingCard(noteId, cardId);
 
         CardPO card = cardRepository.getOne(cardId);
@@ -172,7 +174,7 @@ public class CardService {
     }
 
     private NotePO noteContainingCard(String noteId,
-                                          String cardId) {
+                                      String cardId) {
         return noteContainingCard(getNote(noteId), cardId);
     }
 
@@ -185,7 +187,7 @@ public class CardService {
     }
 
     private NotePO noteContainingCard(NotePO note,
-                                          String cardId) {
+                                      String cardId) {
         if (!note.getCardIds().contains(cardId)) {
             throw new NotFoundException("card " + cardId);
         }

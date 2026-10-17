@@ -49,8 +49,8 @@ public class NoteService {
     }
 
     public synchronized NoteDTO create(String title,
-                                           String bookId,
-                                           List<String> cardIds) {
+                                       String bookId,
+                                       List<String> cardIds) {
         NotePO note = new NotePO().setTitle(title).setBookId(bookId).setCardIds(cardIds);
         String noteId = noteRepository.saveNew(note);
         mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, note.getTitle(), cardIds));
@@ -59,7 +59,7 @@ public class NoteService {
     }
 
     public NoteDTO update(String noteId,
-                              UpdateNoteRequest req) {
+                          UpdateNoteRequest req) {
         NotePO meta = getPO(noteId);
         String title = req.title();
         if (title != null && !title.equals(meta.getTitle())) {

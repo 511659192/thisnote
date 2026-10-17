@@ -9,7 +9,7 @@ public class CardImporterRegister implements PluginRegister {
 
     @Override
     public String description() {
-        return "每 10 秒扫描 notes/cards 中尚未关联到笔记的 Markdown 卡片并导入";
+        return "每 10 秒扫描 notes/cards 中最近有改动且尚未关联到笔记的 Markdown 卡片并导入";
     }
 
     @Override

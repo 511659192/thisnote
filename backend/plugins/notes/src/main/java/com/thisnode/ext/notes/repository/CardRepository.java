@@ -10,9 +10,13 @@ import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -56,14 +60,15 @@ public class CardRepository {
         return getAll(new ArrayList<>(fileIndex.cardFiles().keySet()));
     }
 
-    public List<CardPO> listAllFiles() throws IOException {
+    public List<CardPO> listChangedFiles(Instant since) throws IOException {
         Path cardsDir = notesConfig.getCardsDir();
         if (!Files.isDirectory(cardsDir)) return List.of();
 
+        DirectoryStream.Filter<Path> filter = allOf(markdownFiles(), changedSince(since));
         List<Path> paths = new ArrayList<>();
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(cardsDir, "*.md")) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(cardsDir, filter)) {
             for (Path file : files) {
-                if (Files.isRegularFile(file)) paths.add(file);
+                paths.add(file);
             }
         }
         paths.sort(Comparator.comparing((Path path) -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER).thenComparing(path -> path.getFileName().toString()));
@@ -73,6 +78,38 @@ public class CardRepository {
             cards.add(CardPO.parse(path));
         }
         return List.copyOf(cards);
+    }
+
+    /**
+     * 后缀过滤器：只留 Markdown 卡片文件（glob 语义与 Files.newDirectoryStream(dir, "*.md") 一致）。
+     */
+    private static DirectoryStream.Filter<Path> markdownFiles() {
+        PathMatcher markdown = FileSystems.getDefault().getPathMatcher("glob:*.md");
+        return entry -> markdown.matches(entry.getFileName()) && Files.isRegularFile(entry);
+    }
+
+    /**
+     * 时间过滤器：只留 since 之后有改动（写入或迁入）的卡片。
+     */
+    private static DirectoryStream.Filter<Path> changedSince(Instant since) {
+        return entry -> {
+            BasicFileAttributes attributes;
+            try {
+                attributes = Files.readAttributes(entry, BasicFileAttributes.class);
+            } catch (NoSuchFileException e) {
+                return false;
+            }
+            // 迁移（复制/下载）会保留源文件的修改时间，因此同时看创建时间（Unix 上为状态变更时间）
+            return !attributes.lastModifiedTime().toInstant().isBefore(since) || !attributes.creationTime().toInstant().isBefore(since);
+        };
+    }
+
+    /**
+     * 两个过滤器依次判定，都命中才算数。
+     */
+    private static DirectoryStream.Filter<Path> allOf(DirectoryStream.Filter<Path> first,
+                                                      DirectoryStream.Filter<Path> second) {
+        return entry -> first.accept(entry) && second.accept(entry);
     }
 
     /**
