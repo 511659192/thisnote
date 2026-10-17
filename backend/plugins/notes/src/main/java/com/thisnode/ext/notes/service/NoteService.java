@@ -54,20 +54,10 @@ public class NoteService {
         if (cardIds != null && cardIds.stream().anyMatch(id -> id == null || id.isBlank())) {
             throw new IllegalArgumentException("笔记包含无效的卡片 ID");
         }
-        List<String> initialCardIds = cardIds == null ? List.of() : List.copyOf(cardIds);
 
-        if (!initialCardIds.isEmpty()) {
-            List<NoteMetaPO> existingNotes = noteRepository.getAll();
-            boolean alreadyManaged = existingNotes.stream()
-                    .map(NoteMetaPO::getCardIds)
-                    .filter(existingCardIds -> existingCardIds != null)
-                    .anyMatch(existingCardIds -> initialCardIds.stream().anyMatch(existingCardIds::contains));
-            if (alreadyManaged) return null;
-        }
-
-        NoteMetaPO noteMeta = new NoteMetaPO().setTitle(title).setNotebookId(notebookId).setCardIds(initialCardIds);
+        NoteMetaPO noteMeta = new NoteMetaPO().setTitle(title).setNotebookId(notebookId).setCardIds(cardIds);
         String noteId = noteRepository.saveNew(noteMeta);
-        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, noteMeta.getTitle(), initialCardIds));
+        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, noteMeta.getTitle(), cardIds));
         log.info("创建笔记 {}（notebook={}）", noteId, notebookId);
         return notesMapper.toNoteMetaDTO(noteMeta);
     }

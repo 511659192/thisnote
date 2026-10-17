@@ -27,6 +27,7 @@
 - 【硬规则】UI 指代先定位具体组件层，不从截图或旧界面推断，指代不清先确认：页眉（`.rv-head`）、页签导航（`.rv-tabs`）、卡片元数据（`.rv-note-title`）是不同目标（曾删错层）。
 - 复习评分预览按用户明确给出的间隔实现（纠正：曾按截图误判为 1 分钟阈值）：忘记=轮询、困难=1 天、良好=2 天、简单=3 天；预览与实际评分复用同一调度规则（`SrsService.previewDue` 复制状态复用 `apply`）。
 - 计数徽标的数据须在进入页面时加载，或加载期显示占位，不能等点击页签才出现计数（曾只在页签点击时 `loadEnabledCardList()`）。
+- 用户纠正（2026-10-17）：图片自动调整的第一次修补后仍不能伸缩；此前只处理了 Markdown 附件 `about:blank` 占位，没有核对页面侧尺寸上限。依据：`NotePage.vue` 的 `onFitHeight` 将宽度钳制到 `maxCardWidth`（全局最大 680px），并将高度钳制到视口剩余空间；用户再次反馈点击无变化。下次尺寸故障先追踪事件、尺寸计算、提交和页面限幅全链，并确认是否要越过现有布局边界；未运行验证时只报告源码改动，不声称问题已解决。
 
 ## 插件与文件持久化
 - 笔记根目录统一由 Spring `thisnode.data-root`（默认 `${user.home}/.thisnode`）派生：笔记根 = `data-root/notes`，插件数据 = `data-root/notes/plugins/<pluginId>`；不以 settings.json 的 `notesRoot` 为准；不保留旧 `data-root/plugins/<pluginId>` 的迁移兼容，不自动搬移/删除已有数据；少调用点的路径拼接直接内联，不留纯封装工具类（`PluginDataPathUtils` 已删）。

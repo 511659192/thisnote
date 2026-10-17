@@ -19,8 +19,6 @@ public class NotesSettingsController {
     @GetMapping("/get")
     public Map<String, Object> get() {
         Path root = notesConfig.getRootDir();
-        return Map.of("rootDir", root.toString(),
-                      "activeRootDir", root.toString(),
-                      "restartRequired", false);
+        return Map.of("rootDir", root.toString(), "activeRootDir", root.toString(), "restartRequired", false);
     }
 }

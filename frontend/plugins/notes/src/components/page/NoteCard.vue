@@ -37,6 +37,8 @@ const emit = defineEmits<{
   (e: 'toggle-collapse', id: string): void
   (e: 'focus', id: string): void
   (e: 'fit-height', p: { cardId: string; h: number; w?: number; fitImage?: boolean; force?: boolean }): void
+  (e: 'preview', view: CardView): void
+  (e: 'fit-width', p: { cardId: string; ratio: number }): void
 }>()
 
 const draft = ref('')
@@ -59,15 +61,9 @@ const card = computed(() => props.view.card)
 const content = computed(() => props.view.contentMd ?? '')
 const sourceVisible = computed(() => !card.value.collapsed && props.editing)
 const formatMode = ref<CardFormat>('auto')
-const formatMenuOpen = ref(false)
 const detectedFormat = computed(() => (isMarkdown(props.editing ? draft.value : content.value) ? 'markdown' : 'text'))
 const effectiveFormat = computed(() => formatMode.value === 'auto' ? detectedFormat.value : formatMode.value)
-const formatIcon = computed(() => formatMode.value === 'auto' ? 'A' : formatMode.value === 'markdown' ? 'M' : 'T')
 const detectedFormatLabel = computed(() => detectedFormat.value === 'markdown' ? 'Markdown' : '普通文本')
-const formatTitle = computed(() => {
-  if (formatMode.value === 'auto') return `自动判定（当前：${detectedFormatLabel.value}）`
-  return formatMode.value === 'markdown' ? 'Markdown 格式' : '普通文本格式'
-})
 
 function readFormatMode(cardId: string): CardFormat {
   try {
@@ -80,7 +76,6 @@ function readFormatMode(cardId: string): CardFormat {
 
 function selectFormat(mode: CardFormat) {
   formatMode.value = mode
-  formatMenuOpen.value = false
   try {
     localStorage.setItem(`thisnote.notes.card-format.${card.value.cardId}`, mode)
   } catch {
@@ -115,7 +110,6 @@ watch(
   (id) => {
     loadedFor.value = null
     draft.value = ''
-    formatMenuOpen.value = false
     formatMode.value = readFormatMode(id)
   },
   { immediate: true },
@@ -129,6 +123,7 @@ watch(
  * 右下角优先于单边，所以角落能斜向拉伸。
  */
 function onBodyPointerDown(e: PointerEvent) {
+  pointerDownAt = { x: e.clientX, y: e.clientY }
   const el = e.currentTarget as HTMLElement
   const r = el.getBoundingClientRect()
   const EDGE = 6
@@ -136,6 +131,10 @@ function onBodyPointerDown(e: PointerEvent) {
   const nearRight = r.right - e.clientX <= EDGE
   const nearTop = e.clientY - r.top <= EDGE
   const nearBottom = r.bottom - e.clientY <= EDGE
+  if (nearTop && (nearLeft || nearRight)) {
+    emit('pointerdown', { event: e, view: props.view, mode: 'resize', handle: nearLeft ? 'nw' : 'ne' })
+    return
+  }
   if (nearBottom && (nearLeft || nearRight)) {
     emit('pointerdown', { event: e, view: props.view, mode: 'resize', handle: nearLeft ? 'sw' : 'se' })
     return
@@ -149,6 +148,40 @@ function onBodyPointerDown(e: PointerEvent) {
     return
   }
   emit('pointerdown', { event: e, view: props.view, mode: 'move' })
+}
+
+// ---------------------------------------------------------------- 单击预览 / 双击编辑
+
+/**
+ * 单击预览、双击编辑：单击延迟 250ms 才发预览，双击先取消它再进编辑 ——
+ * 双击的第一次 click 不会抢先弹出预览浮层；拖卡后的 click 按位移判定不算点击。
+ */
+let pointerDownAt: { x: number; y: number } | null = null
+let previewTimer: number | null = null
+
+function cancelPendingPreview() {
+  if (previewTimer === null) return
+  window.clearTimeout(previewTimer)
+  previewTimer = null
+}
+
+function onBodyClick(e: MouseEvent) {
+  emit('focus', card.value.cardId)
+  if (props.editing || card.value.collapsed) return
+  const target = e.target as HTMLElement
+  if (target.closest('.card-tools, .format-control')) return
+  const down = pointerDownAt
+  if (down && Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 3) return
+  if (previewTimer !== null) return
+  previewTimer = window.setTimeout(() => {
+    previewTimer = null
+    emit('preview', props.view)
+  }, 250)
+}
+
+function onBodyDblclick() {
+  cancelPendingPreview()
+  emit('request-edit', card.value.cardId)
 }
 
 function commit() {
@@ -326,6 +359,9 @@ function fitHeight(force = false) {
     return
   }
   const loadedImages = images.filter((image) => image.naturalWidth > 0)
+  const waitingForAttachmentImage = autoFitImageWidth.value && images.some(
+    (image) => image.dataset.thisnodeAttachment && image.getAttribute('src') === 'about:blank',
+  )
 
   // 高度基准：量**内容根节点的自然高度**——.body.read 是滚动容器，scrollHeight 会被
   // 自身 client 高度兜底，直接量它高度永远缩不回去（贴合后底部仍大片空白的原因）。
@@ -357,7 +393,7 @@ function fitHeight(force = false) {
     // 克隆体已含 .body.read 左右 28px 内边距，再补卡片左右边框 2px
     if (maxContentWidth > 0) desiredWidths.push(maxContentWidth + 2)
     if (desiredWidths.length) {
-      autoFitImageWidth.value = false
+      if (!waitingForAttachmentImage) autoFitImageWidth.value = false
       const desired = Math.max(...desiredWidths)
       // 4px 容差避免分数像素来回拉扯；上限由页面侧 maxCardWidth 钳制
       if (Math.abs(desired - card.value.w) > 4) width = desired
@@ -395,6 +431,15 @@ function autoFit() {
   fitHeight(true)
 }
 
+/** ⤢ 排固定选项：自动贴合，或把卡片宽度设为可视宽度的一定比例（比例由页面侧折算提交）。 */
+function chooseFitWidth(ratio: number | null) {
+  if (ratio === null) {
+    autoFit()
+    return
+  }
+  emit('fit-width', { cardId: card.value.cardId, ratio })
+}
+
 /** 当前要量的内容节点：编辑态是屏外 twin，预览态是渲染出来的内容根节点。 */
 function contentEl(): HTMLElement | null {
   return props.editing
@@ -425,6 +470,7 @@ watch([() => props.editing, () => card.value.w], () => {
 })
 watch(() => content.value, () => fitHeight())
 onBeforeUnmount(() => {
+  cancelPendingPreview()
   for (const markdown of pendingImageAttachments) {
     void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
   }
@@ -447,19 +493,23 @@ onBeforeUnmount(() => {
       zIndex: props.zIndex,
     }"
     @pointerdown="onBodyPointerDown"
-    @dblclick.stop="emit('request-edit', card.cardId)"
+    @dblclick.stop="onBodyDblclick"
     @contextmenu.prevent.stop="onContextMenu"
-    @click="emit('focus', card.cardId)"
+    @click="onBodyClick"
   >
     <!-- Card tools are overlaid in the top-right corner so they cost no layout space. -->
     <div class="card-tools">
       <template v-if="!card.collapsed">
         <button
           class="auto-fit"
-          title="自动调整：按内容贴合卡片尺寸"
+          title="1:1：按内容原始尺寸贴合卡片"
           @pointerdown.stop
-          @click.stop="autoFit()"
-        >⤢</button>
+          @click.stop="chooseFitWidth(null)"
+        >1:1</button>
+        <button class="fit-pct" title="卡片宽度：可视宽度的 25%" @pointerdown.stop @click.stop="chooseFitWidth(0.25)">25%</button>
+        <button class="fit-pct" title="卡片宽度：可视宽度的 50%" @pointerdown.stop @click.stop="chooseFitWidth(0.5)">50%</button>
+        <button class="fit-pct" title="卡片宽度：可视宽度的 75%" @pointerdown.stop @click.stop="chooseFitWidth(0.75)">75%</button>
+        <button class="fit-pct" title="卡片宽度：顶满可视宽度（留出页面留白）" @pointerdown.stop @click.stop="chooseFitWidth(1)">100%</button>
         <component
           :is="plugin.cardComponent"
           v-for="plugin in activeCardPlugins()"
@@ -506,26 +556,29 @@ onBeforeUnmount(() => {
 
     <div class="format-control" @pointerdown.stop @click.stop="focusFormatControl">
       <button
-        class="format-trigger"
+        class="format-btn"
+        :class="{ active: formatMode === 'auto' }"
         type="button"
-        :title="formatTitle"
-        :aria-label="`卡片格式：${formatTitle}`"
-        :aria-expanded="formatMenuOpen"
-        @click="formatMenuOpen = !formatMenuOpen"
-      >
-        {{ formatIcon }}
-      </button>
-      <div v-if="formatMenuOpen" class="format-menu" role="menu">
-        <button class="format-option" :class="{ active: formatMode === 'auto' }" role="menuitem" @click="selectFormat('auto')">
-          <span>自动判定</span><small>当前：{{ detectedFormatLabel }}</small>
-        </button>
-        <button class="format-option" :class="{ active: formatMode === 'markdown' }" role="menuitem" @click="selectFormat('markdown')">
-          <span>Markdown</span>
-        </button>
-        <button class="format-option" :class="{ active: formatMode === 'text' }" role="menuitem" @click="selectFormat('text')">
-          <span>普通文本</span>
-        </button>
-      </div>
+        :title="'自动判定（当前：' + detectedFormatLabel + '）'"
+        aria-label="格式：自动判定"
+        @click="selectFormat('auto')"
+      >A</button>
+      <button
+        class="format-btn"
+        :class="{ active: formatMode === 'markdown' }"
+        type="button"
+        title="Markdown 格式"
+        aria-label="格式：Markdown"
+        @click="selectFormat('markdown')"
+      >M</button>
+      <button
+        class="format-btn"
+        :class="{ active: formatMode === 'text' }"
+        type="button"
+        title="普通文本格式"
+        aria-label="格式：普通文本"
+        @click="selectFormat('text')"
+      >T</button>
     </div>
 
     <!-- Off-screen copy of the draft lets "grow to fit" measure text instead of the textarea's
@@ -544,6 +597,12 @@ onBeforeUnmount(() => {
         v-for="pos in ['n', 'w', 'e', 's']"
         :key="'edge-' + pos"
         class="edge"
+        :class="pos"
+      ></span>
+      <span
+        v-for="pos in ['nw', 'ne', 'sw', 'se']"
+        :key="'corner-' + pos"
+        class="edge corner"
         :class="pos"
       ></span>
     </template>
@@ -588,9 +647,11 @@ onBeforeUnmount(() => {
   top: 4px;
   left: 6px;
   z-index: 4;
+  display: flex;
+  gap: 2px;
 }
-.format-trigger {
-  width: 22px;
+.format-btn {
+  width: 20px;
   height: 20px;
   padding: 0;
   border: 0;
@@ -602,46 +663,10 @@ onBeforeUnmount(() => {
   line-height: 1;
   cursor: pointer;
 }
-.format-trigger:hover,
-.format-trigger[aria-expanded='true'] {
+.format-btn:hover,
+.format-btn.active {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
-}
-.format-menu {
-  position: absolute;
-  top: 24px;
-  left: 0;
-  display: grid;
-  min-width: 144px;
-  gap: 2px;
-  padding: 4px;
-  border: 1px solid var(--c-border);
-  border-radius: 7px;
-  background: var(--c-surface);
-  box-shadow: var(--shadow);
-}
-.format-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--c-text);
-  font: inherit;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.format-option:hover,
-.format-option.active {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.format-option small {
-  color: var(--c-text-3);
-  font-size: 10px;
 }
 
 /* --- card tools: an overlay row in the top-right corner ---
@@ -688,16 +713,16 @@ onBeforeUnmount(() => {
 .collapse.active {
   color: var(--accent);
 }
-/* 「自动调整」与折叠按钮同排同款，悬停显形 */
+/* 「自动调整」与宽度百分比、折叠按钮同排同款，悬停显形 */
 .auto-fit {
-  width: 20px;
   height: 20px;
-  padding: 0;
+  padding: 0 4px;
   border: none;
   border-radius: 5px;
   background: transparent;
   color: var(--c-text-3);
-  font-size: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
   opacity: 0;
@@ -710,6 +735,30 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 .auto-fit:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.fit-pct {
+  height: 20px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.card:hover .fit-pct,
+.card.selected .fit-pct,
+.card.focused .fit-pct,
+.card.editing .fit-pct {
+  opacity: 1;
+}
+.fit-pct:hover {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
@@ -792,4 +841,8 @@ onBeforeUnmount(() => {
 .edge.w { top: 0; bottom: 0; left: -3px; width: 6px; cursor: ew-resize; }
 .edge.e { top: 0; bottom: 0; right: -3px; width: 6px; cursor: ew-resize; }
 .edge.s { left: 0; right: 0; bottom: -3px; height: 6px; cursor: ns-resize; }
+.edge.nw { top: 0; left: 0; width: 6px; height: 6px; cursor: nwse-resize; }
+.edge.ne { top: 0; right: 0; width: 6px; height: 6px; cursor: nesw-resize; }
+.edge.sw { bottom: 0; left: 0; width: 6px; height: 6px; cursor: nesw-resize; }
+.edge.se { bottom: 0; right: 0; width: 6px; height: 6px; cursor: nwse-resize; }
 </style>

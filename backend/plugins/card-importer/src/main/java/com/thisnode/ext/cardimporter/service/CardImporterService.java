@@ -1,6 +1,5 @@
 package com.thisnode.ext.cardimporter.service;
 
-import cn.hutool.core.date.DateTime;
 import com.thisnode.plugin.api.event.CardChangedEvent;
 import com.thisnode.plugin.api.event.CardQueryEvent;
 import com.thisnode.plugin.api.notes.dto.CardDTO;
@@ -10,12 +9,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.prefs.NodeChangeEvent;
 
 @Service
 public class CardImporterService {
@@ -39,7 +35,9 @@ public class CardImporterService {
         }
     }
 
-    /** 将缺少元数据的卡片创建申请交给 Notes 处理。 */
+    /**
+     * 将缺少元数据的卡片创建申请交给 Notes 处理。
+     */
     private void requestCardImports() {
         CompletableFuture<List<CardDTO>> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new CardQueryEvent(result));

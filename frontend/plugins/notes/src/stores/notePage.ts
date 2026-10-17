@@ -32,6 +32,17 @@ export function maxCardWidth(surfaceWidth: number): number {
 }
 
 /**
+ * 「自动调整」显式贴合时的宽度上限：按当前缩放折算的可视世界宽，减去同样的留白；
+ * 仍不小于常规上限。常规 680 上限会让长行文本贴后仍换行、图片卡（默认宽已达上限）宽高都不变。
+ */
+export function fitCardMaxWidth(surfaceWidth: number, zoom: number): number {
+  return Math.max(
+    maxCardWidth(surfaceWidth),
+    Math.round(surfaceWidth / Math.max(zoom, 0.01)) - LIMITS.minVisibleGap,
+  )
+}
+
+/**
  * A note's page: the cards it is made of.
  *
  * <p>Model: a note *is* the page. Blocks belong to exactly one note and hold fragments of its

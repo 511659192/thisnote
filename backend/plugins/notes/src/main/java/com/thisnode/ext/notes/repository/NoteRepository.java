@@ -34,16 +34,10 @@ public class NoteRepository {
 
     public String saveNew(NoteMetaPO note) {
         String noteId = IdUtil.randomUUID();
-        String title = note.getTitle();
-        String baseName = StrUtil.isBlank(title) ? "tmp-" + noteId : title;
+        String baseName = StrUtil.isBlank(note.getTitle()) ? "tmp-" + noteId : note.getTitle();
         String fileName = baseName + ".json";
         Path metaDir = notesConfig.getNoteMetaDir();
         Path file = metaDir.resolve(fileName);
-        List<String> indexedFileNames = new ArrayList<>(fileIndex.noteFiles().values());
-        for (int number = 1; Files.exists(file) || indexedFileNames.contains(fileName); number++) {
-            fileName = baseName + "_" + number + ".json";
-            file = metaDir.resolve(fileName);
-        }
         fileHelper.fileWritten(file, note.setNoteId(noteId));
         fileIndex.addNote(noteId, fileName);
         return noteId;

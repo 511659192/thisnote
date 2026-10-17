@@ -86,13 +86,13 @@ public class CardRepository {
         meta.setCardId(cardId);
 
         Path dir = notesConfig.getCardsDir();
-        Files.createDirectories(dir);
         String prefix = title == null || title.isBlank() ? "tmp-" + cardId : title;
         for (int number = 1; ; number++) {
             String suffix = "_" + number;
             String fileName = prefix + suffix + ".md";
             Path file = dir.resolve(fileName);
             if (Files.exists(file)) continue;
+
             meta.setSourceFileName(fileName);
             fileHelper.fileWritten(file, CardPO.compose(meta, content));
             fileIndex.addCard(cardId, fileName);
@@ -115,20 +115,6 @@ public class CardRepository {
             throw new IllegalArgumentException("卡片文件名必须是 cards 目录下的文件名：" + fileName);
         }
         fileHelper.fileWritten(file, markdown);
-        fileIndex.addCard(cardId, fileName);
-    }
-
-    public void indexExisting(String cardId,
-                              String fileName) {
-        if (fileName == null || !fileName.endsWith(".md") || !fileName.equals(Path.of(fileName).getFileName().toString())) {
-            throw new IllegalArgumentException("卡片文件名必须是 cards 目录下的 Markdown 文件名：" + fileName);
-        }
-        if (cardId == null || cardId.isBlank()) {
-            throw new IllegalArgumentException("卡片 ID 不能为空");
-        }
-        if (!Files.isRegularFile(notesConfig.getCardsDir().resolve(fileName))) {
-            throw new IllegalArgumentException("卡片文件不存在：" + fileName);
-        }
         fileIndex.addCard(cardId, fileName);
     }
 

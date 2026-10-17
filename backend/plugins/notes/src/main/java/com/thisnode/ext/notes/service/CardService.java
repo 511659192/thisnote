@@ -1,13 +1,13 @@
 package com.thisnode.ext.notes.service;
 
+import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.model.CardPO;
-import com.thisnode.ext.notes.model.NotesMapper;
+import com.thisnode.ext.notes.model.CardPO.CardMeta;
 import com.thisnode.ext.notes.model.NoteMetaPO;
+import com.thisnode.ext.notes.model.NotesMapper;
 import com.thisnode.ext.notes.model.request.BatchUpdateCardsRequest;
 import com.thisnode.ext.notes.model.request.CreateCardRequest;
 import com.thisnode.ext.notes.model.request.UpdateCardRequest;
-import com.thisnode.ext.notes.model.CardPO.CardMeta;
-import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.plugin.api.event.CardChangedEvent;
@@ -63,7 +63,7 @@ public class CardService {
     }
 
     public CardResponseDTO create(String noteId,
-                       CreateCardRequest req) {
+                                  CreateCardRequest req) {
         return create(noteId, req, null);
     }
 
@@ -80,13 +80,7 @@ public class CardService {
         double w = Math.max(CardRepository.MIN_W, req.w());
         double h = Math.max(CardRepository.MIN_H, req.h());
 
-        CardMeta card = new CardMeta()
-        .setX(x)
-        .setY(y)
-        .setW(w)
-        .setH(h)
-        .setColor(req.color())
-        .setNoteId(noteMeta.getNoteId());
+        CardMeta card = new CardMeta().setX(x).setY(y).setW(w).setH(h).setColor(req.color()).setNoteId(noteMeta.getNoteId());
         if (fixedFileName == null) {
             cardRepository.saveNew(card, content, noteMeta.getTitle());
         } else {
@@ -106,9 +100,9 @@ public class CardService {
 
     // Card metadata and body share one Markdown file, so serialize their read-modify-write paths.
     public synchronized CardResponseDTO writeContent(String noteId,
-                                          String cardId,
-                                          String contentMd,
-                                          String baseContentMd) {
+                                                     String cardId,
+                                                     String contentMd,
+                                                     String baseContentMd) {
         NoteMetaPO noteMeta = noteContainingCard(noteId, cardId);
 
         CardPO card = cardRepository.getOne(cardId);
@@ -135,8 +129,8 @@ public class CardService {
     }
 
     public synchronized CardMetaDTO update(String noteId,
-                                        String cardId,
-                                        UpdateCardRequest changes) {
+                                           String cardId,
+                                           UpdateCardRequest changes) {
         return notesMapper.toCardMetaDTO(update(getNoteMeta(noteId), cardId, changes));
     }
 
@@ -191,7 +185,7 @@ public class CardService {
     }
 
     private NoteMetaPO noteContainingCard(String noteId,
-                                        String cardId) {
+                                          String cardId) {
         return noteContainingCard(getNoteMeta(noteId), cardId);
     }
 
@@ -204,7 +198,7 @@ public class CardService {
     }
 
     private NoteMetaPO noteContainingCard(NoteMetaPO note,
-                                        String cardId) {
+                                          String cardId) {
         if (!note.getCardIds().contains(cardId)) {
             throw new NotFoundException("card " + cardId);
         }

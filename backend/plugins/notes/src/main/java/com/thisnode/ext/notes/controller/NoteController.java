@@ -3,8 +3,8 @@ package com.thisnode.ext.notes.controller;
 import com.thisnode.ext.notes.model.request.CreateNoteRequest;
 import com.thisnode.ext.notes.model.request.NoteListQuery;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
-import com.thisnode.plugin.api.notes.dto.NoteMetaDTO;
 import com.thisnode.ext.notes.service.NoteService;
+import com.thisnode.plugin.api.notes.dto.NoteMetaDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,9 +20,9 @@ public class NoteController {
 
     @GetMapping("/get")
     public List<NoteMetaDTO> list(@RequestParam(required = false) String notebookId,
-                               @RequestParam(required = false) String text,
-                               @RequestParam(defaultValue = "500") int limit,
-                               @RequestParam(defaultValue = "0") int offset) {
+                                  @RequestParam(required = false) String text,
+                                  @RequestParam(defaultValue = "500") int limit,
+                                  @RequestParam(defaultValue = "0") int offset) {
         return noteService.list(new NoteListQuery(notebookId, text, limit, offset));
     }
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, maxCardWidth, usePageStore } from '@/stores/notePage'
+import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
-import { activeCardPlugins, toast } from '@thisnode/plugin-api'
+import { activeCardPlugins, host, toast } from '@thisnode/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
 import type { CardView } from '@/api/types'
@@ -21,6 +21,9 @@ import type { CardUpdate } from '@/api/page'
  * There is no dot grid, no groups, no connectors, no board concept.
  */
 const page = usePageStore()
+
+/** 预览浮层复用宿主的 Markdown 渲染（与卡片、复习页同一份）。 */
+const { MarkdownView } = host()
 
 const emit = defineEmits<{
   (e: 'context', p: { x: number; y: number; target: 'page' | 'card'; view?: CardView; imageSrc?: string }): void
@@ -117,6 +120,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   observer?.disconnect()
+  window.removeEventListener('mousemove', onPreviewMouseMove)
+  window.removeEventListener('mouseup', onPreviewMouseUp)
   root.value?.removeEventListener('wheel', onWheel)
   window.removeEventListener('pointerdown', onWindowPointerDown, true)
   window.removeEventListener('pointermove', onPointerMove)
@@ -429,9 +434,14 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
   if (p.force) page.clearManualHeight(p.cardId)
   // 用户手动定过长度的卡片不再自动贴合（说了算的是用户，不是内容）。
   else if (page.isManualHeight(p.cardId) && !p.fitImage) return
+  // 「自动调整」(force) 按内容宽度贴合，上限放宽到可视世界宽：常规上限下长行文本照旧换行，
+  // 图片卡宽高算出来都等于现值，一次更新都不产生，按钮看起来完全失效。
+  const widthCap = p.force
+    ? fitCardMaxWidth(size.width, page.viewport.zoom)
+    : maxCardWidth(size.width)
   const width = p.w === undefined
     ? view.card.w
-    : Math.max(BLOCK_MIN_W, Math.min(p.w, maxCardWidth(size.width)))
+    : Math.max(BLOCK_MIN_W, Math.min(p.w, widthCap))
   // 双向贴合（长高也缩回），再按视口封顶：卡片最高长到**浏览器底缘**，
   // 再多的内容在卡片内滚动，而不是把卡片撑出好几屏、在画布上够不着。
   const rect = root.value?.getBoundingClientRect()
@@ -447,6 +457,103 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
   if (width !== view.card.w) updates.push({ cardId: view.card.cardId, w: width })
   if (next !== view.card.h) updates.push({ cardId: view.card.cardId, h: next })
   if (updates.length) void page.commit(updates).catch(() => undefined)
+}
+
+/** ⤢ 菜单选比例：卡片宽度 = 可视宽度（留白后）× 比例；高度仍由贴合逻辑负责。 */
+function onFitWidth(p: { cardId: string; ratio: number }) {
+  const view = page.cards.find((b) => b.card.cardId === p.cardId)
+  if (!view) return
+  const width = Math.max(BLOCK_MIN_W, Math.round(fitCardMaxWidth(size.width, page.viewport.zoom) * p.ratio))
+  if (width === view.card.w) return
+  void page.commit([{ cardId: view.card.cardId, w: width }]).catch(() => undefined)
+}
+
+// ---------------------------------------------------------------- 卡片预览（单击）
+
+/** 单击卡片弹出的预览：完整内容按自然尺寸展示，形态对齐复习页「已开启卡片」。 */
+const previewCard = ref<CardView | null>(null)
+
+function onCardPreview(view: CardView) {
+  previewCard.value = view
+}
+
+function closeCardPreview() {
+  previewCard.value = null
+}
+
+// 预览图片缩放拖移：滚轮缩放 + 左键拖移作用于浮层内的图片；状态挂在图片元素上，
+// 浮层关闭随 DOM 一起丢弃（与复习页同一套交互）。
+const PREVIEW_IMG_MIN_SCALE = 0.2
+const PREVIEW_IMG_MAX_SCALE = 8
+type PreviewImgTransform = { scale: number; x: number; y: number }
+const previewImgTransforms = new WeakMap<HTMLImageElement, PreviewImgTransform>()
+let previewImgDrag: {
+  image: HTMLImageElement
+  startX: number
+  startY: number
+  baseX: number
+  baseY: number
+} | null = null
+
+function transformOf(image: HTMLImageElement): PreviewImgTransform {
+  let transform = previewImgTransforms.get(image)
+  if (!transform) {
+    transform = { scale: 1, x: 0, y: 0 }
+    previewImgTransforms.set(image, transform)
+  }
+  return transform
+}
+
+function applyImgTransform(image: HTMLImageElement) {
+  const t = transformOf(image)
+  // translate 在 scale 之前，保证拖移位移始终按屏幕像素计算
+  image.style.transform = 'translate(' + t.x + 'px, ' + t.y + 'px) scale(' + t.scale + ')'
+}
+
+function onPreviewWheel(event: WheelEvent) {
+  // 预览浮层内的滚轮不落回画布：否则滚动会平移/缩放遮罩后面的页面
+  event.stopPropagation()
+  const image = (event.target as HTMLElement).closest?.('img')
+  if (!image) return
+  event.preventDefault()
+  const transform = transformOf(image)
+  const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2
+  transform.scale = Math.min(PREVIEW_IMG_MAX_SCALE, Math.max(PREVIEW_IMG_MIN_SCALE, transform.scale * factor))
+  applyImgTransform(image)
+}
+
+function onPreviewMouseDown(event: MouseEvent) {
+  if (event.button !== 0) return
+  const image = (event.target as HTMLElement).closest?.('img')
+  if (!image) return
+  event.preventDefault()
+  const transform = transformOf(image)
+  previewImgDrag = {
+    image,
+    startX: event.clientX,
+    startY: event.clientY,
+    baseX: transform.x,
+    baseY: transform.y,
+  }
+  image.classList.add('preview-img-grabbing')
+  window.addEventListener('mousemove', onPreviewMouseMove)
+  window.addEventListener('mouseup', onPreviewMouseUp)
+}
+
+function onPreviewMouseMove(event: MouseEvent) {
+  if (!previewImgDrag) return
+  const transform = transformOf(previewImgDrag.image)
+  transform.x = previewImgDrag.baseX + (event.clientX - previewImgDrag.startX)
+  transform.y = previewImgDrag.baseY + (event.clientY - previewImgDrag.startY)
+  applyImgTransform(previewImgDrag.image)
+}
+
+function onPreviewMouseUp() {
+  if (!previewImgDrag) return
+  previewImgDrag.image.classList.remove('preview-img-grabbing')
+  previewImgDrag = null
+  window.removeEventListener('mousemove', onPreviewMouseMove)
+  window.removeEventListener('mouseup', onPreviewMouseUp)
 }
 
 /**
@@ -582,12 +689,14 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault()
     page.selectAll()
   } else if (e.key === 'Escape') {
-    if (page.editingCardId) void finishEditing()
+    if (previewCard.value) closeCardPreview()
+    else if (page.editingCardId) void finishEditing()
     else page.clearSelection()
   } else if (e.key === 'F2' || e.key === 'Enter') {
     const single = page.singleSelected
     if (single) {
       e.preventDefault()
+      closeCardPreview()
       void beginEdit(single)
     }
   } else if (primary && e.key === '0') {
@@ -652,6 +761,8 @@ defineExpose({ size, beginEdit, finishEditing })
         @context="onBlockContext"
         @save="onSave"
         @fit-height="onFitHeight"
+        @preview="onCardPreview"
+        @fit-width="onFitWidth"
         @end-edit="finishEditing()"
         @toggle-collapse="onToggleCollapse"
         @focus="onCardFocus"
@@ -689,6 +800,29 @@ defineExpose({ size, beginEdit, finishEditing })
       <button class="btn sm" title="按阅读顺序单列重排全部卡片" @click="autoLayout">自动布局</button>
       <button class="btn sm" title="重置 (Ctrl+0)" @click="page.resetView()">1:1</button>
       <button class="btn sm" :class="{ active: page.snapToGrid }" title="尺寸吸附" @click="page.toggleSnap()">吸附</button>
+    </div>
+
+    <!-- 单击卡片弹出的预览浮层：形态对齐复习页「已开启卡片」的预览 -->
+    <div
+      v-if="previewCard"
+      class="card-preview-overlay"
+      @click.self="closeCardPreview"
+      @dblclick.stop
+      @pointerdown.stop
+    >
+      <section class="card-preview-dialog" role="dialog" aria-modal="true" aria-label="卡片预览">
+        <header class="card-preview-header">
+          <button class="btn sm ghost" aria-label="关闭预览" @click="closeCardPreview">×</button>
+        </header>
+        <div
+          class="card-preview-content"
+          @wheel="onPreviewWheel"
+          @mousedown="onPreviewMouseDown"
+          @dragstart.prevent
+        >
+          <component :is="MarkdownView" :content="previewCard.contentMd || ''" />
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -748,5 +882,54 @@ defineExpose({ size, beginEdit, finishEditing })
 .zoom-label {
   min-width: 44px;
   text-align: center;
+}
+
+/* --- 单击卡片预览浮层：尺寸与遮罩对齐复习页 .rv-preview-* --- */
+.card-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 48%);
+  overscroll-behavior: contain;
+}
+.card-preview-dialog {
+  display: flex;
+  width: fit-content;
+  min-width: min(480px, 90vw);
+  max-width: 90vw;
+  max-height: 80vh;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-lg);
+}
+.card-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--c-border);
+}
+.card-preview-content {
+  min-width: 0;
+  max-height: calc(80vh - 56px);
+  overflow: auto;
+  padding: var(--space-4);
+}
+/* 预览按图片实际大小展示，不套用 MarkdownView 默认的 320px 高度上限与列宽约束 */
+.card-preview-content :deep(.md-preview img) {
+  max-width: none;
+  max-height: none;
+  cursor: grab;
+  user-select: none;
+}
+.card-preview-content :deep(.md-preview img.preview-img-grabbing) {
+  cursor: grabbing;
 }
 </style>
