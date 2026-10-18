@@ -1,10 +1,12 @@
 package com.thisnode.ext.favorite.controller;
 
 import com.thisnode.ext.favorite.FavoritePlugin;
+import com.thisnode.ext.favorite.model.request.FavoriteBatchRequest;
 import com.thisnode.ext.favorite.service.FavoriteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,5 +52,19 @@ public class FavoriteController {
                                          @RequestParam boolean value) {
         favoriteService.setFavorite(noteId, value);
         return Map.of("favorite", value);
+    }
+
+    /**
+     * 批量设置收藏：给「按笔记本收藏」用。
+     */
+    @PostMapping("/update-state-batch")
+    public Map<String, Object> setStateBatch(@RequestBody FavoriteBatchRequest request) {
+        int updated = 0;
+        for (String noteId : request.noteIds()) {
+            if (noteId == null || noteId.isBlank()) continue;
+            favoriteService.setFavorite(noteId, request.value());
+            updated++;
+        }
+        return Map.of("updated", updated);
     }
 }

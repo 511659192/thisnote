@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
-import { listHeaders_, toast } from '@thisnode/plugin-api'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { activeNoteBatchActions, activeNoteRowActions, listHeaders_, toast, type NoteBatchAction, type NoteRef, type NoteRowAction } from '@thisnode/plugin-api'
 import { noteApi } from '@/api/note'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
@@ -199,6 +199,49 @@ function askRemove(node: NoteDto) {
   if (!props.allowNoteManagement) return
   emit('remove', node.noteId)
 }
+
+// ---------------------------------------------------------------- 插件动作（收藏 / 记忆曲线等）
+
+/** 行内图标与批量按钮都来自插件注册表；核心不认识任何具体插件。 */
+const rowActions = computed(() => activeNoteRowActions())
+const batchActions = computed(() => activeNoteBatchActions())
+
+function noteRef(note: NoteDto): NoteRef {
+  return { noteId: note.noteId, title: note.title, cardIds: note.cardIds ?? [] }
+}
+
+async function runRowAction(action: NoteRowAction, note: NoteDto) {
+  if (!action.toggle) return
+  try {
+    await action.toggle(noteRef(note))
+  } catch (e) {
+    const label = action.title?.(noteRef(note)) ?? '操作'
+    toast(`${label}失败：${(e as Error).message}`, 'error')
+  }
+}
+
+async function runBatchAction(action: NoteBatchAction) {
+  const ids = new Set(selected.value)
+  const notes = props.nodes.filter((note) => ids.has(note.noteId)).map(noteRef)
+  if (!notes.length) return
+  try {
+    const message = await action.run(notes)
+    toast(message || `${action.label}：${notes.length} 篇笔记`, 'success')
+  } catch (e) {
+    toast(`${action.label}失败：${(e as Error).message}`, 'error')
+  }
+}
+
+function loadActionStates() {
+  const notes = props.nodes.map(noteRef)
+  for (const action of rowActions.value) {
+    const pending = action.loadState?.(notes)
+    if (pending) void pending.catch(() => undefined)
+  }
+}
+
+onMounted(loadActionStates)
+watch(() => props.nodes, loadActionStates)
 </script>
 
 <template>
@@ -214,10 +257,19 @@ function askRemove(node: NoteDto) {
       <button type="button" class="tool-btn" :disabled="!selected.length" @click="moveMenuOpen = !moveMenuOpen">
         转入笔记本
       </button>
+      <button
+        v-for="action in batchActions"
+        :key="action.pluginId + action.label"
+        type="button"
+        class="tool-btn"
+        :disabled="!selected.length"
+        :title="action.title"
+        @click="runBatchAction(action)"
+      >{{ action.label }}</button>
       <button type="button" class="tool-btn danger" :disabled="!selected.length" @click="requestBatchRemove">
         删除选中{{ selected.length ? `（${selected.length}）` : '' }}
       </button>
-      <button type="button" class="tool-btn" @click="stopSelecting">取消</button>
+      <button type="button" class="tool-btn" @click="stopSelecting">关闭</button>
     </div>
     <div v-if="selecting && moveMenuOpen" class="book-menu">
       <button
@@ -290,6 +342,19 @@ function askRemove(node: NoteDto) {
         -->
         <div v-if="n.bookId" class="row-2 groups">
           <span class="chip group-chip" title="所属分组">▣ {{ bookTitle(n.bookId) }}</span>
+          <span v-if="allowNoteManagement" class="row-actions">
+            <template v-for="action in rowActions" :key="action.pluginId">
+              <component :is="action.component" v-if="action.component" :note="noteRef(n)" />
+              <span
+                v-else
+                class="row-action"
+                :class="{ active: action.isActive?.(noteRef(n)) }"
+                role="button"
+                :title="action.title?.(noteRef(n))"
+                @click.stop="runRowAction(action, n)"
+              >{{ action.isActive?.(noteRef(n)) && action.activeGlyph ? action.activeGlyph : action.glyph }}</span>
+            </template>
+          </span>
         </div>
       </div>
     </div>
@@ -338,7 +403,6 @@ function askRemove(node: NoteDto) {
 }
 
 .tool-btn.danger {
-  border-color: color-mix(in srgb, var(--danger) 42%, var(--c-border));
   color: var(--danger);
 }
 
@@ -473,5 +537,38 @@ function askRemove(node: NoteDto) {
 }
 .fav {
   color: var(--warning);
+}
+
+/* 行内快捷操作（收藏 / 记忆曲线）：常驻显示，位于标题行右侧 */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  color: var(--c-text-2);
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.5;
+  cursor: pointer;
+  user-select: none;
+}
+.row-action:hover {
+  background: var(--c-surface-3);
+  color: var(--accent);
+  opacity: 1;
+}
+.row-action.active {
+  /* 收藏用实心/空心区分状态，不再用金色强调 */
+  color: var(--c-text-2);
+  opacity: 1;
 }
 </style>

@@ -1,6 +1,7 @@
 package com.thisnode.ext.memorycycle.controller;
 
 import com.thisnode.ext.memorycycle.model.CardSchedule;
+import com.thisnode.ext.memorycycle.model.request.CardStateBatchRequest;
 import com.thisnode.ext.memorycycle.model.request.ReviewRequest;
 import com.thisnode.ext.memorycycle.model.view.CardStateView;
 import com.thisnode.ext.memorycycle.model.view.DueCardView;
@@ -42,6 +43,20 @@ public class MemoryCycleController {
                                         @RequestParam boolean value) {
         memoryCycleService.setEnabled(cardId, value);
         return Map.of("enabled", value);
+    }
+
+    /**
+     * 批量设置卡片状态：给「按笔记本开启复习」用。
+     */
+    @PostMapping("/update-state-batch")
+    public Map<String, Object> setStateBatch(@RequestBody CardStateBatchRequest request) {
+        int updated = 0;
+        for (String cardId : request.cardIds()) {
+            if (cardId == null || cardId.isBlank()) continue;
+            memoryCycleService.setEnabled(cardId, request.value());
+            updated++;
+        }
+        return Map.of("updated", updated);
     }
 
     /**

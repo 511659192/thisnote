@@ -4,6 +4,7 @@ import type { CardView } from '@/api/types'
 import { activeCardPlugins, host, toast } from '@thisnode/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode, isMarkdown, type CardFormat } from './markdownFormat'
+import CustomWidthDialog from './CustomWidthDialog.vue'
 
 /** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
 const MarkdownView = host().MarkdownView
@@ -26,6 +27,8 @@ const props = defineProps<{
   editing: boolean
   focused: boolean
   zIndex: number
+  /** 视口折算出的「100% 宽度」，用于判断当前宽度落在哪个百分比档位。 */
+  fitBaseWidth?: number
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +42,7 @@ const emit = defineEmits<{
   (e: 'fit-height', p: { cardId: string; h: number; w?: number; fitImage?: boolean; force?: boolean }): void
   (e: 'preview', view: CardView): void
   (e: 'fit-width', p: { cardId: string; ratio: number }): void
+  (e: 'fit-custom', p: { cardId: string; width: number }): void
 }>()
 
 const draft = ref('')
@@ -59,6 +63,39 @@ const rootEl = ref<HTMLElement | null>(null)
 
 const card = computed(() => props.view.card)
 const content = computed(() => props.view.contentMd ?? '')
+/** 图片卡 1:1 宽度（原图宽 + 内边距），用于判断当前是否停在 1:1。 */
+const imageFitWidth = ref<number | null>(null)
+
+/** 按当前宽度反推选中的档位：命中 1:1/百分比则高亮对应项，否则高亮「自定义」。 */
+const activePreset = computed<string>(() => {
+  const width = Math.round(card.value.w)
+  if (imageFitWidth.value && Math.abs(width - imageFitWidth.value) <= 2) return '1:1'
+  const base = props.fitBaseWidth
+  if (base) {
+    for (const ratio of [0.25, 0.5, 0.75, 1]) {
+      if (Math.abs(width - Math.round(base * ratio)) <= 2) return `${Math.round(ratio * 100)}%`
+    }
+  }
+  return 'custom'
+})
+
+// 图片异步加载：拿到原图宽度后，1:1 档位的高亮才能与当前宽度对上
+onMounted(() => {
+  void nextTick(() => {
+    const images = Array.from(readBody.value?.querySelectorAll('img') ?? [])
+    const sync = () => {
+      const loaded = images.filter((image) => image.naturalWidth > 0)
+      imageFitWidth.value = loaded.length
+        ? Math.max(...loaded.map((image) => image.naturalWidth)) + 30
+        : null
+    }
+    sync()
+    for (const image of images) image.addEventListener('load', sync, { once: true })
+  })
+})
+/** 内容只有一张图片：图片按卡片内容宽度等比伸缩（初始尺寸即原图 1:1）。 */
+const IMAGE_ONLY = /^!\[[^\]]*\]\(.+\)$/
+const isImageOnly = computed(() => IMAGE_ONLY.test(content.value.trim()))
 const sourceVisible = computed(() => !card.value.collapsed && props.editing)
 const formatMode = ref<CardFormat>('auto')
 const detectedFormat = computed(() => (isMarkdown(props.editing ? draft.value : content.value) ? 'markdown' : 'text'))
@@ -169,7 +206,7 @@ function onBodyClick(e: MouseEvent) {
   emit('focus', card.value.cardId)
   if (props.editing || card.value.collapsed) return
   const target = e.target as HTMLElement
-  if (target.closest('.card-tools, .format-control')) return
+  if (target.closest('.card-tools, .format-control, .fit-tools')) return
   const down = pointerDownAt
   if (down && Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 3) return
   if (previewTimer !== null) return
@@ -360,6 +397,9 @@ function fitHeight(force = false) {
     return
   }
   const loadedImages = images.filter((image) => image.naturalWidth > 0)
+  imageFitWidth.value = loadedImages.length
+    ? Math.max(...loadedImages.map((image) => image.naturalWidth)) + 30
+    : null
   const waitingForAttachmentImage = autoFitImageWidth.value && images.some(
     (image) => image.dataset.thisnodeAttachment && image.getAttribute('src') === 'about:blank',
   )
@@ -387,15 +427,20 @@ function fitHeight(force = false) {
   let width: number | undefined
   if (force || autoFitImageWidth.value) {
     const desiredWidths: number[] = []
-    if (!force && autoFitImageWidth.value && loadedImages.length) {
-      desiredWidths.push(Math.max(...loadedImages.map((image) => image.naturalWidth)) + 32)
-    }
+    // 图片按原图宽度（卡片宽 = 图片宽 + 30，内容区与图片 1:1）
+    const imageWidth = loadedImages.length
+      ? Math.max(...loadedImages.map((image) => image.naturalWidth)) + 30
+      : 0
+    if (imageWidth > 0) desiredWidths.push(imageWidth)
     const maxContentWidth = measureMaxContentWidth()
     // 克隆体已含 .body.read 左右 28px 内边距，再补卡片左右边框 2px
     if (maxContentWidth > 0) desiredWidths.push(maxContentWidth + 2)
     if (desiredWidths.length) {
       if (!waitingForAttachmentImage) autoFitImageWidth.value = false
-      const desired = Math.max(...desiredWidths)
+      // 纯图片卡以图片原始宽度为准，不受文本量出来的宽度干扰
+      const desired = isImageOnly.value && imageWidth > 0
+        ? imageWidth
+        : Math.max(...desiredWidths)
       // 4px 容差避免分数像素来回拉扯；上限由页面侧 maxCardWidth 钳制
       if (Math.abs(desired - card.value.w) > 4) width = desired
     }
@@ -439,6 +484,25 @@ function chooseFitWidth(ratio: number | null) {
     return
   }
   emit('fit-width', { cardId: card.value.cardId, ratio })
+}
+
+/** 自定义宽度（px）：只约束宽度，高度仍由贴合逻辑负责。 */
+const customWidthOpen = ref(false)
+const customWidthDraft = ref('')
+
+function chooseCustomWidth() {
+  // 纯图片卡默认填图片原始宽度；其它卡片退回当前卡片宽度
+  const imageWidth = isImageOnly.value && imageFitWidth.value ? imageFitWidth.value - 30 : 0
+  customWidthDraft.value = String(Math.round(imageWidth > 0 ? imageWidth : card.value.w))
+  customWidthOpen.value = true
+}
+
+function applyCustomWidth() {
+  const value = Number(customWidthDraft.value.trim())
+  if (!Number.isFinite(value) || value < 88) return
+  customWidthOpen.value = false
+  // 图片卡的输入是图片宽度，卡片宽 = 图片宽 + 内容区左右内边距
+  emit('fit-custom', { cardId: card.value.cardId, width: isImageOnly.value ? value + 30 : value })
 }
 
 /** 当前要量的内容节点：编辑态是屏外 twin，预览态是渲染出来的内容根节点。 */
@@ -486,11 +550,11 @@ onBeforeUnmount(() => {
     ref="rootEl"
     class="card"
     :data-card-id="card.cardId"
-    :class="{ selected, editing, collapsed: card.collapsed, focused }"
+    :class="{ selected, editing, collapsed: card.collapsed, focused, 'image-only': isImageOnly }"
     :style="{
       transform: `translate3d(${card.x}px, ${card.y}px, 0)`,
       width: `${card.w}px`,
-      height: card.collapsed ? '26px' : `${card.h}px`,
+      height: card.collapsed ? '26px' : isImageOnly && !editing ? 'auto' : `${card.h}px`,
       zIndex: props.zIndex,
     }"
     @pointerdown="onBodyPointerDown"
@@ -501,16 +565,6 @@ onBeforeUnmount(() => {
     <!-- Card tools are overlaid in the top-right corner so they cost no layout space. -->
     <div class="card-tools">
       <template v-if="!card.collapsed">
-        <button
-          class="auto-fit"
-          title="1:1：宽度贴合文本最大宽度"
-          @pointerdown.stop
-          @click.stop="chooseFitWidth(null)"
-        >1:1</button>
-        <button class="fit-pct" title="卡片宽度：可视宽度的 25%" @pointerdown.stop @click.stop="chooseFitWidth(0.25)">25%</button>
-        <button class="fit-pct" title="卡片宽度：可视宽度的 50%" @pointerdown.stop @click.stop="chooseFitWidth(0.5)">50%</button>
-        <button class="fit-pct" title="卡片宽度：可视宽度的 75%" @pointerdown.stop @click.stop="chooseFitWidth(0.75)">75%</button>
-        <button class="fit-pct" title="卡片宽度：顶满可视宽度（留出页面留白）" @pointerdown.stop @click.stop="chooseFitWidth(1)">100%</button>
         <component
           :is="plugin.cardComponent"
           v-for="plugin in activeCardPlugins()"
@@ -582,6 +636,20 @@ onBeforeUnmount(() => {
       >T</button>
     </div>
 
+    <div v-if="!card.collapsed" class="fit-tools" @pointerdown.stop @click.stop>
+      <button
+        class="auto-fit"
+        :class="{ active: activePreset === '1:1' }"
+        title="1:1：宽度贴合内容"
+        @click.stop="chooseFitWidth(null)"
+      >1:1</button>
+      <button class="fit-pct" :class="{ active: activePreset === '25%' }" title="卡片宽度：可视宽度的 25%" @click.stop="chooseFitWidth(0.25)">25%</button>
+      <button class="fit-pct" :class="{ active: activePreset === '50%' }" title="卡片宽度：可视宽度的 50%" @click.stop="chooseFitWidth(0.5)">50%</button>
+      <button class="fit-pct" :class="{ active: activePreset === '75%' }" title="卡片宽度：可视宽度的 75%" @click.stop="chooseFitWidth(0.75)">75%</button>
+      <button class="fit-pct" :class="{ active: activePreset === '100%' }" title="卡片宽度：顶满可视宽度（留出页面留白）" @click.stop="chooseFitWidth(1)">100%</button>
+      <button class="fit-pct" :class="{ active: activePreset === 'custom' }" title="自定义宽度（px）" @click.stop="chooseCustomWidth">自定义</button>
+    </div>
+
     <!-- Off-screen copy of the draft lets "grow to fit" measure text instead of the textarea's
          current card-sized box. -->
     <div
@@ -607,6 +675,14 @@ onBeforeUnmount(() => {
         :class="pos"
       ></span>
     </template>
+
+    <CustomWidthDialog
+      v-model="customWidthDraft"
+      :open="customWidthOpen"
+      :title="isImageOnly ? '图片宽度' : '卡片宽度'"
+      @cancel="customWidthOpen = false"
+      @confirm="applyCustomWidth"
+    />
   </article>
 </template>
 
@@ -649,6 +725,16 @@ onBeforeUnmount(() => {
   left: 6px;
   z-index: 4;
   display: flex;
+  gap: 2px;
+}
+/* 宽度贴合工具（1:1 / 百分比）：放在左侧格式按钮之后，只控制宽度，高度由贴合逻辑负责 */
+.fit-tools {
+  position: absolute;
+  top: 4px;
+  left: 76px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
   gap: 2px;
 }
 .format-btn {
@@ -763,6 +849,11 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
+.auto-fit.active,
+.fit-pct.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
 
 /* --- body: the writing surface --- */
 .body {
@@ -788,6 +879,16 @@ onBeforeUnmount(() => {
 }
 .body.read :deep(.md-preview img) {
   max-height: none;
+}
+/* 图片卡：内容区宽度即图片宽度，随卡片宽度等比伸缩（1:1 初始）；高度由内容撑开，永不出现滚动条 */
+.card.image-only .body.read :deep(.md-preview img) {
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  height: auto;
+}
+.card.image-only .body.read {
+  overflow: hidden;
 }
 .body.edit {
   background: transparent;

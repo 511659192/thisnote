@@ -1,5 +1,6 @@
 import { memoryCycleApi } from './src/api/memoryCycleApi'
 import { memoryCycle } from './src/stores/memoryCycle'
+import { registerMemoryCycleActions } from './src/actions'
 import {
   registerCardPlugin,
   registerNavEntry,
@@ -44,6 +45,9 @@ export function register(): void {
     name: 'review',
     component: () => import('./src/views/ReviewView.vue'),
   })
+
+  /** 笔记列表里的行内 🧠 与批量「记忆 + / −」。 */
+  registerMemoryCycleActions()
 }
 
 export async function bootstrap() {}

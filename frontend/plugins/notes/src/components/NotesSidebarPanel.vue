@@ -61,6 +61,7 @@ async function refreshPluginBadges() {
 async function refreshPlugins() {
   await refreshPluginAvailability()
   await refreshPluginBadges()
+  await refreshFilterBadges()
 }
 /**
  * 两个触发器各管各的，**切路由不再拉可用性快照**：
@@ -100,6 +101,23 @@ function onVisibility() {
 /** 插件提供的列表筛选（例如「收藏」）：和核心的「全部笔记」同级，只是给同一份列表加一个条件。 */
 /** 侧栏只渲染可见筛选：hidden 的筛选（如搜索框）由插件自己的 UI 激活，不占侧栏行。 */
 const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters().filter((f) => !f.hidden))
+
+/** 插件筛选行右侧的数量（例如「收藏」有多少篇）。 */
+const filterBadges = ref<Record<string, number>>({})
+
+async function refreshFilterBadges() {
+  const out: Record<string, number> = {}
+  await Promise.all(pluginFilters.value.map(async (filter) => {
+    if (!filter.badge) return
+    try {
+      const count = await filter.badge()
+      if (count && count > 0) out[filter.id] = count
+    } catch {
+      // 数量拿不到就不显示
+    }
+  }))
+  filterBadges.value = out
+}
 const activePluginFilter = computed<NoteListFilter | null>(() => {
   const active = activeListFilter_()
   if (!active) return null
@@ -298,6 +316,7 @@ watch(
       >
         <span class="ico" :title="collapsed ? pf.label : undefined">{{ pf.icon || '★' }}</span>
         <span v-if="!collapsed" class="label">{{ pf.label }}</span>
+        <span v-if="!collapsed && filterBadges[pf.id]" class="count">{{ filterBadges[pf.id] }}</span>
       </button>
 
       <!--

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, watchEffect } from 'vue'
 import { favoriteApi } from '../api/favoriteApi'
+import { favoriteIds, setFavorite } from '../actions'
 
 /**
  * 收藏插件的「笔记工具」：笔记标题旁的 ★ 开关。
@@ -19,11 +20,19 @@ async function load(id: string) {
     return
   }
   try {
-    on.value = await favoriteApi.isFavorite(id)
+    const value = await favoriteApi.isFavorite(id)
+    on.value = value
+    if (value) favoriteIds.add(id)
+    else favoriteIds.delete(id)
   } catch {
     on.value = false
   }
 }
+
+// 列表里的收藏开关改了同一份状态，这里跟着同步
+watchEffect(() => {
+  if (props.noteId) on.value = favoriteIds.has(props.noteId)
+})
 
 watch(() => props.noteId, (id) => void load(id), { immediate: true })
 
@@ -31,8 +40,7 @@ async function toggle() {
   if (!props.noteId || busy.value) return
   busy.value = true
   try {
-    await favoriteApi.setFavorite(props.noteId, !on.value)
-    on.value = !on.value
+    await setFavorite(props.noteId, !on.value)
   } finally {
     busy.value = false
   }

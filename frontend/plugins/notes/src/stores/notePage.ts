@@ -25,6 +25,13 @@ export const GRID = 24
  */
 const LIMITS = { maxW: BLOCK_MAX_W, minVisibleGap: 140 }
 
+/** 卡片内容里是否包含 Markdown 图片。 */
+const IMAGE_MD = /!\[[^\]]*\]\([^)]*\)/
+
+function containsImage(contentMd: string): boolean {
+  return IMAGE_MD.test(contentMd)
+}
+
 export function maxCardWidth(surfaceWidth: number): number {
   return Math.max(320, Math.min(LIMITS.maxW, surfaceWidth - LIMITS.minVisibleGap))
 }
@@ -275,6 +282,8 @@ export const usePageStore = defineStore('notePage', () => {
     const max = maxCardWidth(surfaceWidth)
     const updates: CardUpdate[] = []
     for (const v of cards.value) {
+      // 图片卡按原图 1:1 显示，不随视口收窄
+      if (containsImage(v.contentMd)) continue
       if (v.card.w > max) {
         v.card.w = max
         updates.push({ cardId: v.card.cardId, w: max })
@@ -315,34 +324,28 @@ export const usePageStore = defineStore('notePage', () => {
     }
   }
 
-  /** Card size that fits pasted text, so nothing is cropped on arrival. */
+  /**
+   * 新建/粘贴卡片的默认尺寸：宽度固定为视口的 50%（文本与图片一致），
+   * 高度按内容估算（图片按当前宽度等比、文本按行数），随后由贴合逻辑微调。
+   */
   function sizeForContent(
     content: string,
     imageSize?: { width: number; height: number },
-    surfaceWidth?: number,
+    width = 550,
   ): { w: number; h: number } {
-    const maxWidth = surfaceWidth === undefined ? LIMITS.maxW : maxCardWidth(surfaceWidth)
+    const w = Math.round(Math.max(BLOCK_MIN_W, width))
     const textContent = imageSize ? content.replace(/!\[[^\]]*\]\([^)]+\)/g, '').trim() : content
     const lines = textContent.split('\n')
-    const longest = lines.reduce((max, l) => Math.max(max, l.length), 0)
-    const cjk = (textContent.match(/[\u3400-\u9fff]/g) || []).length
-    const visual = Math.max(longest, textContent.length / 2) + cjk / 4
-    // Cards are wide by default (a card is written in place, so it needs room), but never
-    // wider than the page allows.
-    const textWidth = textContent.trim() ? Math.max(BLOCK_MIN_W, 260 + visual * 4.2) : 0
-    let w = Math.round(Math.min(maxWidth, Math.max(imageSize ? BLOCK_MIN_W : 420, textWidth)))
-    if (imageSize && imageSize.width > 0) {
-      const imageWidth = Math.min(imageSize.width, maxWidth - 32)
-      w = Math.round(Math.min(maxWidth, Math.max(w, imageWidth + 32)))
-    }
     const perLine = Math.max(20, Math.floor((w - 40) / 8.4))
-    const estLines = Math.min(30, Math.max(lines.length, Math.ceil(textContent.length / perLine)))
-    let h = Math.round(Math.min(520, Math.max(180, 84 + estLines * 24)))
+    const estLines = Math.max(lines.length, Math.ceil(textContent.length / perLine))
+    let h: number
     if (imageSize && imageSize.width > 0) {
-      const imageWidth = Math.min(imageSize.width, maxWidth - 32)
+      const imageWidth = Math.max(1, w - 32)
       const imageHeight = imageSize.height * imageWidth / imageSize.width
       const textHeight = textContent.trim() ? estLines * 24 + 24 : 0
-      h = Math.round(Math.min(520, Math.max(BLOCK_MIN_H, imageHeight + textHeight + 56)))
+      h = Math.round(Math.max(BLOCK_MIN_H, imageHeight + textHeight + 56))
+    } else {
+      h = Math.round(Math.max(180, 84 + estLines * 24))
     }
     return { w, h }
   }
@@ -351,10 +354,10 @@ export const usePageStore = defineStore('notePage', () => {
     content: string,
     at: { x: number; y: number },
     imageSize?: { width: number; height: number },
-    surfaceWidth?: number,
+    width?: number,
   ) {
     const trimmed = content.replace(/\r\n/g, '\n').trim()
-    const { w, h } = sizeForContent(trimmed, imageSize, surfaceWidth)
+    const { w, h } = sizeForContent(trimmed, imageSize, width)
     return addBlock(at, { contentMd: trimmed, w, h })
   }
 

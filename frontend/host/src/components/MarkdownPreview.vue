@@ -59,6 +59,7 @@ onBeforeUnmount(() => {
 
 .md-preview :deep(img) {
   display: block;
+  margin: 0 auto;
   max-width: 100%;
   max-height: 320px;
   object-fit: contain;

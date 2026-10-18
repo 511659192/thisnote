@@ -25,4 +25,26 @@ export const favoriteApi = {
     http.post<{ favorite: boolean }>(
       `/api/plugins/${FAVORITE_PLUGIN_ID}/update-state`, {}, { noteId, value },
     ),
+
+  /** 批量收藏 / 取消收藏（按笔记）。 */
+  setFavorites: (noteIds: string[], value: boolean) =>
+    http.post<{ updated: number }>(
+      `/api/plugins/${FAVORITE_PLUGIN_ID}/update-state-batch`, { noteIds, value },
+    ),
+}
+
+/**
+ * 全部笔记 id（分页）。
+ *
+ * <p>收藏记录可能残留已删除笔记的 id（例如删除时收藏插件正好停用），计数时用它排除。
+ */
+export async function listNoteIds(): Promise<string[]> {
+  const out: string[] = []
+  const limit = 500
+  for (let offset = 0; ; offset += limit) {
+    const page = await http.get<Array<{ noteId: string }>>('/api/notes/get', { limit, offset })
+    for (const note of page) out.push(note.noteId)
+    if (page.length < limit) break
+  }
+  return out
 }

@@ -282,7 +282,7 @@ host（qiankun 主应用，:5173）
 - **附件元数据**：上传时、以及导入器「接管」未管理附件时（改名 + 记 `originalName`），把宽高、字节数、
   MIME、时间写进 `notes/plugins/notes/attachment-metadata.json`（`AttachmentService.java`）；
   `cardId` / `noteId` 字段已预留，目前没有卡片/笔记上下文，值为 null。附件被删除时同步移除条目；
-  ImageIO 读不出尺寸时宽高记 0。
+  `ImageSize.of()` 读不出尺寸时宽高记 0。
   正文引用写法是 `../attachments/<文件名>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
   `frontend/host/src/components/MarkdownPreview.vue:21-42`）。
 
@@ -324,9 +324,11 @@ host（qiankun 主应用，:5173）
 | GET | `/api/books/get` | 分组列表（type=book） |
 | POST | `/api/books/create` / `/update?id=` / `/delete?id=` | 分组增删改 |
 
-**favorite**：`GET /api/plugins/favorite/get-favorites`、`GET .../get-state?noteId=`、`POST .../update-state?noteId=&value=`
+**favorite**：`GET /api/plugins/favorite/get-favorites`、`GET .../get-state?noteId=`、`POST .../update-state?noteId=&value=`、
+`POST .../update-state-batch`（body `{noteIds, value}`，按笔记本批量收藏/取消）
 
 **memory-cycle**：`GET .../get-cards?ids=a,b`、`GET .../get-card?cardId=`、`POST .../update-state?cardId=&value=`、
+`POST .../update-state-batch`（body `{cardIds, value}`，按笔记本批量开启/关闭）、
 `POST .../review?cardId=`（body `{grade:1..4}`）、`GET .../get-due?limit=50`、`POST .../delete-schedule?cardId=`
 
 **baidu-sync**：`GET .../get-settings`、`POST .../update-settings`、`GET .../get-authorization-url`、
@@ -385,8 +387,8 @@ host（qiankun 主应用，:5173）
 - 每个候选先经 `AttachmentAdoptEvent` 交给 notes：改名为 `<uuid>.<ext>`、原始文件名记入附件元数据；
   本插件再按新文件名建卡，标题取原文件名（去掉扩展名）（`AttachmentImporterService.java`）。
 - 通过 `CardChangedEvent.requestCardCreate` 交给 notes 建笔记/卡片，归入 `grp-default`；本插件不写笔记数据。
-- 卡片初始框体按图片像素尺寸折算：宽 = min(图片宽, 650) + 30（下限 240、上限 680），高 = 等比高度 + 44（下限 88）；
-  ImageIO 读不到尺寸（损坏文件）时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
+- 卡片初始框体按图片像素尺寸 1:1 生成：宽 = 图片宽 + 30（下限 240），高 = 图片高 + 44（下限 88），不设宽度上限；
+  png/jpg 用 ImageIO、WebP 解析 RIFF 头；都读不到时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
 - 未被管理的附件由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.unmanagedAttachments()`），本插件不扫描附件目录、不解析卡片内容。
 
 **state-reset**
@@ -440,7 +442,7 @@ host（qiankun 主应用，:5173）
 
 ### 6.4 插槽与可用性
 
-`frontend/plugin-api/src/registry.ts:14-22` 共有 **9 个响应式注册表**：
+`frontend/plugin-api/src/registry.ts:14-24` 共有 **11 个响应式注册表**：
 
 | 插槽 | 注册函数 | 消费方 |
 |---|---|---|
@@ -453,6 +455,11 @@ host（qiankun 主应用，:5173）
 | 侧栏主面板 | `registerSidebarPanel` | `Shell`（notes 的列表面板） |
 | 列表头 | `registerListHeader` | `NoteList`（标题搜索框） |
 | 顶栏搜索 | `registerTopbarSearch` | `Shell`（全局搜索） |
+| 列表行内动作 | `registerNoteRowAction` | `NoteList`（`activeNoteRowActions()`，如 ☆/🧠） |
+| 列表批量动作 | `registerNoteBatchAction` | `NoteList`（`activeNoteBatchActions()`，如「收藏 +/−」「记忆 +/−」） |
+
+- 行内动作 / 批量动作都使用 `NoteRef`（`{noteId,title,cardIds}`）：状态的读写、`loadState`、`isActive`、`toggle` 全在插件里，
+  核心只渲染注册表并把所选笔记递进去（favorite、memory-cycle 各在自己的 `src/actions.ts`）。
 
 - 共享指针 `activeListFilter`：插件 UI（搜索框、侧栏筛选行）设它，notes 域 `watch` 它并调用筛选的 `load()`
   取命中 id（`registry.ts:31-41`；`stores/notes.ts:59-92`）。
@@ -567,10 +574,9 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
    `git ls-files frontend/plugin-api` 返回 0 条，`git check-ignore -v frontend/plugin-api/package.json` 命中的就是这条规则。
    **影响**：新克隆的仓库缺少整个界面契约包，`workspace:*` 依赖无法解析 → 安装/构建失败。
    修复前不要依赖「提交即可带走」。
-2. **memory-cycle 复习页的卡片内容接口形态不匹配（未运行验证）。**
-   前端按 `{ cards: [...] }` 解包（`frontend/plugins/memory-cycle/src/api/memoryCycleApi.ts:114-131,164-177`），
-   而后端 `/api/notes/cards/get` 返回裸数组 `List<CardDTO>`（`backend/plugins/notes/.../CardController.java:24-28`），
-   `item.page.cards` 会是 `undefined`，`for...of` 抛错 → 复习页取不到正文。改之前先确认是不是正在进行中的重构。
+2. **memory-cycle 复习页的卡片内容接口形态（已修复）。**
+   原先前端按 `{ cards: [...] }` 解包，而后端 `/api/notes/cards/get` 返回裸数组 `List<CardDTO>`；
+   现在 `memoryCycleApi.ts` 直接按数组使用，复习页不再报 `item.page.cards is not iterable`。
 3. **顶栏全局搜索的「摘要命中」实际不生效。**
    `GlobalSearch.vue` 依赖 `note.summary`（`:20,46-58,146-153`），但后端 `NoteDTO` 没有 `summary` 字段
    （`backend/plugin-api/.../notes/dto/NoteDTO.java:5`），笔记列表类型里也没有。
@@ -593,7 +599,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
     `maven-antrun-plugin` 干的（`plugins/memory-cycle/pom.xml:86-105` 等），app 模块没有该配置。
 11. **`NotesSidebarPanel.vue:1-7` 有 `<style>` 块之外的 CSS 文本**（同样内容在文件末尾 `:416-422` 重复）；
     SFC 解析器如何处理块外内容本次未验证，改动该文件时先看一眼。
-12. **`registry.ts:9` 注释说「目前有五个插槽」，实际注册表有 9 个**（`:14-22`）。
+12. ~~`registry.ts:9` 注释说「目前有五个插槽」，实际注册表有 9 个~~（已修复：注释改为指向 §6.4 的完整清单，
+    注册表现有 11 个）。
 13. **`MemoryCycleStateChangedEventListener` 有两份实例**：一份是插件容器里的 `@Component`
     （`MemoryCycleStateChangedEventListener.java:9`），另一份由 `MemoryCyclePlugin` 手工 new 并注册到主容器
     （`MemoryCyclePlugin.java:64-73`）。当前只有主容器那份会收到事件（事件由主容器发布），但读代码时容易误会。

@@ -1,6 +1,7 @@
 import { registerNoteListFilter, registerNoteTool, unregisterPlugin } from '@thisnode/plugin-api'
 import FavoriteTool from './src/components/FavoriteTool.vue'
-import { favoriteApi, FAVORITE_PLUGIN_ID } from './src/api/favoriteApi'
+import { favoriteApi, FAVORITE_PLUGIN_ID, listNoteIds } from './src/api/favoriteApi'
+import { registerFavoriteActions } from './src/actions'
 
 /**
  * 收藏插件的界面侧注册 —— 「实体插件」的参考实现，只挂两个槽位：
@@ -37,8 +38,18 @@ function register(): void {
     hideNoteManagement: true,
     /** 核心据此过滤自己的列表：插件只回答"哪些笔记被收藏了"。 */
     load: async () => (await favoriteApi.notes()).map((note) => note.id),
+    /**
+     * 侧栏「收藏」行右侧的数量：只数**仍然存在**的笔记。
+     * 收藏记录里可能残留已删除笔记的 id（删除时插件正好停用），不能直接取记录条数。
+     */
+    badge: async () => {
+      const [favorites, noteIds] = await Promise.all([favoriteApi.notes(), listNoteIds()])
+      const alive = new Set(noteIds)
+      return favorites.filter((note) => alive.has(note.id)).length
+    },
   }
   registerNoteListFilter(favoritesFilter)
+  registerFavoriteActions()
 }
 
 export async function bootstrap() {}

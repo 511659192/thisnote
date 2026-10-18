@@ -427,6 +427,15 @@ function onToggleCollapse(cardId: string) {
   void page.commit([{ cardId: view.card.cardId, collapsed: !view.card.collapsed }])
 }
 
+/**
+ * 选过预设宽度（1:1/百分比/自定义）的卡片：高度一直贴合内容，不再按视口封顶，避免出现滚动条。
+ */
+const fullHeightFits = new Set<string>()
+/** 视口折算出的「100% 宽度」：卡片用它反推当前宽度落在哪个百分比档位。 */
+const fitBaseWidth = computed(() => fitCardMaxWidth(size.width, page.viewport.zoom))
+/** 新卡片默认宽度：视口的 50%（文本与图片一致）。 */
+const defaultCardWidthPx = computed(() => Math.round(fitBaseWidth.value * 0.5))
+
 function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: boolean; force?: boolean }) {
   const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (!view) return
@@ -434,11 +443,25 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
   if (p.force) page.clearManualHeight(p.cardId)
   // 用户手动定过长度的卡片不再自动贴合（说了算的是用户，不是内容）。
   else if (page.isManualHeight(p.cardId) && !p.fitImage) return
+  // 选过宽度预设（含 1:1 按钮）的卡片永久取消高度封顶，后续图片加载/内容重排也不再截断
+  if (p.force) fullHeightFits.add(p.cardId)
+  // 图片卡（fitImage）不封顶：按原图 1:1 伸缩；文本卡仍受可视宽度约束。
+  const imageCard = /!\[[^\]]*\]\(.+\)/.test(view.contentMd ?? '')
+  // 高度封顶的豁免：
+  //  - 宽度命中预设（刷新后也按当前宽度判断，不依赖本次点击）
+  //  - 内容包含图片（按原图尺寸展示，卡片内不出现滚动条）
+  //  - 本次选过自定义宽度 / 显式 1:1
+  const base = fitBaseWidth.value
+  const presetWidth = base > 0 && [0.25, 0.5, 0.75, 1]
+    .some((ratio) => Math.abs(view.card.w - Math.round(base * ratio)) <= 2)
+  const uncapped = presetWidth || imageCard || fullHeightFits.has(p.cardId)
   // 「自动调整」(force) 按内容宽度贴合，上限放宽到可视世界宽：常规上限下长行文本照旧换行，
   // 图片卡宽高算出来都等于现值，一次更新都不产生，按钮看起来完全失效。
-  const widthCap = p.force
-    ? fitCardMaxWidth(size.width, page.viewport.zoom)
-    : maxCardWidth(size.width)
+  const widthCap = p.fitImage && imageCard
+    ? Number.MAX_SAFE_INTEGER
+    : p.force
+      ? fitCardMaxWidth(size.width, page.viewport.zoom)
+      : maxCardWidth(size.width)
   // 1:1 是内容驱动的显式贴合：宽度下限放宽（突破拖拽下限 240）以贴住短文本，
   // 卡片过窄时右侧工具行会被裁剪，拖拽右下角即可恢复常规宽度。
   const minWidth = p.force ? 88 : BLOCK_MIN_W
@@ -453,7 +476,7 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
     BLOCK_MIN_H * 2,
     Math.round((window.innerHeight - screenTop - 12) / Math.max(page.viewport.zoom, 0.01)),
   )
-  const next = Math.min(Math.round(p.h), available)
+  const next = uncapped ? Math.round(p.h) : Math.min(Math.round(p.h), available)
   // 宽高合成一次提交：早先「宽度先落、高度跳过等观察器补偿」，图片卡会停在
   // 「宽已变、高仍旧」的中间态；现在宽高（含卡片侧折算好的新高度）原子生效。
   const updates: CardUpdate[] = []
@@ -462,12 +485,25 @@ function onFitHeight(p: { cardId: string; h: number; w?: number; fitImage?: bool
   if (updates.length) void page.commit(updates).catch(() => undefined)
 }
 
-/** ⤢ 菜单选比例：卡片宽度 = 可视宽度（留白后）× 比例；高度仍由贴合逻辑负责。 */
+/** ⤢ 菜单选比例：只约束卡片宽度（可视宽度 × 比例）；解除手动高度，高度交回贴合逻辑。 */
 function onFitWidth(p: { cardId: string; ratio: number }) {
   const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (!view) return
+  page.clearManualHeight(p.cardId)
   const width = Math.max(BLOCK_MIN_W, Math.round(fitCardMaxWidth(size.width, page.viewport.zoom) * p.ratio))
   if (width === view.card.w) return
+  fullHeightFits.add(p.cardId)
+  void page.commit([{ cardId: view.card.cardId, w: width }]).catch(() => undefined)
+}
+
+/** 自定义宽度（px）：只约束宽度；解除手动高度，高度交回贴合逻辑。 */
+function onFitCustom(p: { cardId: string; width: number }) {
+  const view = page.cards.find((b) => b.card.cardId === p.cardId)
+  if (!view) return
+  page.clearManualHeight(p.cardId)
+  const width = Math.max(88, Math.round(p.width))
+  if (width === view.card.w) return
+  fullHeightFits.add(p.cardId)
   void page.commit([{ cardId: view.card.cardId, w: width }]).catch(() => undefined)
 }
 
@@ -639,7 +675,7 @@ async function onPaste(e: ClipboardEvent) {
         await deleteUnreferencedImageAttachment(markdown)
         return
       }
-      const created = await page.addBlockFromContent(markdown, at, imageSize, size.width)
+      const created = await page.addBlockFromContent(markdown, at, imageSize, defaultCardWidthPx.value)
       if (created) toast('已粘贴图片为卡片', 'success')
       else await deleteUnreferencedImageAttachment(markdown)
     } catch (error) {
@@ -661,7 +697,7 @@ async function onPaste(e: ClipboardEvent) {
 
   const world = page.screenToWorld(lastPointer.value)
   const at = { x: Math.round(world.x), y: Math.round(world.y) }
-  const created = await page.addBlockFromContent(text, at)
+  const created = await page.addBlockFromContent(text, at, undefined, defaultCardWidthPx.value)
   if (created) {
     const format = markdownFile ? 'markdown' : clipboardCode ? 'text' : null
     if (format) {
@@ -766,6 +802,8 @@ defineExpose({ size, beginEdit, finishEditing })
         @fit-height="onFitHeight"
         @preview="onCardPreview"
         @fit-width="onFitWidth"
+        @fit-custom="onFitCustom"
+        :fit-base-width="fitBaseWidth"
         @end-edit="finishEditing()"
         @toggle-collapse="onToggleCollapse"
         @focus="onCardFocus"

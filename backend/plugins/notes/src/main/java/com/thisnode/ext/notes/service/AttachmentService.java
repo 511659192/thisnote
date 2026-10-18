@@ -7,13 +7,12 @@ import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.plugin.api.notes.dto.AttachmentDTO;
 import com.thisnode.plugin.api.util.FileHelper;
+import com.thisnode.plugin.api.util.ImageSize;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -169,7 +168,7 @@ public class AttachmentService {
     }
 
     /**
-     * 读取图片尺寸等元数据；ImageIO 读不出来时宽高记 0，不影响文件本身。
+     * 读取图片尺寸等元数据；读不出来时宽高记 0，不影响文件本身。
      */
     private CardPO.AttachmentMeta buildMeta(String attachmentId,
                                             String fileName,
@@ -178,14 +177,10 @@ public class AttachmentService {
                                             String mediaType) {
         int width = 0;
         int height = 0;
-        try {
-            BufferedImage image = ImageIO.read(file.toFile());
-            if (image != null) {
-                width = image.getWidth();
-                height = image.getHeight();
-            }
-        } catch (IOException e) {
-            log.warn("读取图片尺寸失败：{}", file, e);
+        int[] pixels = ImageSize.of(file);
+        if (pixels != null) {
+            width = pixels[0];
+            height = pixels[1];
         }
         return new CardPO.AttachmentMeta(attachmentId, fileName, originalName, null, null, width, height, file.toFile().length(), mediaType, System.currentTimeMillis());
     }

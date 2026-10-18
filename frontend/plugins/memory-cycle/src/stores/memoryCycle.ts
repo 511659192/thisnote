@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { bumpPluginState } from '@thisnode/plugin-api'
 import { memoryCycleApi, type Grade, type MemoryCycleCardState } from '../api/memoryCycleApi'
 
 const state = reactive(new Map<string, MemoryCycleCardState>())
@@ -53,6 +54,7 @@ export const memoryCycle = {
     const version = advanceStateVersion(cardId)
     const result = await memoryCycleApi.setEnabled(cardId, next)
     if (stateVersions.get(cardId) !== version) return
+    bumpPluginState('memory-cycle')
     const updated = this.stateOf(cardId)
     updated.enabled = result.enabled
     if (result.enabled && !updated.schedule.cardId) {

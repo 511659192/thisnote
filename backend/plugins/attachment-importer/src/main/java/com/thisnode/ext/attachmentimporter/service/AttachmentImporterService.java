@@ -6,18 +6,14 @@ import com.thisnode.plugin.api.event.CardChangedEvent;
 import com.thisnode.plugin.api.notes.dto.AttachmentDTO;
 import com.thisnode.plugin.api.notes.dto.CardDTO;
 import com.thisnode.plugin.api.notes.dto.CardMetaDTO;
+import com.thisnode.plugin.api.util.ImageSize;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -46,11 +42,10 @@ public class AttachmentImporterService {
 
     /**
      * 与界面侧卡片几何保持一致（frontend/plugins/notes/src/stores/notePage.ts 的
-     * BLOCK_MIN_W / BLOCK_MIN_H / BLOCK_MAX_W）：宽度 240–680，高度只设下限。
+     * BLOCK_MIN_W / BLOCK_MIN_H）：宽度与高度只设下限，不封顶。
      */
     private static final double MIN_CARD_WIDTH = 240d;
     private static final double MIN_CARD_HEIGHT = 88d;
-    private static final double MAX_CARD_WIDTH = 680d;
     /**
      * 卡片内容区外框：左右内边距 14×2 + 边框 1×2；上下内边距 30 + 12，再加边框 1×2。
      * 图片段落是唯一子节点，首尾 margin 为 0，所以卡片高 = 图片高 + 此值。
@@ -143,47 +138,24 @@ public class AttachmentImporterService {
     }
 
     /**
-     * 按图片原始像素尺寸折算卡片框体：宽度贴合图片（最多 680），高度随纵横比。
+     * 按图片原始像素尺寸给出卡片框体：内容区与图片 1:1，外框补上卡片内边距。
      *
      * <p>图片以 {@code max-width:100%}（不放大）渲染，卡片内容区宽 = 卡片宽 - 30，
-     * 所以「宽 = 图片宽 + 30」时图片正好填满；超过 680 时图片按比例缩小。
-     * 读不到尺寸（格式不被 ImageIO 支持、文件损坏）返回 {@code null}，由 notes 用默认 720×260。
+     * 所以「宽 = 图片宽 + 30」时图片按原始尺寸显示；不设宽度上限，大图也不缩放。
+     * 读不到尺寸（文件损坏）返回 {@code null}，由 notes 用默认 720×260。
      */
     private static CardMetaDTO imageCardMeta(Path file) {
         double[] pixels = imagePixelSize(file);
         if (pixels == null) {
             return null;
         }
-        double naturalWidth = pixels[0];
-        double naturalHeight = pixels[1];
-        double renderedWidth = Math.min(naturalWidth, MAX_CARD_WIDTH - CARD_HORIZONTAL_CHROME);
-        double renderedHeight = naturalHeight * (renderedWidth / naturalWidth);
-        double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, Math.min(MAX_CARD_WIDTH, renderedWidth + CARD_HORIZONTAL_CHROME)));
-        double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, renderedHeight + CARD_VERTICAL_CHROME));
+        double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, pixels[0] + CARD_HORIZONTAL_CHROME));
+        double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, pixels[1] + CARD_VERTICAL_CHROME));
         return new CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, 0, null, null, false, null);
     }
 
     private static double[] imagePixelSize(Path file) {
-        try (ImageInputStream input = ImageIO.createImageInputStream(file.toFile())) {
-            if (input == null) {
-                return null;
-            }
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
-            if (!readers.hasNext()) {
-                return null;
-            }
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(input);
-                int width = reader.getWidth(0);
-                int height = reader.getHeight(0);
-                return width > 0 && height > 0 ? new double[]{width, height} : null;
-            } finally {
-                reader.dispose();
-            }
-        } catch (IOException | RuntimeException e) {
-            log.debug("读取图片尺寸失败：{}", file, e);
-            return null;
-        }
+        int[] size = ImageSize.of(file);
+        return size == null ? null : new double[]{size[0], size[1]};
     }
 }

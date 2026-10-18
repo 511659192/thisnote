@@ -76,6 +76,11 @@ export const memoryCycleApi = {
     http.post<{ enabled: boolean }>(
       `/api/plugins/memory-cycle/update-state`, {}, { cardId, value },
     ),
+  /** 批量开启/关闭（按卡片）。 */
+  setStates: (cardIds: string[], value: boolean) =>
+    http.post<{ updated: number }>(
+      '/api/plugins/memory-cycle/update-state-batch', { cardIds, value },
+    ),
   review: (cardId: string, grade: Grade) =>
     http.post<MemoryCycleCardState>(
       `/api/plugins/memory-cycle/review`, { grade }, { cardId },
@@ -112,16 +117,18 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     owners = findOwners(notes)
   }
   const pages = await Promise.all(owners.map(async ({ note, cardIds: noteCardIds }) => {
-    const page = await http.get<{
-      cards: Array<{ meta: { cardId: string }; content: string }>
-    }>('/api/notes/cards/get', { noteId: note.noteId, cardIds: noteCardIds.join(',') })
-    return { note, page }
+    // /api/notes/cards/get 返回的是卡片数组本身，没有 { cards } 包装
+    const cards = await http.get<Array<{ meta: { cardId: string }; content: string }>>(
+      '/api/notes/cards/get',
+      { noteId: note.noteId, cardIds: noteCardIds.join(',') },
+    )
+    return { note, cards }
   })).catch((error) => {
     noteCardIndexCache = null
     throw error
   })
   for (const item of pages) {
-    for (const card of item.page.cards) {
+    for (const card of item.cards) {
       if (want.has(card.meta.cardId)) {
         found.set(card.meta.cardId, {
           noteTitle: item.note.title,
@@ -163,12 +170,14 @@ export async function loadEnabledCards(): Promise<EnabledMemoryCard[]> {
       const batch = notes.slice(i, i + noteBatchSize)
       const pages = await Promise.all(batch.map(async (note) => ({
         note,
-        page: await http.get<{
-          cards: Array<{ meta: { cardId: string }; content: string }>
-        }>('/api/notes/cards/get', { noteId: note.noteId }),
+        // /api/notes/cards/get 返回裸数组
+        cards: await http.get<Array<{ meta: { cardId: string }; content: string }>>(
+          '/api/notes/cards/get',
+          { noteId: note.noteId },
+        ),
       })))
-      for (const { note, page } of pages) {
-        for (const card of page.cards) {
+      for (const { note, cards } of pages) {
+        for (const card of cards) {
           const cardId = card.meta.cardId
           if (!contentById.has(cardId)) {
             contentById.set(cardId, { noteTitle: note.title, contentMd: card.content })
