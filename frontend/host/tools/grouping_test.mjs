@@ -122,7 +122,7 @@ if (noteId && rootId) {
     dt.setData(mime, value)
     target.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true }))
     target.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true }))
-  }, { mime: 'application/x-thisnode-node', value: noteId, groupTitle: ROOT })
+  }, { mime: 'application/x-thisnote-note', value: noteId, groupTitle: ROOT })
   await win.waitForTimeout(1800)
 
   const inGroup = await api('GET', `/api/notes/${noteId}/blocks`).then(() => null).catch(() => null)

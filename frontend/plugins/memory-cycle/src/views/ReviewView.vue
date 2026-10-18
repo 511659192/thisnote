@@ -14,7 +14,7 @@ import {
   type ScheduleHistoryEntry,
 } from '../api/memoryCycleApi'
 import { memoryCycle } from '../stores/memoryCycle'
-import { createPreviewImageInteractions, host, emitPluginStateChange, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
+import { createPreviewImageInteractions, host, emitPluginStateChange, isPluginActive, refreshPluginAvailability } from '@thisnote/plugin-api'
 import ReviewCardTile from '../components/ReviewCardTile.vue'
 
 const PLUGIN_ID = 'memory-cycle'
@@ -267,7 +267,7 @@ function closePreview() {
 // ---------------------------------------------------------------- 预览图片缩放拖移
 
 /** 滚轮缩放 + 左键拖移作用于预览浮层内的图片，与笔记页共用同一套交互
- *（实现见 @thisnode/plugin-api 的 createPreviewImageInteractions）。 */
+ *（实现见 @thisnote/plugin-api 的 createPreviewImageInteractions）。 */
 const { onPreviewWheel, onPreviewMouseDown, dispose: disposePreviewInteractions } = createPreviewImageInteractions({
   grabbingClass: 'rv-img-grabbing',
 })

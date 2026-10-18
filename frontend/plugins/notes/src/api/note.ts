@@ -1,4 +1,4 @@
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 import type { NoteDto } from './types'
 
 export interface NoteQuery {

@@ -22,7 +22,7 @@ function pluginAssetsDevServer() {
     '.woff2': 'font/woff2',
   }
   return {
-    name: 'thisnode-plugin-assets-dev',
+    name: 'thisnote-plugin-assets-dev',
     configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
       server.middlewares.use((req, res, next) => {
         const url = String(req.url ?? '').split('?')[0]
@@ -49,7 +49,7 @@ function pluginAssetsDevServer() {
  * 主应用在运行时按启用列表 loadMicroApp 装载它们（见 src/plugins/loader.ts）。
  *
  * <p>共享运行时不再是 import map + /plugin-runtime.js：qiankun 的 ESM 沙箱里
- * URL 模块是私有实例，宿主改为把自己的 vue / vue-router / @thisnode/plugin-api
+ * URL 模块是私有实例，宿主改为把自己的 vue / vue-router / @thisnote/plugin-api
  * 命名空间注入微应用沙箱（sandbox.modules），微应用里的裸 import 解析到的就是
  * 同一份实例。
  */
@@ -64,9 +64,9 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     proxy: {
-      // 后端地址可用 THISNODE_BACKEND 覆盖（默认 45917）：起第二个实例做验证时不用停正在跑的那个。
+      // 后端地址可用 THISNOTE_BACKEND 覆盖（默认 45917）：起第二个实例做验证时不用停正在跑的那个。
       '/api': {
-        target: process.env.THISNODE_BACKEND ?? 'http://127.0.0.1:45917',
+        target: process.env.THISNOTE_BACKEND ?? 'http://127.0.0.1:45917',
         changeOrigin: true,
       },
     },

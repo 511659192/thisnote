@@ -6,7 +6,7 @@ import {
   registerPluginRoute,
   registerSidebarPanel,
   registerTopbarSearch,
-} from '@thisnode/plugin-api'
+} from '@thisnote/plugin-api'
 import GlobalSearch from './src/components/GlobalSearch.vue'
 import TitleSearchBox from './src/components/TitleSearchBox.vue'
 import NoteView from './src/views/NoteView.vue'
@@ -27,7 +27,7 @@ import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stor
  * </ol>
  *
  * <p>favorite ★ 与 memory-cycle 🧠 通过卡片工具/笔记工具/列表筛选插槽插进本域的视图 ——
- * 注册表在共享的 @thisnode/plugin-api 实例里（shallowReactive），装载顺序无关。
+ * 注册表在共享的 @thisnote/plugin-api 实例里（shallowReactive），装载顺序无关。
  */
 function register(): void {
   registerSidebarPanel({ pluginId: PLUGIN_ID, component: NotesSidebarPanel })

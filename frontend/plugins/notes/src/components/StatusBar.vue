@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
-import { backendMessage, backendOnline, shellState } from '@thisnode/plugin-api'
+import { backendMessage, backendOnline, shellState } from '@thisnote/plugin-api'
 
 const nodes = useNoteStore()
 const page = usePageStore()

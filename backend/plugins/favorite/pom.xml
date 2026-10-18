@@ -5,14 +5,14 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.thisnode</groupId>
-    <artifactId>thisnode-parent</artifactId>
+    <groupId>com.thisnote</groupId>
+    <artifactId>thisnote-parent</artifactId>
     <version>0.1.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>plugin-favorite</artifactId>
-  <name>thisnode-plugin-favorite</name>
+  <name>thisnote-plugin-favorite</name>
   <properties>
     <plugin.id>favorite</plugin.id>
   </properties>
@@ -24,7 +24,7 @@
   -->
   <dependencies>
     <dependency>
-      <groupId>com.thisnode</groupId>
+      <groupId>com.thisnote</groupId>
       <artifactId>plugin-api</artifactId>
     </dependency>
 
@@ -68,7 +68,7 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
           <classifier>standalone</classifier>
-          <mainClass>com.thisnode.ext.favorite.FavoriteStarter</mainClass>
+          <mainClass>com.thisnote.ext.favorite.FavoriteStarter</mainClass>
         </configuration>
       </plugin>
 

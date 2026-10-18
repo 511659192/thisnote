@@ -1,4 +1,4 @@
-import { emitPluginStateChange, registerNoteBatchAction, registerNoteRowAction, type NoteRef } from '@thisnode/plugin-api'
+import { emitPluginStateChange, registerNoteBatchAction, registerNoteRowAction, type NoteRef } from '@thisnote/plugin-api'
 import { memoryCycleApi } from './api/memoryCycleApi'
 import { memoryCycle } from './stores/memoryCycle'
 import MemoryCycleRowAction from './components/MemoryCycleRowAction.vue'

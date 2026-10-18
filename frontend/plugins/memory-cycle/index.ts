@@ -1,4 +1,4 @@
-import { createPluginLifecycle, registerCardPlugin, registerNavEntry, registerPluginRoute } from '@thisnode/plugin-api'
+import { createPluginLifecycle, registerCardPlugin, registerNavEntry, registerPluginRoute } from '@thisnote/plugin-api'
 import { memoryCycleApi } from './src/api/memoryCycleApi'
 import { memoryCycle } from './src/stores/memoryCycle'
 import { registerMemoryCycleActions } from './src/actions'

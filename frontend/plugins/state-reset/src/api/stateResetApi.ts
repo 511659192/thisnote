@@ -1,4 +1,4 @@
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 
 export const stateResetApi = {
   /** 发出一次插件状态重置事件（各插件清理并重建自己的状态）。 */

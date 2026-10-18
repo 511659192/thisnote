@@ -27,7 +27,7 @@
 - 【硬规则】修「界面没反应」类问题必须用真实浏览器探针走**会挂载目标组件的路径**（如先打开笔记页再点菜单），从列表页走可能永远不触发卸载钩子，探针绿灯是假阴性。
 
 ## 插件与文件持久化
-- 数据根目录统一由 Spring `thisnode.data-root`（默认 `${user.home}/.thisnode`）派生：笔记根 = `data-root/notes`，插件数据 = `data-root/notes/plugins/<pluginId>`；不做旧路径迁移兼容，少调用点的路径拼接直接内联、不留纯封装工具类。
+- 数据根目录统一由 Spring `thisnote.data-root`（默认 `${user.home}/.thisnote`）派生：笔记根 = `data-root/notes`，插件数据 = `data-root/notes/plugins/<pluginId>`；不做旧路径迁移兼容，少调用点的路径拼接直接内联、不留纯封装工具类。
 - 领域模型留在插件内部（Notes 用 `CardPO`），跨插件走 plugin-api 的 `CardDTO`/`CardMetaDTO`；导入插件经 Notes API 使用，不直接扫描 Notes 目录或解析磁盘格式。
 - 不保留多余监听器、不发布无人处理的事件：卡片创建申请监听器已兼管笔记创建，导入侧对缺 `CardMeta` 的文件发卡片创建申请即可。
 - FileHelper 是插件文件操作与变更事件的统一入口，调用方不传发布器；持久写/删/移成功后发布带绝对路径的事件（重命名另带旧 URI），临时文件清理不发布；跨插件事件须经主容器发布，FileHelper 单例在插件上下文 refresh 前注册。

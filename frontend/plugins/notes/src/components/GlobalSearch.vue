@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 
 /**
  * 顶栏模糊查询（logo 右侧）：标题模糊匹配，下拉结果可直接跳转。

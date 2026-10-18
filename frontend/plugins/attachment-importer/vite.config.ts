@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { qiankun } from '@qiankunjs/bundler-plugin/vite'
-import { qiankunSharedDeps } from '@thisnode/plugin-api/vite'
+import { qiankunSharedDeps } from '@thisnote/plugin-api/vite'
 
 export default defineConfig({
   plugins: [vue(), qiankun(), qiankunSharedDeps()],
@@ -20,7 +20,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: { chunkFileNames: 'chunk-[hash].js' },
-      external: ['vue', 'vue-router', '@thisnode/plugin-api'],
+      external: ['vue', 'vue-router', '@thisnote/plugin-api'],
     },
   },
 })

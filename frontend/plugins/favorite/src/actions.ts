@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { emitPluginStateChange, registerNoteBatchAction, registerNoteRowAction, type NoteRef } from '@thisnode/plugin-api'
+import { emitPluginStateChange, registerNoteBatchAction, registerNoteRowAction, type NoteRef } from '@thisnote/plugin-api'
 import { favoriteApi, FAVORITE_PLUGIN_ID } from './api/favoriteApi'
 
 /**

@@ -5,14 +5,14 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.thisnode</groupId>
-    <artifactId>thisnode-parent</artifactId>
+    <groupId>com.thisnote</groupId>
+    <artifactId>thisnote-parent</artifactId>
     <version>0.1.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>plugin-state-reset</artifactId>
-  <name>thisnode-plugin-state-reset</name>
+  <name>thisnote-plugin-state-reset</name>
   <properties>
     <plugin.id>state-reset</plugin.id>
   </properties>
@@ -21,7 +21,7 @@
 
   <dependencies>
     <dependency>
-      <groupId>com.thisnode</groupId>
+      <groupId>com.thisnote</groupId>
       <artifactId>plugin-api</artifactId>
     </dependency>
     <dependency>
@@ -50,7 +50,7 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
           <classifier>standalone</classifier>
-          <mainClass>com.thisnode.ext.statereset.StateResetStarter</mainClass>
+          <mainClass>com.thisnote.ext.statereset.StateResetStarter</mainClass>
         </configuration>
       </plugin>
 

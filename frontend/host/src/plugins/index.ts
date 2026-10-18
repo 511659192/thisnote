@@ -5,7 +5,7 @@
  * 生产吃插件 jar 里的 ``plugin.js``，开发吃各插件 dev server 的源码（见 ``loader.ts``）。
  * 这里只把平台重新导出，核心各处照旧 ``from '@/plugins'``。
  */
-export * from '@thisnode/plugin-api'
+export * from '@thisnote/plugin-api'
 export {
   loadActivePluginFrontends,
   loadPluginFrontend,

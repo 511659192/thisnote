@@ -1,4 +1,4 @@
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 
 const BASE = '/api/plugins/baidu-sync'
 

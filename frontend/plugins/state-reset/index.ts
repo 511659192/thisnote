@@ -1,4 +1,4 @@
-import { createPluginLifecycle, registerPluginSettings } from '@thisnode/plugin-api'
+import { createPluginLifecycle, registerPluginSettings } from '@thisnote/plugin-api'
 import StateResetSettings from './src/views/StateResetSettings.vue'
 
 const PLUGIN_ID = 'state-reset'

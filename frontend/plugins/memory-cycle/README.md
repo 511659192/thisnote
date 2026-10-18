@@ -1,6 +1,6 @@
 # memory-cycle 插件实现分析（后端 + 界面侧）
 
-> 本文分析 thisnode 插件平台里一个完整的参考实现：记忆周期（Anki 式 SM-2 间隔重复）。
+> 本文分析 thisnote 插件平台里一个完整的参考实现：记忆周期（Anki 式 SM-2 间隔重复）。
 > 读它 = 读「一个插件如何独立管理自己的状态、通过消息事件协作并贡献界面插槽」。
 >
 > 代码位置：后端 `backend/plugins/memory-cycle/` ·
@@ -15,8 +15,8 @@
 
 | 关注点 | 归属 | 存放位置 |
 |---|---|---|
-| 卡片是否开启记忆周期（开关） | **插件自己** | `scheduling.json` 中存在对应排期即表示开启 |
-| 排期（状态/难度/间隔/到期时间…） | **插件自己** | `<data-root>/plugins/memory-cycle/scheduling.json` |
+| 卡片是否开启记忆周期（开关） | **插件自己** | `.scheduling.json` 中存在对应排期即表示开启 |
+| 排期（状态/难度/间隔/到期时间…） | **插件自己** | `<data-root>/notes/plugins/memory-cycle/.scheduling.json` |
 | 卡片正文与标题 | **不归它管**（不读笔记数据） | 由界面侧经核心的公开 API 现拼 |
 
 ---
@@ -29,7 +29,7 @@
 backend/runtime/plugins/memory-cycle.jar
   ├── plugin.properties          ← PF4J 的 PropertiesPluginDescriptorFinder 读它
   │     plugin.id=memory-cycle
-  │     plugin.class=com.thisnode.ext.memorycycle.MemoryCyclePlugin
+  │     plugin.class=com.thisnote.ext.memorycycle.MemoryCyclePlugin
   │     plugin.version=@project.version@   ← Maven 过滤注入（版本单源，父 pom 写一次）
   └── 类 + 空 Spring 容器入口
 ```
@@ -49,8 +49,8 @@ backend/runtime/plugins/memory-cycle.jar
 
 | 状态 | 存放 | 为什么 |
 |---|---|---|
-| 「这张卡开了记忆周期吗」 | 插件自己的 `scheduling.json` | 对应排期存在即为开启；关闭时删除对应排期 |
-| 排期（state/level/dueAt/reps/lapses…） | 插件自己的 `scheduling.json`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
+| 「这张卡开了记忆周期吗」 | 插件自己的 `.scheduling.json` | 对应排期存在即为开启；关闭时删除对应排期 |
+| 排期（state/level/dueAt/reps/lapses…） | 插件自己的 `.scheduling.json`（JSON 对象，以 `cardId` 为键） | 平台不认识调度语义，也不该认识；插件自己拥有、自己演进（换算法不动平台） |
 
 `SrsService` 在启用卡片时创建初始排期，并以排期是否存在判断开关；控制器通过本插件端点调用它，不需要平台状态服务回调，也没有跨容器的存储依赖。
 
@@ -71,7 +71,7 @@ new ──评分──► learning（页面内短周期重现）──毕业─�
 一个防漂移技巧：**`previewDue()` 在副本上重放 `apply()`** 来算「这次评分后何时再见」，
 而不是另写一份间隔公式 —— 预览与真实调度永远一致（分别实现迟早会漂）。
 
-`CardScheduleRepository` 每次直接读取 `scheduling.json`，不缓存排期。文件不存在或为空时按无排期处理；每次变更都会以 JSON 全量重写。只读取当前 JSON 格式，不兼容或迁移历史排期数据；JSON 文件无法解析时会保留原文件并报错。
+`CardScheduleRepository` 每次直接读取 `.scheduling.json`，不缓存排期。文件不存在或为空时按无排期处理；每次变更都会以 JSON 全量重写。只读取当前 JSON 格式，不兼容或迁移历史排期数据；JSON 文件无法解析时会保留原文件并报错。
 
 JSON 中的 `dueAt`、`lastReviewedAt` 以毫秒时间戳数字保存，并直接反序列化为 `CardSchedule` 字段。
 
@@ -136,7 +136,7 @@ if (!window.__POWERED_BY_QIANKUN__) register()                  // 独立预览�
 ```
 
 宿主停用/重载插件 → qiankun `unmount()` → 注册整体撤走（插槽图标、侧栏入口、`/review` 路由一起消失），
-再启用时重新注册，**无需刷新页面**。共享依赖（vue / vue-router / pinia / @thisnode/plugin-api）
+再启用时重新注册，**无需刷新页面**。共享依赖（vue / vue-router / pinia / @thisnote/plugin-api）
 由宿主经沙箱 `modules` 注入同一份实例（否则会有两个 Vue、两个注册表）。
 
 ### 3.2 三处注册
@@ -197,7 +197,7 @@ NoteCard 渲染卡片时：
 | 运行期提供 | `GET /plugin-assets/memory-cycle/plugin.js` | **界面侧静态服务**提供（开发期：宿主 dev server 的中间件从 `frontend/runtime/plugins/` 端出）；闸门在装载器（停用即不装载） |
 | 开发期 | `frontend/plugins/memory-cycle` dev server: **7112** | 端口约定见 `host/src/plugins/devPorts.ts`；没起则自动回退到交付产物 |
 
-> 排期是**运行期数据**，不在仓库里：`<data-root>/plugins/memory-cycle/scheduling.json`。存在对应排期即表示卡片已开启。
+> 排期是**运行期数据**，不在仓库里：`<data-root>/notes/plugins/memory-cycle/.scheduling.json`。存在对应排期即表示卡片已开启。
 
 ---
 
@@ -213,7 +213,7 @@ NoteCard 渲染卡片时：
    GET get-due → 得到排期摘要 → 定位当前卡片所属笔记并读取这张卡的正文（核心公开 API）
 
 ③ 用户点「良好」
-   POST /review?cardId=… {grade:3} → SrsService.apply() 推进状态机 → 全量重写 scheduling.json
+   POST /review?cardId=… {grade:3} → SrsService.apply() 推进状态机 → 全量重写 .scheduling.json
    → 界面侧用返回的新排期覆盖本地 → 短周期卡随机回到当前队列，毕业卡移出视图
 
 ④ 用户在笔记里删掉这张卡片

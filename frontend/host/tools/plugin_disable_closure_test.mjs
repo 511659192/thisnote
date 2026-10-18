@@ -15,8 +15,8 @@
 import { chromium } from 'playwright'
 import { existsSync } from 'node:fs'
 
-const API = process.env.THISNODE_API ?? 'http://127.0.0.1:45917'
-const APP = process.env.THISNODE_APP ?? 'http://localhost:5173'
+const API = process.env.THISNOTE_API ?? 'http://127.0.0.1:45917'
+const APP = process.env.THISNOTE_APP ?? 'http://localhost:5173'
 const PLUGIN = 'memory-cycle'
 const CANDIDATES = [
   (process.env.LOCALAPPDATA ?? '') + '\\ms-playwright\\chromium-1208\\chrome-win64\\chrome.exe',

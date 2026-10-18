@@ -10,7 +10,7 @@ import {
   ConfirmDialog,
   modifierLabel,
   toast,
-} from '@thisnode/plugin-api'
+} from '@thisnote/plugin-api'
 import { usePageStore } from '@/stores/notePage'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'

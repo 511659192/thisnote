@@ -1,4 +1,4 @@
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 
 /** 收藏插件自己的 API 与状态。 */
 

@@ -3,7 +3,7 @@ import {
   registerNavEntry,
   registerPluginRoute,
   registerPluginSettings,
-} from '@thisnode/plugin-api'
+} from '@thisnote/plugin-api'
 import BaiduSyncSettings from './src/views/BaiduSyncSettings.vue'
 
 const PLUGIN_ID = 'baidu-sync'

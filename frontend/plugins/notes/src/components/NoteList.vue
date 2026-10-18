@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { activeNoteBatchActions, activeNoteRowActions, listHeaders_, toast, type NoteBatchAction, type NoteRef, type NoteRowAction } from '@thisnode/plugin-api'
+import { activeNoteBatchActions, activeNoteRowActions, listHeaders_, toast, type NoteBatchAction, type NoteRef, type NoteRowAction } from '@thisnote/plugin-api'
 import { noteApi } from '@/api/note'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'

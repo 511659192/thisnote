@@ -5,14 +5,14 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.thisnode</groupId>
-    <artifactId>thisnode-parent</artifactId>
+    <groupId>com.thisnote</groupId>
+    <artifactId>thisnote-parent</artifactId>
     <version>0.1.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>plugin-card-importer</artifactId>
-  <name>thisnode-plugin-card-importer</name>
+  <name>thisnote-plugin-card-importer</name>
   <properties>
     <plugin.id>card-importer</plugin.id>
   </properties>
@@ -21,7 +21,7 @@
 
   <dependencies>
     <dependency>
-      <groupId>com.thisnode</groupId>
+      <groupId>com.thisnote</groupId>
       <artifactId>plugin-api</artifactId>
     </dependency>
     <dependency>
@@ -49,7 +49,7 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
           <classifier>standalone</classifier>
-          <mainClass>com.thisnode.ext.cardimporter.CardImporterStarter</mainClass>
+          <mainClass>com.thisnote.ext.cardimporter.CardImporterStarter</mainClass>
         </configuration>
       </plugin>
 

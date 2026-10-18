@@ -1,4 +1,4 @@
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 
 export function getClipboardImage(data: DataTransfer | null): Blob | null {
   if (!data) return null

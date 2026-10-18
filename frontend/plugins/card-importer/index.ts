@@ -1,4 +1,4 @@
-import { createPluginLifecycle, registerPluginSettings } from '@thisnode/plugin-api'
+import { createPluginLifecycle, registerPluginSettings } from '@thisnote/plugin-api'
 import CardImporterSettings from './src/views/CardImporterSettings.vue'
 
 const PLUGIN_ID = 'card-importer'

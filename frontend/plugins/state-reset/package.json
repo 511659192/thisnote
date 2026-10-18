@@ -1,5 +1,5 @@
 {
-  "name": "@thisnode/plugin-state-reset",
+  "name": "@thisnote/plugin-state-reset",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -8,7 +8,7 @@
     "build": "vite build && node ../../tools/deliver.mjs state-reset"
   },
   "dependencies": {
-    "@thisnode/plugin-api": "workspace:*",
+    "@thisnote/plugin-api": "workspace:*",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

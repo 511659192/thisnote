@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { dismiss as shellDismiss, shellState } from '@thisnode/plugin-api'
+import { dismiss as shellDismiss, shellState } from '@thisnote/plugin-api'
 
 const state = shellState
 </script>

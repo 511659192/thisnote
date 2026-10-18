@@ -1,5 +1,5 @@
 {
-  "name": "thisnode-frontend",
+  "name": "thisnote-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@thisnode/plugin-api": "workspace:*",
+    "@thisnote/plugin-api": "workspace:*",
     "qiankun": "^3.0.0-rc.22",
     "markdown-it": "^14.1.0",
     "pinia": "^3.0.1",

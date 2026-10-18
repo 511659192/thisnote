@@ -16,7 +16,7 @@ import {
   shellState,
   type NoteListFilter,
   toast,
-} from '@thisnode/plugin-api'
+} from '@thisnote/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import PromptDialog from '@/components/PromptDialog.vue'
 import type { Book } from '@/api/types'

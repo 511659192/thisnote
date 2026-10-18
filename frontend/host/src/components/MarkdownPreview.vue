@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { request } from '@thisnode/plugin-api'
+import { request } from '@thisnote/plugin-api'
 import { renderMarkdown } from '@/core/markdown'
 
 const props = defineProps<{
@@ -18,9 +18,9 @@ watch(html, async () => {
   for (const url of objectUrls) URL.revokeObjectURL(url)
   objectUrls = []
 
-  const images = root.value?.querySelectorAll<HTMLImageElement>('[data-thisnode-attachment]') ?? []
+  const images = root.value?.querySelectorAll<HTMLImageElement>('[data-thisnote-attachment]') ?? []
   await Promise.all(Array.from(images, async (image) => {
-    const fileName = image.dataset.thisnodeAttachment
+    const fileName = image.dataset.thisnoteAttachment
     if (!fileName) return
     try {
       const response = await request<Response>('GET', '/api/notes/attachments/get', {

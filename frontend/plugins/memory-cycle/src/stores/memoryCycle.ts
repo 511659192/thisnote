@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { emitPluginStateChange } from '@thisnode/plugin-api'
+import { emitPluginStateChange } from '@thisnote/plugin-api'
 import { memoryCycleApi, type Grade, type MemoryCycleCardState } from '../api/memoryCycleApi'
 
 const state = reactive(new Map<string, MemoryCycleCardState>())

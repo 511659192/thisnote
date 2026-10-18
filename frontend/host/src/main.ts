@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 import { waitForBackend } from './core/http'
-import { installHostServices } from '@thisnode/plugin-api'
+import { installHostServices } from '@thisnote/plugin-api'
 import { loadActivePluginFrontends } from './plugins/loader'
 import { useUiStore } from './stores/ui'
 import { formatBytes, formatRelative } from './core/utils'
@@ -21,7 +21,7 @@ async function bootstrap() {
   app.use(createPinia())
   app.use(router)
 
-  // 把核心的实现装给插件：契约在 @thisnode/plugin-api，实现在核心。
+  // 把核心的实现装给插件：契约在 @thisnote/plugin-api，实现在核心。
   // notify 用闭包延迟取 store（这里还没挂载，实际调用发生在用户交互时）。
   installHostServices({
     notify: (message, kind) => useUiStore().toast(message, kind),

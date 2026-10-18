@@ -1,5 +1,5 @@
 {
-  "name": "@thisnode/plugin-attachment-importer",
+  "name": "@thisnote/plugin-attachment-importer",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -8,7 +8,7 @@
     "build": "vite build && node ../../tools/deliver.mjs attachment-importer"
   },
   "dependencies": {
-    "@thisnode/plugin-api": "workspace:*",
+    "@thisnote/plugin-api": "workspace:*",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

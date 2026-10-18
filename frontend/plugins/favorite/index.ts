@@ -1,4 +1,4 @@
-import { createPluginLifecycle, registerNoteListFilter, registerNoteTool } from '@thisnode/plugin-api'
+import { createPluginLifecycle, registerNoteListFilter, registerNoteTool } from '@thisnote/plugin-api'
 import FavoriteTool from './src/components/FavoriteTool.vue'
 import { favoriteApi, FAVORITE_PLUGIN_ID } from './src/api/favoriteApi'
 import { registerFavoriteActions } from './src/actions'

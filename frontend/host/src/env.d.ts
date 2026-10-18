@@ -7,5 +7,5 @@ declare module '*.vue' {
 }
 
 interface Window {
-  __THISNODE_API__?: string
+  __THISNOTE_API__?: string
 }

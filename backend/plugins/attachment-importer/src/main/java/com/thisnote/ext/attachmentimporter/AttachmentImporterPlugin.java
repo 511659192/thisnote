@@ -1,0 +1,51 @@
+package com.thisnote.ext.attachmentimporter;
+
+import com.thisnote.ext.attachmentimporter.service.AttachmentImporterService;
+import com.thisnote.plugin.api.util.MainContainerListeners;
+import org.laxture.sbp.SpringBootPlugin;
+import org.laxture.sbp.spring.boot.IPluginConfigurer;
+import org.laxture.sbp.spring.boot.SpringBootstrap;
+import org.pf4j.PluginWrapper;
+import org.springframework.context.support.GenericApplicationContext;
+
+/**
+ * 附件导入插件：定时扫描附件目录，把未被卡片引用的图片自动生成笔记与卡片。
+ *
+ * <p>形态与 card-importer 相同：只做「发现 + 提交申请」，笔记与卡片由核心插件（notes）
+ * 通过 {@code CardChangedEvent.requestCardCreate} 创建；本插件不写笔记数据。
+ *
+ * <p>id 与版本来自 {@code plugin.properties}，这里只保留端点/数据目录要用的稳定 id。
+ */
+public class AttachmentImporterPlugin extends SpringBootPlugin {
+
+    public static final String PLUGIN_ID = "attachment-importer";
+
+    /** 本插件注册到主容器的全部跨插件监听器（停止时统一摘除）。 */
+    private MainContainerListeners listeners;
+
+    public AttachmentImporterPlugin(PluginWrapper wrapper) {
+        super(wrapper, new IPluginConfigurer[0]);
+    }
+
+    @Override
+    protected SpringBootstrap createSpringBootstrap() {
+        return new SpringBootstrap(this, AttachmentImporterStarter.class);
+    }
+
+    @Override
+    public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
+        AttachmentImporterService service = ctx.getBean(AttachmentImporterService.class);
+        service.setMainEventPublisher(getMainApplicationContext());
+        listeners = new MainContainerListeners(getMainApplicationContext());
+        listeners.onStateReset("attachment-importer 无自有状态", () -> { });
+    }
+
+    @Override
+    public void stop() {
+        if (listeners != null) {
+            listeners.removeAll();
+            listeners = null;
+        }
+        super.stop();
+    }
+}

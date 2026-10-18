@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CardView } from '@/api/types'
-import { activeCardPlugins, host, toast } from '@thisnode/plugin-api'
+import { activeCardPlugins, host, toast } from '@thisnote/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode, isMarkdown, type CardFormat } from './markdownFormat'
 import CustomSizeDialog from './CustomSizeDialog.vue'
@@ -403,7 +403,7 @@ function fitHeight(force = false) {
     ? Math.max(...loadedImages.map((image) => image.naturalWidth)) + 30
     : null
   const waitingForAttachmentImage = autoFitImageWidth.value && images.some(
-    (image) => image.dataset.thisnodeAttachment && image.getAttribute('src') === 'about:blank',
+    (image) => image.dataset.thisnoteAttachment && image.getAttribute('src') === 'about:blank',
   )
 
   // 高度基准：量**内容根节点的自然高度**——.body.read 是滚动容器，scrollHeight 会被

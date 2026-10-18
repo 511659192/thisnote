@@ -1,4 +1,4 @@
-import { createPluginLifecycle, registerPluginSettings } from '@thisnode/plugin-api'
+import { createPluginLifecycle, registerPluginSettings } from '@thisnote/plugin-api'
 import AttachmentImporterSettings from './src/views/AttachmentImporterSettings.vue'
 
 const PLUGIN_ID = 'attachment-importer'

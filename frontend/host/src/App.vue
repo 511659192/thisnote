@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { backendOnline, backendMessage, waitForBackend } from '@thisnode/plugin-api'
+import { backendOnline, backendMessage, waitForBackend } from '@thisnote/plugin-api'
 import ToastHost from '@/components/ToastHost.vue'
 
 onMounted(async () => {

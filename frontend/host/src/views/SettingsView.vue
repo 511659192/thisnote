@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { pluginApi, type PluginInfo } from '@/api/plugins'
 import { request } from '@/core/http'
-import { ConfirmDialog } from '@thisnode/plugin-api'
+import { ConfirmDialog } from '@thisnote/plugin-api'
 import {
   pluginSettings,
   refreshPluginAvailability,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { emitPluginStateChange, type NoteRef } from '@thisnode/plugin-api'
+import { emitPluginStateChange, type NoteRef } from '@thisnote/plugin-api'
 import { memoryCycleApi } from '../api/memoryCycleApi'
 import { memoryCycle } from '../stores/memoryCycle'
 import MemoryCycleIcon from './MemoryCycleIcon.vue'

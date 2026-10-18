@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { host } from '@thisnode/plugin-api'
+import { host } from '@thisnote/plugin-api'
 import type { EnabledMemoryCard } from '../api/memoryCycleApi'
 
 defineProps<{ card: EnabledMemoryCard }>()

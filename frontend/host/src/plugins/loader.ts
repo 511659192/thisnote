@@ -1,7 +1,7 @@
 import { loadMicroApp, type MicroApp, type ModuleNamespace } from 'qiankun'
 import type { Router } from 'vue-router'
-import { pluginApi, pluginRoutes } from '@thisnode/plugin-api'
-import { SHARED_DEP_PREFIX } from '@thisnode/plugin-api/vite'
+import { pluginApi, pluginRoutes } from '@thisnote/plugin-api'
+import { SHARED_DEP_PREFIX } from '@thisnote/plugin-api/vite'
 import { PLUGIN_DEV_PORTS } from './devPorts'
 
 /**
@@ -14,7 +14,7 @@ import { PLUGIN_DEV_PORTS } from './devPorts'
  * 第一次成为界面侧的真实生命周期事件，不再依赖整页刷新。
  *
  * <p><b>共享运行时</b>：沙箱里 fetch 的任何 URL 模块都是私有实例，所以共享的
- * vue / vue-router / @thisnode/plugin-api 不走 URL（那是旧 import map 方案，
+ * vue / vue-router / @thisnote/plugin-api 不走 URL（那是旧 import map 方案，
  * 在沙箱下会裂成两个 Vue），而是宿主把自己的模块命名空间通过 `sandbox.modules`
  * 注入微应用 —— 微应用源码里的裸 import 解析到的就是宿主正在用的同一份实例。
  *
@@ -34,7 +34,7 @@ const microApps = new Map<string, MicroApp>()
 const registeredRoutes = new Map<string, string>()
 
 // ---------------------------------------------------------------------------
-// 共享模块：宿主的 vue / vue-router / @thisnode/plugin-api 命名空间
+// 共享模块：宿主的 vue / vue-router / @thisnote/plugin-api 命名空间
 // ---------------------------------------------------------------------------
 
 let sharedModulesPromise: Promise<Record<string, { namespace: ModuleNamespace }>> | null = null
@@ -48,20 +48,20 @@ function sharedSandboxModules(): Promise<Record<string, { namespace: ModuleNames
       import('vue'),
       import('vue-router'),
       import('pinia'),
-      import('@thisnode/plugin-api'),
+      import('@thisnote/plugin-api'),
     ])
     return {
       vue: { namespace: vue },
       'vue-router': { namespace: vueRouter },
       pinia: { namespace: pinia },
-      '@thisnode/plugin-api': { namespace: pluginApiModule },
+      '@thisnote/plugin-api': { namespace: pluginApiModule },
     }
   })()
   return sharedModulesPromise
 }
 
 /**
- * 开发期的说明符改写：插件 dev server 的 {@code qiankunSharedDeps}（@thisnode/plugin-api/vite）
+ * 开发期的说明符改写：插件 dev server 的 {@code qiankunSharedDeps}（@thisnote/plugin-api/vite）
  * 把共享依赖拦截成 `{@link SHARED_DEP_PREFIX}` 开头的哨兵路径；这里把它映射回裸名，
  * 让沙箱继续走 modules 表解析到宿主的实例。其余说明符按沙箱默认规则处理
  * （URL 相对解析；未知裸名交给 modules 表，找不到就报错——插件不该有别的裸依赖）。
@@ -69,7 +69,7 @@ function sharedSandboxModules(): Promise<Record<string, { namespace: ModuleNames
 function devSharedResolveHook(specifier: string, referrer: string): string {
   if (specifier.startsWith(SHARED_DEP_PREFIX)) {
     const name = decodeURIComponent(specifier.slice(SHARED_DEP_PREFIX.length).split('?')[0])
-    if (name === 'vue' || name === 'vue-router' || name === 'pinia' || name === '@thisnode/plugin-api') return name
+    if (name === 'vue' || name === 'vue-router' || name === 'pinia' || name === '@thisnote/plugin-api') return name
     return specifier
   }
   const isUrlLike =
@@ -100,13 +100,13 @@ function buildHtmlEntry(moduleSrcUrl: string): string {
 
 /**
  * 界面资源基址：默认**同源**（部署时由界面侧的静态服务在 `/plugin-assets/` 下提供）；
- * 也可以用 `window.__THISNODE_PLUGIN_ASSETS__` 或 localStorage 的
- * `thisnode.pluginAssetsBase` 覆盖到别的源（与 apiBase 同一套优先级）。
+ * 也可以用 `window.__THISNOTE_PLUGIN_ASSETS__` 或 localStorage 的
+ * `thisnote.pluginAssetsBase` 覆盖到别的源（与 apiBase 同一套优先级）。
  */
 function assetsBase(): string {
-  const injected = (window as unknown as { __THISNODE_PLUGIN_ASSETS__?: string }).__THISNODE_PLUGIN_ASSETS__
+  const injected = (window as unknown as { __THISNOTE_PLUGIN_ASSETS__?: string }).__THISNOTE_PLUGIN_ASSETS__
   if (typeof injected === 'string' && injected) return injected.replace(/\/+$/, '')
-  const stored = localStorage.getItem('thisnode.pluginAssetsBase')
+  const stored = localStorage.getItem('thisnote.pluginAssetsBase')
   if (stored) return stored.replace(/\/+$/, '')
   return ''
 }

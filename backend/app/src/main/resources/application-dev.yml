@@ -1,6 +1,6 @@
 # 插件开发模式（profile: dev）
 #
-#   cd backend && java -jar app/target/thisnode-backend.jar --spring.profiles.active=dev
+#   cd backend && java -jar app/target/thisnote-backend.jar --spring.profiles.active=dev
 #
 # 与生产（默认）的差别只有一个：**插件从 target/classes 直接加载，而不是从 runtime/plugins/*.jar**。
 # 于是改插件代码只要重新编译那个模块（IDE 里 Build，或 `mvn -pl plugin-<id> compile`），

@@ -10,7 +10,7 @@ importers:
 
   host:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
       markdown-it:
@@ -65,7 +65,7 @@ importers:
 
   plugins/attachment-importer:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       vue:
@@ -87,7 +87,7 @@ importers:
 
   plugins/baidu-sync:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       vue:
@@ -109,7 +109,7 @@ importers:
 
   plugins/card-importer:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       vue:
@@ -131,7 +131,7 @@ importers:
 
   plugins/favorite:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       vue:
@@ -153,7 +153,7 @@ importers:
 
   plugins/memory-cycle:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       vue:
@@ -175,7 +175,7 @@ importers:
 
   plugins/notes:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       pinia:
@@ -200,7 +200,7 @@ importers:
 
   plugins/state-reset:
     dependencies:
-      '@thisnode/plugin-api':
+      '@thisnote/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
       vue:

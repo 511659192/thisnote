@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useUiStore } from '@/stores/ui'
-import { sidebarPanels_, topbarSearches_ } from '@thisnode/plugin-api'
+import { sidebarPanels_, topbarSearches_ } from '@thisnote/plugin-api'
 
 const ui = useUiStore()
 </script>

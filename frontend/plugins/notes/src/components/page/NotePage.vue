@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
-import { activeCardPlugins, createPreviewImageInteractions, host, onPluginStateChange, toast } from '@thisnode/plugin-api'
+import { activeCardPlugins, createPreviewImageInteractions, host, onPluginStateChange, toast } from '@thisnote/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
 import type { CardView } from '@/api/types'
@@ -536,7 +536,7 @@ function closeCardPreview() {
 }
 
 // 预览图片缩放拖移：滚轮缩放 + 左键拖移作用于浮层内的图片，与复习页共用同一套交互
-//（实现见 @thisnode/plugin-api 的 createPreviewImageInteractions）。
+//（实现见 @thisnote/plugin-api 的 createPreviewImageInteractions）。
 const { onPreviewWheel, onPreviewMouseDown, dispose: disposePreviewInteractions } = createPreviewImageInteractions({
   grabbingClass: 'preview-img-grabbing',
   stopWheelPropagation: true,

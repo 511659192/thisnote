@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { clearActiveListFilter, setActiveListFilter } from '@thisnode/plugin-api'
+import { clearActiveListFilter, setActiveListFilter } from '@thisnote/plugin-api'
 import { useNoteStore } from '@/stores/notes'
 import { FILTER_ID, PLUGIN_ID, matchCount, query as queryState, setQuery } from '../stores/titleSearch'
 

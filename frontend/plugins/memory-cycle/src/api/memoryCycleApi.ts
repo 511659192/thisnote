@@ -1,4 +1,4 @@
-import { http } from '@thisnode/plugin-api'
+import { http } from '@thisnote/plugin-api'
 
 /** 记忆周期插件自己的 API 与类型 —— 属于插件，不属于通用底座。 */
 
@@ -21,7 +21,7 @@ export interface MemoryCycleCardState {
   gradePreview?: Record<string, number>
 }
 
-/** 一次复习记录（插件侧的 schedule-history.json）。 */
+/** 一次复习记录（插件侧的 .schedule-history.json）。 */
 export interface ScheduleHistoryEntry {
   cardId: string
   reviewedAt: number

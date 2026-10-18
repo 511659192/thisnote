@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
  *
  * <p>后端靠 Maven 强制"插件只能看见 plugin-api"（在插件里 import 核心类会**编译失败**）；
  * 界面侧没有等价机制，所以这里用测试守住同一条线：插件界面不得出现 `from '@/…'`
- * 这类核心内部引用，只能用 `@thisnode/plugin-api`。
+ * 这类核心内部引用，只能用 `@thisnote/plugin-api`。
  */
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
 
@@ -24,7 +24,7 @@ function collect(dir: string): string[] {
 }
 
 describe('插件界面边界', () => {
-  it('插件界面只依赖 @thisnode/plugin-api，不得引用核心内部路径', () => {
+  it('插件界面只依赖 @thisnote/plugin-api，不得引用核心内部路径', () => {
     const offenders: string[] = []
     for (const plugin of ['memory-cycle', 'favorite']) {
       const dir = join(repoRoot, 'frontend', 'plugins', plugin)

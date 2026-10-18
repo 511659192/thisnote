@@ -14,12 +14,12 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 三个从代码里明确读出的设计决策：
 
 1. **文件是唯一权威，没有数据库。** 笔记数据以本地 md/json 文件为准；平台侧没有任何表
-   （`backend/app/src/main/java/com/thisnode/ThisnodeApplication.java:12`；插件说明见 `backend/plugins/notes/src/main/resources/application.yml:4`）。
+   （`backend/app/src/main/java/com/thisnote/ThisnoteApplication.java:12`；插件说明见 `backend/plugins/notes/src/main/resources/application.yml:4`）。
 2. **产物分离。** 后端不端出任何静态资源（`backend/app/src/main/resources/application.yml:37-41` 的 `add-mappings: false`），
    界面由界面侧独立构建、交付、提供服务。
 3. **平台不认识业务，业务全在插件里。** 主体按 SBP/PF4J 最佳实践做成纯平台（插件发现/契约校验/启停/健康 + 管理面），
    笔记域本身也是插件（`notes`，`undeactivatable=true`），功能插件各自独立存储
-   （`backend/plugins/notes/src/main/java/com/thisnode/ext/notes/NotesRegister.java:33-35`）。
+   （`backend/plugins/notes/src/main/java/com/thisnote/ext/notes/NotesRegister.java:33-35`）。
 
 术语口径（`frontend/tools/deliver.mjs:13-20` 明确写死了这套叫法）：
 
@@ -37,15 +37,15 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 
 | 项 | 值 | 出处 |
 |---|---|---|
-| 后端端口 | `45917`（可用 `THISNODE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
-| 界面 dev server | `5173`，`/api` 代理到 45917（`THISNODE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
+| 后端端口 | `45917`（可用 `THISNOTE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
+| 界面 dev server | `5173`，`/api` 代理到 45917（`THISNOTE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
 | 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117` | `frontend/host/src/plugins/devPorts.ts:8-16` |
-| 数据根目录 | `${thisnode.data-root:${user.home}/.thisnode}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnode/ext/notes/config/NotesConfig.java:18-20` |
-| 插件契约版本 | `0.0.1` | `backend/plugin-api/src/main/java/com/thisnode/plugin/api/lifecycle/PluginRegister.java:27` |
+| 数据根目录 | `${thisnote.data-root:${user.home}/.thisnote}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnote/ext/notes/config/NotesConfig.java:18-20` |
+| 插件契约版本 | `0.0.1` | `backend/plugin-api/src/main/java/com/thisnote/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
-| 后端日志 | `${user.home}/.thisnode/logs/backend.log` | `backend/app/src/main/resources/application.yml:48` |
+| 后端日志 | `${user.home}/.thisnote/logs/backend.log` | `backend/app/src/main/resources/application.yml:48` |
 | Java / Spring Boot | 21 / 3.5.6 | `backend/pom.xml:8-12,36` |
 | PF4J / SBP | 3.16.0 / 3.5.27 | `backend/pom.xml:37-38` |
 | 前端 | Vue 3.5 / Vite 6.2 / qiankun 3 rc / Pinia 3 / vue-router 4.5 / markdown-it 14 | `frontend/host/package.json:14-30` |
@@ -77,7 +77,7 @@ thisnote/
 ```
 
 `.gitignore` 刻意忽略：`backend/runtime/plugins/`、`frontend/runtime/plugins/`、`backend/plugins-dev/`、
-`frontend/plugins/*/dist/`、`docs/`、`.thisnode/`、各类日志（`.gitignore:18-45`）。
+`frontend/plugins/*/dist/`、`docs/`、`.thisnote/`、各类日志（`.gitignore:18-45`）。
 
 ---
 
@@ -90,7 +90,7 @@ thisnote/
  HTTP 127.0.0.1  │ HealthController  /api/health/get                                  │
    :45917 ──────►│ PluginController  /api/plugins/{get,get-detail,active,reload,       │
                  │                              get-health}                            │
-                 │ ApiExceptionHandler（统一 JSON 错误）  ThisnodeConfig（CORS/JSON/闸门）│
+                 │ ApiExceptionHandler（统一 JSON 错误）  ThisnoteConfig（CORS/JSON/闸门）│
                  │ PluginRegistry / PluginStateService / PluginLifecycle               │
                  └───────────────▲───────────────────────────────▲────────────────────┘
                                  │ 契约（编译期唯一可见）           │ SBP/PF4J 装载
@@ -104,8 +104,8 @@ thisnote/
                         └─────────────────┘              └───────────────────────────────┘
 ```
 
-- 平台组件扫描显式列举 `com.thisnode.api / config / plugin`，**刻意不含 `com.thisnode.ext`**
-  （`ThisnodeApplication.java:21-26`）。
+- 平台组件扫描显式列举 `com.thisnote.api / config / plugin`，**刻意不含 `com.thisnote.ext`**
+  （`ThisnoteApplication.java:21-26`）。
 - 每个插件是独立的 Spring Boot 工程，SBP 给它自己的 `ApplicationContext`（`CardChangedEvent.java:10-17` 有实测说明）；
   控制器由 SBP 挂进主 MVC，所以外部 URL 仍是 `/api/**`（`NotesPlugin.java:17-24`）。
 
@@ -118,7 +118,7 @@ host（qiankun 主应用，:5173）
  ├─ GET /api/plugins/get 取启用列表 → loadMicroApp 逐个装载
  │    ├─ 生产：/plugin-assets/<id>/plugin.js（+ plugin.css）
  │    └─ 开发：http://localhost:<devPort>/index.ts（探活失败回退生产产物）
- └─ 共享依赖经 sandbox.modules 注入：vue / vue-router / pinia / @thisnode/plugin-api
+ └─ 共享依赖经 sandbox.modules 注入：vue / vue-router / pinia / @thisnote/plugin-api
 ```
 
 微应用在 `mount()` 里向注册表登记插槽，`unmount()` 里 `unregisterPlugin(id)` 整体撤销；
@@ -132,8 +132,8 @@ host（qiankun 主应用，:5173）
 
 | 类 | 职责 | 关键点 |
 |---|---|---|
-| `ThisnodeApplication` | 启动 | `@EnableScheduling`；扫描范围不含插件包 |
-| `ThisnodeConfig` | Web 装配 | 宽松 CORS（只监听本机）；`/api/plugins/**` 挂闸门；用 fastjson2 替换 Jackson |
+| `ThisnoteApplication` | 启动 | `@EnableScheduling`；扫描范围不含插件包 |
+| `ThisnoteConfig` | Web 装配 | 宽松 CORS（只监听本机）；`/api/plugins/**` 挂闸门；用 fastjson2 替换 Jackson |
 | `PluginRegistry` | PF4J 直通 + 扩展查询 | **PF4J 是唯一来源**；按 `plugin.requires` 用 `VersionManager` 过滤不满足契约的插件 |
 | `PluginStateService` | 全局启停/重载/健康/管理视图 | 状态真相在 PF4J，不另存标记；不可停用插件拒绝停用与在线重载（409） |
 | `PluginLifecycle` | 启动四阶段 | 发现 → 校验契约 → 激活 → 健康检查；`SmartInitializingSingleton` 时机；结果存 `report()` |
@@ -188,9 +188,9 @@ host（qiankun 主应用，:5173）
 | id | 角色 | 不可停用 | `plugin.requires` | 依赖插件 | 自有存储 |
 |---|---|---|---|---|---|
 | `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=0.0.1` | 无 | `<data-root>/notes/**` |
-| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=0.0.1` | 无 | `notes/plugins/favorite/favorites.properties` |
-| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/scheduling.json`（排期）、`schedule-history.json`（复习历史） |
-| `baidu-sync` | 百度网盘双向同步 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
+| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=0.0.1` | 无 | `notes/plugins/favorite/.favorites.properties` |
+| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/.scheduling.json`（排期）、`.schedule-history.json`（复习历史） |
+| `baidu-sync` | 百度网盘双向同步 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{.credentials,.sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（只通过事件协作） |
 | `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（每轮按引用关系判断） |
 | `state-reset` | 手动发出状态重置事件 | 否 | `>=0.0.1` | 无 | 无（事件触发器） |
@@ -225,7 +225,7 @@ host（qiankun 主应用，:5173）
   （`/create`、`/update`、`/delete`、`/update-content`）；**不使用路径变量**，标识一律 `@RequestParam`
   （`PluginController.java:14-22`，端点形态亦同 `.agent/mem/lessons.md:15`）。
 - **JSON**：全后端统一 fastjson2；`extendMessageConverters` 把 Jackson 转换器摘掉，并把 fastjson2 插到链首
-  （`ThisnodeConfig.java:62-74`）。两个与旧 Jackson 行为对齐的点：
+  （`ThisnoteConfig.java:62-74`）。两个与旧 Jackson 行为对齐的点：
   - 关掉默认的字段名字母序（`JSONFactory.setDefaultWriterAlphabetic(false)`）；
   - `WriteNonStringKeyAsString`：`gradePreview` 那种 `Map<Integer,Long>` 不能写成 `{1:…}` 裸键（非法 JSON）。
 - **错误映射**（`ApiExceptionHandler.java`）：
@@ -248,27 +248,30 @@ host（qiankun 主应用，:5173）
 <data-root>/notes/
 ├── cards/                      卡片（Markdown，一张一个文件，只含正文）
 │   └── <标题>_<n>.md
-├── book/books.json             分组台账（数组）
+├── book/.books.json            分组台账（数组）
 ├── attachments/                <名称>.<png|jpg|webp>（上传生成 uuid；手工放入的其它名字也支持）
-├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
-    ├── notes/note-metadata.json   noteId → NotePO（扁平 map）
-    ├── notes/card-metadata.json   cardId → meta（扁平 map；meta.fileName 即文件名）
-    ├── notes/attachment-metadata.json  fileName → {attachmentId,fileName,originalName,cardId,noteId,w,h,size,contentType,uploadedAt}
+    ├── notes/.note-metadata.json   noteId → NotePO（扁平 map）
+    ├── notes/.card-metadata.json   cardId → meta（扁平 map；meta.fileName 即文件名）
+    ├── notes/.attachment-metadata.json  fileName → {attachmentId,fileName,originalName,cardId,noteId,w,h,size,contentType,uploadedAt}
     └── <pluginId>/              其它插件自己的数据
 ```
 
+- **插件持久化文件统一隐藏命名**：插件状态文件一律以 `.` 开头 —— notes 的 `.note-metadata.json`、
+  `.card-metadata.json`、`.attachment-metadata.json`，favorite 的 `.favorites.properties`，
+  memory-cycle 的 `.scheduling.json` / `.schedule-history.json`，baidu-sync 的 `.credentials.json` /
+  `.sync-state.json`，notes 分组台账 `book/.books.json`。卡片 md 与附件等内容文件保持原命名。
 - **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
-  `notes/plugins/notes/card-metadata.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
+  `notes/plugins/notes/.card-metadata.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
   （`CardPO.java:50-70`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
 - **笔记与卡片都是 ID → 数据**：笔记元数据（title/bookId/cardIds/updatedAt）在
-  `notes/plugins/notes/note-metadata.json` 的 map 里（`NoteRepository.java`），卡片元数据在
-  `card-metadata.json` 里；两者都不依赖物理文件名，标题改名只改数据（卡片文件仍按标题重命名）。
+  `notes/plugins/notes/.note-metadata.json` 的 map 里（`NoteRepository.java`），卡片元数据在
+  `.card-metadata.json` 里；两者都不依赖物理文件名，标题改名只改数据（卡片文件仍按标题重命名）。
 - **笔记列表顺序**：按 `NotePO.updatedAt` 倒序（原来用 meta 文件 mtime）；创建/更新时刷新。
 - **旧格式完全不兼容**：`notes/meta/*.json`、`.note-file-index.json`、`.card-file-index.json` 都不读取、不迁移；
   旧卡片 md 首行的 `<!-- thisnode:meta … -->` 也不再剥离，按普通正文处理。
 - **几何更新只写索引**：拖动/缩放卡片不再改写 md，md 的 mtime 只在正文变化时更新；代价是每次
-  几何提交都会重写整份 `card-metadata.json`（卡片数量大时写入量随之增长）。
+  几何提交都会重写整份 `.card-metadata.json`（卡片数量大时写入量随之增长）。
 - **md 只是正文**：外部把卡片 md 改名后，索引按文件名找不到它 → 该卡片按「无主卡片」处理
   （元数据仍留在索引里成为孤儿条目）。
 - **笔记必须有归属分组**：默认分组固定 `grp-default` / 标题「收集箱」（`BookPO.java:32-33`）；
@@ -281,7 +284,7 @@ host（qiankun 主应用，:5173）
 - **附件**：只接受 png/jpg/webp（扩展名大小写不敏感）；文件名不含路径分隔符，可含空格/括号
   （上传生成 UUID，手工放入的其它名字也能被识别；删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
 - **附件元数据**：上传时、以及导入器「接管」未管理附件时（改名 + 记 `originalName`），把宽高、字节数、
-  MIME、时间写进 `notes/plugins/notes/attachment-metadata.json`（`AttachmentService.java`）；
+  MIME、时间写进 `notes/plugins/notes/.attachment-metadata.json`（`AttachmentService.java`）；
   `cardId` / `noteId` 字段已预留，目前没有卡片/笔记上下文，值为 null。附件被删除时同步移除条目；
   `ImageSize.of()` 读不出尺寸时宽高记 0。
   正文引用写法是 `../attachments/<文件名>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
@@ -336,7 +339,7 @@ host（qiankun 主应用，:5173）
 到期口径：**自然天**。`due` / `get-due` / `get-due-count` 都按「排期落在今天或更早」计算（边界是明天 0 点），
 不比较当前时分秒；`schedule.due` 字段同样按自然天给出。
 
-复习历史（`schedule-history.json`）是「是否到期」的依据：开启记忆曲线时立即写一条 `grade=0`（dueAt=当时）、
+复习历史（`.schedule-history.json`）是「是否到期」的依据：开启记忆曲线时立即写一条 `grade=0`（dueAt=当时）、
 每次评分写一条 `grade=1..4`（dueAt=按评分算出的下次时间），前端「今日到期」只读这张表（无历史的新卡片才回退排期）。
 
 **baidu-sync**：`GET .../get-settings`、`POST .../update-settings`、`GET .../get-authorization-url`、
@@ -359,7 +362,7 @@ host（qiankun 主应用，:5173）
   （`CardService.java:162-174`；`CardAttachmentCleanupListener.java:20-25`；`CardChangedEventListener.java:22-31`）。
 
 **favorite**
-- 只存「哪些 noteId 被收藏」，状态文件是 Java `Properties`（`notes/plugins/favorite/favorites.properties`）。
+- 只存「哪些 noteId 被收藏」，状态文件是 Java `Properties`（`notes/plugins/favorite/.favorites.properties`）。
 - 端点只回 id，不读笔记数据 → 不依赖 notes（`FavoriteController.java:16-20`）。
 - 订阅 `NoteChangedEvent(DELETED)` 清理收藏记录（`NoteChangedEventListener.java:17-22`）。
 
@@ -401,7 +404,7 @@ host（qiankun 主应用，:5173）
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
-- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json` 与 `schedule-history.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；notes → 把 `note-metadata.json`、`card-metadata.json` 与 `attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
+- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `.favorites.properties`；memory-cycle → `{}` 的 `.scheduling.json` 与 `.schedule-history.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `.sync-state.json`（保留 `.credentials.json`，同步进行中跳过）；notes → 把 `.note-metadata.json`、`.card-metadata.json` 与 `.attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
 
 ---
 
@@ -413,8 +416,8 @@ host（qiankun 主应用，:5173）
 
 | 包 | 作用 |
 |---|---|
-| `frontend/host` (`thisnode-frontend`) | 主应用：壳、设置页、qiankun 装载器、Markdown 渲染与格式化服务 |
-| `frontend/plugin-api` (`@thisnode/plugin-api`) | **界面侧唯一契约**：注册表、可用性桥、插件管理客户端、HTTP、宿主服务、shell 状态、vite 共享依赖插件；2026-10-18 起另含跨插件共享 UI（`ConfirmDialog`、`createPreviewImageInteractions`、`createPluginLifecycle`）—— 源码形态进宿主模块图，样式随宿主 CSS 全局生效 |
+| `frontend/host` (`thisnote-frontend`) | 主应用：壳、设置页、qiankun 装载器、Markdown 渲染与格式化服务 |
+| `frontend/plugin-api` (`@thisnote/plugin-api`) | **界面侧唯一契约**：注册表、可用性桥、插件管理客户端、HTTP、宿主服务、shell 状态、vite 共享依赖插件；2026-10-18 起另含跨插件共享 UI（`ConfirmDialog`、`createPreviewImageInteractions`、`createPluginLifecycle`）—— 源码形态进宿主模块图，样式随宿主 CSS 全局生效 |
 | `frontend/plugins/*` | 各自的微应用；产物 `plugin.js` + `plugin.css` + 分片 |
 
 ### 6.2 主应用启动顺序（很重要，深链接靠它）
@@ -435,8 +438,8 @@ host（qiankun 主应用，:5173）
 ### 6.3 微应用装载器（`frontend/host/src/plugins/loader.ts`）
 
 - **入口**：运行时生成 blob HTML，里面只有一个绝对地址的 module script（`:96-99`）。
-- **共享模块**：宿主把 `vue / vue-router / pinia / @thisnode/plugin-api` 的**模块命名空间**注入
-  `sandbox.modules`（`:40-61`）。开发期还有 `resolveHook` 把 `@thisnode/plugin-api/vite` 的哨兵路径
+- **共享模块**：宿主把 `vue / vue-router / pinia / @thisnote/plugin-api` 的**模块命名空间**注入
+  `sandbox.modules`（`:40-61`）。开发期还有 `resolveHook` 把 `@thisnote/plugin-api/vite` 的哨兵路径
   （`/@qk-shared/<name>`）映射回裸名（`:69-86`；契约见 `frontend/plugin-api/vite.ts:17-20`）。
   这是为了避免「两个 Vue / 两个注册表」。
 - **容器**：每个插件一个独立容器 `#plugin-microapp-<id>`，放在 `#plugin-microapps` 下
@@ -485,8 +488,8 @@ host（qiankun 主应用，:5173）
 - `host()`：`notify / formatBytes / formatRelative / MarkdownView`，由核心在启动时 `installHostServices` 注入；
   插件不得 `import '@/…'`（`frontend/plugin-api/src/host.ts:11-35`；有测试守着，见 §8）。
 - `shellState`：主题、toast 队列、侧栏收起；跨微应用共享的模块级 reactive 单例（不是 Pinia），
-  持久化键 `thisnode.theme` / `thisnode.sidebar`（`shell-state.ts:21-57`）。宿主 `useUiStore` 只是它的 Pinia 代理。
-- HTTP：`apiBase` 解析顺序 = 桌面壳注入 `__THISNODE_API__` → `localStorage['thisnode.apiBase']` →
+  持久化键 `thisnote.theme` / `thisnote.sidebar`（`shell-state.ts:21-57`）。宿主 `useUiStore` 只是它的 Pinia 代理。
+- HTTP：`apiBase` 解析顺序 = 桌面壳注入 `__THISNOTE_API__` → `localStorage['thisnote.apiBase']` →
   同源（5173/无端口）→ `http://127.0.0.1:45917`（`http.ts:12-26`）；
   `waitForBackend()` 并发去重，供「重试连接」复用（`:119-147`）。
 
@@ -501,7 +504,7 @@ host（qiankun 主应用，:5173）
   自动排版、图片预览缩放（`:37-50,563-737`）。
 - **卡片（`NoteCard.vue`）**：没有标题字段，卡片名就是正文里的标题；默认渲染 Markdown，编辑时就地显示源码；
   粘贴图片/ Markdown 文件、按内容自动调高（`NoteCard.vue:12-22,187-320,341-495`）。
-- **视口**：按笔记持久化到 `localStorage['thisnode.page.viewport.<noteId>']`，防抖 300ms + 卸载前刷写
+- **视口**：按笔记持久化到 `localStorage['thisnote.page.viewport.<noteId>']`，防抖 300ms + 卸载前刷写
   （`notePage.ts:481-524`）；网格/吸附偏好也持久化（`:552-560`）。
 - **保存策略**：几何写是乐观的（跟手），手势结束才批量 `batch-update`；失败就 toast + 重新载入（`notePage.ts:237-261`）；
   正文写带基线，409 时提示并重载（`:388-423`）。
@@ -522,7 +525,7 @@ host（qiankun 主应用，:5173）
 或历史上任意一条排期落在今天；默认 3 列，卡片列表不展示历史）、
 **开启记忆**（所有开启记忆周期的卡片，默认 5 列，可切 3/5 列）；四档按钮标注「下次出现」；
 短周期卡在队列内轮询重现，长周期卡移出视图；键盘 1-4 作用于最上方卡片；预览浮层显示完整复习历史；
-查不到正文的排期按孤儿处理并调 `delete-schedule` 清理。复习历史由后端 `schedule-history.json` 记录（每卡最多 200 条）。
+查不到正文的排期按孤儿处理并调 `delete-schedule` 清理。复习历史由后端 `.schedule-history.json` 记录（每卡最多 200 条）。
 
 ### 6.8 构建与交付
 
@@ -539,8 +542,8 @@ host（qiankun 主应用，:5173）
 
 ```powershell
 cd backend
-mvn package                                     # 产出 app/target/thisnode-backend.jar，并把插件 jar 拷到 runtime/plugins/
-java -jar app/target/thisnode-backend.jar       # 默认 profile，端口 45917（日志见 backend/app/backend-run.log:20-22）
+mvn package                                     # 产出 app/target/thisnote-backend.jar，并把插件 jar 拷到 runtime/plugins/
+java -jar app/target/thisnote-backend.jar       # 默认 profile，端口 45917（日志见 backend/app/backend-run.log:20-22）
 ```
 
 插件开发模式：
@@ -548,7 +551,7 @@ java -jar app/target/thisnode-backend.jar       # 默认 profile，端口 45917�
 ```powershell
 mvn compile                                     # 先有各模块 target/classes
 powershell -File tools\dev_plugins.ps1          # 生成 plugins-dev（目录联接）
-java -jar app/target/thisnode-backend.jar --spring.profiles.active=dev
+java -jar app/target/thisnote-backend.jar --spring.profiles.active=dev
 ```
 
 **界面侧**
@@ -557,11 +560,11 @@ java -jar app/target/thisnode-backend.jar --spring.profiles.active=dev
 cd frontend
 pnpm install
 pnpm dev                                        # 宿主 5173 + 各插件 dev server（端口见 devPorts.ts）
-pnpm --filter thisnode-frontend build           # 仅宿主
+pnpm --filter thisnote-frontend build           # 仅宿主
 pnpm -r build                                   # 各包构建（插件 build 已接 deliver.mjs）
 ```
 
-**数据**：默认 `%USERPROFILE%\.thisnode\notes`；删库/换库就是换这个目录（不要在应用运行时手工改索引文件）。
+**数据**：默认 `%USERPROFILE%\.thisnote\notes`；删库/换库就是换这个目录（不要在应用运行时手工改索引文件）。
 
 ---
 
@@ -569,8 +572,8 @@ pnpm -r build                                   # 各包构建（插件 build �
 
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
-| `backend/app/src/test/java/com/thisnode/plugin/PluginJarContractTest.java` | 5 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
-| `frontend/host/tests/markdown.test.ts` | HTML 转义、标题/列表/表格/任务项、`plainText`/`firstHeading`/`wordCount` | `pnpm --filter thisnode-frontend test` |
+| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 5 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
+| `frontend/host/tests/markdown.test.ts` | HTML 转义、标题/列表/表格/任务项、`plainText`/`firstHeading`/`wordCount` | `pnpm --filter thisnote-frontend test` |
 | `frontend/host/tests/plugin_boundary.test.ts` | 插件界面不得出现 `from '@/…'`（只检查 memory-cycle、favorite 两个目录） | 同上 |
 | `frontend/host/tools/*.mjs` | 约 20 个 Playwright/HTTP 手动探针（卡片模式、拖拽、标题改名、插件管理、qiankun 冒烟等） | 手工 `node tools/xxx.mjs`，**未接进 `test` 脚本** |
 | `scripts/seed-notes.mjs` | 通过 HTTP API 批量造笔记/卡片 | `node scripts/seed-notes.mjs [n]` |
@@ -643,21 +646,21 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 5. 在两个 `onPluginBootstrap` / `afterPluginBootstrap` 里：`ctx.registerBean(FileHelper.class, …)`；
    需要跨插件监听就 `new` 一个 listener 注册到 `getMainApplicationContext()`，并在 `stop()` 里摘掉。
 6. 端点放 `/api/plugins/<pluginId>/…`；业务异常用 `plugin-api` 的契约异常。
-7. 数据路径：`${thisnode.data-root}` → `notes/plugins/<pluginId>/`，不要自造根目录。
+7. 数据路径：`${thisnote.data-root}` → `notes/plugins/<pluginId>/`，不要自造根目录。
 8. `backend/tools/dev_plugins.ps1` 的 `$plugins` 表加一行（dev 模式需要）。
 9. `PluginJarContractTest` 的 `@CsvSource` 加一行（否则新 jar 没有契约测试覆盖）。
 
 ### 新增界面微应用
 
 1. `frontend/plugins/<id>/{package.json,vite.config.ts,index.ts,index.html,src/**}`；
-   包名 `@thisnode/plugin-<id>`；`vite.config.ts` 用 `vue() + qiankun() + qiankunSharedDeps()`，
+   包名 `@thisnote/plugin-<id>`；`vite.config.ts` 用 `vue() + qiankun() + qiankunSharedDeps()`，
    `build.lib` 入口 `index.ts`、ES、`plugin.js`、`plugin.css`，`external` 四个共享依赖。
 2. `frontend/pnpm-workspace.yaml` 加包路径；根 `frontend/package.json` 的 `dev:plugins` 视情况加过滤。
 3. `vite.config.ts` 固定端口 + `frontend/host/src/plugins/devPorts.ts` 登记同一端口。
 4. `index.ts` 导出 `bootstrap/mount/unmount`；`mount` 里 `register*`，`unmount` 里 `unregisterPlugin(id)`；
    独立运行时（`!window.__POWERED_BY_QIANKUN__`）import 即注册，便于单独调试。
-5. 只能 `import '@thisnode/plugin-api'` 与包内相对路径，**不得** `import '@/…'`；需要宿主能力用 `host()`。
-6. 插件自己的 API/类型放 `src/api/`，不要塞进 `@thisnode/plugin-api`（底座只认通用管理面）。
+5. 只能 `import '@thisnote/plugin-api'` 与包内相对路径，**不得** `import '@/…'`；需要宿主能力用 `host()`。
+6. 插件自己的 API/类型放 `src/api/`，不要塞进 `@thisnote/plugin-api`（底座只认通用管理面）。
 
 ### 改动公开契约时
 

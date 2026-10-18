@@ -5,14 +5,14 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.thisnode</groupId>
-    <artifactId>thisnode-parent</artifactId>
+    <groupId>com.thisnote</groupId>
+    <artifactId>thisnote-parent</artifactId>
     <version>0.1.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>plugin-memory-cycle</artifactId>
-  <name>thisnode-plugin-memory-cycle</name>
+  <name>thisnote-plugin-memory-cycle</name>
   <properties>
     <plugin.id>memory-cycle</plugin.id>
   </properties>
@@ -27,7 +27,7 @@
   -->
   <dependencies>
     <dependency>
-      <groupId>com.thisnode</groupId>
+      <groupId>com.thisnote</groupId>
       <artifactId>plugin-api</artifactId>
     </dependency>
 
@@ -76,7 +76,7 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
           <classifier>standalone</classifier>
-          <mainClass>com.thisnode.ext.memorycycle.MemoryCycleStarter</mainClass>
+          <mainClass>com.thisnote.ext.memorycycle.MemoryCycleStarter</mainClass>
         </configuration>
       </plugin>
 

@@ -5,15 +5,15 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.thisnode</groupId>
-    <artifactId>thisnode-parent</artifactId>
+    <groupId>com.thisnote</groupId>
+    <artifactId>thisnote-parent</artifactId>
     <version>0.1.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>thisnode-backend</artifactId>
-  <name>thisnode-backend</name>
-  <description>thisnode local backend (REST + SQLite/MySQL + Markdown mirror)</description>
+  <artifactId>thisnote-backend</artifactId>
+  <name>thisnote-backend</name>
+  <description>thisnote local backend (REST + SQLite/MySQL + Markdown mirror)</description>
 
   <dependencies>
     <!-- 插件契约 + 插件侧共享支持。插件本体（favorite / memory-cycle / baidu-pan）**不在**这里：
@@ -22,7 +22,7 @@
 
          （与 sbp-core 同样的共享方式）。 -->
     <dependency>
-      <groupId>com.thisnode</groupId>
+      <groupId>com.thisnote</groupId>
       <artifactId>plugin-api</artifactId>
     </dependency>
 
@@ -83,7 +83,7 @@
   </dependencies>
 
   <build>
-    <finalName>thisnode-backend</finalName>
+    <finalName>thisnote-backend</finalName>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>
@@ -93,7 +93,7 @@
       <!--
         交付形态是两份东西：应用 jar + backend/runtime/plugins/ 目录里的插件 jar。
         插件 jar 由各自模块产出，这里在 package 阶段把它们拷到 runtime/plugins/，
-        所以 `mvn package` 之后从 backend/ 直接 `java -jar app/target/thisnode-backend.jar` 就能用，
+        所以 `mvn package` 之后从 backend/ 直接 `java -jar app/target/thisnote-backend.jar` 就能用，
         不需要手工 cp。destFileName 固定成与 plugin.properties 里 plugin.id 一致的名字。
         单独构建本模块时（-pl app）插件不在反应堆里，用 -am 或先跑整仓构建。
       -->

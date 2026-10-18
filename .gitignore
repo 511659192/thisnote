@@ -4,7 +4,9 @@ frontend/host/dist/
 frontend/host/.vite/
 frontend/host/coverage/
 frontend/host/pnpm-lock.yaml
+.vite/
 *.tsbuildinfo
+*.iml
 
 # ---------- java / backend ----------
 # 注意：gitignore 不支持行内 # 注释，注释必须独立成行，否则整行变成字面文件名规则
@@ -23,11 +25,12 @@ backend/runtime/plugins/
 frontend/runtime/plugins/
 backend/plugins-dev/
 
-# ---------- 历史：outDir 曾少写 backend/ 时误落的产物目录（防再生成） ----------
+# ---------- 历史：outDir 曾少写 backend/ 时误落的产物目录（防再生成；plugin-api 是源码，放行） ----------
 frontend/plugin-*/
+!frontend/plugin-api/
 
 # ---------- runtime data (never commit user notes) ----------
-.thisnode/
+.thisnote/
 *.db
 *.db-wal
 *.db-shm
@@ -36,6 +39,8 @@ attachments/
 snapshots/
 
 # ---------- local tooling ----------
+.agent/tmp_*
+.codex/
 tools/__pycache__/
 *.pyc
 .vscode/
@@ -43,3 +48,5 @@ tools/__pycache__/
 *.log
 docs/
 graphify-out/
+Thumbs.db
+.DS_Store

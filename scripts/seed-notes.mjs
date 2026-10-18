@@ -1,5 +1,5 @@
 const DEFAULT_NOTE_COUNT = 1000
-const BASE_URL = (process.env.THISNODE_BASE_URL ?? 'http://127.0.0.1:45917').replace(/\/+$/, '')
+const BASE_URL = (process.env.THISNOTE_BASE_URL ?? 'http://127.0.0.1:45917').replace(/\/+$/, '')
 const NOTE_COUNT = Number(process.argv[2] ?? DEFAULT_NOTE_COUNT)
 
 if (!Number.isInteger(NOTE_COUNT) || NOTE_COUNT < 1) {

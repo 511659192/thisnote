@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { bookApi } from '@/api'
 import type { NoteDto, Book } from '@/api/types'
-import { activeListFilter_, getNoteListFilter, toast } from '@thisnode/plugin-api'
+import { activeListFilter_, getNoteListFilter, toast } from '@thisnote/plugin-api'
 
 /** Notes: list, selection, notebook navigation and title updates. */
 export const useNoteStore = defineStore('notes', () => {
@@ -119,11 +119,13 @@ export const useNoteStore = defineStore('notes', () => {
 
   /** 回到「全部笔记」：清掉分组限定，重新拉列表。 */
   function showAll() {
+    stopBatchSelect()
     activeBookId.value = null
     void loadList()
   }
 
   function setBook(id: string | null) {
+    stopBatchSelect()
     activeBookId.value = id
     void loadList()
   }

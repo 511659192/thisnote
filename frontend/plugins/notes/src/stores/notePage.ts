@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { pageApi, type CardUpdate } from '@/api/page'
-import { ApiError, toast } from '@thisnode/plugin-api'
+import { ApiError, toast } from '@thisnote/plugin-api'
 import type { Card, CardView } from '@/api/types'
 import { useNoteStore } from '@/stores/notes'
 
@@ -479,7 +479,7 @@ export const usePageStore = defineStore('notePage', () => {
   // 视口按笔记持久化：刷新 / 换页回来还在原来的中心点。拖拽时每帧都会变，防抖落盘。
 
   function viewportKey(id: string) {
-    return `thisnode.page.viewport.${id}`
+    return `thisnote.page.viewport.${id}`
   }
 
   let saveViewportTimer: ReturnType<typeof setTimeout> | null = null

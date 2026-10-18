@@ -1,5 +1,5 @@
 server:
-  port: ${THISNODE_PORT:45917}
+  port: ${THISNOTE_PORT:45917}
   address: 127.0.0.1
   shutdown: graceful
 
@@ -43,6 +43,6 @@ spring:
 logging:
   level:
     root: INFO
-    com.thisnode: DEBUG
+    com.thisnote: DEBUG
   file:
-    name: ${user.home}/.thisnode/logs/backend.log
+    name: ${user.home}/.thisnote/logs/backend.log

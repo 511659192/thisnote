@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
-import { pluginRoutes } from '@thisnode/plugin-api'
+import { pluginRoutes } from '@thisnote/plugin-api'
 
 /**
  * 装载占位页：业务路由（/notes、/notes/:id…）由业务域微应用在 mount 时登记，
