@@ -40,6 +40,11 @@ async function createNote() {
   if (detail) await router.push(`/notes/${detail.noteId}`)
 }
 
+function toggleBatch() {
+  if (nodes.batchSelecting) nodes.stopBatchSelect()
+  else nodes.startBatchSelect()
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     query.value = ''
@@ -64,10 +69,14 @@ function onKeydown(e: KeyboardEvent) {
       <span v-if="query && matchCount !== null" class="count">{{ matchCount }} 篇</span>
       <button v-if="query" class="clear" title="清空 (Esc)" @click="query = ''">×</button>
     </div>
-    <button class="new-note" type="button" title="新建笔记" @click="createNote">
-      <span class="plus">＋</span>
-      <span>新建笔记</span>
-    </button>
+    <button
+      class="batch"
+      type="button"
+      :class="{ active: nodes.batchSelecting }"
+      :title="nodes.batchSelecting ? '退出批量操作' : '批量操作'"
+      @click="toggleBatch"
+    >☑</button>
+    <button class="new-note" type="button" title="新建笔记" @click="createNote">＋</button>
   </div>
 </template>
 
@@ -100,24 +109,42 @@ function onKeydown(e: KeyboardEvent) {
 }
 .new-note {
   flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: grid;
+  place-items: center;
+  width: 28px;
   height: 28px;
-  padding: 0 8px;
+  border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 17px;
+  line-height: 1;
+}
+.batch {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 14px;
+  line-height: 1;
+}
+.batch:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--c-border));
+  color: var(--c-text);
+}
+.batch.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .new-note:hover {
-  filter: brightness(1.07);
-}
-.new-note .plus {
-  font-size: 15px;
-  line-height: 1;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--c-border));
+  color: var(--accent);
 }
 .title-search .ico {
   flex: 0 0 auto;

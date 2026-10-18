@@ -30,22 +30,16 @@ const page = usePageStore()
 const renamingId = ref<string | null>(null)
 const titleDraft = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
-const selecting = ref(false)
-const selected = ref<string[]>([])
+const selecting = computed(() => store.batchSelecting)
+const selected = computed(() => store.batchSelected)
 const moveMenuOpen = ref(false)
 let titleOpenTimer: number | null = null
 let savingNoteId: string | null = null
 
 const allSelected = computed(() => props.nodes.length > 0 && selected.value.length === props.nodes.length)
 
-function startSelecting() {
-  selecting.value = true
-  selected.value = []
-}
-
 function stopSelecting() {
-  selecting.value = false
-  selected.value = []
+  store.stopBatchSelect()
   moveMenuOpen.value = false
 }
 
@@ -54,13 +48,11 @@ function clearSelection() {
 }
 
 function toggleSelected(noteId: string) {
-  selected.value = selected.value.includes(noteId)
-    ? selected.value.filter((id) => id !== noteId)
-    : [...selected.value, noteId]
+  store.toggleBatchSelected(noteId)
 }
 
 function toggleAll() {
-  selected.value = allSelected.value ? [] : props.nodes.map((note) => note.noteId)
+  store.toggleBatchAll(props.nodes.map((note) => note.noteId))
 }
 
 function requestBatchRemove() {
@@ -217,20 +209,15 @@ function askRemove(node: NoteDto) {
         <component :is="h.component" />
       </template>
     </div>
-    <div v-if="allowNoteManagement" class="list-tools">
-      <template v-if="!selecting">
-        <button type="button" class="tool-btn" @click="startSelecting">批量操作</button>
-      </template>
-      <template v-else>
-        <button type="button" class="tool-btn" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</button>
-        <button type="button" class="tool-btn" :disabled="!selected.length" @click="moveMenuOpen = !moveMenuOpen">
-          转入笔记本
-        </button>
-        <button type="button" class="tool-btn danger" :disabled="!selected.length" @click="requestBatchRemove">
-          删除选中{{ selected.length ? `（${selected.length}）` : '' }}
-        </button>
-        <button type="button" class="tool-btn" @click="stopSelecting">取消</button>
-      </template>
+    <div v-if="allowNoteManagement && selecting" class="list-tools">
+      <button type="button" class="tool-btn" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</button>
+      <button type="button" class="tool-btn" :disabled="!selected.length" @click="moveMenuOpen = !moveMenuOpen">
+        转入笔记本
+      </button>
+      <button type="button" class="tool-btn danger" :disabled="!selected.length" @click="requestBatchRemove">
+        删除选中{{ selected.length ? `（${selected.length}）` : '' }}
+      </button>
+      <button type="button" class="tool-btn" @click="stopSelecting">取消</button>
     </div>
     <div v-if="selecting && moveMenuOpen" class="book-menu">
       <button

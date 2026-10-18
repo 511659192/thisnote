@@ -19,6 +19,30 @@ export const useNoteStore = defineStore('notes', () => {
   const listQuery = ref('')
   const selectedIds = ref<string[]>([])
 
+  /** 批量操作模式：入口在列表头部的图标按钮，选中态由列表使用。 */
+  const batchSelecting = ref(false)
+  const batchSelected = ref<string[]>([])
+
+  function startBatchSelect() {
+    batchSelecting.value = true
+    batchSelected.value = []
+  }
+
+  function stopBatchSelect() {
+    batchSelecting.value = false
+    batchSelected.value = []
+  }
+
+  function toggleBatchSelected(noteId: string) {
+    batchSelected.value = batchSelected.value.includes(noteId)
+      ? batchSelected.value.filter((id) => id !== noteId)
+      : [...batchSelected.value, noteId]
+  }
+
+  function toggleBatchAll(ids: string[]) {
+    batchSelected.value = batchSelected.value.length === ids.length ? [] : [...ids]
+  }
+
   let detailToken = 0
 
   const currentId = computed(() => current.value?.noteId ?? null)
@@ -267,6 +291,12 @@ export const useNoteStore = defineStore('notes', () => {
     activeBookId,
     listQuery,
     selectedIds,
+    batchSelecting,
+    batchSelected,
+    startBatchSelect,
+    stopBatchSelect,
+    toggleBatchSelected,
+    toggleBatchAll,
     loadList,
     refreshMeta,
     refreshAll,
