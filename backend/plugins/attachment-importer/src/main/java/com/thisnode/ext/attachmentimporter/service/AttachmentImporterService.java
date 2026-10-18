@@ -1,10 +1,11 @@
 package com.thisnode.ext.attachmentimporter.service;
 
+import com.thisnode.plugin.api.event.AttachmentAdoptEvent;
 import com.thisnode.plugin.api.event.AttachmentQueryEvent;
 import com.thisnode.plugin.api.event.CardChangedEvent;
+import com.thisnode.plugin.api.notes.dto.AttachmentDTO;
 import com.thisnode.plugin.api.notes.dto.CardDTO;
 import com.thisnode.plugin.api.notes.dto.CardMetaDTO;
-import com.thisnode.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
@@ -15,46 +16,33 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Locale;
-import java.util.Map;
+import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 /**
  * 把「没有归属」的图片附件自动变成一篇笔记 + 一张卡片。
  *
- * <p>与 card-importer 同构：本插件只负责发现候选、规范化文件名、提交创建申请；
+ * <p>与 card-importer 同构：本插件只负责发现候选、提交创建申请；
  * 笔记与卡片由 notes 通过 {@link CardChangedEvent#requestCardCreate} 创建。
  *
- * <p>候选 = 没有被任何卡片引用（向 notes 查询，见 {@link AttachmentQueryEvent}）
- * + 文件已存在至少 10 秒（避开「编辑器先传图、卡片稍后才保存」的窗口）。
+ * <p>候选 = notes 通过 {@link AttachmentQueryEvent} 返回的「未被管理的附件」
+ * （attachments 目录里、没有任何卡片引用的 png/jpg）。
  * 不保存导入状态：是否已导入由「有没有卡片引用它」判断。
  *
- * <p>附件只有 {@code <uuid>.<png|jpg>} 才能被界面渲染，所以非规范名会原地改名，
- * 原文件名保留为笔记标题；生成失败时把文件名回滚。
+ * <p>每个候选先经 {@link AttachmentAdoptEvent} 交给 notes：改名为 {@code <uuid>.<ext>}，
+ * 原始文件名记入附件元数据；本插件再按新文件名建卡，标题取原文件名（去掉扩展名）。
  */
 @Slf4j
 @Service
 public class AttachmentImporterService {
 
     private static final long SCAN_INTERVAL_MILLIS = 10_000L;
-    private static final long MIN_AGE_MILLIS = 10_000L;
     private static final long REFERENCE_QUERY_TIMEOUT_SECONDS = 10L;
     private static final String DEFAULT_BOOK_ID = "grp-default";
-
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg");
 
     /**
      * 与界面侧卡片几何保持一致（frontend/plugins/notes/src/stores/notePage.ts 的
@@ -70,18 +58,10 @@ public class AttachmentImporterService {
     private static final double CARD_HORIZONTAL_CHROME = 30d;
     private static final double CARD_VERTICAL_CHROME = 44d;
 
-    /**
-     * 与 {@code AttachmentService.IMAGE_FILE_NAME}、界面侧 Markdown 渲染识别的名字保持一致。
-     */
-    private static final Pattern CANONICAL_FILE_NAME = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg)");
-
-    private final FileHelper fileHelper;
     private final Path attachmentsDir;
     private ApplicationEventPublisher mainEventPublisher;
 
-    public AttachmentImporterService(FileHelper fileHelper,
-                                     @Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.fileHelper = fileHelper;
+    public AttachmentImporterService(@Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
         Path root = Path.of(dataRoot).toAbsolutePath().normalize();
         this.attachmentsDir = root.resolve("notes").resolve("attachments");
     }
@@ -95,136 +75,57 @@ public class AttachmentImporterService {
         try {
             importNewAttachments();
         } catch (RuntimeException e) {
-            log.warn("扫描附件目录失败", e);
+            log.warn("查询未被管理的附件失败", e);
         }
     }
 
     private void importNewAttachments() {
-        if (!Files.isDirectory(attachmentsDir)) {
-            return;
-        }
-        Map<String, Path> attachments = listAttachments();
-        if (attachments.isEmpty()) {
-            return;
-        }
-
-        Set<String> referenced = referencedFileNames();
-        long now = System.currentTimeMillis();
-        for (Map.Entry<String, Path> attachment : attachments.entrySet()) {
-            String fileName = attachment.getKey();
-            if (referenced.contains(fileName)) {
-                continue;
-            }
-            if (!isOldEnough(attachment.getValue(), now)) {
-                continue;
-            }
-            importAttachment(fileName, attachment.getValue());
-        }
-    }
-
-    private void importAttachment(String fileName,
-                                  Path file) {
-        String title = titleOf(fileName);
-        if (title.isBlank()) {
-            log.warn("附件 {} 没有可用作标题的文件名，已跳过", fileName);
-            return;
-        }
-
-        String canonicalName = canonicalName(fileName);
-        boolean renamed = !canonicalName.equals(fileName);
-        Path target = attachmentsDir.resolve(canonicalName);
-        if (renamed) {
-            try {
-                fileHelper.rename(file, target);
-            } catch (RuntimeException e) {
-                log.warn("附件 {} 规范化文件名失败，下一轮重试", fileName, e);
-                return;
-            }
-        }
-
-        // 按图片原始像素尺寸给出初始卡片框体；读不到尺寸时用 notes 的默认宽高。
-        CardMetaDTO meta = imageCardMeta(target);
-        try {
-            mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(new CardDTO(meta, cardContent(title, canonicalName), null), title, DEFAULT_BOOK_ID));
-        } catch (RuntimeException e) {
-            if (renamed) {
-                rollback(target, file);
-            }
-            log.warn("附件 {} 生成笔记/卡片失败，下一轮重试", fileName, e);
-            return;
-        }
-
-        log.info("附件 {} 已生成笔记「{}」（规范化名 {}）", fileName, title, canonicalName);
-    }
-
-    private void rollback(Path target,
-                          Path original) {
-        try {
-            fileHelper.rename(target, original);
-        } catch (RuntimeException e) {
-            log.warn("附件文件名回滚失败：{} → {}", target, original, e);
-        }
-    }
-
-    private Map<String, Path> listAttachments() {
-        Map<String, Path> files = new LinkedHashMap<>();
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(attachmentsDir)) {
-            for (Path path : stream) {
-                String fileName = path.getFileName().toString();
-                if (!isImageFile(fileName)) {
-                    continue;
-                }
-                BasicFileAttributes attributes;
-                try {
-                    attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-                } catch (IOException e) {
-                    continue;
-                }
-                if (attributes.isRegularFile() && attributes.size() > 0) {
-                    files.put(fileName, path);
-                }
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("无法读取附件目录 " + attachmentsDir, e);
-        }
-        return files;
-    }
-
-    private Set<String> referencedFileNames() {
-        CompletableFuture<Set<String>> result = new CompletableFuture<>();
+        CompletableFuture<List<AttachmentDTO>> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new AttachmentQueryEvent(result));
-        return result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
-    }
+        List<AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
 
-    private static boolean isImageFile(String fileName) {
-        if (fileName.startsWith(".")) {
-            return false;
-        }
-        int dot = fileName.lastIndexOf('.');
-        return dot > 0 && IMAGE_EXTENSIONS.contains(fileName.substring(dot + 1).toLowerCase(Locale.ROOT));
-    }
-
-    private static boolean isOldEnough(Path file,
-                                       long now) {
-        try {
-            return Files.getLastModifiedTime(file).toMillis() <= now - MIN_AGE_MILLIS;
-        } catch (IOException e) {
-            return false;
+        for (AttachmentDTO attachment : attachments) {
+            String adopted = adopt(attachment.fileName());
+            if (adopted != null) {
+                importAttachment(attachment.fileName(), adopted);
+            }
         }
     }
 
     /**
-     * 已是规范名就原样使用；否则生成 UUID 名。
+     * 交给 notes 把附件改名为 {@code <uuid>.<ext>}（原名记入元数据），返回新文件名。
      */
-    private static String canonicalName(String fileName) {
-        if (CANONICAL_FILE_NAME.matcher(fileName).matches()) {
-            return fileName;
+    private String adopt(String fileName) {
+        CompletableFuture<AttachmentDTO> result = new CompletableFuture<>();
+        mainEventPublisher.publishEvent(new AttachmentAdoptEvent(result, fileName));
+        try {
+            AttachmentDTO adopted = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+            return adopted == null ? null : adopted.fileName();
+        } catch (RuntimeException e) {
+            log.warn("附件 {} 接管失败，下一轮重试", fileName, e);
+            return null;
         }
-        return UUID.randomUUID() + "." + extensionOf(fileName);
     }
 
-    private static String extensionOf(String fileName) {
-        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+    private void importAttachment(String originalName,
+                                  String fileName) {
+        Path file = attachmentsDir.resolve(fileName);
+        String title = titleOf(originalName);
+        if (title.isBlank()) {
+            log.warn("附件 {} 没有可用作标题的文件名，已跳过", originalName);
+            return;
+        }
+
+        // 按图片原始像素尺寸给出初始卡片框体；读不到尺寸时用 notes 的默认宽高。
+        CardMetaDTO meta = imageCardMeta(file);
+        try {
+            mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(new CardDTO(meta, cardContent(title, fileName), null), title, DEFAULT_BOOK_ID));
+        } catch (RuntimeException e) {
+            log.warn("附件 {} 生成笔记/卡片失败，下一轮重试", originalName, e);
+            return;
+        }
+
+        log.info("附件 {} 已接管为 {}，生成笔记「{}」", originalName, fileName, title);
     }
 
     private static String titleOf(String fileName) {
@@ -233,12 +134,12 @@ public class AttachmentImporterService {
     }
 
     private static String cardContent(String title,
-                                      String canonicalName) {
+                                      String fileName) {
         String alt = title.replace("[", "［").replace("]", "］").replace("\r", " ").replace("\n", " ");
         if (alt.length() > 80) {
             alt = alt.substring(0, 80);
         }
-        return "![" + alt + "](../attachments/" + canonicalName + ")";
+        return "![" + alt + "](<../attachments/" + fileName + ">)";
     }
 
     /**

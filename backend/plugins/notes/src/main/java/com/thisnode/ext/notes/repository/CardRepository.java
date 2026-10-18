@@ -48,7 +48,7 @@ public class CardRepository {
         if (cardId == null || cardId.isBlank()) return null;
 
         // 先读取meta
-        CardMeta meta = readCardIndex(cardId);
+        CardMeta meta = readCardMetadata(cardId);
         if (meta == null || meta.getFileName() == null) return null;
 
         // 组合meta card
@@ -70,9 +70,9 @@ public class CardRepository {
     /**
      * 索引里的全部卡片。
      */
-    public synchronized List<CardPO> getAllIndexed() {
+    public synchronized List<CardPO> getAllManaged() {
         List<CardPO> cards = new ArrayList<>();
-        Map<String, CardMeta> cardMetaMap = readCardIndex();
+        Map<String, CardMeta> cardMetaMap = readCardMetadata();
         for (CardMeta meta : cardMetaMap.values()) {
             if (meta == null || meta.getFileName() == null) continue;
 
@@ -166,7 +166,7 @@ public class CardRepository {
         Path dir = notesConfig.getRootDir().resolve("cards");
         boolean draftTitle = noteTitle == null || noteTitle.isBlank();
         for (String cardId : cardIds) {
-            CardMeta meta = readCardIndex(cardId);
+            CardMeta meta = readCardMetadata(cardId);
             if (meta == null || meta.getFileName() == null) continue;
 
             String oldFileName = meta.getFileName();
@@ -186,7 +186,7 @@ public class CardRepository {
     public synchronized String update(CardMeta meta,
                                       String contentMd,
                                       String cardId) {
-        CardMeta indexed = readCardIndex(cardId);
+        CardMeta indexed = readCardMetadata(cardId);
         if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
@@ -201,7 +201,7 @@ public class CardRepository {
      */
     public synchronized void update(CardMeta meta,
                                     String cardId) {
-        CardMeta indexed = readCardIndex(cardId);
+        CardMeta indexed = readCardMetadata(cardId);
         if (indexed == null || indexed.getFileName() == null) {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
@@ -213,7 +213,7 @@ public class CardRepository {
         if (cardIds == null) return;
 
         for (String cardId : cardIds) {
-            CardMeta meta = readCardIndex(cardId);
+            CardMeta meta = readCardMetadata(cardId);
             if (meta == null) continue;
             deleteIndexMeta(cardId);
             if (meta.getFileName() != null) {
@@ -228,13 +228,13 @@ public class CardRepository {
         return card;
     }
 
-    private CardMeta readCardIndex(String cardId) {
-        return cardId == null ? null : readCardIndex().get(cardId);
+    private CardMeta readCardMetadata(String cardId) {
+        return cardId == null ? null : readCardMetadata().get(cardId);
     }
 
     private Map<String, CardMeta> metaByFileName() {
         Map<String, CardMeta> byFileName = new LinkedHashMap<>();
-        for (CardMeta meta : readCardIndex().values()) {
+        for (CardMeta meta : readCardMetadata().values()) {
             if (meta != null && meta.getFileName() != null) {
                 byFileName.put(meta.getFileName(), meta);
             }
@@ -249,13 +249,13 @@ public class CardRepository {
         if (meta.getFileName() == null || meta.getFileName().isBlank()) {
             throw new IllegalArgumentException("卡片文件名不能为空：" + meta.getCardId());
         }
-        Map<String, CardMeta> metas = readCardIndex();
+        Map<String, CardMeta> metas = readCardMetadata();
         metas.put(meta.getCardId(), meta);
         fileHelper.fileWritten(cardMetadataFile, metas);
     }
 
     private void deleteIndexMeta(String cardId) {
-        Map<String, CardMeta> metas = readCardIndex();
+        Map<String, CardMeta> metas = readCardMetadata();
         if (metas.remove(cardId) != null) {
             fileHelper.fileWritten(cardMetadataFile, metas);
         }
@@ -268,7 +268,7 @@ public class CardRepository {
         fileHelper.fileWritten(cardMetadataFile, new LinkedHashMap<>());
     }
 
-    private Map<String, CardMeta> readCardIndex() {
+    private Map<String, CardMeta> readCardMetadata() {
         try {
             String json = Files.readString(cardMetadataFile, StandardCharsets.UTF_8);
             if (json.isBlank()) {

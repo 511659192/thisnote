@@ -70,20 +70,22 @@ public class CardPO {
     }
 
     /**
-     * 附件元数据：上传时记录的关键信息。
+     * 附件元数据：上传/导入时记录的关键信息。
      *
      * @param attachmentId 附件 ID（文件名里的 UUID）
-     * @param fileName     磁盘文件名（{@code <uuid>.<png|jpg>}，也是索引的 key）
-     * @param cardId       归属卡片 ID（上传时尚无上下文时为 null）
-     * @param noteId       归属笔记 ID（上传时尚无上下文时为 null）
+     * @param fileName     磁盘文件名（png/jpg，也是索引的 key）
+     * @param originalName 改名前/上传时的原始文件名（没有则为 null）
+     * @param cardId       归属卡片 ID（尚无上下文时为 null）
+     * @param noteId       归属笔记 ID（尚无上下文时为 null）
      * @param w            图片宽度（像素；读不出来时为 0）
      * @param h            图片高度（像素；读不出来时为 0）
      * @param size         文件字节数
      * @param contentType  规范化后的 MIME 类型（image/png、image/jpeg）
-     * @param uploadedAt   上传时间（epoch 毫秒）
+     * @param uploadedAt   上传/导入时间（epoch 毫秒）
      */
     public record AttachmentMeta(String attachmentId,
                                  String fileName,
+                                 String originalName,
                                  String cardId,
                                  String noteId,
                                  int w,

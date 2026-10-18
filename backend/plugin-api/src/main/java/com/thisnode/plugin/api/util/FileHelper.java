@@ -118,6 +118,7 @@ public final class FileHelper {
         return moved;
     }
 
+
     private void publishFileChange(FileChangeEvent.Operation operation,
                                    Path file,
                                    Path previousFile) {

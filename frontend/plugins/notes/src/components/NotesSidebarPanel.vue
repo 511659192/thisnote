@@ -130,6 +130,33 @@ function openPluginEntry(path: string) {
   void router.push(path)
 }
 
+/** 拖拽中的笔记 → 悬停的分组 id（用于高亮投放目标）。 */
+const dragOverGroupId = ref<string | null>(null)
+
+function onGroupDragOver(id: string, event: DragEvent) {
+  if (!event.dataTransfer?.types.includes('application/x-thisnote-note')) return
+  event.dataTransfer.dropEffect = 'move'
+  dragOverGroupId.value = id
+}
+
+function onGroupDragLeave(id: string, event: DragEvent) {
+  const target = event.relatedTarget as Node | null
+  if (target && (event.currentTarget as HTMLElement).contains(target)) return
+  if (dragOverGroupId.value === id) dragOverGroupId.value = null
+}
+
+async function onGroupDrop(group: Book, event: DragEvent) {
+  dragOverGroupId.value = null
+  const noteId = event.dataTransfer?.getData('application/x-thisnote-note')
+  if (!noteId) return
+  try {
+    await nodes.moveMany([noteId], group.id)
+    toast(`已转入「${group.title}」`, 'success')
+  } catch (e) {
+    toast(`转入失败：${(e as Error).message}`, 'error')
+  }
+}
+
 // ---------------------------------------------------------------- 分组列表
 
 /** 默认分组的固定 id（与后端 NotebookRepository.DEFAULT_GROUP_ID 一致）。 */
@@ -248,10 +275,13 @@ watch(
             v-for="group in nodes.books"
             :key="group.id"
             class="nav-item group-item"
-            :class="{ active: nodes.activeBookId === group.id }"
+            :class="{ active: nodes.activeBookId === group.id, 'drop-target': dragOverGroupId === group.id }"
             :title="group.title"
             @click="openBook(group.id)"
             @contextmenu.prevent="onGroupContext($event, group)"
+            @dragover.prevent="onGroupDragOver(group.id, $event)"
+            @dragleave="onGroupDragLeave(group.id, $event)"
+            @drop.prevent="onGroupDrop(group, $event)"
           >
             <span class="label">{{ group.title }}</span>
             <span v-if="nodes.bookCounts[group.id]" class="count">{{ nodes.bookCounts[group.id] }}</span>
@@ -388,6 +418,12 @@ watch(
 }
 .nav-item.group-item {
   padding-left: calc(var(--space-2) + 22px);
+}
+.nav-item.group-item.drop-target {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: var(--accent-soft);
+  color: var(--c-text);
 }
 .nav-item:hover {
   background: var(--c-surface-3);

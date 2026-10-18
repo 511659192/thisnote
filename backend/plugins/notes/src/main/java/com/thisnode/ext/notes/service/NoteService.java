@@ -7,6 +7,7 @@ import com.thisnode.ext.notes.model.NotesMapper;
 import com.thisnode.ext.notes.model.request.CreateNoteRequest;
 import com.thisnode.ext.notes.model.request.NoteListRequest;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
+import com.thisnode.ext.notes.repository.BookRepository;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.ext.notes.repository.NoteRepository;
 import com.thisnode.plugin.api.event.CardChangedEvent;
@@ -35,6 +36,7 @@ public class NoteService {
 
     private final NoteRepository noteRepository;
     private final CardRepository cardRepository;
+    private final BookRepository bookRepository;
     private final NotesMapper notesMapper;
     private final AttachmentService attachmentService;
     private ApplicationEventPublisher mainEventPublisher;
@@ -89,6 +91,25 @@ public class NoteService {
         return notesMapper.toNoteDTO(meta);
     }
 
+    /**
+     * 批量转入分组：只改笔记的 bookId，卡片与附件不动。
+     */
+    public synchronized void moveAll(List<String> noteIds, String bookId) {
+        if (noteIds == null || noteIds.isEmpty()) return;
+        if (bookId == null || bookId.isBlank() || bookRepository.getOne(bookId) == null) {
+            throw new IllegalArgumentException("分组不存在：" + bookId);
+        }
+        int moved = 0;
+        for (String noteId : noteIds) {
+            NotePO note = noteRepository.getOne(noteId);
+            if (note == null) continue;
+            note.setBookId(bookId);
+            noteRepository.update(note);
+            moved++;
+        }
+        log.info("将 {} 篇笔记转入分组 {}", moved, bookId);
+    }
+
     public void delete(String id) {
         NotePO meta = noteRepository.getOne(id);
         if (meta == null) {
@@ -110,6 +131,20 @@ public class NoteService {
             attachmentService.deleteIfUnreferenced(removedAttachments);
         }
         log.info("删除笔记 {}「{}」及 {} 张卡片", id, meta.getTitle(), deletedCardIds.size());
+    }
+
+    /**
+     * 批量删除：逐篇走与单篇相同的删除流程（卡片、无引用附件一并处理）。
+     */
+    public synchronized void deleteAll(List<String> noteIds) {
+        if (noteIds == null || noteIds.isEmpty()) return;
+        int deleted = 0;
+        for (String noteId : noteIds) {
+            if (noteId == null || noteId.isBlank()) continue;
+            delete(noteId);
+            deleted++;
+        }
+        log.info("批量删除笔记 {} 篇", deleted);
     }
 
     public NoteDTO get(String id) {

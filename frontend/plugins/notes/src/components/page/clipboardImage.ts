@@ -27,7 +27,7 @@ export async function uploadImageAttachment(image: Blob): Promise<string> {
 }
 
 export async function deleteUnreferencedImageAttachment(markdown: string): Promise<void> {
-  const match = /\.\.\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:png|jpg))/.exec(markdown)
+  const match = /\.\.\/attachments\/([^/\n]+\.(?:png|jpg))/i.exec(markdown)
   if (match) await http.post<void>('/api/notes/attachments/delete', undefined, { fileName: match[1] })
 }
 

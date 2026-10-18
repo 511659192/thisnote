@@ -166,7 +166,8 @@ host（qiankun 主应用，:5173）
 | `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED/REQUEST` |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
-| `event/AttachmentQueryEvent` | `CompletableFuture<Set<String>>`：被任意卡片引用的附件文件名快照，notes 侧监听填充 |
+| `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
+| `event/AttachmentAdoptEvent` | `CompletableFuture<AttachmentDTO>` + `fileName`：接管一个未被管理的附件（改名为 `<uuid>.<ext>`、原名记入元数据），notes 侧监听填充 |
 | `event/PluginStateResetEvent` | 状态重置通知（`sourcePluginId`）：state-reset 插件手动发布，各插件清理并重建自己的状态 |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
@@ -247,12 +248,12 @@ host（qiankun 主应用，:5173）
 ├── cards/                      卡片（Markdown，一张一个文件，只含正文）
 │   └── <标题>_<n>.md
 ├── book/books.json             分组台账（数组）
-├── attachments/                <uuid>.<png|jpg>
+├── attachments/                <名称>.<png|jpg>（上传生成 uuid；手工放入的其它名字也支持）
 ├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
     ├── notes/note-metadata.json   noteId → NotePO（扁平 map）
     ├── notes/card-metadata.json   cardId → meta（扁平 map；meta.fileName 即文件名）
-    ├── notes/attachment-metadata.json  fileName → {attachmentId,fileName,cardId,noteId,w,h,size,contentType,uploadedAt}
+    ├── notes/attachment-metadata.json  fileName → {attachmentId,fileName,originalName,cardId,noteId,w,h,size,contentType,uploadedAt}
     └── <pluginId>/              其它插件自己的数据
 ```
 
@@ -276,12 +277,13 @@ host（qiankun 主应用，:5173）
 - **内容保存的并发基线**：`update-content` 带 `baseContentMd`，磁盘上已不是这一份就回 409，
   **磁盘优先**，不覆盖外部编辑器（Obsidian/VS Code）的改动（`CardService.java:91-118`；
   前端处理见 `frontend/plugins/notes/src/stores/notePage.ts:388-423`）。
-- **附件**：只接受 png/jpg；文件名必须严格匹配 UUID 正则（不含路径分隔符）
-  （删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
-- **附件元数据**：上传时把宽高、字节数、MIME、上传时间写进 `notes/plugins/notes/attachment-metadata.json`
-  （`AttachmentService.java`）；`cardId` / `noteId` 字段已预留，上传接口目前没有卡片/笔记上下文，值为 null。
-  附件被删除时同步移除条目；ImageIO 读不出尺寸时宽高记 0。
-  正文引用写法是 `../attachments/<uuid>.<ext>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
+- **附件**：只接受 png/jpg（扩展名大小写不敏感）；文件名不含路径分隔符，可含空格/括号
+  （上传生成 UUID，手工放入的其它名字也能被识别；删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
+- **附件元数据**：上传时、以及导入器「接管」未管理附件时（改名 + 记 `originalName`），把宽高、字节数、
+  MIME、时间写进 `notes/plugins/notes/attachment-metadata.json`（`AttachmentService.java`）；
+  `cardId` / `noteId` 字段已预留，目前没有卡片/笔记上下文，值为 null。附件被删除时同步移除条目；
+  ImageIO 读不出尺寸时宽高记 0。
+  正文引用写法是 `../attachments/<文件名>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
   `frontend/host/src/components/MarkdownPreview.vue:21-42`）。
 
 ### 5.8 端点清单
@@ -307,6 +309,8 @@ host（qiankun 主应用，:5173）
 | GET | `/api/notes/get-detail?noteId=` | 单篇 meta |
 | POST | `/api/notes/update` | body `{noteId, title}` |
 | POST | `/api/notes/delete?id=` | 连同卡片与无引用附件一起删 |
+| POST | `/api/notes/delete-batch` | body `{noteIds}`，逐篇走单篇删除流程 |
+| POST | `/api/notes/move` | body `{noteIds, bookId}`，只改归属分组 |
 | GET | `/api/notes/cards/get?noteId=&cardIds=a,b` | 省略 `cardIds` = 整页（**返回数组**） |
 | POST | `/api/notes/cards/create` | body 含 `noteId/x/y/w/h/content/color` |
 | POST | `/api/notes/cards/update-content` | body `{noteId, cardId, contentMd, baseContentMd}` |
@@ -376,13 +380,14 @@ host（qiankun 主应用，:5173）
 - 它通过事件查询卡片，不直接读 notes 目录（`.agent/mem/lessons.md:29`；`CardQueryEventListener.java:20-27`）。
 
 **attachment-importer**
-- 候选 = 文件已存在 ≥10 秒 + 没有被任何卡片引用；不保存导入状态，是否已导入由「有没有卡片引用它」判断
-  （`AttachmentImporterService.java`）。
-- 非 UUID 文件名原地改名为 `<uuid>.<ext>`（经 `FileHelper.fileMoved`），原文件名作笔记标题；生成失败则把名字改回去。
+- 候选 = notes 通过 `AttachmentQueryEvent` 返回的未被管理附件（`AttachmentService.unmanagedAttachments()`）；
+  不保存导入状态，是否已导入由「有没有卡片引用它」判断（`AttachmentImporterService.java`）。
+- 每个候选先经 `AttachmentAdoptEvent` 交给 notes：改名为 `<uuid>.<ext>`、原始文件名记入附件元数据；
+  本插件再按新文件名建卡，标题取原文件名（去掉扩展名）（`AttachmentImporterService.java`）。
 - 通过 `CardChangedEvent.requestCardCreate` 交给 notes 建笔记/卡片，归入 `grp-default`；本插件不写笔记数据。
 - 卡片初始框体按图片像素尺寸折算：宽 = min(图片宽, 650) + 30（下限 240、上限 680），高 = 等比高度 + 44（下限 88）；
   ImageIO 读不到尺寸（损坏文件）时用 notes 默认的 720×260。界面侧打开时仍按视口高度封顶（`NotePage.onFitHeight`）。
-- 附件引用快照由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.allReferencedFileNames()`），本插件不解析卡片内容。
+- 未被管理的附件由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.unmanagedAttachments()`），本插件不扫描附件目录、不解析卡片内容。
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。

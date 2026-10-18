@@ -228,6 +228,21 @@ export const useNoteStore = defineStore('notes', () => {
     toast('已彻底删除', 'success')
   }
 
+  async function deleteMany(ids: string[]) {
+    if (!ids.length) return
+    await noteApi.deleteBatch(ids)
+    if (currentId.value && ids.includes(currentId.value)) current.value = null
+    await Promise.all([loadList(), refreshMeta()])
+    toast(`已删除 ${ids.length} 篇笔记`, 'success')
+  }
+
+  async function moveMany(ids: string[], bookId: string) {
+    if (!ids.length) return
+    await noteApi.moveMany(ids, bookId)
+    if (current.value && ids.includes(current.value.noteId)) current.value.bookId = bookId
+    await Promise.all([loadList(), refreshMeta()])
+  }
+
 
   /** Re-read the current note from disk-backed state (after an external edit). */
   async function syncFromServer() {
@@ -269,6 +284,8 @@ export const useNoteStore = defineStore('notes', () => {
     updateCurrent,
     createNode,
     deleteForever,
+    deleteMany,
+    moveMany,
     syncFromServer,
   }
 })

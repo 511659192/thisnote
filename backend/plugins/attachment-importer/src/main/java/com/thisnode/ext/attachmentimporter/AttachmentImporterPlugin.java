@@ -2,7 +2,6 @@ package com.thisnode.ext.attachmentimporter;
 
 import com.thisnode.ext.attachmentimporter.service.AttachmentImporterService;
 import com.thisnode.ext.attachmentimporter.service.PluginStateResetListener;
-import com.thisnode.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -30,12 +29,6 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
     @Override
     protected SpringBootstrap createSpringBootstrap() {
         return new SpringBootstrap(this, AttachmentImporterStarter.class);
-    }
-
-    @Override
-    public void onPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
-        super.onPluginBootstrap(bootstrap, ctx);
-        ctx.registerBean(FileHelper.class, () -> new FileHelper(getMainApplicationContext(), PLUGIN_ID));
     }
 
     @Override

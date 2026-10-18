@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (e: 'open', id: string): void
   (e: 'context', payload: { node: NoteDto; x: number; y: number }): void
   (e: 'remove', id: string): void
+  (e: 'remove-batch', ids: string[]): void
 }>()
 
 const store = useNoteStore()
@@ -29,8 +30,55 @@ const page = usePageStore()
 const renamingId = ref<string | null>(null)
 const titleDraft = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
+const selecting = ref(false)
+const selected = ref<string[]>([])
+const moveMenuOpen = ref(false)
 let titleOpenTimer: number | null = null
 let savingNoteId: string | null = null
+
+const allSelected = computed(() => props.nodes.length > 0 && selected.value.length === props.nodes.length)
+
+function startSelecting() {
+  selecting.value = true
+  selected.value = []
+}
+
+function stopSelecting() {
+  selecting.value = false
+  selected.value = []
+  moveMenuOpen.value = false
+}
+
+function clearSelection() {
+  stopSelecting()
+}
+
+function toggleSelected(noteId: string) {
+  selected.value = selected.value.includes(noteId)
+    ? selected.value.filter((id) => id !== noteId)
+    : [...selected.value, noteId]
+}
+
+function toggleAll() {
+  selected.value = allSelected.value ? [] : props.nodes.map((note) => note.noteId)
+}
+
+function requestBatchRemove() {
+  if (!selected.value.length) return
+  emit('remove-batch', [...selected.value])
+}
+
+async function moveSelected(bookId: string) {
+  if (!selected.value.length) return
+  try {
+    await store.moveMany([...selected.value], bookId)
+    const book = store.books.find((item) => item.id === bookId)
+    toast(`已转入「${book?.title ?? bookId}」`, 'success')
+    stopSelecting()
+  } catch (e) {
+    toast(`转入失败：${(e as Error).message}`, 'error')
+  }
+}
 
 function clearTitleOpenTimer() {
   if (titleOpenTimer === null) return
@@ -43,8 +91,24 @@ function openNote(noteId: string) {
   emit('open', noteId)
 }
 
+/** 把笔记拖到侧栏的分组上即可转入该分组。 */
+function onDragStart(event: DragEvent, note: NoteDto) {
+  if (!props.allowNoteManagement || selecting.value) {
+    event.preventDefault()
+    return
+  }
+  if (!event.dataTransfer) return
+  event.dataTransfer.setData('application/x-thisnote-note', note.noteId)
+  event.dataTransfer.setData('text/plain', note.title)
+  event.dataTransfer.effectAllowed = 'move'
+}
+
 function onTitleClick(event: MouseEvent, note: NoteDto) {
   event.stopPropagation()
+  if (selecting.value) {
+    toggleSelected(note.noteId)
+    return
+  }
   if (event.detail > 1) {
     clearTitleOpenTimer()
     return
@@ -59,6 +123,7 @@ function onTitleClick(event: MouseEvent, note: NoteDto) {
 function onTitleDoubleClick(event: MouseEvent, note: NoteDto) {
   event.stopPropagation()
   event.preventDefault()
+  if (selecting.value) return
   if (props.allowNoteManagement) {
     void startRename(note)
     return
@@ -77,7 +142,7 @@ async function startRename(note: NoteDto) {
   titleInput.value?.select()
 }
 
-defineExpose({ startRename })
+defineExpose({ startRename, clearSelection })
 
 function cancelRename(noteId: string) {
   if (savingNoteId === noteId) return
@@ -152,6 +217,30 @@ function askRemove(node: NoteDto) {
         <component :is="h.component" />
       </template>
     </div>
+    <div v-if="allowNoteManagement" class="list-tools">
+      <template v-if="!selecting">
+        <button type="button" class="tool-btn" @click="startSelecting">批量操作</button>
+      </template>
+      <template v-else>
+        <button type="button" class="tool-btn" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</button>
+        <button type="button" class="tool-btn" :disabled="!selected.length" @click="moveMenuOpen = !moveMenuOpen">
+          转入笔记本
+        </button>
+        <button type="button" class="tool-btn danger" :disabled="!selected.length" @click="requestBatchRemove">
+          删除选中{{ selected.length ? `（${selected.length}）` : '' }}
+        </button>
+        <button type="button" class="tool-btn" @click="stopSelecting">取消</button>
+      </template>
+    </div>
+    <div v-if="selecting && moveMenuOpen" class="book-menu">
+      <button
+        v-for="book in store.books"
+        :key="book.id"
+        type="button"
+        class="tool-btn"
+        @click="moveSelected(book.id)"
+      >{{ book.title }}</button>
+    </div>
     <div class="list-body">
       <div v-if="loading" class="list-loading small muted">加载中…</div>
       <div v-else-if="!nodes.length" class="list-empty">
@@ -162,17 +251,27 @@ function askRemove(node: NoteDto) {
         v-for="n in nodes"
         :key="n.noteId"
         class="note-row"
-        :class="{ active: n.noteId === currentId }"
+        :class="{ active: n.noteId === currentId, selected: selected.includes(n.noteId) }"
         :data-node-id="n.noteId"
+        :draggable="allowNoteManagement && !selecting"
         role="button"
         tabindex="0"
-        @click="openNote(n.noteId)"
-        @keydown.enter.self.prevent="openNote(n.noteId)"
+        @click="selecting ? toggleSelected(n.noteId) : openNote(n.noteId)"
+        @keydown.enter.self.prevent="selecting ? toggleSelected(n.noteId) : openNote(n.noteId)"
         @contextmenu="onContext($event, n)"
+        @dragstart="onDragStart($event, n)"
       >
         <div class="row-1">
           <input
-            v-if="renamingId === n.noteId && allowNoteManagement"
+            v-if="selecting"
+            type="checkbox"
+            class="row-check"
+            :checked="selected.includes(n.noteId)"
+            aria-label="选择笔记"
+            @click.stop="toggleSelected(n.noteId)"
+          />
+          <input
+            v-if="renamingId === n.noteId && allowNoteManagement && !selecting"
             ref="titleInput"
             v-model="titleDraft"
             class="title title-edit"
@@ -192,7 +291,7 @@ function askRemove(node: NoteDto) {
             @dblclick="onTitleDoubleClick($event, n)"
           >{{ n.title.trim() ? n.title : '请输入标题' }}</span>
           <span
-            v-if="allowNoteManagement"
+            v-if="allowNoteManagement && !selecting"
             class="row-del"
             role="button"
             title="彻底删除"
@@ -215,6 +314,56 @@ function askRemove(node: NoteDto) {
   flex: 0 0 auto;
   padding: 4px var(--space-2) 4px;
   border-bottom: 1px solid var(--c-border);
+}
+
+.list-tools {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px var(--space-2);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.book-menu {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px var(--space-2);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface-2);
+}
+
+.tool-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  background: var(--c-surface-3);
+}
+
+.tool-btn.danger {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--c-border));
+  color: var(--danger);
+}
+
+.tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row-check {
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .note-list {
@@ -259,6 +408,9 @@ function askRemove(node: NoteDto) {
 .note-row.active {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.note-row.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .row-1 {
   display: flex;

@@ -1,6 +1,8 @@
 package com.thisnode.ext.notes.controller;
 
 import com.thisnode.ext.notes.model.request.CreateNoteRequest;
+import com.thisnode.ext.notes.model.request.DeleteNotesRequest;
+import com.thisnode.ext.notes.model.request.MoveNotesRequest;
 import com.thisnode.ext.notes.model.request.NoteListRequest;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
 import com.thisnode.ext.notes.service.NoteService;
@@ -44,6 +46,18 @@ public class NoteController {
     @PostMapping("/delete")
     public Map<String, Object> delete(@RequestParam String id) {
         noteService.delete(id);
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/delete-batch")
+    public Map<String, Object> deleteBatch(@RequestBody DeleteNotesRequest req) {
+        noteService.deleteAll(req.noteIds());
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/move")
+    public Map<String, Object> move(@RequestBody MoveNotesRequest req) {
+        noteService.moveAll(req.noteIds(), req.bookId());
         return Map.of("ok", true);
     }
 }

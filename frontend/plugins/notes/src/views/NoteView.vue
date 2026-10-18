@@ -362,6 +362,24 @@ function requestDeleteNote(id: string) {
   )
 }
 
+function requestDeleteNotes(ids: string[]) {
+  if (!allowNoteManagement.value || !ids.length) return
+  askForConfirmation(
+    `彻底删除选中的 ${ids.length} 篇笔记？`,
+    '这些笔记的卡片文件会一起删除，无法恢复。',
+    async () => {
+      try {
+        await nodes.deleteMany(ids)
+        noteListRef.value?.clearSelection()
+        if (nodes.currentId && ids.includes(nodes.currentId)) await router.push('/notes')
+      } catch (e) {
+        toast(`批量删除失败：${(e as Error).message}`, 'error')
+      }
+    },
+    '删除',
+  )
+}
+
 function onPageContext(p: { x: number; y: number; target: 'page' | 'card'; view?: CardView; imageSrc?: string }) {
   const entries: MenuEntry[] = []
   if (p.target === 'card' && p.view) {
@@ -479,6 +497,7 @@ onBeforeUnmount(() => {
           @open="openNode"
           @context="onNodeContext"
           @remove="requestDeleteNote"
+          @remove-batch="requestDeleteNotes"
         />
       </div>
 

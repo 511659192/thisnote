@@ -25,4 +25,8 @@ export const noteApi = {
 
   delete: (id: string) => http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id }),
 
+  deleteBatch: (noteIds: string[]) => http.post<{ ok: boolean }>('/api/notes/delete-batch', { noteIds }),
+
+  moveMany: (noteIds: string[], bookId: string) => http.post<{ ok: boolean }>('/api/notes/move', { noteIds, bookId }),
+
 }
