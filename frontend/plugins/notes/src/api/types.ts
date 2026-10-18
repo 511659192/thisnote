@@ -4,7 +4,6 @@
  */
 
 export interface Book {
-  v: number
   id: string
   type: string
   title: string
@@ -16,7 +15,6 @@ export interface Book {
 
 /** Card metadata returned by the backend inside the Card domain object. */
 export interface CardMeta {
-  v: number
   cardId: string
   sourceFileName?: string | null
   noteId?: string | null
@@ -50,7 +48,6 @@ export interface CardView {
  * 一篇笔记的 meta（后端原样返回的列表行）：没有正文体，摘要与计数是后端写入时算好的缓存。
  */
 export interface NoteDto {
-  v: number
   noteId: string
   title: string
   /** 归属分组 id（单归属，直接取自笔记 meta）；显示用的标题由界面侧台账解析。 */

@@ -42,7 +42,7 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         AttachmentImporterService service = ctx.getBean(AttachmentImporterService.class);
         service.setMainEventPublisher(getMainApplicationContext());
-        stateResetListener = new PluginStateResetListener(service);
+        stateResetListener = new PluginStateResetListener();
         getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 

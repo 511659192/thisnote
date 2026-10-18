@@ -1,24 +1,19 @@
 package com.thisnode.ext.attachmentimporter.service;
 
 import com.thisnode.plugin.api.event.PluginStateResetEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
 /**
- * 状态重置：清空附件导入记录（注册在主容器上，由 state-reset 插件触发）。
+ * 状态重置：本插件没有持久化状态，只记一条日志。
  */
 @Slf4j
-@RequiredArgsConstructor
 public class PluginStateResetListener
         implements ApplicationListener<PayloadApplicationEvent<PluginStateResetEvent>> {
 
-    private final AttachmentImporterService importerService;
-
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
-        importerService.clearState();
-        log.info("收到状态重置事件（来自 {}）：附件导入记录已清空", event.getPayload().sourcePluginId());
+        log.info("收到状态重置事件（来自 {}）：attachment-importer 无自有状态", event.getPayload().sourcePluginId());
     }
 }

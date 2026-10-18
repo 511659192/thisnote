@@ -6,7 +6,6 @@ import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.plugin.api.util.FileHelper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -23,7 +22,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AttachmentService {
 
@@ -36,6 +34,16 @@ public class AttachmentService {
     private final NotesConfig notesConfig;
     private final CardRepository cardRepository;
     private final FileHelper fileHelper;
+    private final Path attachmentMetadataFile;
+
+    public AttachmentService(NotesConfig notesConfig,
+                             CardRepository cardRepository,
+                             FileHelper fileHelper) {
+        this.notesConfig = notesConfig;
+        this.cardRepository = cardRepository;
+        this.fileHelper = fileHelper;
+        this.attachmentMetadataFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".attachment-metadata.json");
+    }
 
     public String save(MultipartFile file) {
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("图片文件为空");
@@ -45,10 +53,11 @@ public class AttachmentService {
         String extension = EXTENSIONS_BY_MEDIA_TYPE.get(mediaType);
         if (extension == null) throw new IllegalArgumentException("不支持的图片格式");
 
-        String fileName = UUID.randomUUID() + "." + extension;
+        String attachmentId = UUID.randomUUID().toString();
+        String fileName = attachmentId + "." + extension;
         Path destination = notesConfig.getRootDir().resolve("attachments").resolve(fileName);
         fileHelper.fileWritten(destination, file);
-        putMetadata(fileName, buildMeta(destination, mediaType));
+        putMetadata(fileName, buildMeta(attachmentId, fileName, destination, mediaType));
         return "../attachments/" + fileName;
     }
 
@@ -100,13 +109,15 @@ public class AttachmentService {
      * 状态重置：把附件索引重写为空 map（附件文件保留）。
      */
     public synchronized void reset() {
-        fileHelper.fileWritten(notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".attachment-index.json"), new LinkedHashMap<>());
+        fileHelper.fileWritten(attachmentMetadataFile, new LinkedHashMap<>());
     }
 
     /**
      * 读取图片尺寸等元数据；ImageIO 读不出来时宽高记 0，不影响文件本身。
      */
-    private CardPO.AttachmentMeta buildMeta(Path file,
+    private CardPO.AttachmentMeta buildMeta(String attachmentId,
+                                            String fileName,
+                                            Path file,
                                             String mediaType) {
         int width = 0;
         int height = 0;
@@ -119,34 +130,33 @@ public class AttachmentService {
         } catch (IOException e) {
             log.warn("读取图片尺寸失败：{}", file, e);
         }
-        return new CardPO.AttachmentMeta(width, height, file.toFile().length(), mediaType, System.currentTimeMillis());
+        return new CardPO.AttachmentMeta(attachmentId, fileName, null, null, width, height, file.toFile().length(), mediaType, System.currentTimeMillis());
     }
 
     private synchronized void putMetadata(String fileName,
                                           CardPO.AttachmentMeta meta) {
         Map<String, CardPO.AttachmentMeta> metas = readMetadata();
         metas.put(fileName, meta);
-        fileHelper.fileWritten(notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".attachment-index.json"), metas);
+        fileHelper.fileWritten(attachmentMetadataFile, metas);
     }
 
     private synchronized void removeMetadata(String fileName) {
         Map<String, CardPO.AttachmentMeta> metas = readMetadata();
         if (metas.remove(fileName) != null) {
-            fileHelper.fileWritten(notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".attachment-index.json"), metas);
+            fileHelper.fileWritten(attachmentMetadataFile, metas);
         }
     }
 
     private Map<String, CardPO.AttachmentMeta> readMetadata() {
-        Path indexFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".attachment-index.json");
         try {
-            String json = Files.readString(indexFile, StandardCharsets.UTF_8);
+            String json = Files.readString(attachmentMetadataFile, StandardCharsets.UTF_8);
             if (json.isBlank()) return new LinkedHashMap<>();
             Map<String, CardPO.AttachmentMeta> metas = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, CardPO.AttachmentMeta>>() {
             });
             return metas == null ? new LinkedHashMap<>() : metas;
         } catch (Exception e) {
-            log.error("附件索引无法解析：{}", indexFile, e);
-            throw new IllegalStateException("附件索引无法解析 " + indexFile, e);
+            log.error("附件索引无法解析：{}", attachmentMetadataFile, e);
+            throw new IllegalStateException("附件索引无法解析 " + attachmentMetadataFile, e);
         }
     }
 

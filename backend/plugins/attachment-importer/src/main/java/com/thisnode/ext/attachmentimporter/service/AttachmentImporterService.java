@@ -1,7 +1,5 @@
 package com.thisnode.ext.attachmentimporter.service;
 
-import com.thisnode.ext.attachmentimporter.model.ImportState;
-import com.thisnode.ext.attachmentimporter.repository.ImportStateRepository;
 import com.thisnode.plugin.api.event.AttachmentQueryEvent;
 import com.thisnode.plugin.api.event.CardChangedEvent;
 import com.thisnode.plugin.api.notes.dto.CardDTO;
@@ -23,10 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -42,9 +38,9 @@ import java.util.regex.Pattern;
  * <p>与 card-importer 同构：本插件只负责发现候选、规范化文件名、提交创建申请；
  * 笔记与卡片由 notes 通过 {@link CardChangedEvent#requestCardCreate} 创建。
  *
- * <p>候选 = 状态文件里没有 + 文件已存在至少 10 秒（避开「编辑器先传图、卡片稍后才保存」的窗口）
- * + 没有被任何卡片引用（向 notes 查询，见 {@link AttachmentQueryEvent}）。
- * 不建历史基线：状态文件缺失时（首次运行/被删除），当前目录里未被引用的图片都会被导入。
+ * <p>候选 = 没有被任何卡片引用（向 notes 查询，见 {@link AttachmentQueryEvent}）
+ * + 文件已存在至少 10 秒（避开「编辑器先传图、卡片稍后才保存」的窗口）。
+ * 不保存导入状态：是否已导入由「有没有卡片引用它」判断。
  *
  * <p>附件只有 {@code <uuid>.<png|jpg>} 才能被界面渲染，所以非规范名会原地改名，
  * 原文件名保留为笔记标题；生成失败时把文件名回滚。
@@ -73,25 +69,18 @@ public class AttachmentImporterService {
      */
     private static final double CARD_HORIZONTAL_CHROME = 30d;
     private static final double CARD_VERTICAL_CHROME = 44d;
-    /**
-     * CardMetaDTO 的版本字段；建卡时只消费 w/h，这个值不参与。
-     */
-    private static final int CARD_META_SCHEMA = 2;
 
     /**
      * 与 {@code AttachmentService.IMAGE_FILE_NAME}、界面侧 Markdown 渲染识别的名字保持一致。
      */
     private static final Pattern CANONICAL_FILE_NAME = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:png|jpg)");
 
-    private final ImportStateRepository stateRepository;
     private final FileHelper fileHelper;
     private final Path attachmentsDir;
     private ApplicationEventPublisher mainEventPublisher;
 
-    public AttachmentImporterService(ImportStateRepository stateRepository,
-                                     FileHelper fileHelper,
+    public AttachmentImporterService(FileHelper fileHelper,
                                      @Value("${thisnode.data-root:${user.home}/.thisnode}") String dataRoot) {
-        this.stateRepository = stateRepository;
         this.fileHelper = fileHelper;
         Path root = Path.of(dataRoot).toAbsolutePath().normalize();
         this.attachmentsDir = root.resolve("notes").resolve("attachments");
@@ -99,12 +88,6 @@ public class AttachmentImporterService {
 
     public void setMainEventPublisher(ApplicationEventPublisher publisher) {
         this.mainEventPublisher = Objects.requireNonNull(publisher);
-    }
-
-    /** 状态重置：清空导入记录，未引用附件会在下一轮扫描重新导入。 */
-    public void clearState() {
-        stateRepository.clear();
-        log.info("附件导入状态已清空");
     }
 
     @Scheduled(fixedDelay = SCAN_INTERVAL_MILLIS, initialDelay = SCAN_INTERVAL_MILLIS)
@@ -121,45 +104,28 @@ public class AttachmentImporterService {
             return;
         }
         Map<String, Path> attachments = listAttachments();
-        // 状态缺失（首次运行或被手动删除）从空状态开始：现有未引用附件会被导入。
-        ImportState state = stateRepository.load();
-        if (state == null) {
-            state = new ImportState();
+        if (attachments.isEmpty()) {
+            return;
         }
 
+        Set<String> referenced = referencedFileNames();
         long now = System.currentTimeMillis();
-        List<Map.Entry<String, Path>> candidates = new ArrayList<>();
         for (Map.Entry<String, Path> attachment : attachments.entrySet()) {
-            if (state.getFiles().containsKey(attachment.getKey())) {
+            String fileName = attachment.getKey();
+            if (referenced.contains(fileName)) {
                 continue;
             }
             if (!isOldEnough(attachment.getValue(), now)) {
                 continue;
             }
-            candidates.add(attachment);
-        }
-        if (candidates.isEmpty()) {
-            return;
-        }
-
-        Set<String> referenced = referencedFileNames();
-        for (Map.Entry<String, Path> candidate : candidates) {
-            String fileName = candidate.getKey();
-            if (referenced.contains(fileName)) {
-                remember(state, fileName, snapshot(candidate.getValue()));
-                log.debug("附件 {} 已被卡片引用，跳过导入", fileName);
-                continue;
-            }
-            importAttachment(state, fileName, candidate.getValue());
+            importAttachment(fileName, attachment.getValue());
         }
     }
 
-    private void importAttachment(ImportState state,
-                                  String fileName,
+    private void importAttachment(String fileName,
                                   Path file) {
         String title = titleOf(fileName);
         if (title.isBlank()) {
-            remember(state, fileName, snapshot(file));
             log.warn("附件 {} 没有可用作标题的文件名，已跳过", fileName);
             return;
         }
@@ -188,26 +154,7 @@ public class AttachmentImporterService {
             return;
         }
 
-        ImportState.ImportedFile imported = snapshot(target);
-        imported.setNoteTitle(title);
-        if (renamed) {
-            imported.setSourceFileName(fileName);
-        }
-        remember(state, canonicalName, imported);
-        if (renamed) {
-            remember(state, fileName, imported);
-        }
         log.info("附件 {} 已生成笔记「{}」（规范化名 {}）", fileName, title, canonicalName);
-    }
-
-    /**
-     * 记录一条状态并立即落盘：导入过程中崩溃时，已处理的文件不会在下一轮被重复导入。
-     */
-    private void remember(ImportState state,
-                          String fileName,
-                          ImportState.ImportedFile entry) {
-        state.getFiles().put(fileName, entry);
-        stateRepository.save(state);
     }
 
     private void rollback(Path target,
@@ -312,7 +259,7 @@ public class AttachmentImporterService {
         double renderedHeight = naturalHeight * (renderedWidth / naturalWidth);
         double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, Math.min(MAX_CARD_WIDTH, renderedWidth + CARD_HORIZONTAL_CHROME)));
         double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, renderedHeight + CARD_VERTICAL_CHROME));
-        return new CardMetaDTO(CARD_META_SCHEMA, null, null, null, 0d, 0d, cardWidth, cardHeight, 0, null, null, false, null);
+        return new CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, 0, null, null, false, null);
     }
 
     private static double[] imagePixelSize(Path file) {
@@ -337,17 +284,5 @@ public class AttachmentImporterService {
             log.debug("读取图片尺寸失败：{}", file, e);
             return null;
         }
-    }
-
-    private static ImportState.ImportedFile snapshot(Path file) {
-        ImportState.ImportedFile entry = new ImportState.ImportedFile();
-        try {
-            BasicFileAttributes attributes = Files.readAttributes(file, BasicFileAttributes.class);
-            entry.setSize(attributes.size());
-            entry.setModifiedAt(attributes.lastModifiedTime().toMillis());
-        } catch (IOException e) {
-            log.debug("读取附件属性失败：{}", file, e);
-        }
-        return entry;
     }
 }

@@ -171,7 +171,7 @@ host（qiankun 主应用，:5173）
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
-| `notes/dto/*` | `NoteDTO(v,noteId,title,bookId,cardIds)`、`CardDTO(meta,content,sourceFileName)`、`CardMetaDTO`、`BookDTO` |
+| `notes/dto/*` | `NoteDTO(noteId,title,bookId,cardIds)`、`CardDTO(meta,content,sourceFileName)`、`CardMetaDTO`、`BookDTO` |
 
 契约包的依赖刻意压到最小（pf4j / spring-context / spring-web / fastjson2 / hutool / guava / lombok，
 `backend/plugin-api/pom.xml:22-60`），不把实现技术栈强加给插件作者。
@@ -190,7 +190,7 @@ host（qiankun 主应用，:5173）
 | `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
 | `baidu-sync` | 百度网盘双向同步 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（只通过事件协作） |
-| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | `notes/plugins/attachment-importer/imported.json`（仅导入状态） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（每轮按引用关系判断） |
 | `state-reset` | 手动发出状态重置事件 | 否 | `>=0.0.1` | 无 | 无（事件触发器） |
 
 出处：各模块 `src/main/resources/plugin.properties`。
@@ -250,23 +250,23 @@ host（qiankun 主应用，:5173）
 ├── attachments/                <uuid>.<png|jpg>
 ├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
-    ├── notes/.note-index.json   noteId → NotePO（扁平 map）
-    ├── notes/.card-index.json   cardId → meta（扁平 map；meta.fileName 即文件名）
-    ├── notes/.attachment-index.json  fileName → {w,h,size,contentType,uploadedAt}
+    ├── notes/note-metadata.json   noteId → NotePO（扁平 map）
+    ├── notes/card-metadata.json   cardId → meta（扁平 map；meta.fileName 即文件名）
+    ├── notes/attachment-metadata.json  fileName → {attachmentId,fileName,cardId,noteId,w,h,size,contentType,uploadedAt}
     └── <pluginId>/              其它插件自己的数据
 ```
 
 - **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
-  `notes/plugins/notes/.card-index.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
+  `notes/plugins/notes/card-metadata.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
   （`CardPO.java:50-70`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
 - **笔记与卡片都是 ID → 数据**：笔记元数据（title/bookId/cardIds/updatedAt）在
-  `notes/plugins/notes/.note-index.json` 的 map 里（`NoteRepository.java`），卡片元数据在
-  `.card-index.json` 里；两者都不依赖物理文件名，标题改名只改数据（卡片文件仍按标题重命名）。
+  `notes/plugins/notes/note-metadata.json` 的 map 里（`NoteRepository.java`），卡片元数据在
+  `card-metadata.json` 里；两者都不依赖物理文件名，标题改名只改数据（卡片文件仍按标题重命名）。
 - **笔记列表顺序**：按 `NotePO.updatedAt` 倒序（原来用 meta 文件 mtime）；创建/更新时刷新。
 - **旧格式完全不兼容**：`notes/meta/*.json`、`.note-file-index.json`、`.card-file-index.json` 都不读取、不迁移；
   旧卡片 md 首行的 `<!-- thisnode:meta … -->` 也不再剥离，按普通正文处理。
 - **几何更新只写索引**：拖动/缩放卡片不再改写 md，md 的 mtime 只在正文变化时更新；代价是每次
-  几何提交都会重写整份 `.card-index.json`（卡片数量大时写入量随之增长）。
+  几何提交都会重写整份 `card-metadata.json`（卡片数量大时写入量随之增长）。
 - **md 只是正文**：外部把卡片 md 改名后，索引按文件名找不到它 → 该卡片按「无主卡片」处理
   （元数据仍留在索引里成为孤儿条目）。
 - **笔记必须有归属分组**：默认分组固定 `grp-default` / 标题「收集箱」（`BookPO.java:32-33`）；
@@ -278,8 +278,9 @@ host（qiankun 主应用，:5173）
   前端处理见 `frontend/plugins/notes/src/stores/notePage.ts:388-423`）。
 - **附件**：只接受 png/jpg；文件名必须严格匹配 UUID 正则（不含路径分隔符）
   （删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
-- **附件元数据**：上传时把宽高、字节数、MIME、上传时间写进 `notes/plugins/notes/.attachment-index.json`
-  （`AttachmentService.java`）；附件被删除时同步移除条目；ImageIO 读不出尺寸时宽高记 0。
+- **附件元数据**：上传时把宽高、字节数、MIME、上传时间写进 `notes/plugins/notes/attachment-metadata.json`
+  （`AttachmentService.java`）；`cardId` / `noteId` 字段已预留，上传接口目前没有卡片/笔记上下文，值为 null。
+  附件被删除时同步移除条目；ImageIO 读不出尺寸时宽高记 0。
   正文引用写法是 `../attachments/<uuid>.<ext>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
   `frontend/host/src/components/MarkdownPreview.vue:21-42`）。
 
@@ -375,7 +376,7 @@ host（qiankun 主应用，:5173）
 - 它通过事件查询卡片，不直接读 notes 目录（`.agent/mem/lessons.md:29`；`CardQueryEventListener.java:20-27`）。
 
 **attachment-importer**
-- 候选 = 状态文件里没有 + 文件已存在 ≥10 秒 + 未被任何卡片引用；不建历史基线，状态文件缺失时当前未引用图片都会被导入
+- 候选 = 文件已存在 ≥10 秒 + 没有被任何卡片引用；不保存导入状态，是否已导入由「有没有卡片引用它」判断
   （`AttachmentImporterService.java`）。
 - 非 UUID 文件名原地改名为 `<uuid>.<ext>`（经 `FileHelper.fileMoved`），原文件名作笔记标题；生成失败则把名字改回去。
 - 通过 `CardChangedEvent.requestCardCreate` 交给 notes 建笔记/卡片，归入 `grp-default`；本插件不写笔记数据。
@@ -385,7 +386,7 @@ host（qiankun 主应用，:5173）
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
-- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；attachment-importer → 空 `imported.json`（未引用附件下一轮重新导入）；notes → 把 `.note-index.json`、`.card-index.json` 与 `.attachment-index.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；card-importer / state-reset 无状态文件，只记日志。
+- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；notes → 把 `note-metadata.json`、`card-metadata.json` 与 `attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
 
 ---
 

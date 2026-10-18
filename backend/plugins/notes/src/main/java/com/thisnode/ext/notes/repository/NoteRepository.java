@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 笔记存储：全部笔记元数据在一份 {@code plugins/notes/.note-index.json} 的 map 里
+ * 笔记存储：全部笔记元数据在一份 {@code plugins/notes/note-metadata.json} 的 map 里
  * （{@code noteId → NotePO}），没有「一篇一个文件」也不再需要 ID → 文件名映射。
  *
  * <p>旧 {@code notes/meta/*.json} 与旧索引结构都不迁移、不读取（按约定不做历史迁移）。
@@ -30,12 +30,12 @@ import java.util.Map;
 public class NoteRepository {
 
     private final FileHelper fileHelper;
-    private final Path nodesIndexFile;
+    private final Path nodeMetadataFile;
 
     public NoteRepository(NotesConfig notesConfig,
                           FileHelper fileHelper) {
         this.fileHelper = fileHelper;
-        this.nodesIndexFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".note-index.json");
+        this.nodeMetadataFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".note-metadata.json");
     }
 
     public synchronized String save(NotePO note) {
@@ -47,7 +47,7 @@ public class NoteRepository {
         notes.put(noteId, note);
 
         // 替换索引
-        fileHelper.fileWritten(nodesIndexFile, notes);
+        fileHelper.fileWritten(nodeMetadataFile, notes);
         return noteId;
     }
 
@@ -75,7 +75,7 @@ public class NoteRepository {
     public synchronized void delete(String noteId) {
         Map<String, NotePO> notes = noteIndex();
         if (notes.remove(noteId) != null) {
-            fileHelper.fileWritten(nodesIndexFile, notes);
+            fileHelper.fileWritten(nodeMetadataFile, notes);
         }
     }
 
@@ -104,14 +104,14 @@ public class NoteRepository {
         Map<String, NotePO> notes = noteIndex();
         notes.put(note.getNoteId(), note);
 
-        fileHelper.fileWritten(nodesIndexFile, notes);
+        fileHelper.fileWritten(nodeMetadataFile, notes);
     }
 
     /**
      * 状态重置：把笔记索引重写为空 map。
      */
     public synchronized void reset() {
-        fileHelper.fileWritten(nodesIndexFile, new LinkedHashMap<>());
+        fileHelper.fileWritten(nodeMetadataFile, new LinkedHashMap<>());
     }
 
     /**
@@ -119,12 +119,12 @@ public class NoteRepository {
      */
     private Map<String, NotePO> noteIndex() {
         try {
-            String json = Files.readString(nodesIndexFile, StandardCharsets.UTF_8);
+            String json = Files.readString(nodeMetadataFile, StandardCharsets.UTF_8);
             Map<String, NotePO> notes = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, NotePO>>() { });
             return notes == null ? new LinkedHashMap<>() : notes;
         } catch (Exception e) {
-            log.error("笔记索引无法解析：{}", nodesIndexFile, e);
-            throw new IllegalStateException("笔记索引无法解析 " + nodesIndexFile, e);
+            log.error("笔记索引无法解析：{}", nodeMetadataFile, e);
+            throw new IllegalStateException("笔记索引无法解析 " + nodeMetadataFile, e);
         }
     }
 }

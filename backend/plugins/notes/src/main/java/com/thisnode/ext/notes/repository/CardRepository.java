@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 卡片存储：正文在 {@code cards/*.md}，元数据在 {@code plugins/notes/.card-index.json}
+ * 卡片存储：正文在 {@code cards/*.md}，元数据在 {@code plugins/notes/.card-metadata.json}
  * （{@code cardId → CardMeta}，文件名就是 {@code meta.sourceFileName}）。
  */
 @Slf4j
@@ -34,13 +34,13 @@ public class CardRepository {
 
     private final NotesConfig notesConfig;
     private final FileHelper fileHelper;
-    private final Path cardIndexFile;
+    private final Path cardMetadataFile;
 
     public CardRepository(NotesConfig notesConfig,
                           FileHelper fileHelper) {
         this.notesConfig = notesConfig;
         this.fileHelper = fileHelper;
-        this.cardIndexFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".card-index.json");
+        this.cardMetadataFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".card-metadata.json");
     }
 
     @SneakyThrows
@@ -251,13 +251,13 @@ public class CardRepository {
         }
         Map<String, CardMeta> metas = readCardIndex();
         metas.put(meta.getCardId(), meta);
-        fileHelper.fileWritten(cardIndexFile, metas);
+        fileHelper.fileWritten(cardMetadataFile, metas);
     }
 
     private void deleteIndexMeta(String cardId) {
         Map<String, CardMeta> metas = readCardIndex();
         if (metas.remove(cardId) != null) {
-            fileHelper.fileWritten(cardIndexFile, metas);
+            fileHelper.fileWritten(cardMetadataFile, metas);
         }
     }
 
@@ -265,20 +265,20 @@ public class CardRepository {
      * 状态重置：把卡片索引重写为空 map（md 文件保留）。
      */
     public synchronized void reset() {
-        fileHelper.fileWritten(cardIndexFile, new LinkedHashMap<>());
+        fileHelper.fileWritten(cardMetadataFile, new LinkedHashMap<>());
     }
 
     private Map<String, CardMeta> readCardIndex() {
         try {
-            String json = Files.readString(cardIndexFile, StandardCharsets.UTF_8);
+            String json = Files.readString(cardMetadataFile, StandardCharsets.UTF_8);
             if (json.isBlank()) {
                 return new LinkedHashMap<>();
             }
             Map<String, CardMeta> metas = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, CardMeta>>() { });
             return metas == null ? new LinkedHashMap<>() : metas;
         } catch (Exception e) {
-            log.error("卡片索引无法解析：{}", cardIndexFile, e);
-            throw new IllegalStateException("卡片索引无法解析 " + cardIndexFile, e);
+            log.error("卡片索引无法解析：{}", cardMetadataFile, e);
+            throw new IllegalStateException("卡片索引无法解析 " + cardMetadataFile, e);
         }
     }
 }

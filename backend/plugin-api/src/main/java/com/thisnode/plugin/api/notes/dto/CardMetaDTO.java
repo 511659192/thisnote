@@ -2,8 +2,7 @@ package com.thisnode.plugin.api.notes.dto;
 
 import java.util.Map;
 
-public record CardMetaDTO(int v,
-                          String cardId,
+public record CardMetaDTO(String cardId,
                           String sourceFileName,
                           String noteId,
                           double x,
