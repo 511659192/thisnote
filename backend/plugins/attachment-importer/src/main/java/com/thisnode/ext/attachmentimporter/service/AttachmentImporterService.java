@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * 笔记与卡片由 notes 通过 {@link CardChangedEvent#requestCardCreate} 创建。
  *
  * <p>候选 = notes 通过 {@link AttachmentQueryEvent} 返回的「未被管理的附件」
- * （attachments 目录里、没有任何卡片引用的 png/jpg）。
+ * （attachments 目录里、没有任何卡片引用的 png/jpg/webp）。
  * 不保存导入状态：是否已导入由「有没有卡片引用它」判断。
  *
  * <p>每个候选先经 {@link AttachmentAdoptEvent} 交给 notes：改名为 {@code <uuid>.<ext>}，

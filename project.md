@@ -248,7 +248,7 @@ host（qiankun 主应用，:5173）
 ├── cards/                      卡片（Markdown，一张一个文件，只含正文）
 │   └── <标题>_<n>.md
 ├── book/books.json             分组台账（数组）
-├── attachments/                <名称>.<png|jpg>（上传生成 uuid；手工放入的其它名字也支持）
+├── attachments/                <名称>.<png|jpg|webp>（上传生成 uuid；手工放入的其它名字也支持）
 ├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
     ├── notes/note-metadata.json   noteId → NotePO（扁平 map）
@@ -277,7 +277,7 @@ host（qiankun 主应用，:5173）
 - **内容保存的并发基线**：`update-content` 带 `baseContentMd`，磁盘上已不是这一份就回 409，
   **磁盘优先**，不覆盖外部编辑器（Obsidian/VS Code）的改动（`CardService.java:91-118`；
   前端处理见 `frontend/plugins/notes/src/stores/notePage.ts:388-423`）。
-- **附件**：只接受 png/jpg（扩展名大小写不敏感）；文件名不含路径分隔符，可含空格/括号
+- **附件**：只接受 png/jpg/webp（扩展名大小写不敏感）；文件名不含路径分隔符，可含空格/括号
   （上传生成 UUID，手工放入的其它名字也能被识别；删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
 - **附件元数据**：上传时、以及导入器「接管」未管理附件时（改名 + 记 `originalName`），把宽高、字节数、
   MIME、时间写进 `notes/plugins/notes/attachment-metadata.json`（`AttachmentService.java`）；

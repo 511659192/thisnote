@@ -73,7 +73,7 @@ public class CardPO {
      * 附件元数据：上传/导入时记录的关键信息。
      *
      * @param attachmentId 附件 ID（文件名里的 UUID）
-     * @param fileName     磁盘文件名（png/jpg，也是索引的 key）
+     * @param fileName     磁盘文件名（png/jpg/webp，也是索引的 key）
      * @param originalName 改名前/上传时的原始文件名（没有则为 null）
      * @param cardId       归属卡片 ID（尚无上下文时为 null）
      * @param noteId       归属笔记 ID（尚无上下文时为 null）

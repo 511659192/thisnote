@@ -30,11 +30,11 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AttachmentService {
 
-    private static final String IMAGE_FILE_NAME = "[^/\n]+\\.(?:png|jpg)";
+    private static final String IMAGE_FILE_NAME = "[^/\n]+\\.(?:png|jpg|webp)";
     private static final Pattern IMAGE_FILE_NAME_PATTERN = Pattern.compile(IMAGE_FILE_NAME, Pattern.CASE_INSENSITIVE);
     private static final Pattern IMAGE_REFERENCE_PATTERN = Pattern.compile("\\.\\./attachments/(" + IMAGE_FILE_NAME + ")", Pattern.CASE_INSENSITIVE);
-    private static final Map<String, String> EXTENSIONS_BY_MEDIA_TYPE = Map.of("image/png", "png", "image/jpeg", "jpg");
-    private static final Map<String, String> MEDIA_TYPES_BY_EXTENSION = Map.of("png", "image/png", "jpg", "image/jpeg");
+    private static final Map<String, String> EXTENSIONS_BY_MEDIA_TYPE = Map.of("image/png", "png", "image/jpeg", "jpg", "image/webp", "webp");
+    private static final Map<String, String> MEDIA_TYPES_BY_EXTENSION = Map.of("png", "image/png", "jpg", "image/jpeg", "webp", "image/webp");
 
     private final NotesConfig notesConfig;
     private final CardRepository cardRepository;
@@ -117,7 +117,7 @@ public class AttachmentService {
     }
 
     /**
-     * 未被管理的附件：attachments 目录里、没有任何卡片引用的 png/jpg。
+     * 未被管理的附件：attachments 目录里、没有任何卡片引用的 png/jpg/webp。
      */
     public List<AttachmentDTO> unmanagedAttachments() {
         Set<String> referenced = allReferencedFileNames();
@@ -218,7 +218,7 @@ public class AttachmentService {
     }
 
     /**
-     * 文件名可以是任意名字，但必须是 png/jpg 且不含路径分隔符。
+     * 文件名可以是任意名字，但必须是 png/jpg/webp 且不含路径分隔符。
      */
     private Path imagePathOrNull(String fileName) {
         if (fileName == null || fileName.indexOf('\\') >= 0) return null;
@@ -230,6 +230,6 @@ public class AttachmentService {
         int dot = fileName.lastIndexOf('.');
         if (dot <= 0) return false;
         String extension = fileName.substring(dot + 1);
-        return "png".equalsIgnoreCase(extension) || "jpg".equalsIgnoreCase(extension);
+        return "png".equalsIgnoreCase(extension) || "jpg".equalsIgnoreCase(extension) || "webp".equalsIgnoreCase(extension);
     }
 }
