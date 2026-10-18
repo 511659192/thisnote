@@ -267,6 +267,23 @@ export const useNoteStore = defineStore('notes', () => {
     await Promise.all([loadList(), refreshMeta()])
   }
 
+  /**
+   * 卡片增删后同步列表里的 `cardIds`。
+   *
+   * <p>列表行内的插件动作（收藏/记忆曲线）拿的是列表快照里的 cardIds；
+   * 不补这一步，「刚新增的卡片」在列表里点开启会被漏掉。
+   */
+  function registerCard(noteId: string, cardId: string) {
+    const note = nodes.value.find((item) => item.noteId === noteId)
+    if (note && !note.cardIds.includes(cardId)) note.cardIds = [...note.cardIds, cardId]
+  }
+
+  function unregisterCard(cardId: string) {
+    for (const note of nodes.value) {
+      if (note.cardIds.includes(cardId)) note.cardIds = note.cardIds.filter((id) => id !== cardId)
+    }
+  }
+
 
   /** Re-read the current note from disk-backed state (after an external edit). */
   async function syncFromServer() {
@@ -297,6 +314,8 @@ export const useNoteStore = defineStore('notes', () => {
     stopBatchSelect,
     toggleBatchSelected,
     toggleBatchAll,
+    registerCard,
+    unregisterCard,
     loadList,
     refreshMeta,
     refreshAll,

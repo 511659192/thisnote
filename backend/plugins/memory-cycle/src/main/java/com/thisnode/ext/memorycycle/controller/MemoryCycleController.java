@@ -1,6 +1,7 @@
 package com.thisnode.ext.memorycycle.controller;
 
 import com.thisnode.ext.memorycycle.model.CardSchedule;
+import com.thisnode.ext.memorycycle.model.ScheduleHistoryEntry;
 import com.thisnode.ext.memorycycle.model.request.CardStateBatchRequest;
 import com.thisnode.ext.memorycycle.model.request.ReviewRequest;
 import com.thisnode.ext.memorycycle.model.view.CardStateView;
@@ -36,6 +37,22 @@ public class MemoryCycleController {
     @GetMapping("/get-card")
     public CardStateView card(@RequestParam String cardId) {
         return cardStateView(memoryCycleService.cardState(cardId));
+    }
+
+    /**
+     * 某张卡片的复习历史（从旧到新）。
+     */
+    @GetMapping("/get-history")
+    public List<ScheduleHistoryEntry> history(@RequestParam String cardId) {
+        return memoryCycleService.history(cardId);
+    }
+
+    /**
+     * 批量取复习历史（卡片 id → 记录），给列表页一次请求用。
+     */
+    @GetMapping("/get-histories")
+    public Map<String, List<ScheduleHistoryEntry>> histories(@RequestParam List<String> ids) {
+        return memoryCycleService.histories(ids);
     }
 
     @PostMapping("/update-state")
@@ -77,6 +94,14 @@ public class MemoryCycleController {
     @GetMapping("/get-due")
     public List<DueCardView> due(@RequestParam(defaultValue = "50") int limit) {
         return memoryCycleService.due(limit).stream().map(this::dueView).toList();
+    }
+
+    /**
+     * 今日到期（自然天）的卡片数量，给侧栏徽标用。
+     */
+    @GetMapping("/get-due-count")
+    public Map<String, Integer> dueCount() {
+        return Map.of("count", memoryCycleService.dueTodayCount());
     }
 
     /**

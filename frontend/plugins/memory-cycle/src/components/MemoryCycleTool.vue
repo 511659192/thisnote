@@ -13,7 +13,8 @@ const nextReminder = computed(() => {
   if (!enabled.value) return ''
   const dueAt = card.value.schedule.dueAt
   if (!dueAt) return '未安排'
-  if (dueAt <= Date.now()) return '已到期'
+  // 「到期」按自然天判断（后端 due 字段），不再比较当前时分秒
+  if (card.value.schedule.due) return '今日到期'
   return `下次 ${formatInterval(dueAt)}后`
 })
 const busy = ref(false)
@@ -33,14 +34,14 @@ async function toggle() {
   <button
     class="mc-chip"
     :class="{ 'mc-on': enabled, 'mc-idle-chip': !enabled }"
-    :title="enabled ? (nextReminder === '已到期' ? '' : nextReminder) : '开启记忆周期'"
+    :title="enabled ? nextReminder : '开启记忆周期'"
     :aria-label="enabled ? `记忆周期已开启，${nextReminder}` : '记忆周期未开启，点击开启'"
     :disabled="busy"
     @pointerdown.stop
     @click.stop="toggle"
   >
     <MemoryCycleIcon />
-    <span v-if="enabled && nextReminder !== '已到期'" class="mc-next-reminder">{{ nextReminder }}</span>
+    <span v-if="enabled && nextReminder !== '今日到期'" class="mc-next-reminder">{{ nextReminder }}</span>
   </button>
 </template>
 

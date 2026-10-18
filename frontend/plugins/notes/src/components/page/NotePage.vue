@@ -612,46 +612,52 @@ function onPreviewMouseUp() {
 }
 
 /**
- * 一键自动布局：按阅读顺序（y 容差分出「行」，行内自左向右）确定卡片次序，
- * 然后优先左右并排铺满当前可视画布宽，一行放不下再换行；宽高保持原样。
+ * 一键自动布局：打乱卡片顺序后逐个找「最靠上的空位」放下（优先填洞），
+ * 放不下再往最下方追加；卡片保持原有宽高。
  */
 function autoLayout() {
   const cards = page.cards.map((b) => b.card)
   if (cards.length === 0) return
-  const ROW_TOLERANCE = 48
-  const GAP = 24
-  const byY = [...cards].sort((a, b) => a.y - b.y || a.x - b.x)
-  const order: typeof byY = []
-  let row: typeof byY = []
-  let rowTop = 0
-  for (const card of byY) {
-    if (row.length && card.y >= rowTop + ROW_TOLERANCE) {
-      order.push(...row.sort((a, b) => a.x - b.x))
-      row = []
-    }
-    if (!row.length) rowTop = card.y
-    row.push(card)
+  // 乱序：每次点都可能得到不同摆法，避免又排成整齐的行
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[cards[i], cards[j]] = [cards[j], cards[i]]
   }
-  order.push(...row.sort((a, b) => a.x - b.x))
 
-  // 可视画布的世界宽度：行内从左往右排，超出可视范围才换行
+  const GAP = 24
   const zoom = Math.max(page.viewport.zoom, 0.01)
   const surfaceWidth = Math.max(320, Math.round(size.width / zoom) - 48)
   const left = Math.min(...cards.map((c) => c.x))
   const top = Math.min(...cards.map((c) => c.y))
-  let cursorX = left
-  let cursorY = top
-  let rowBottom = top
-  const updates = order.map((card) => {
-    // 行内已有卡片且这张放不下 → 换行
-    if (cursorX > left && cursorX + card.w > left + surfaceWidth) {
-      cursorX = left
-      cursorY = rowBottom + GAP
+  const placed: Array<{ x: number; y: number; w: number; h: number }> = []
+
+  const overlaps = (x: number, y: number, w: number, h: number) => placed.some((r) => (
+    x < r.x + r.w + GAP && x + w + GAP > r.x
+    && y < r.y + r.h + GAP && y + h + GAP > r.y
+  ))
+
+  const updates = cards.map((card) => {
+    // 候选位置：左上角 + 每个已放卡片的右侧 / 正下方
+    const candidates: Array<{ x: number; y: number }> = [{ x: left, y: top }]
+    for (const r of placed) {
+      candidates.push({ x: r.x + r.w + GAP, y: r.y })
+      candidates.push({ x: r.x, y: r.y + r.h + GAP })
     }
-    rowBottom = Math.max(rowBottom, cursorY + card.h)
-    const update = { cardId: card.cardId, x: cursorX, y: cursorY }
-    cursorX += card.w + GAP
-    return update
+    let best: { x: number; y: number } | null = null
+    for (const candidate of candidates) {
+      if (candidate.x + card.w > left + surfaceWidth) continue
+      if (overlaps(candidate.x, candidate.y, card.w, card.h)) continue
+      if (!best || candidate.y < best.y - 0.5
+        || (Math.abs(candidate.y - best.y) <= 0.5 && candidate.x < best.x)) {
+        best = candidate
+      }
+    }
+    if (!best) {
+      const bottom = placed.reduce((max, r) => Math.max(max, r.y + r.h), top) + GAP
+      best = { x: left, y: bottom }
+    }
+    placed.push({ x: best.x, y: best.y, w: card.w, h: card.h })
+    return { cardId: card.cardId, x: best.x, y: best.y }
   })
   void page.commit(updates)
 }
@@ -855,7 +861,7 @@ defineExpose({ size, beginEdit, finishEditing })
       <span class="small mono zoom-label">{{ Math.round(page.viewport.zoom * 100) }}%</span>
       <button class="btn sm" title="放大" @click="page.zoomAt({ x: size.width / 2, y: size.height / 2 }, 1.15)">＋</button>
       <button class="btn sm" title="适应全部卡片 (Ctrl+1)" @click="page.fit(size)">适应</button>
-      <button class="btn sm" title="按阅读顺序单列重排全部卡片" @click="autoLayout">自动布局</button>
+      <button class="btn sm" title="乱序摆放，优先填充空白" @click="autoLayout">自动布局</button>
       <button class="btn sm" title="重置 (Ctrl+0)" @click="page.resetView()">1:1</button>
       <button class="btn sm" :class="{ active: page.snapToGrid }" title="尺寸吸附" @click="page.toggleSnap()">吸附</button>
     </div>

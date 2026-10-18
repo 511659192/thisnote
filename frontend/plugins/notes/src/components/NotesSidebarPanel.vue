@@ -25,6 +25,7 @@ import {
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import PromptDialog from '@/components/PromptDialog.vue'
 import type { Book } from '@/api/types'
 
 /**
@@ -63,7 +64,6 @@ async function refreshPluginBadges(force = false) {
 async function refreshPlugins() {
   await refreshPluginAvailability()
   await refreshPluginBadges()
-  await refreshFilterBadges()
 }
 /**
  * 两个触发器各管各的，**切路由不再拉可用性快照**：
@@ -87,9 +87,8 @@ onMounted(async () => {
   await nodes.refreshAll()
   void refreshPlugins()
   unsubscribePluginState = onPluginStateChange(() => {
-    // 插件里改了数据（收藏/记忆曲线）：侧栏的计数立刻跟着刷新
+    // 插件里改了数据（记忆曲线…）：侧栏的徽标立刻跟着刷新
     void refreshPluginBadges(true)
-    void refreshFilterBadges()
   })
   window.addEventListener('focus', onFocus)
   document.addEventListener('visibilitychange', onVisibility)
@@ -111,22 +110,6 @@ function onVisibility() {
 /** 侧栏只渲染可见筛选：hidden 的筛选（如搜索框）由插件自己的 UI 激活，不占侧栏行。 */
 const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters().filter((f) => !f.hidden))
 
-/** 插件筛选行右侧的数量（例如「收藏」有多少篇）。 */
-const filterBadges = ref<Record<string, number>>({})
-
-async function refreshFilterBadges() {
-  const out: Record<string, number> = {}
-  await Promise.all(pluginFilters.value.map(async (filter) => {
-    if (!filter.badge) return
-    try {
-      const count = await filter.badge()
-      if (count && count > 0) out[filter.id] = count
-    } catch {
-      // 数量拿不到就不显示
-    }
-  }))
-  filterBadges.value = out
-}
 const activePluginFilter = computed<NoteListFilter | null>(() => {
   const active = activeListFilter_()
   if (!active) return null
@@ -202,21 +185,55 @@ const confirmDialog = ref<{
   action: (() => void | Promise<void>) | null
 }>({ open: false, title: '', message: '', action: null })
 
-async function promptNewGroup() {
-  const title = window.prompt('新建分组名称')
-  if (!title || !title.trim()) return
-  try {
-    await nodes.createGroup(title.trim())
-    toast('分组已创建', 'success')
-  } catch (e) {
-    toast(`创建失败：${(e as Error).message}`, 'error')
+const groupNameDialog = ref<{
+  open: boolean
+  title: string
+  value: string
+  action: ((name: string) => Promise<void>) | null
+}>({ open: false, title: '', value: '', action: null })
+
+function promptNewGroup() {
+  groupNameDialog.value = {
+    open: true,
+    title: '新建分组',
+    value: '',
+    action: async (name) => {
+      try {
+        await nodes.createGroup(name)
+        toast('分组已创建', 'success')
+      } catch (e) {
+        toast(`创建失败：${(e as Error).message}`, 'error')
+      }
+    },
   }
 }
 
-async function renameGroup(id: string, current: string) {
-  const title = window.prompt('重命名分组', current)
-  if (!title || !title.trim() || title === current) return
-  await nodes.renameGroup(id, title.trim())
+function renameGroup(id: string, current: string) {
+  groupNameDialog.value = {
+    open: true,
+    title: '重命名分组',
+    value: current,
+    action: async (name) => {
+      if (name === current) return
+      try {
+        await nodes.renameGroup(id, name)
+      } catch (e) {
+        toast(`重命名失败：${(e as Error).message}`, 'error')
+      }
+    },
+  }
+}
+
+async function confirmGroupName() {
+  const { action, value } = groupNameDialog.value
+  const name = value.trim()
+  if (!name || !action) return
+  groupNameDialog.value = { ...groupNameDialog.value, open: false, action: null }
+  await action(name)
+}
+
+function cancelGroupName() {
+  groupNameDialog.value = { ...groupNameDialog.value, open: false, action: null }
 }
 
 async function removeGroup(id: string) {
@@ -282,12 +299,14 @@ watch(
         @click="openAll()"
         :title="collapsed ? '全部笔记' : undefined"
       >
-        <!-- 图标就是「新建分组」按钮：悬停时 ▤ 变 ＋（不额外占一行） -->
-        <span class="ico-swap" title="新建分组" @click.stop="promptNewGroup()">
-          <span class="ico base">▤</span>
-          <span class="ico add">＋</span>
-        </span>
+        <span class="ico base">▤</span>
         <span v-if="!collapsed" class="label">全部笔记</span>
+        <span
+          v-if="!collapsed"
+          class="row-add"
+          title="新建分组"
+          @click.stop="promptNewGroup()"
+        >＋</span>
         <!-- 「全部笔记」下方显示扁平分组列表。 -->
         <span
           v-if="!collapsed"
@@ -311,7 +330,6 @@ watch(
             @drop.prevent="onGroupDrop(group, $event)"
           >
             <span class="label">{{ group.title }}</span>
-            <span v-if="nodes.bookCounts[group.id]" class="count">{{ nodes.bookCounts[group.id] }}</span>
           </button>
         </template>
 
@@ -325,7 +343,6 @@ watch(
       >
         <span class="ico" :title="collapsed ? pf.label : undefined">{{ pf.icon || '★' }}</span>
         <span v-if="!collapsed" class="label">{{ pf.label }}</span>
-        <span v-if="!collapsed && filterBadges[pf.id]" class="count">{{ filterBadges[pf.id] }}</span>
       </button>
 
       <!--
@@ -407,30 +424,29 @@ watch(
   cursor: pointer;
 }
 .root-caret {
-  margin-left: auto;
   padding: 0 2px;
 }
 .group-item {
   font-size: 12.5px;
 }
-.ico-swap {
+/* 「新建分组」：放在「全部笔记」行右侧，悬停时出现 */
+.row-add {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
+  width: 16px;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  opacity: 0;
   cursor: pointer;
 }
-.ico-swap .add {
-  display: none;
-  color: var(--accent);
-  font-weight: 700;
+.nav-item:hover .row-add {
+  opacity: 1;
 }
-.nav-item:hover .ico-swap .base {
-  display: none;
-}
-.nav-item:hover .ico-swap .add {
-  display: inline;
+.row-add:hover {
+  background: var(--c-surface-3);
 }
 
 .nav-item {

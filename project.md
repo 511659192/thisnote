@@ -188,7 +188,7 @@ host（qiankun 主应用，:5173）
 |---|---|---|---|---|---|
 | `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=0.0.1` | 无 | `<data-root>/notes/**` |
 | `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=0.0.1` | 无 | `notes/plugins/favorite/favorites.properties` |
-| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/scheduling.json` |
+| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/scheduling.json`（排期）、`schedule-history.json`（复习历史） |
 | `baidu-sync` | 百度网盘双向同步 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{credentials,sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（只通过事件协作） |
 | `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（每轮按引用关系判断） |
@@ -329,7 +329,14 @@ host（qiankun 主应用，:5173）
 
 **memory-cycle**：`GET .../get-cards?ids=a,b`、`GET .../get-card?cardId=`、`POST .../update-state?cardId=&value=`、
 `POST .../update-state-batch`（body `{cardIds, value}`，按笔记本批量开启/关闭）、
-`POST .../review?cardId=`（body `{grade:1..4}`）、`GET .../get-due?limit=50`、`POST .../delete-schedule?cardId=`
+`POST .../review?cardId=`（body `{grade:1..4}`）、`GET .../get-due?limit=50`、`GET .../get-due-count`（今日到期数）、
+`GET .../get-history?cardId=`、`GET .../get-histories?ids=a,b`（卡片 id → 复习历史）、`POST .../delete-schedule?cardId=`
+
+到期口径：**自然天**。`due` / `get-due` / `get-due-count` 都按「排期落在今天或更早」计算（边界是明天 0 点），
+不比较当前时分秒；`schedule.due` 字段同样按自然天给出。
+
+复习历史（`schedule-history.json`）是「是否到期」的依据：开启记忆曲线时立即写一条 `grade=0`（dueAt=当时）、
+每次评分写一条 `grade=1..4`（dueAt=按评分算出的下次时间），前端「今日到期」只读这张表（无历史的新卡片才回退排期）。
 
 **baidu-sync**：`GET .../get-settings`、`POST .../update-settings`、`GET .../get-authorization-url`、
 `POST .../exchange-code`、`POST .../update-auto-sync?value=`、`POST .../sync`、`GET .../get-sync-status`、
@@ -393,7 +400,7 @@ host（qiankun 主应用，:5173）
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
-- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；notes → 把 `note-metadata.json`、`card-metadata.json` 与 `attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
+- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json` 与 `schedule-history.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；notes → 把 `note-metadata.json`、`card-metadata.json` 与 `attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
 
 ---
 
@@ -462,7 +469,7 @@ host（qiankun 主应用，:5173）
   核心只渲染注册表并把所选笔记递进去（favorite、memory-cycle 各在自己的 `src/actions.ts`）。
 
 - **插件状态变化事件**（`pluginState.ts`）：插件改完自己的数据（收藏、记忆曲线…）调
-  `emitPluginStateChange({pluginId, noteIds?, cardIds?})`；核心侧栏订阅后强制刷新徽标与筛选计数，
+  `emitPluginStateChange({pluginId, noteIds?, cardIds?})`；核心侧栏订阅后强制刷新徽标，
   笔记页订阅后重新装载当前卡片的插件状态。核心不认识任何具体插件，插件也不知道谁在听。
 
 - 共享指针 `activeListFilter`：插件 UI（搜索框、侧栏筛选行）设它，notes 域 `watch` 它并调用筛选的 `load()`
@@ -503,16 +510,18 @@ host（qiankun 主应用，:5173）
 | 插件 | 登记了什么 | 关键文件 |
 |---|---|---|
 | favorite | 笔记工具 ★ + 列表筛选 `favorites`（`hideNoteManagement: true`），**没有自己的页面** | `frontend/plugins/favorite/index.ts:24-42` |
-| memory-cycle | 卡片工具 🧠（`loadState/isEnabled/toggle/cardComponent`）+ 侧栏入口（order 1，徽标=到期数）+ `/review` 路由 | `frontend/plugins/memory-cycle/index.ts:16-47` |
+| memory-cycle | 卡片工具 🧠（`loadState/isEnabled/toggle/cardComponent`）+ 侧栏入口（order 1，徽标=今日到期数）+ `/review` 路由 | `frontend/plugins/memory-cycle/index.ts:16-47` |
 | baidu-sync | 设置面板 + 侧栏入口（order 2）+ `/baidu-sync` 路由 | `frontend/plugins/baidu-sync/index.ts:11-28` |
 | card-importer | 只有设置面板 | `frontend/plugins/card-importer/index.ts:6-8` |
 | attachment-importer | 只有设置面板（静态说明，不读后端） | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
-复习页（`ReviewView.vue`）：三个页签 —— **今日复习**（到期队列逐张评分）、**今日到期**（排期落在今天之内的卡片列表，默认 3 列）、
-**开启记忆**（所有开启记忆周期的卡片，默认 5 列，可切 3/5 列）；四档按钮标注「下次出现」；短周期卡在队列内轮询重现，
-长周期卡移出视图；键盘 1-4 作用于最上方卡片；查不到正文的排期按孤儿处理并调 `delete-schedule` 清理。
+复习页（`ReviewView.vue`）：三个页签 —— **今日复习**（到期队列逐张评分）、**今日到期**（最新一条排期在今天或更早（含过期），
+或历史上任意一条排期落在今天；默认 3 列，卡片列表不展示历史）、
+**开启记忆**（所有开启记忆周期的卡片，默认 5 列，可切 3/5 列）；四档按钮标注「下次出现」；
+短周期卡在队列内轮询重现，长周期卡移出视图；键盘 1-4 作用于最上方卡片；预览浮层显示完整复习历史；
+查不到正文的排期按孤儿处理并调 `delete-schedule` 清理。复习历史由后端 `schedule-history.json` 记录（每卡最多 200 条）。
 
 ### 6.8 构建与交付
 

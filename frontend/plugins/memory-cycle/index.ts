@@ -35,7 +35,7 @@ export function register(): void {
     glyph: '🧠',
     to: '/review',
     order: 1,
-    badge: async () => (await memoryCycleApi.due(50)).length,
+    badge: async () => (await memoryCycleApi.dueCount()).count,
   })
 
   /** 复习页也由插件登记（核心路由表里不出现 /review 这个插件路径）。 */

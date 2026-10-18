@@ -21,6 +21,16 @@ export interface MemoryCycleCardState {
   gradePreview?: Record<string, number>
 }
 
+/** 一次复习记录（插件侧的 schedule-history.json）。 */
+export interface ScheduleHistoryEntry {
+  cardId: string
+  reviewedAt: number
+  grade: number
+  state: string
+  level: number
+  dueAt: number
+}
+
 /** 复习评分：与 Anki 一致的四档 */
 export type Grade = 1 | 2 | 3 | 4
 
@@ -88,6 +98,19 @@ export const memoryCycleApi = {
   due: (limit = 50) =>
     http.get<DueCard[]>(
       '/api/plugins/memory-cycle/get-due', { limit },
+    ),
+  /** 今日到期（自然天）的卡片数量。 */
+  dueCount: () =>
+    http.get<{ count: number }>('/api/plugins/memory-cycle/get-due-count'),
+  /** 某张卡片的复习历史（从旧到新）。 */
+  history: (cardId: string) =>
+    http.get<ScheduleHistoryEntry[]>(
+      '/api/plugins/memory-cycle/get-history', { cardId },
+    ),
+  /** 批量取复习历史（卡片 id → 记录）。 */
+  histories: (cardIds: string[]) =>
+    http.get<Record<string, ScheduleHistoryEntry[]>>(
+      '/api/plugins/memory-cycle/get-histories', { ids: cardIds.join(',') },
     ),
   /** 删掉一条排期（复习页发现它是孤儿时调用）。 */
   forget: (cardId: string) =>

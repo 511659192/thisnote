@@ -11,6 +11,7 @@ import {
   type EnabledMemoryCard,
   type Grade,
   type MemoryCycleCardState,
+  type ScheduleHistoryEntry,
 } from '../api/memoryCycleApi'
 import { memoryCycle } from '../stores/memoryCycle'
 import { host, emitPluginStateChange, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
@@ -37,28 +38,76 @@ type ReviewTab = 'review' | 'due' | 'enabled'
 const activeTab = ref<ReviewTab>('review')
 const enabledCards = ref<EnabledMemoryCard[]>([])
 const previewCard = ref<EnabledMemoryCard | null>(null)
+/** 预览浮层的页签：卡片内容 / 复习历史。 */
+const previewTab = ref<'content' | 'history'>('content')
 const enabledCardsLoading = ref(false)
 const enabledCardsLoaded = ref(false)
 const enabledCardsError = ref('')
 /** 今日到期 / 开启记忆的列数（默认分别是 3 列与 5 列）。 */
-const dueColumns = ref<3 | 5>(3)
-const enabledColumns = ref<3 | 5>(5)
+const dueColumns = ref<3 | 5 | 7>(3)
+const enabledColumns = ref<3 | 5 | 7>(5)
 const loading = ref(true)
 const reviewedCount = ref(0)
 const busyIds = ref(new Set<string>())
 const reviewedStates = new Map<string, MemoryCycleCardState>()
 
-/** 今天 23:59:59.999 的时间戳。 */
-function endOfToday(): number {
-  const end = new Date()
-  end.setHours(23, 59, 59, 999)
-  return end.getTime()
+/** 今天 0 点（自然天边界）。 */
+function startOfToday(): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today.getTime()
 }
 
-/** 今日到期：排期落在今天之内（含已在今日队列里、尚未评分的卡片）。 */
+/** 明天 0 点（自然天边界，不掺时分秒）。 */
+function startOfTomorrow(): number {
+  const tomorrow = new Date()
+  tomorrow.setHours(0, 0, 0, 0)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return tomorrow.getTime()
+}
+
+/** 每张卡片的复习历史（cardId → 记录，从旧到新）。 */
+const histories = ref<Record<string, ScheduleHistoryEntry[]>>({})
+const historiesLoaded = ref(false)
+
+/** 批量拉取所有已开启卡片的历史（每 100 个一组），「今日到期」以最新一条历史的 dueAt 为准。 */
+async function loadHistories() {
+  const ids = enabledCards.value.map((card) => card.cardId)
+  historiesLoaded.value = false
+  if (!ids.length) {
+    histories.value = {}
+    historiesLoaded.value = true
+    return
+  }
+  const merged: Record<string, ScheduleHistoryEntry[]> = {}
+  for (let i = 0; i < ids.length; i += 100) {
+    try {
+      const chunk = await memoryCycleApi.histories(ids.slice(i, i + 100))
+      Object.assign(merged, chunk)
+    } catch {
+      // 单组失败不影响其它卡片
+    }
+  }
+  histories.value = merged
+  historiesLoaded.value = true
+}
+
+/**
+ * 今日到期：
+ * - 最新一条排期落在今天或更早（过期卡也算）→ 是；
+ * - 历史上任意一条排期落在今天（哪怕最新一条已经排到未来）→ 是；
+ * - 没有历史的新卡片按当前排期算。
+ */
 const dueTodayCards = computed(() => {
-  const end = endOfToday()
-  return enabledCards.value.filter((card) => card.schedule.dueAt > 0 && card.schedule.dueAt <= end)
+  const start = startOfToday()
+  const end = startOfTomorrow()
+  const isToday = (time: number) => time > 0 && time >= start && time < end
+  return enabledCards.value.filter((card) => {
+    const entries = histories.value[card.cardId] ?? []
+    const latestDue = entries.length ? entries[entries.length - 1].dueAt : card.schedule.dueAt
+    if (latestDue > 0 && latestDue < end) return true
+    return entries.some((entry) => isToday(entry.dueAt))
+  })
 })
 
 const stateLabel = (state: string) => {
@@ -70,10 +119,21 @@ const stateLabel = (state: string) => {
   }
 }
 
+const GRADE_LABEL: Record<number, string> = { 0: '开启', 1: '忘记', 2: '困难', 3: '良好', 4: '简单' }
+
+/** 预览里的完整历史行：时间 · 评分 → 下次复习日期。 */
+function formatHistory(entry: ScheduleHistoryEntry): string {
+  const at = new Date(entry.reviewedAt)
+  const due = new Date(entry.dueAt)
+  const pad = (value: number) => value.toString().padStart(2, '0')
+  return `${at.getMonth() + 1}/${at.getDate()} ${pad(at.getHours())}:${pad(at.getMinutes())}`
+    + ` · ${GRADE_LABEL[entry.grade] ?? entry.grade} → 下次 ${due.getMonth() + 1}/${due.getDate()}`
+}
+
 function reminderLabel(card: EnabledMemoryCard) {
   const { dueAt, due } = card.schedule
   if (!dueAt) return '未安排'
-  if (due || dueAt <= Date.now()) return '已到期'
+  if (due) return '今日到期'
   return `下次 ${formatInterval(dueAt)}后`
 }
 
@@ -145,6 +205,7 @@ async function loadEnabledCardList() {
     }
     enabledCards.value = loadedCards.sort((a, b) => a.schedule.dueAt - b.schedule.dueAt)
     enabledCardsLoaded.value = true
+    void loadHistories()
   } catch (error) {
     enabledCardsError.value = error instanceof Error ? error.message : '加载失败，请重试'
   } finally {
@@ -154,11 +215,22 @@ async function loadEnabledCardList() {
 
 function selectTab(tab: ReviewTab) {
   activeTab.value = tab
-  if ((tab === 'due' || tab === 'enabled') && !enabledCardsLoaded.value) void loadEnabledCardList()
+  if (tab === 'due' || tab === 'enabled') {
+    if (!enabledCardsLoaded.value) void loadEnabledCardList()
+    else if (tab === 'due' && !historiesLoaded.value) void loadHistories()
+  }
 }
 
-function openPreview(card: EnabledMemoryCard) {
+async function openPreview(card: EnabledMemoryCard) {
   previewCard.value = card
+  previewTab.value = 'content'
+  if (Object.prototype.hasOwnProperty.call(histories.value, card.cardId)) return
+  try {
+    const entries = await memoryCycleApi.history(card.cardId)
+    histories.value = { ...histories.value, [card.cardId]: entries }
+  } catch {
+    // 历史拿不到不影响预览
+  }
 }
 
 function closePreview() {
@@ -282,12 +354,25 @@ function requeueShort(card: DueCard & Partial<CardContent>, updated: MemoryCycle
   queue.value = remaining
 }
 
-function settleGrade(card: DueCard & Partial<CardContent>, updated: MemoryCycleCardState) {
+function settleGrade(card: DueCard & Partial<CardContent>, gradeValue: Grade, updated: MemoryCycleCardState) {
   reviewedStates.set(card.cardId, updated)
   const enabledCard = enabledCards.value.find((item) => item.cardId === card.cardId)
   if (enabledCard) {
     enabledCard.schedule = updated.schedule
     enabledCards.value.sort((a, b) => a.schedule.dueAt - b.schedule.dueAt)
+  }
+  // 本地补一条历史：「今日到期」按最新一条历史的排期重新计算
+  const entries = histories.value[card.cardId] ?? []
+  histories.value = {
+    ...histories.value,
+    [card.cardId]: [...entries, {
+      cardId: card.cardId,
+      reviewedAt: Date.now(),
+      grade: gradeValue,
+      state: updated.schedule.state,
+      level: updated.schedule.level,
+      dueAt: updated.schedule.dueAt,
+    }],
   }
   if (updated.schedule.state === 'learning' || updated.schedule.state === 'relearning') {
     requeueShort(card, updated)
@@ -301,7 +386,7 @@ async function grade(card: DueCard, g: Grade) {
   busyIds.value.add(card.cardId)
   try {
     const updated = await memoryCycle.review(card.cardId, g)
-    settleGrade(card, updated)
+    settleGrade(card, g, updated)
     await loadCurrentCardContent()
   } finally {
     busyIds.value.delete(card.cardId)
@@ -355,7 +440,7 @@ const GRADES: { grade: Grade; label: string }[] = [
     <header class="rv-head">
       <h2>复习</h2>
       <span v-if="activeTab === 'review' && queue.length" class="rv-progress">{{ queue.length }} 张待复习</span>
-      <span v-else-if="activeTab === 'due' && enabledCardsLoaded" class="rv-progress">{{ dueTodayCards.length }} 张今日到期</span>
+      <span v-else-if="activeTab === 'due' && historiesLoaded" class="rv-progress">{{ dueTodayCards.length }} 张今日到期</span>
       <span v-else-if="activeTab === 'enabled' && enabledCardsLoaded" class="rv-progress">{{ enabledCards.length }} 张已开启</span>
       <span v-else-if="(activeTab === 'due' || activeTab === 'enabled') && (enabledCardsLoading || loading)" class="rv-progress">统计中…</span>
       <div class="spacer"></div>
@@ -390,7 +475,7 @@ const GRADES: { grade: Grade; label: string }[] = [
         @click="selectTab('due')"
       >
         今日到期
-        <span v-if="enabledCardsLoaded" class="rv-tab-count">{{ dueTodayCards.length }}</span>
+        <span v-if="historiesLoaded" class="rv-tab-count">{{ dueTodayCards.length }}</span>
         <span v-else-if="enabledCardsLoading || loading" class="rv-tab-count">…</span>
       </button>
       <button
@@ -468,16 +553,17 @@ const GRADES: { grade: Grade; label: string }[] = [
 
     <section v-else-if="!pluginDisabled && activeTab === 'due'" class="rv-enabled-panel">
       <div class="rv-enabled-header">
-        <p class="small muted">今日到期的卡片（截止到今天 23:59）</p>
+        <p class="small muted">今日到期的卡片（含过期；历史上任意一次排期落在今天也算）</p>
         <div class="rv-columns">
           <button class="btn sm ghost" :class="{ active: dueColumns === 3 }" title="3 列" @click="dueColumns = 3">3 列</button>
           <button class="btn sm ghost" :class="{ active: dueColumns === 5 }" title="5 列" @click="dueColumns = 5">5 列</button>
+          <button class="btn sm ghost" :class="{ active: dueColumns === 7 }" title="7 列" @click="dueColumns = 7">7 列</button>
         </div>
         <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
           {{ enabledCardsLoading ? '加载中…' : '刷新' }}
         </button>
       </div>
-      <div v-if="enabledCardsLoading" class="rv-state small muted">加载今日到期卡片…</div>
+      <div v-if="enabledCardsLoading || (enabledCardsLoaded && !historiesLoaded)" class="rv-state small muted">加载今日到期卡片…</div>
       <div v-else-if="enabledCardsError" class="rv-state rv-done">
         <p class="small muted">加载失败：{{ enabledCardsError }}</p>
         <button class="btn primary" @click="loadEnabledCardList">重试</button>
@@ -502,6 +588,7 @@ const GRADES: { grade: Grade; label: string }[] = [
         <div class="rv-columns">
           <button class="btn sm ghost" :class="{ active: enabledColumns === 3 }" title="3 列" @click="enabledColumns = 3">3 列</button>
           <button class="btn sm ghost" :class="{ active: enabledColumns === 5 }" title="5 列" @click="enabledColumns = 5">5 列</button>
+          <button class="btn sm ghost" :class="{ active: enabledColumns === 7 }" title="7 列" @click="enabledColumns = 7">7 列</button>
         </div>
         <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
           {{ enabledCardsLoading ? '加载中…' : '刷新' }}
@@ -541,13 +628,34 @@ const GRADES: { grade: Grade; label: string }[] = [
           </div>
           <button class="btn sm ghost" aria-label="关闭预览" @click="closePreview">×</button>
         </header>
-        <div
-          class="rv-preview-content"
-          @wheel="onPreviewWheel"
-          @mousedown="onPreviewMouseDown"
-          @dragstart.prevent
-        >
+        <div class="rv-preview-tabs" role="tablist" aria-label="预览内容">
+          <button
+            class="rv-tab"
+            :class="{ active: previewTab === 'content' }"
+            role="tab"
+            :aria-selected="previewTab === 'content'"
+            @click="previewTab = 'content'"
+          >卡片内容</button>
+          <button
+            class="rv-tab"
+            :class="{ active: previewTab === 'history' }"
+            role="tab"
+            :aria-selected="previewTab === 'history'"
+            @click="previewTab = 'history'"
+          >复习历史</button>
+        </div>
+        <div v-if="previewTab === 'content'" class="rv-preview-content" @wheel="onPreviewWheel" @mousedown="onPreviewMouseDown" @dragstart.prevent>
           <component :is="MarkdownView" :content="previewCard.contentMd" />
+        </div>
+        <div v-else class="rv-preview-history-body">
+          <template v-if="histories[previewCard.cardId]?.length">
+            <ol class="rv-history-list">
+              <li v-for="entry in histories[previewCard.cardId]" :key="entry.reviewedAt + '-' + entry.grade">
+                {{ formatHistory(entry) }}
+              </li>
+            </ol>
+          </template>
+          <span v-else class="small muted">还没有复习记录</span>
         </div>
       </section>
     </div>
@@ -761,6 +869,27 @@ const GRADES: { grade: Grade; label: string }[] = [
 }
 .rv-preview-info {
   min-width: 0;
+}
+.rv-preview-tabs {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--c-border);
+}
+.rv-preview-history-body {
+  min-width: 0;
+  max-height: calc(80vh - 110px);
+  overflow: auto;
+  padding: var(--space-4);
+  color: var(--c-text-2);
+  font-size: 12px;
+}
+.rv-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
 }
 .rv-preview-content {
   min-width: 0;

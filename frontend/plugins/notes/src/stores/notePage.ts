@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { pageApi, type CardUpdate } from '@/api/page'
 import { ApiError, toast } from '@thisnode/plugin-api'
 import type { Card, CardView } from '@/api/types'
+import { useNoteStore } from '@/stores/notes'
 
 export interface Viewport {
   x: number
@@ -300,8 +301,9 @@ export const usePageStore = defineStore('notePage', () => {
     opts: { contentMd?: string; w?: number; h?: number; surfaceWidth?: number; surfaceHeight?: number } = {},
   ): Promise<CardView | null> {
     if (!noteId.value) return null
+    const targetNoteId = noteId.value
     try {
-      const createdCard = await pageApi.addBlock(noteId.value, {
+      const createdCard = await pageApi.addBlock(targetNoteId, {
         x: Math.round(at.x),
         y: Math.round(at.y),
         w: opts.w ?? defaultCardWidth(opts.surfaceWidth),
@@ -317,6 +319,8 @@ export const usePageStore = defineStore('notePage', () => {
         fresh = created
       }
       selection.value = [fresh.card.cardId]
+      // 列表行内的插件动作读的是笔记列表快照里的 cardIds，新建后补上
+      useNoteStore().registerCard(targetNoteId, fresh.card.cardId)
       return fresh
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -378,6 +382,7 @@ export const usePageStore = defineStore('notePage', () => {
       const nextManualHeights = new Set(manualHeights.value)
       nextManualHeights.delete(cardId)
       manualHeights.value = nextManualHeights
+      useNoteStore().unregisterCard(cardId)
       toast('卡片已删除', 'success')
       return true
     } catch (e) {

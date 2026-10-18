@@ -1,7 +1,9 @@
 package com.thisnode.ext.memorycycle.service;
 
 import com.thisnode.ext.memorycycle.model.CardSchedule;
+import com.thisnode.ext.memorycycle.model.ScheduleHistoryEntry;
 import com.thisnode.ext.memorycycle.repository.CardScheduleRepository;
+import com.thisnode.ext.memorycycle.repository.ScheduleHistoryRepository;
 import com.thisnode.plugin.api.event.MemoryCycleStateChangedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -18,12 +20,15 @@ public class MemoryCycleService {
     private static final long DAY_MS = 86_400_000L;
 
     private final CardScheduleRepository scheduleRepository;
+    private final ScheduleHistoryRepository historyRepository;
     private ApplicationEventPublisher mainEventPublisher;
 
     public MemoryCycleService(ApplicationEventPublisher mainEventPublisher,
-                              CardScheduleRepository scheduleRepository) {
+                              CardScheduleRepository scheduleRepository,
+                              ScheduleHistoryRepository historyRepository) {
         this.mainEventPublisher = mainEventPublisher;
         this.scheduleRepository = scheduleRepository;
+        this.historyRepository = historyRepository;
     }
 
     private static boolean isShortPhase(String state) {
@@ -95,7 +100,8 @@ public class MemoryCycleService {
     }
 
     /**
-     * First grade on a freshly enabled card: a new schedule due immediately.
+     * 首次开启：建一条「立即到期」的排期，并立刻写一条历史（grade=0 表示「开启」而不是评分），
+     * 这样「今天是否到期」只看历史表就够了，不需要再回退到排期。
      */
     private void createIfAbsent(String cardId) {
         if (scheduleRepository.getOne(cardId) != null) {
@@ -109,6 +115,7 @@ public class MemoryCycleService {
         s.setReps(0);
         s.setLapses(0);
         scheduleRepository.save(s);
+        appendHistory(cardId, 0, s, now);
     }
 
     /**
@@ -128,10 +135,36 @@ public class MemoryCycleService {
         s.setReps(s.getReps() + 1);
         s.setLastReviewedAt(new Date(now));
         scheduleRepository.save(s);
+        appendHistory(cardId, grade, s, now);
         log.info("卡片 {} 评分 {} → 状态 {}，下次复习 {}（level={}）",
                 cardId, grade, s.getState(), s.getDueAt(), s.getLevel());
         fillResponseFields(s, true, now);
         return s;
+    }
+
+    /** 每复习一次追加一条历史；文件写入会发 FileChangeEvent，网盘同步随之带上。 */
+    private void appendHistory(String cardId,
+                               int grade,
+                               CardSchedule schedule,
+                               long now) {
+        ScheduleHistoryEntry entry = new ScheduleHistoryEntry();
+        entry.setCardId(cardId);
+        entry.setReviewedAt(now);
+        entry.setGrade(grade);
+        entry.setState(schedule.getState());
+        entry.setLevel(schedule.getLevel());
+        entry.setDueAt(schedule.getDueAt().getTime());
+        historyRepository.append(entry);
+    }
+
+    /** 某张卡片的复习历史（从旧到新）。 */
+    public synchronized List<ScheduleHistoryEntry> history(String cardId) {
+        return historyRepository.get(cardId);
+    }
+
+    /** 批量取复习历史，给列表页一次请求用。 */
+    public synchronized Map<String, List<ScheduleHistoryEntry>> histories(List<String> cardIds) {
+        return historyRepository.getFor(cardIds);
     }
 
     private void apply(CardSchedule s,
@@ -163,17 +196,17 @@ public class MemoryCycleService {
     }
 
     /**
-     * 到期卡片：遍历自己的排期文件，取「已开启 + 到点」的那些。
-     *
-     * <p>返回里只有排期与 cardId —— 卡片属于哪篇笔记、正文是什么，由界面侧自己取（本插件不读笔记数据）。
+     * 到期卡片：按**自然天**判断 —— 排期在今天（含今天更早的过期卡片）就算到期，
+     * 不再要求精确到当前时刻。返回里只有排期与 cardId，正文由界面侧自己取。
      */
     public synchronized List<CardSchedule> due(int limit) {
         long now = System.currentTimeMillis();
+        long tomorrow = startOfTomorrow();
         int cap = Math.max(1, Math.min(limit, 200));
         List<CardSchedule> rows = new ArrayList<>();
         for (CardSchedule s : scheduleRepository.getAll()) {
             boolean shortPhase = isShortPhase(s.getState());
-            if (!shortPhase && s.getDueAt().getTime() > now) {
+            if (!shortPhase && s.getDueAt().getTime() >= tomorrow) {
                 continue;
             }
             if (shortPhase) {
@@ -186,6 +219,32 @@ public class MemoryCycleService {
         return rows.size() > cap ? new ArrayList<>(rows.subList(0, cap)) : rows;
     }
 
+    /** 今天（自然天）到期、尚未完成复习的卡片数量，给侧栏徽标用。 */
+    public synchronized int dueTodayCount() {
+        long tomorrow = startOfTomorrow();
+        int count = 0;
+        for (CardSchedule s : scheduleRepository.getAll()) {
+            if (isShortPhase(s.getState()) || s.getDueAt().getTime() < tomorrow) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 明天 0 点（自然天边界）。用日期计算而不是「今天 23:59:59.999」，
+     * 避免时区/毫秒边界上把次日 0 点的卡片算进今天。
+     */
+    private static long startOfTomorrow() {
+        Calendar calendar = Calendar.getInstance();
+        calendar.add(Calendar.DAY_OF_MONTH, 1);
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTimeInMillis();
+    }
+
     /**
      * 卡片没了：删掉它的排期条目（由主容器上的 {@code CardChangedEvent} 触发）。
      *
@@ -193,23 +252,27 @@ public class MemoryCycleService {
      */
     public synchronized boolean delete(String cardId) {
         boolean removed = scheduleRepository.delete(cardId);
+        historyRepository.delete(cardId);
         if (removed) {
             log.debug("卡片 {} 的记忆周期排期已删除", cardId);
         }
         return removed;
     }
 
-    /** 状态重置：清空全部排期（「已开启」即存在排期）。 */
+    /** 状态重置：清空全部排期与复习历史（「已开启」即存在排期）。 */
     public synchronized void clearAll() {
         scheduleRepository.clear();
-        log.info("记忆周期排期已清空");
+        historyRepository.clear();
+        log.info("记忆周期排期与复习历史已清空");
     }
 
     private void fillResponseFields(CardSchedule schedule,
                                     boolean enabled,
                                     long now) {
         schedule.setEnabled(enabled);
-        schedule.setDue(enabled && (isShortPhase(schedule.getState()) || schedule.getDueAt().getTime() <= now));
+        // 「到期」同样按自然天：今天的都算到期，不再看当前时分秒
+        schedule.setDue(enabled && (isShortPhase(schedule.getState())
+                || schedule.getDueAt().getTime() < startOfTomorrow()));
         schedule.setGradePreview(previewDue(schedule, now));
     }
 
