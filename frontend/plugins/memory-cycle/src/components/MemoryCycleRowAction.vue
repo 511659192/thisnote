@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { bumpPluginState, type NoteRef } from '@thisnode/plugin-api'
+import { emitPluginStateChange, type NoteRef } from '@thisnode/plugin-api'
 import { memoryCycleApi } from '../api/memoryCycleApi'
 import { memoryCycle } from '../stores/memoryCycle'
 import MemoryCycleIcon from './MemoryCycleIcon.vue'
@@ -30,7 +30,7 @@ async function toggle() {
     const value = !allEnabled.value
     await memoryCycleApi.setStates(cardIds.value, value)
     await memoryCycle.loadState(cardIds.value)
-    bumpPluginState('memory-cycle')
+    emitPluginStateChange({ pluginId: 'memory-cycle', cardIds: cardIds.value })
   } finally {
     busy.value = false
   }

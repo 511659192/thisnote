@@ -35,7 +35,7 @@ async function setMany(notes: NoteRef[], value: boolean): Promise<void> {
     if (value) favoriteIds.add(noteId)
     else favoriteIds.delete(noteId)
   }
-  bumpPluginState(FAVORITE_PLUGIN_ID)
+  emitPluginStateChange({ pluginId: FAVORITE_PLUGIN_ID, noteIds })
 }
 
 export function registerFavoriteActions(): void {

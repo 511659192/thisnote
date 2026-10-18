@@ -461,6 +461,10 @@ host（qiankun 主应用，:5173）
 - 行内动作 / 批量动作都使用 `NoteRef`（`{noteId,title,cardIds}`）：状态的读写、`loadState`、`isActive`、`toggle` 全在插件里，
   核心只渲染注册表并把所选笔记递进去（favorite、memory-cycle 各在自己的 `src/actions.ts`）。
 
+- **插件状态变化事件**（`pluginState.ts`）：插件改完自己的数据（收藏、记忆曲线…）调
+  `emitPluginStateChange({pluginId, noteIds?, cardIds?})`；核心侧栏订阅后强制刷新徽标与筛选计数，
+  笔记页订阅后重新装载当前卡片的插件状态。核心不认识任何具体插件，插件也不知道谁在听。
+
 - 共享指针 `activeListFilter`：插件 UI（搜索框、侧栏筛选行）设它，notes 域 `watch` 它并调用筛选的 `load()`
   取命中 id（`registry.ts:31-41`；`stores/notes.ts:59-92`）。
 - **可用性桥**（`availability.ts`）：把后端 `active` 拉成响应式 `inactive` 集；`active*()` 系列据此过滤；
@@ -506,8 +510,9 @@ host（qiankun 主应用，:5173）
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
-复习页（`ReviewView.vue`）：到期队列逐张评分，四档按钮标注「下次出现」；短周期卡在队列内轮询重现，长周期卡移出视图；
-键盘 1-4 作用于最上方卡片；查不到正文的排期按孤儿处理并调 `delete-schedule` 清理（`ReviewView.vue:20-27,76-140`）。
+复习页（`ReviewView.vue`）：三个页签 —— **今日复习**（到期队列逐张评分）、**今日到期**（排期落在今天之内的卡片列表，默认 3 列）、
+**开启记忆**（所有开启记忆周期的卡片，默认 5 列，可切 3/5 列）；四档按钮标注「下次出现」；短周期卡在队列内轮询重现，
+长周期卡移出视图；键盘 1-4 作用于最上方卡片；查不到正文的排期按孤儿处理并调 `delete-schedule` 清理。
 
 ### 6.8 构建与交付
 

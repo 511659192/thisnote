@@ -16,6 +16,7 @@ import {
   activeNoteListFilters,
   clearActiveListFilter,
   navBadges,
+  onPluginStateChange,
   refreshPluginAvailability,
   setActiveListFilter,
   shellState,
@@ -48,15 +49,16 @@ const collapsed = computed(() => shellState.sidebarCollapsed)
 /** 当前是否停在某个插件页面上：入口与核心视图同级，同一时刻只该有一行是亮的。 */
 const isPluginPage = computed(() => pluginNav.value.some((entry) => route.path === entry.to))
 const badges = ref<Record<string, number>>({})
+let unsubscribePluginState: (() => void) | null = null
 
-async function refreshPluginBadges() {
+async function refreshPluginBadges(force = false) {
   /**
    * 不给「你正在看的那个插件页」取徽标：那份数据页面自己刚刚取过一遍，
    * 再取一次就是同一份列表请求打两遍（从复习切到收藏时实测到过）。
    * 等你离开这个页面时，它会被正常刷新。
    */
   const elsewhere = pluginNav.value.filter((entry) => route.path !== entry.to)
-  badges.value = await navBadges(elsewhere)
+  badges.value = await navBadges(elsewhere, force)
 }
 async function refreshPlugins() {
   await refreshPluginAvailability()
@@ -84,12 +86,19 @@ onMounted(async () => {
   // 设置页等非笔记路由的侧栏也得有行可点）。
   await nodes.refreshAll()
   void refreshPlugins()
+  unsubscribePluginState = onPluginStateChange(() => {
+    // 插件里改了数据（收藏/记忆曲线）：侧栏的计数立刻跟着刷新
+    void refreshPluginBadges(true)
+    void refreshFilterBadges()
+  })
   window.addEventListener('focus', onFocus)
   document.addEventListener('visibilitychange', onVisibility)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('focus', onFocus)
   document.removeEventListener('visibilitychange', onVisibility)
+  unsubscribePluginState?.()
+  unsubscribePluginState = null
 })
 function onFocus() {
   void refreshPlugins()

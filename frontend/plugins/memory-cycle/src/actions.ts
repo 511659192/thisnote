@@ -1,4 +1,4 @@
-import { bumpPluginState, registerNoteBatchAction, registerNoteRowAction, type NoteRef } from '@thisnode/plugin-api'
+import { emitPluginStateChange, registerNoteBatchAction, registerNoteRowAction, type NoteRef } from '@thisnode/plugin-api'
 import { memoryCycleApi } from './api/memoryCycleApi'
 import { memoryCycle } from './stores/memoryCycle'
 import MemoryCycleRowAction from './components/MemoryCycleRowAction.vue'
@@ -33,7 +33,7 @@ async function apply(notes: NoteRef[], value: boolean): Promise<string> {
   if (!ids.length) return '所选笔记还没有卡片'
   await memoryCycleApi.setStates(ids, value)
   await loadStates(ids)
-  bumpPluginState(PLUGIN_ID)
+  emitPluginStateChange({ pluginId: PLUGIN_ID, cardIds: ids })
   return `已${value ? '开启' : '关闭'} ${ids.length} 张卡片的记忆曲线`
 }
 

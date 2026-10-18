@@ -13,7 +13,8 @@ import {
   type MemoryCycleCardState,
 } from '../api/memoryCycleApi'
 import { memoryCycle } from '../stores/memoryCycle'
-import { host, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
+import { host, emitPluginStateChange, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
+import ReviewCardTile from '../components/ReviewCardTile.vue'
 
 const PLUGIN_ID = 'memory-cycle'
 
@@ -32,16 +33,33 @@ const currentCard = computed(() => queue.value[0])
 const loadedContentIds = ref(new Set<string>())
 const contentLoadingCardId = ref<string | null>(null)
 const contentError = ref('')
-const activeTab = ref<'review' | 'enabled'>('review')
+type ReviewTab = 'review' | 'due' | 'enabled'
+const activeTab = ref<ReviewTab>('review')
 const enabledCards = ref<EnabledMemoryCard[]>([])
 const previewCard = ref<EnabledMemoryCard | null>(null)
 const enabledCardsLoading = ref(false)
 const enabledCardsLoaded = ref(false)
 const enabledCardsError = ref('')
+/** 今日到期 / 开启记忆的列数（默认分别是 3 列与 5 列）。 */
+const dueColumns = ref<3 | 5>(3)
+const enabledColumns = ref<3 | 5>(5)
 const loading = ref(true)
 const reviewedCount = ref(0)
 const busyIds = ref(new Set<string>())
 const reviewedStates = new Map<string, MemoryCycleCardState>()
+
+/** 今天 23:59:59.999 的时间戳。 */
+function endOfToday(): number {
+  const end = new Date()
+  end.setHours(23, 59, 59, 999)
+  return end.getTime()
+}
+
+/** 今日到期：排期落在今天之内（含已在今日队列里、尚未评分的卡片）。 */
+const dueTodayCards = computed(() => {
+  const end = endOfToday()
+  return enabledCards.value.filter((card) => card.schedule.dueAt > 0 && card.schedule.dueAt <= end)
+})
 
 const stateLabel = (state: string) => {
   switch (state) {
@@ -105,6 +123,7 @@ async function loadCurrentCardContent() {
       orphanCount.value++
       queue.value = queue.value.filter((item) => item.cardId !== card.cardId)
       void memoryCycleApi.forget(card.cardId).catch(() => {})
+      emitPluginStateChange({ pluginId: PLUGIN_ID, cardIds: [card.cardId] })
     } catch (error) {
       contentError.value = error instanceof Error ? error.message : '读取卡片失败，请重试'
       return
@@ -133,9 +152,9 @@ async function loadEnabledCardList() {
   }
 }
 
-function selectTab(tab: 'review' | 'enabled') {
+function selectTab(tab: ReviewTab) {
   activeTab.value = tab
-  if (tab === 'enabled' && !enabledCardsLoaded.value) void loadEnabledCardList()
+  if ((tab === 'due' || tab === 'enabled') && !enabledCardsLoaded.value) void loadEnabledCardList()
 }
 
 function openPreview(card: EnabledMemoryCard) {
@@ -336,8 +355,9 @@ const GRADES: { grade: Grade; label: string }[] = [
     <header class="rv-head">
       <h2>复习</h2>
       <span v-if="activeTab === 'review' && queue.length" class="rv-progress">{{ queue.length }} 张待复习</span>
+      <span v-else-if="activeTab === 'due' && enabledCardsLoaded" class="rv-progress">{{ dueTodayCards.length }} 张今日到期</span>
       <span v-else-if="activeTab === 'enabled' && enabledCardsLoaded" class="rv-progress">{{ enabledCards.length }} 张已开启</span>
-      <span v-else-if="activeTab === 'enabled' && (enabledCardsLoading || loading)" class="rv-progress">统计中…</span>
+      <span v-else-if="(activeTab === 'due' || activeTab === 'enabled') && (enabledCardsLoading || loading)" class="rv-progress">统计中…</span>
       <div class="spacer"></div>
       <button class="btn sm ghost" @click="router.push('/notes')">返回笔记</button>
     </header>
@@ -360,7 +380,18 @@ const GRADES: { grade: Grade; label: string }[] = [
         :aria-selected="activeTab === 'review'"
         @click="selectTab('review')"
       >
-        卡片复习 <span v-if="queue.length" class="rv-tab-count">{{ queue.length }}</span>
+        今日复习 <span v-if="queue.length" class="rv-tab-count">{{ queue.length }}</span>
+      </button>
+      <button
+        class="rv-tab"
+        :class="{ active: activeTab === 'due' }"
+        role="tab"
+        :aria-selected="activeTab === 'due'"
+        @click="selectTab('due')"
+      >
+        今日到期
+        <span v-if="enabledCardsLoaded" class="rv-tab-count">{{ dueTodayCards.length }}</span>
+        <span v-else-if="enabledCardsLoading || loading" class="rv-tab-count">…</span>
       </button>
       <button
         class="rv-tab"
@@ -369,7 +400,7 @@ const GRADES: { grade: Grade; label: string }[] = [
         :aria-selected="activeTab === 'enabled'"
         @click="selectTab('enabled')"
       >
-        已开启卡片
+        开启记忆
         <span v-if="enabledCardsLoaded" class="rv-tab-count">{{ enabledCards.length }}</span>
         <span v-else-if="enabledCardsLoading || loading" class="rv-tab-count">…</span>
       </button>
@@ -435,9 +466,43 @@ const GRADES: { grade: Grade; label: string }[] = [
 
     </template>
 
+    <section v-else-if="!pluginDisabled && activeTab === 'due'" class="rv-enabled-panel">
+      <div class="rv-enabled-header">
+        <p class="small muted">今日到期的卡片（截止到今天 23:59）</p>
+        <div class="rv-columns">
+          <button class="btn sm ghost" :class="{ active: dueColumns === 3 }" title="3 列" @click="dueColumns = 3">3 列</button>
+          <button class="btn sm ghost" :class="{ active: dueColumns === 5 }" title="5 列" @click="dueColumns = 5">5 列</button>
+        </div>
+        <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
+          {{ enabledCardsLoading ? '加载中…' : '刷新' }}
+        </button>
+      </div>
+      <div v-if="enabledCardsLoading" class="rv-state small muted">加载今日到期卡片…</div>
+      <div v-else-if="enabledCardsError" class="rv-state rv-done">
+        <p class="small muted">加载失败：{{ enabledCardsError }}</p>
+        <button class="btn primary" @click="loadEnabledCardList">重试</button>
+      </div>
+      <div v-else-if="!enabledCardsLoaded" class="rv-state small muted">正在准备卡片列表…</div>
+      <div v-else-if="!dueTodayCards.length" class="rv-state rv-done">
+        <h3>今天没有到期的卡片</h3>
+      </div>
+      <div v-else class="rv-enabled-list" :style="{ columnCount: dueColumns }">
+        <ReviewCardTile
+          v-for="card in dueTodayCards"
+          :key="card.cardId"
+          :card="card"
+          @preview="openPreview(card)"
+        />
+      </div>
+    </section>
+
     <section v-else-if="!pluginDisabled && activeTab === 'enabled'" class="rv-enabled-panel">
       <div class="rv-enabled-header">
         <p class="small muted">已开启记忆周期的卡片（包含未到期卡片）</p>
+        <div class="rv-columns">
+          <button class="btn sm ghost" :class="{ active: enabledColumns === 3 }" title="3 列" @click="enabledColumns = 3">3 列</button>
+          <button class="btn sm ghost" :class="{ active: enabledColumns === 5 }" title="5 列" @click="enabledColumns = 5">5 列</button>
+        </div>
         <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
           {{ enabledCardsLoading ? '加载中…' : '刷新' }}
         </button>
@@ -451,28 +516,13 @@ const GRADES: { grade: Grade; label: string }[] = [
       <div v-else-if="!enabledCards.length" class="rv-state rv-done">
         <h3>没有开启记忆周期的卡片</h3>
       </div>
-      <div v-else class="rv-enabled-list">
-        <article
+      <div v-else class="rv-enabled-list" :style="{ columnCount: enabledColumns }">
+        <ReviewCardTile
           v-for="card in enabledCards"
           :key="card.cardId"
-          class="rv-enabled-card"
-          @click="openPreview(card)"
-        >
-          <div class="rv-enabled-content">
-            <button
-              class="btn sm ghost rv-preview-trigger"
-              aria-label="预览卡片"
-              title="预览卡片"
-              @click.stop="openPreview(card)"
-            >
-              <svg class="rv-preview-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </button>
-            <component :is="MarkdownView" :content="card.contentMd" />
-          </div>
-        </article>
+          :card="card"
+          @preview="openPreview(card)"
+        />
       </div>
     </section>
 
@@ -585,54 +635,15 @@ const GRADES: { grade: Grade; label: string }[] = [
   margin: 0;
 }
 .rv-enabled-list {
-  columns: 3;
   column-gap: var(--space-3);
 }
-.rv-enabled-card {
-  position: relative;
-  display: inline-flex;
-  box-sizing: border-box;
-  width: 100%;
-  max-height: 50vh;
-  margin: 0 0 var(--space-3);
-  break-inside: avoid;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow: auto;
-  padding: var(--space-3);
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: var(--c-surface);
-  box-shadow: var(--shadow-sm);
+.rv-columns {
+  display: flex;
+  gap: 6px;
 }
-.rv-preview-trigger {
-  position: absolute;
-  top: var(--space-2);
-  right: calc(var(--space-2) + 16px);
-  z-index: 1;
-}
-.rv-preview-icon {
-  display: block;
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.rv-enabled-content {
-  padding-right: 64px;
-  overflow-x: hidden;
-}
-@media (max-width: 900px) {
-  .rv-enabled-list {
-    columns: 2;
-  }
-}
-@media (max-width: 600px) {
-  .rv-enabled-list {
-    columns: 1;
-  }
+.rv-columns .btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .rv-review-stage {
@@ -757,11 +768,7 @@ const GRADES: { grade: Grade; label: string }[] = [
   overflow: auto;
   padding: var(--space-4);
 }
-/* 已开启卡片按图片实际大小展示，不套用 MarkdownView 默认的 320px 高度上限；
-   预览浮层完全按自然尺寸，超出部分滚动，列表卡仍受列宽约束以免三列布局破版 */
-.rv-enabled-content :deep(.md-preview img) {
-  max-height: none;
-}
+/* 预览浮层完全按自然尺寸，超出部分滚动；列表卡仍受列宽约束以免列数多时破版 */
 .rv-preview-content :deep(.md-preview img) {
   max-width: none;
   max-height: none;

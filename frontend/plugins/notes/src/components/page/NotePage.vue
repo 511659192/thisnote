@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
-import { activeCardPlugins, host, toast } from '@thisnode/plugin-api'
+import { activeCardPlugins, host, onPluginStateChange, toast } from '@thisnode/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
 import type { CardView } from '@/api/types'
@@ -75,20 +75,31 @@ function watchSentinel() {
 // 插件底座：卡片集合或插件注册变化时，批量装载对应状态（每页一次请求）。
 // 插件微应用可能晚于笔记页挂载；也要监听插件实例替换，避免热重载后状态没补拉。
 // 只问仍在运行的插件——被停用的插件其端点会被拒绝，问了也只是白打一串 409。
+function reloadCardPluginStates() {
+  const cardIds = page.cards.map((b) => b.card.cardId)
+  if (!cardIds.length) return
+  for (const plugin of activeCardPlugins()) {
+    void plugin.loadState(cardIds).catch(() => undefined)
+  }
+}
+
 watch(
   [
     () => page.cards.map((b) => b.card.cardId).join(','),
     () => activeCardPlugins(),
   ],
-  ([ids]) => {
-    if (!ids) return
-    const cardIds = ids.split(',')
-    for (const plugin of activeCardPlugins()) {
-      void plugin.loadState(cardIds).catch(() => undefined)
-    }
-  },
+  () => reloadCardPluginStates(),
   { immediate: true },
 )
+
+// 插件广播状态变化（例如列表里一键开启记忆曲线）：当前笔记的卡片徽标同步刷新
+let unsubscribePluginState: (() => void) | null = null
+onMounted(() => {
+  unsubscribePluginState = onPluginStateChange((change) => {
+    if (!activeCardPlugins().some((plugin) => plugin.id === change.pluginId)) return
+    reloadCardPluginStates()
+  })
+})
 
 onMounted(() => {
   if (!root.value) return
@@ -120,6 +131,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   observer?.disconnect()
+  unsubscribePluginState?.()
+  unsubscribePluginState = null
   window.removeEventListener('mousemove', onPreviewMouseMove)
   window.removeEventListener('mouseup', onPreviewMouseUp)
   root.value?.removeEventListener('wheel', onWheel)
@@ -497,14 +510,17 @@ function onFitWidth(p: { cardId: string; ratio: number }) {
 }
 
 /** 自定义宽度（px）：只约束宽度；解除手动高度，高度交回贴合逻辑。 */
-function onFitCustom(p: { cardId: string; width: number }) {
+/** 自定义尺寸（px）：宽高都按用户输入固定，高度视为手动高度。 */
+function onFitCustom(p: { cardId: string; width: number; height: number }) {
   const view = page.cards.find((b) => b.card.cardId === p.cardId)
   if (!view) return
-  page.clearManualHeight(p.cardId)
   const width = Math.max(88, Math.round(p.width))
-  if (width === view.card.w) return
-  fullHeightFits.add(p.cardId)
-  void page.commit([{ cardId: view.card.cardId, w: width }]).catch(() => undefined)
+  const height = Math.max(BLOCK_MIN_H, Math.round(p.height))
+  page.markManualHeight(p.cardId)
+  const updates: CardUpdate[] = []
+  if (width !== view.card.w) updates.push({ cardId: view.card.cardId, w: width })
+  if (height !== view.card.h) updates.push({ cardId: view.card.cardId, h: height })
+  if (updates.length) void page.commit(updates).catch(() => undefined)
 }
 
 // ---------------------------------------------------------------- 卡片预览（单击）
@@ -790,6 +806,7 @@ defineExpose({ size, beginEdit, finishEditing })
         :editing="page.editingCardId === view.card.cardId"
         :focused="page.selection.includes(view.card.cardId)"
         :z-index="page.zIndexFor(view.card.cardId)"
+        :manual-height="page.isManualHeight(view.card.cardId)"
         @pointerdown="onBlockPointerDown"
         @request-edit="
           (id: string) => {
