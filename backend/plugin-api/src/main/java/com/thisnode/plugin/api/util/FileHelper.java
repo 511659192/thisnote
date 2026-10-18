@@ -2,6 +2,7 @@ package com.thisnode.plugin.api.util;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.plugin.api.event.FileChangeEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +15,12 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.CopyOption;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -142,6 +146,47 @@ public final class FileHelper {
         Path parent = file.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
+        }
+    }
+
+    /**
+     * 读取整份 JSON map 索引（如 noteId → PO 的单文件全量索引）。
+     * 文件缺失/空白/解析为 null 一律按「索引损坏」处理：记 error 后抛出，保留现场等人工介入，不静默重建。
+     */
+    public static <T> Map<String, T> readMapIndex(Path file,
+                                                  TypeReference<LinkedHashMap<String, T>> type,
+                                                  String label) {
+        try {
+            Map<String, T> map = JSON.parseObject(Files.readString(file, StandardCharsets.UTF_8), type);
+            return map == null ? new LinkedHashMap<>() : map;
+        } catch (Exception e) {
+            log.error(label + "索引无法解析：{}", file, e);
+            throw new IllegalStateException(label + "索引无法解析 " + file, e);
+        }
+    }
+
+    /**
+     * 读取整份 JSON map；文件缺失视为「还没有数据」返回空 map，
+     * 其余读取/解析失败按 label 记 warn 后抛出（保留原文件，不静默重建）。
+     */
+    public static <T> Map<String, T> readMapOrEmpty(Path file,
+                                                    TypeReference<LinkedHashMap<String, T>> type,
+                                                    String label) {
+        String json;
+        try {
+            json = Files.readString(file, StandardCharsets.UTF_8);
+        } catch (NoSuchFileException e) {
+            return new LinkedHashMap<>();
+        } catch (IOException e) {
+            log.warn(label + "文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
+            throw new IllegalStateException(label + "文件无法读取 " + file, e);
+        }
+        try {
+            Map<String, T> map = json.isBlank() ? null : JSON.parseObject(json, type);
+            return map == null ? new LinkedHashMap<>() : map;
+        } catch (RuntimeException e) {
+            log.warn(label + "文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
+            throw new IllegalStateException(label + "文件无法读取 " + file, e);
         }
     }
 }

@@ -1,11 +1,12 @@
 package com.thisnode.ext.memorycycle;
 
-import com.thisnode.ext.memorycycle.service.MemoryCycleStateChangedEventListener;
-import com.thisnode.ext.memorycycle.service.NoteChangedEventListener;
-import com.thisnode.ext.memorycycle.service.CardChangedEventListener;
 import com.thisnode.ext.memorycycle.service.MemoryCycleService;
-import com.thisnode.ext.memorycycle.service.PluginStateResetListener;
+import com.thisnode.plugin.api.event.CardChangedEvent;
+import com.thisnode.plugin.api.event.MemoryCycleStateChangedEvent;
+import com.thisnode.plugin.api.event.NoteChangedEvent;
 import com.thisnode.plugin.api.util.FileHelper;
+import com.thisnode.plugin.api.util.MainContainerListeners;
+import lombok.extern.slf4j.Slf4j;
 
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -22,16 +23,14 @@ import org.pf4j.PluginWrapper;
  *
  * <p>id 与版本来自 {@code plugin.properties}（由 {@code descriptor()} 从 PF4J 描述符取），不在这里硬编码。
  */
+@Slf4j
 public class MemoryCyclePlugin extends SpringBootPlugin {
 
     /** 端点前缀；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "memory-cycle";
 
-    /** 注册到主容器的排期清理器（停止时要摘掉，见 {@link #stop()}）。 */
-    private CardChangedEventListener listener;
-    private NoteChangedEventListener noteChangedEventListener;
-    private MemoryCycleStateChangedEventListener stateListener;
-    private PluginStateResetListener resetListener;
+    /** 本插件注册到主容器的全部跨插件监听器（停止时统一摘除）。 */
+    private MainContainerListeners listeners;
 
     public MemoryCyclePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -67,14 +66,33 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
                                      org.springframework.context.support.GenericApplicationContext ctx) {
         MemoryCycleService srs = ctx.getBean(MemoryCycleService.class);
         srs.setMainEventPublisher(getMainApplicationContext());
-        listener = new CardChangedEventListener(srs);
-        noteChangedEventListener = new NoteChangedEventListener(srs);
-        stateListener = new MemoryCycleStateChangedEventListener(srs);
-        resetListener = new PluginStateResetListener(srs);
-        getMainApplicationContext().addApplicationListener(listener);
-        getMainApplicationContext().addApplicationListener(noteChangedEventListener);
-        getMainApplicationContext().addApplicationListener(stateListener);
-        getMainApplicationContext().addApplicationListener(resetListener);
+        listeners = new MainContainerListeners(getMainApplicationContext());
+        listeners.onPayload(CardChangedEvent.class, payload -> {
+            if (payload.kind() != CardChangedEvent.Kind.DELETED) {
+                return;
+            }
+            if (srs.delete(payload.cardId())) {
+                log.info("卡片已删除，复习状态一并清除：{}", payload.cardId());
+            }
+        });
+        listeners.onPayload(NoteChangedEvent.class, change -> {
+            if (change.kind() != NoteChangedEvent.Kind.DELETED) {
+                return;
+            }
+            int removedCards = 0;
+            for (String cardId : change.cardIds()) {
+                if (srs.delete(cardId)) {
+                    removedCards++;
+                }
+            }
+            log.info("笔记已删除，相关复习状态已清理：noteId={}, cards={}", change.noteId(), removedCards);
+        });
+        listeners.onPayload(MemoryCycleStateChangedEvent.class, change -> {
+            if (!change.enabled() && srs.delete(change.cardId())) {
+                log.info("记忆周期已关闭，排期条目一并清除：{}", change.cardId());
+            }
+        });
+        listeners.onStateReset("记忆周期排期与复习历史已清空", srs::clearAll);
     }
 
     /**
@@ -83,21 +101,9 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
      */
     @Override
     public void stop() {
-        if (listener != null) {
-            getMainApplicationContext().removeApplicationListener(listener);
-            listener = null;
-        }
-        if (noteChangedEventListener != null) {
-            getMainApplicationContext().removeApplicationListener(noteChangedEventListener);
-            noteChangedEventListener = null;
-        }
-        if (stateListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateListener);
-            stateListener = null;
-        }
-        if (resetListener != null) {
-            getMainApplicationContext().removeApplicationListener(resetListener);
-            resetListener = null;
+        if (listeners != null) {
+            listeners.removeAll();
+            listeners = null;
         }
         super.stop();
     }

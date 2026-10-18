@@ -124,7 +124,7 @@ public class MemoryCycleController {
         long now = System.currentTimeMillis();
         long dueAt = 0;
         if (schedule.isEnabled()) {
-            dueAt = isShortPhase(schedule.getState()) ? now : schedule.getDueAt().getTime();
+            dueAt = MemoryCycleService.isShortPhase(schedule.getState()) ? now : schedule.getDueAt().getTime();
         }
         Long lastReviewedAt = schedule.getLastReviewedAt() == null ? null : schedule.getLastReviewedAt().getTime();
         return new ScheduleView(schedule.getCardId(),
@@ -135,10 +135,6 @@ public class MemoryCycleController {
                                 schedule.getReps(),
                                 schedule.getLapses(),
                                 schedule.isDue());
-    }
-
-    private boolean isShortPhase(String state) {
-        return "new".equals(state) || "learning".equals(state) || "relearning".equals(state);
     }
 
     private DueCardView dueView(CardSchedule schedule) {

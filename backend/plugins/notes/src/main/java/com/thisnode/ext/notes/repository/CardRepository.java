@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.repository;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.CardPO;
@@ -8,11 +7,9 @@ import com.thisnode.ext.notes.model.CardPO.CardMeta;
 import com.thisnode.ext.notes.util.FileNameUtil;
 import com.thisnode.plugin.api.util.FileHelper;
 import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,7 +22,6 @@ import java.util.UUID;
  * 卡片存储：正文在 {@code cards/*.md}，元数据在 {@code plugins/notes/.card-metadata.json}
  * （{@code cardId → CardMeta}，文件名就是 {@code meta.sourceFileName}）。
  */
-@Slf4j
 @Repository
 public class CardRepository {
 
@@ -47,11 +43,9 @@ public class CardRepository {
     public synchronized CardPO getOne(String cardId) {
         if (cardId == null || cardId.isBlank()) return null;
 
-        // 先读取meta
         CardMeta meta = readCardMetadata(cardId);
         if (meta == null || meta.getFileName() == null) return null;
 
-        // 组合meta card
         return readCard(notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName()), meta);
     }
 
@@ -182,6 +176,7 @@ public class CardRepository {
 
     /**
      * Rewrite the card content using its stable ID to resolve the physical path.
+     * {@code contentMd} 为 null = 只更新元数据（几何/颜色…）：正文与 md 文件都不动，mtime 保持不变。
      */
     public synchronized String update(CardMeta meta,
                                       String contentMd,
@@ -191,22 +186,11 @@ public class CardRepository {
             throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
         }
         meta.setFileName(indexed.getFileName());
-        fileHelper.fileWritten(notesConfig.getRootDir().resolve("cards").resolve(indexed.getFileName()), contentMd == null ? "" : contentMd);
+        if (contentMd != null) {
+            fileHelper.fileWritten(notesConfig.getRootDir().resolve("cards").resolve(indexed.getFileName()), contentMd);
+        }
         putCardIndexMeta(meta);
         return cardId;
-    }
-
-    /**
-     * 只更新元数据（几何/颜色…）：正文与 md 文件都不动，mtime 保持不变。
-     */
-    public synchronized void update(CardMeta meta,
-                                    String cardId) {
-        CardMeta indexed = readCardMetadata(cardId);
-        if (indexed == null || indexed.getFileName() == null) {
-            throw new IllegalStateException("卡片 ID 不在索引中：" + cardId);
-        }
-        meta.setFileName(indexed.getFileName());
-        putCardIndexMeta(meta);
     }
 
     public synchronized void delete(List<String> cardIds) {
@@ -269,16 +253,6 @@ public class CardRepository {
     }
 
     private Map<String, CardMeta> readCardMetadata() {
-        try {
-            String json = Files.readString(cardMetadataFile, StandardCharsets.UTF_8);
-            if (json.isBlank()) {
-                return new LinkedHashMap<>();
-            }
-            Map<String, CardMeta> metas = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, CardMeta>>() { });
-            return metas == null ? new LinkedHashMap<>() : metas;
-        } catch (Exception e) {
-            log.error("卡片索引无法解析：{}", cardMetadataFile, e);
-            throw new IllegalStateException("卡片索引无法解析 " + cardMetadataFile, e);
-        }
+        return FileHelper.readMapIndex(cardMetadataFile, new TypeReference<LinkedHashMap<String, CardMeta>>() { }, "卡片");
     }
 }

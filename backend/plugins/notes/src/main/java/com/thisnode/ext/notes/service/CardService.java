@@ -57,11 +57,6 @@ public class CardService {
     }
 
     public CardDTO create(String noteId,
-                          CreateCardRequest req) {
-        return create(noteId, req, null);
-    }
-
-    public CardDTO create(String noteId,
                           CreateCardRequest req,
                           String fixedFileName) {
         if (req.x() == null || req.y() == null) {
@@ -143,7 +138,7 @@ public class CardService {
         Optional.ofNullable(changes.color()).ifPresent(meta::setColor);
         Optional.ofNullable(changes.status()).ifPresent(meta::setStatus);
         Optional.ofNullable(changes.collapsed()).ifPresent(meta::setCollapsed);
-        cardRepository.update(meta, cardId);
+        cardRepository.update(meta, null, cardId);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         log.debug("卡片 {} 元数据已更新", cardId);
         return meta;

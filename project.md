@@ -161,9 +161,10 @@ host（qiankun 主应用，:5173）
 |---|---|
 | `lifecycle/PluginRegister` | 唯一 PF4J 扩展点：`title/description/health/undeactivatable/onGlobalStateChanged`，除显示名与说明外都有默认实现 |
 | `lifecycle/PluginHealth` | `ok / degraded / error / unknown` + 一句话；**刻意不发起网络请求** |
-| `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`） |
+| `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`）；另含 `readMapIndex`/`readMapOrEmpty` 两个 JSON 索引读取原语（缺失/损坏语义不同） |
+| `util/MainContainerListeners` | 插件跨容器监听器统一注册口：`add`/`onPayload`（按 payload 类型分发）/`onStateReset` 注册、`removeAll` 在插件 stop 时统一摘除 |
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
-| `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED/REQUEST` |
+| `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED`（2026-10-18 删除无引用的 `REQUEST` 分支与 `NoteCreateRequest` 载荷） |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
@@ -613,9 +614,12 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
      块内同名规则保留）。
 12. ~~`registry.ts:9` 注释说「目前有五个插槽」，实际注册表有 9 个~~（已修复：注释改为指向 §6.4 的完整清单，
      注册表现有 11 个）。
-13. **`MemoryCycleStateChangedEventListener` 有两份实例**：一份是插件容器里的 `@Component`
-    （`MemoryCycleStateChangedEventListener.java:9`），另一份由 `MemoryCyclePlugin` 手工 new 并注册到主容器
-    （`MemoryCyclePlugin.java:64-73`）。当前只有主容器那份会收到事件（事件由主容器发布），但读代码时容易误会。
+13. ~~`MemoryCycleStateChangedEventListener` 有两份实例~~（已修复：2026-10-18 删除插件容器内的 `@Component` 死注册——
+    跨插件事件只经主容器广播，插件容器内那份从未收到过事件；notes 的 `CardAttachmentCleanupListener` 同形态同批修复。
+    同批把 7 个插件的「listener 注册/摘除」样板与 7 份同构的 `PluginStateResetListener` 下沉为
+    `plugin-api` 的 `MainContainerListeners`（`add`/`onPayload`/`onStateReset`/`removeAll`），
+    业务 listener 以 lambda 内联进各 Plugin 类；`FileChangeEventListener` 例外保留类形态——
+    `BaiduSyncStarter` 的 `@EnableAsync` 使其 `@Async` 代理真实生效，必须保持异步执行）。
 14. **历史日志不能当现状依据**：`backend/app/backend-run.log` 与各处 `*.log` 是 2026-10-12 的运行记录，
     里面还是 `memory-curve`、契约版本 `4.0.0`（`backend-run.log:31-37`）。
 15. **`notes` 新建笔记没有重名校验**：`NoteRepository.save` 直接用标题写 `<title>.json`

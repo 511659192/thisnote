@@ -38,10 +38,6 @@ public class BookService {
         return bookRepository.getAll(type).stream().map(notesMapper::toBookDTO).toList();
     }
 
-    public BookDTO find(String id) {
-        return notesMapper.toBookDTO(bookRepository.getOne(id));
-    }
-
     public BookDTO create(String title,
                          String icon,
                          String type) {

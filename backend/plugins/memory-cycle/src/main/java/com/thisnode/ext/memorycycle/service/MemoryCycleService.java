@@ -31,7 +31,8 @@ public class MemoryCycleService {
         this.historyRepository = historyRepository;
     }
 
-    private static boolean isShortPhase(String state) {
+    /** 短周期状态（new/learning/relearning）一律视为已到期。 */
+    public static boolean isShortPhase(String state) {
         return "new".equals(state) || "learning".equals(state) || "relearning".equals(state);
     }
 
@@ -39,7 +40,7 @@ public class MemoryCycleService {
      * Enabled + schedule for one card. Schedule is {@code null} until the first review.
      */
     public synchronized CardSchedule cardState(String cardId) {
-        return stateOf(scheduleRepository.loadAll(), cardId, System.currentTimeMillis());
+        return cardStates(List.of(cardId)).get(0);
     }
 
     /**

@@ -1,7 +1,7 @@
 package com.thisnode.ext.attachmentimporter;
 
 import com.thisnode.ext.attachmentimporter.service.AttachmentImporterService;
-import com.thisnode.ext.attachmentimporter.service.PluginStateResetListener;
+import com.thisnode.plugin.api.util.MainContainerListeners;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -20,7 +20,8 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "attachment-importer";
 
-    private PluginStateResetListener stateResetListener;
+    /** 本插件注册到主容器的全部跨插件监听器（停止时统一摘除）。 */
+    private MainContainerListeners listeners;
 
     public AttachmentImporterPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -35,15 +36,15 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         AttachmentImporterService service = ctx.getBean(AttachmentImporterService.class);
         service.setMainEventPublisher(getMainApplicationContext());
-        stateResetListener = new PluginStateResetListener();
-        getMainApplicationContext().addApplicationListener(stateResetListener);
+        listeners = new MainContainerListeners(getMainApplicationContext());
+        listeners.onStateReset("attachment-importer 无自有状态", () -> { });
     }
 
     @Override
     public void stop() {
-        if (stateResetListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateResetListener);
-            stateResetListener = null;
+        if (listeners != null) {
+            listeners.removeAll();
+            listeners = null;
         }
         super.stop();
     }

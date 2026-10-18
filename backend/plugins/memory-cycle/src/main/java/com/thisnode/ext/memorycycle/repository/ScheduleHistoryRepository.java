@@ -1,17 +1,11 @@
 package com.thisnode.ext.memorycycle.repository;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.memorycycle.model.ScheduleHistoryEntry;
 import com.thisnode.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -25,7 +19,6 @@ import java.util.Map;
  * <p>写入走 {@link FileHelper}，因此每次追加都会发 {@code FileChangeEvent}，百度网盘同步会自动带上这个文件。
  */
 @Repository
-@Slf4j
 public class ScheduleHistoryRepository {
 
     /** 每张卡片最多保留的记录条数（更早的滚动丢弃）。 */
@@ -80,20 +73,7 @@ public class ScheduleHistoryRepository {
     }
 
     public synchronized Map<String, List<ScheduleHistoryEntry>> loadAll() {
-        try {
-            String json;
-            try {
-                json = Files.readString(file, StandardCharsets.UTF_8);
-            } catch (NoSuchFileException e) {
-                return new LinkedHashMap<>();
-            }
-            Map<String, List<ScheduleHistoryEntry>> history = json.isBlank() ? null : JSON.parseObject(json, new TypeReference<>() {
-            });
-            return history == null ? new LinkedHashMap<>() : history;
-        } catch (IOException | RuntimeException e) {
-            log.warn("复习历史文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
-            throw new IllegalStateException("复习历史文件无法读取 " + file, e);
-        }
+        return FileHelper.readMapOrEmpty(file, new TypeReference<>() { }, "复习历史");
     }
 
     private void writeJson(Map<String, List<ScheduleHistoryEntry>> values) {

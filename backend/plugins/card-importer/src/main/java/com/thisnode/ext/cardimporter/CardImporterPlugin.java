@@ -1,7 +1,7 @@
 package com.thisnode.ext.cardimporter;
 
 import com.thisnode.ext.cardimporter.service.CardImporterService;
-import com.thisnode.ext.cardimporter.service.PluginStateResetListener;
+import com.thisnode.plugin.api.util.MainContainerListeners;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -13,7 +13,8 @@ public class CardImporterPlugin
 
     public static final String PLUGIN_ID = "card-importer";
 
-    private PluginStateResetListener stateResetListener;
+    /** 本插件注册到主容器的全部跨插件监听器（停止时统一摘除）。 */
+    private MainContainerListeners listeners;
 
     public CardImporterPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -28,15 +29,15 @@ public class CardImporterPlugin
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      GenericApplicationContext ctx) {
         ctx.getBean(CardImporterService.class).setMainEventPublisher(getMainApplicationContext());
-        stateResetListener = new PluginStateResetListener();
-        getMainApplicationContext().addApplicationListener(stateResetListener);
+        listeners = new MainContainerListeners(getMainApplicationContext());
+        listeners.onStateReset("card-importer 无自有状态", () -> { });
     }
 
     @Override
     public void stop() {
-        if (stateResetListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateResetListener);
-            stateResetListener = null;
+        if (listeners != null) {
+            listeners.removeAll();
+            listeners = null;
         }
         super.stop();
     }

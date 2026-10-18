@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -31,7 +30,7 @@ public class BaiduOAuthClient {
 
     public String authorizationUrl() {
         BaiduSyncSettings settings = requireClientSettings();
-        return AUTHORIZE_URL + "?" + form(
+        return AUTHORIZE_URL + "?" + BaiduPanClient.query(
                 Map.of("response_type", "code", "client_id", settings.appKey(), "redirect_uri", "oob", "scope", "basic,netdisk", "display", "tv", "qrcode", "1", "force_login", "1"));
     }
 
@@ -73,7 +72,7 @@ public class BaiduOAuthClient {
     }
 
     private JSONObject postToken(Map<String, String> params) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(TOKEN_URL + "?" + form(params))).timeout(Duration.ofSeconds(30)).header("User-Agent", "thisnote-baidu-sync").GET().build();
+        HttpRequest request = HttpRequest.newBuilder(URI.create(TOKEN_URL + "?" + BaiduPanClient.query(params))).timeout(Duration.ofSeconds(30)).header("User-Agent", "thisnote-baidu-sync").GET().build();
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             JSONObject body = JSON.parseObject(response.body());
@@ -112,13 +111,5 @@ public class BaiduOAuthClient {
             message = body.getString("error");
         }
         return message == null || message.isBlank() ? "HTTP " + statusCode : message;
-    }
-
-    private static String form(Map<String, String> values) {
-        return values.entrySet()
-                .stream()
-                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
-                .reduce((left, right) -> left + "&" + right)
-                .orElse("");
     }
 }

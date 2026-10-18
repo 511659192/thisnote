@@ -29,7 +29,7 @@ public class CardController {
 
     @PostMapping("/create")
     public CardDTO create(@RequestBody CreateCardRequest req) {
-        return cardService.create(req.noteId(), req);
+        return cardService.create(req.noteId(), req, null);
     }
 
     /**

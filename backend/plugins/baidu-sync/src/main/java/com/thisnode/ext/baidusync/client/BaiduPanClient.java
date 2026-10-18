@@ -526,7 +526,8 @@ public class BaiduPanClient {
         }
     }
 
-    private static String query(Map<String, String> values) {
+    /** URL 编码 form/query 串；OAuth 与文件 API 的编码规则相同，两处共用。 */
+    static String query(Map<String, String> values) {
         return values.entrySet()
                 .stream()
                 .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
@@ -536,12 +537,7 @@ public class BaiduPanClient {
     }
 
     private static String md5(byte[] bytes) {
-        byte[] digest = newMd5Digest().digest(bytes);
-        StringBuilder value = new StringBuilder(32);
-        for (byte part : digest) {
-            value.append(String.format("%02x", part));
-        }
-        return value.toString();
+        return HexFormat.of().formatHex(newMd5Digest().digest(bytes));
     }
 
     private static MessageDigest newMd5Digest() {

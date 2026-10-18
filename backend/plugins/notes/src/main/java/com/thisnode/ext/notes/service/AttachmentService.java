@@ -1,6 +1,5 @@
 package com.thisnode.ext.notes.service;
 
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.CardPO;
@@ -8,14 +7,12 @@ import com.thisnode.ext.notes.repository.CardRepository;
 import com.thisnode.plugin.api.notes.dto.AttachmentDTO;
 import com.thisnode.plugin.api.util.FileHelper;
 import com.thisnode.plugin.api.util.ImageSize;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -26,7 +23,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-@Slf4j
 public class AttachmentService {
 
     private static final String IMAGE_FILE_NAME = "[^/\n]+\\.(?:png|jpg|webp)";
@@ -200,16 +196,7 @@ public class AttachmentService {
     }
 
     private Map<String, CardPO.AttachmentMeta> readMetadata() {
-        try {
-            String json = Files.readString(attachmentMetadataFile, StandardCharsets.UTF_8);
-            if (json.isBlank()) return new LinkedHashMap<>();
-            Map<String, CardPO.AttachmentMeta> metas = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, CardPO.AttachmentMeta>>() {
-            });
-            return metas == null ? new LinkedHashMap<>() : metas;
-        } catch (Exception e) {
-            log.error("附件索引无法解析：{}", attachmentMetadataFile, e);
-            throw new IllegalStateException("附件索引无法解析 " + attachmentMetadataFile, e);
-        }
+        return FileHelper.readMapIndex(attachmentMetadataFile, new TypeReference<LinkedHashMap<String, CardPO.AttachmentMeta>>() { }, "附件");
     }
 
     /**
@@ -222,9 +209,6 @@ public class AttachmentService {
     }
 
     private static boolean isImageFile(String fileName) {
-        int dot = fileName.lastIndexOf('.');
-        if (dot <= 0) return false;
-        String extension = fileName.substring(dot + 1);
-        return "png".equalsIgnoreCase(extension) || "jpg".equalsIgnoreCase(extension) || "webp".equalsIgnoreCase(extension);
+        return IMAGE_FILE_NAME_PATTERN.matcher(fileName).matches();
     }
 }

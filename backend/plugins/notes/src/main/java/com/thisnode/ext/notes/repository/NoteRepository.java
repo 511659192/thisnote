@@ -2,16 +2,12 @@ package com.thisnode.ext.notes.repository;
 
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 import com.thisnode.ext.notes.config.NotesConfig;
 import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,7 +21,6 @@ import java.util.Map;
  *
  * <p>旧 {@code notes/meta/*.json} 与旧索引结构都不迁移、不读取（按约定不做历史迁移）。
  */
-@Slf4j
 @Repository
 public class NoteRepository {
 
@@ -42,11 +37,9 @@ public class NoteRepository {
         String noteId = IdUtil.randomUUID();
         note.setNoteId(noteId).setUpdatedAt(System.currentTimeMillis());
 
-        // 获取既有索引
         Map<String, NotePO> notes = noteIndex();
         notes.put(noteId, note);
 
-        // 替换索引
         fileHelper.fileWritten(nodeMetadataFile, notes);
         return noteId;
     }
@@ -118,13 +111,6 @@ public class NoteRepository {
      * 读取 {@code noteId → NotePO} 的 map。
      */
     private Map<String, NotePO> noteIndex() {
-        try {
-            String json = Files.readString(nodeMetadataFile, StandardCharsets.UTF_8);
-            Map<String, NotePO> notes = JSON.parseObject(json, new TypeReference<LinkedHashMap<String, NotePO>>() { });
-            return notes == null ? new LinkedHashMap<>() : notes;
-        } catch (Exception e) {
-            log.error("笔记索引无法解析：{}", nodeMetadataFile, e);
-            throw new IllegalStateException("笔记索引无法解析 " + nodeMetadataFile, e);
-        }
+        return FileHelper.readMapIndex(nodeMetadataFile, new TypeReference<>() { }, "笔记");
     }
 }

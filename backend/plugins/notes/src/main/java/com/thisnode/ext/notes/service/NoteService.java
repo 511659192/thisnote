@@ -4,7 +4,6 @@ import com.thisnode.ext.notes.exception.NotFoundException;
 import com.thisnode.ext.notes.model.CardPO;
 import com.thisnode.ext.notes.model.NotePO;
 import com.thisnode.ext.notes.model.NotesMapper;
-import com.thisnode.ext.notes.model.request.CreateNoteRequest;
 import com.thisnode.ext.notes.model.request.NoteListRequest;
 import com.thisnode.ext.notes.model.request.UpdateNoteRequest;
 import com.thisnode.ext.notes.repository.BookRepository;
@@ -54,10 +53,6 @@ public class NoteService {
         cardRepository.reset();
         attachmentService.reset();
         log.info("笔记索引、卡片索引与附件索引已重置");
-    }
-
-    public NoteDTO create(CreateNoteRequest req) {
-        return create("", req.bookId(), List.of());
     }
 
     public synchronized NoteDTO create(String title,
@@ -153,9 +148,7 @@ public class NoteService {
         return notesMapper.toNoteDTO(meta);
     }
 
-    public List<NoteDTO> list(NoteListRequest q) {
-        NoteListRequest query = q == null ? NoteListRequest.defaults() : q;
-
+    public List<NoteDTO> list(NoteListRequest query) {
         List<NotePO> matched = new ArrayList<>();
         for (NotePO note : noteRepository.getAll()) {
             if (matches(note, query)) {

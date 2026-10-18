@@ -7,8 +7,4 @@ public record NoteListRequest(String bookId, String text, int limit, int offset)
         limit = Math.max(1, Math.min(limit <= 0 ? 500 : limit, 2000));
         offset = Math.max(0, offset);
     }
-
-    public static NoteListRequest defaults() {
-        return new NoteListRequest(null, null, 500, 0);
-    }
 }

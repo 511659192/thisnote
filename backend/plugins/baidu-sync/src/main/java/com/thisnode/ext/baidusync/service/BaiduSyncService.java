@@ -45,7 +45,6 @@ public class BaiduSyncService {
     private String remoteRoot;
     private BaiduSyncSettings settings;
 
-    // 示例：dataRoot 为 ~/.thisnode 时，笔记根目录为 ~/.thisnode/notes。
     public BaiduSyncService(BaiduSyncSettingsRepository settingsRepository,
                             BaiduSyncStateRepository stateRepository,
                             BaiduOAuthClient oauthClient,
@@ -75,7 +74,6 @@ public class BaiduSyncService {
         initializeRemoteDirectories();
     }
 
-    // 示例：启动时本地存在 cards/，则初始化任务在网盘创建 notes/cards。
     public void initializeRemoteDirectories() throws IOException {
         BaiduSyncSettings settings = settingsRepository.get();
         if (settings.appName().isBlank() || (settings.accessToken().isBlank() && settings.refreshToken().isBlank())) {
@@ -102,7 +100,6 @@ public class BaiduSyncService {
         });
     }
 
-    // 示例：重命名事件带旧、新路径时，两条路径都会进入变更同步。
     public void requestSyncAfterChange(FileChangeEvent event) {
         Set<Path> changedPaths = Sets.newLinkedHashSet();
         changedPaths.add(event.url());
@@ -114,7 +111,6 @@ public class BaiduSyncService {
         syncChangedFiles(changedPaths);
     }
 
-    // 示例：手动或定时触发时扫描本地与网盘文件并规划全量差异。
     public BaiduSyncStatus startSync() {
         status = new BaiduSyncStatus(true, 0, 0, 0, 0, "");
         log.info("百度网盘同步开始");
@@ -122,7 +118,6 @@ public class BaiduSyncService {
         return status;
     }
 
-    // 示例：状态接口读取最近一次同步的上传、下载、删除计数。
     public BaiduSyncStatus status() {
         return status;
     }
@@ -138,7 +133,6 @@ public class BaiduSyncService {
         log.info("百度网盘同步基线已重置（授权凭据保留）");
     }
 
-    // 示例：本地与网盘都含 a.md 且指纹一致时，预览将其计入一致文件数。
     public BaiduSyncPreview preview() throws IOException {
         ensureSyncIdle();
         LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
@@ -153,7 +147,6 @@ public class BaiduSyncService {
         return createPreview(consistent, changes);
     }
 
-    // 示例：local 与 remote 对应 a.md 的大小和秒级修改时间相同，计数加一。
     private int countConsistentFiles(Map<String, LocalItem> local,
                                      Map<String, BaiduPanEntry> remoteFiles) {
         int consistent = 0;
@@ -166,14 +159,12 @@ public class BaiduSyncService {
         return consistent;
     }
 
-    // 示例：两端指纹均为 120:42 时返回该指纹，否则返回 null。
     private static FileFingerprint matchingFingerprint(LocalItem local,
                                                        BaiduPanEntry remote) {
         FileFingerprint fingerprint = FileFingerprint.of(local.size(), local.modifiedAt());
         return fingerprint.equals(FileFingerprint.of(remote.size(), remote.modifiedAt())) ? fingerprint : null;
     }
 
-    // 示例：changes 含 2 个上传和 1 个删除时，预览汇总数并生成 3 条明细。
     private BaiduSyncPreview createPreview(int consistent,
                                            List<FileChange> changes) {
         List<BaiduSyncPreviewItem> items = new ArrayList<>();
@@ -198,14 +189,12 @@ public class BaiduSyncService {
     }
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 300_000)
-    // 示例：自动同步开启时，定时触发一次全量同步。
     public void scheduledSync() {
         if (settingsRepository.get().autoSync()) {
             startSync();
         }
     }
 
-    // 示例：比较本地 cards/a.md、网盘同名文件和基线后执行全量计划。
     private void sync() {
         SyncCounters counters = new SyncCounters();
         try {
@@ -240,7 +229,6 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：上传 2 个文件后第 3 个失败，状态保留已完成计数并记录错误信息。
     private void failSync(SyncCounters counters,
                           Throwable error) {
         Exception failure = error instanceof Exception exception ? exception : new IllegalStateException("百度网盘同步失败", error);
@@ -252,7 +240,6 @@ public class BaiduSyncService {
         status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, failureMessage);
     }
 
-    // 示例：cards/a.md 更新事件只查询、上传并保存 a.md 的基线。
     private void syncChangedFiles(Set<Path> changedPaths) {
         SyncCounters counters = new SyncCounters();
         try {
@@ -281,7 +268,6 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：notes/cards/a.md 转为 cards/a.md，notes 外路径和插件目录会被忽略。
     private Set<String> relativeChangedPaths(Path notesRoot,
                                              Set<Path> changedPaths) {
         Set<String> relatives = new LinkedHashSet<>();
@@ -297,7 +283,6 @@ public class BaiduSyncService {
         return relatives;
     }
 
-    // 示例：a.md 存在时返回其文件信息；已删除的 b.md 不加入结果。
     private Map<String, LocalItem> localFilesForPaths(Path notesRoot,
                                                       Set<String> relativePaths) throws IOException {
         Map<String, LocalItem> localFiles = new LinkedHashMap<>();
@@ -317,7 +302,6 @@ public class BaiduSyncService {
         return localFiles;
     }
 
-    // 示例：cards/a.md 与 cards/b.md 共用父目录时，只列举一次网盘 cards/。
     private Map<String, BaiduPanEntry> listRemoteFilesForPaths(String accessToken,
                                                                String remoteRoot,
                                                                Set<String> relativePaths) {
@@ -355,7 +339,6 @@ public class BaiduSyncService {
         return remoteFiles;
     }
 
-    // 示例：本地 a.md 存在则上传；本地已删而网盘仍有 a.md 则删除远端文件。
     private List<FileChange> planChangedFileOperations(Set<String> relativePaths,
                                                        Map<String, LocalItem> localFiles,
                                                        Map<String, BaiduPanEntry> remoteFiles) {
@@ -374,7 +357,6 @@ public class BaiduSyncService {
         return changes;
     }
 
-    // 示例：上传后两端 a.md 指纹相同才更新基线，否则移除旧基线。
     private void saveChangedFileBaseline(String accessToken,
                                          Path notesRoot,
                                          String remoteRoot,
@@ -402,7 +384,6 @@ public class BaiduSyncService {
         stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), files, directories));
     }
 
-    // 示例：parent 为 cards/sub 时，集合增加 cards 和 cards/sub。
     private void addParentDirectories(String parent,
                                       Set<String> directories) {
         if (parent.isBlank()) {
@@ -415,7 +396,6 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：计划中有两个 UPLOAD 时，逐个上传并递增 uploaded 计数。
     private void uploadChanges(String accessToken,
                                String remoteRoot,
                                List<FileChange> changes,
@@ -427,7 +407,6 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：计划中 a.md 为 DOWNLOAD 时，下载到本地 notes/a.md。
     private void downloadChanges(String accessToken,
                                  Path notesRoot,
                                  List<FileChange> changesToDownload,
@@ -451,7 +430,6 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：远端待删路径超过 50 个时，按文件管理 API 上限分批删除。
     private void deleteRemoteChanges(String accessToken,
                                      List<FileChange> changesToDelete,
                                      SyncCounters counters) {
@@ -478,14 +456,12 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：扫描 notes/ 时收集 cards/a.md 和 cards/，跳过 baidu-sync 插件数据目录。
     private LocalSnapshot scanLocalSnapshot(Path root,
                                             Path excluded) throws IOException {
         Map<String, LocalItem> files = new LinkedHashMap<>();
         Set<String> directories = new LinkedHashSet<>();
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
-            // 示例：遇到 notes/plugins/baidu-sync 时跳过整棵子树。
             public FileVisitResult preVisitDirectory(Path dir,
                                                      BasicFileAttributes attrs) {
                 if (dir.toAbsolutePath().normalize().equals(excluded)) {
@@ -498,7 +474,6 @@ public class BaiduSyncService {
             }
 
             @Override
-            // 示例：普通文件 cards/a.md 加入文件清单，符号链接不加入。
             public FileVisitResult visitFile(Path file,
                                              BasicFileAttributes attrs) throws IOException {
                 if (attrs.isRegularFile() && !Files.isSymbolicLink(file)) {
@@ -511,7 +486,6 @@ public class BaiduSyncService {
         return new LocalSnapshot(files, directories);
     }
 
-    // 示例：从网盘 notes 根目录递归收集 cards/a.md 和 cards/ 子目录。
     private RemoteSnapshot scanRemote(String accessToken,
                                       String remoteRoot) {
         Map<String, BaiduPanEntry> files = new LinkedHashMap<>();
@@ -592,7 +566,6 @@ public class BaiduSyncService {
         return changes;
     }
 
-    // 示例：remoteRoot=/apps/app、relative=notes/cards 时依次创建两级目录。
     private void createRemoteDirectory(String accessToken,
                                        String remoteRoot,
                                        String relative) {
@@ -606,7 +579,7 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：目标目录已存在（errno -8）时忽略，其他创建错误向上抛出。
+    // 目标目录已存在（errno -8）视为成功；其他创建错误向上抛出。
     private void createRemoteDirectoryPath(String accessToken,
                                            String path) {
         try {
@@ -618,7 +591,6 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：缺少授权令牌或 appName 时立即抛出对应配置错误。
     private void validateSettings(BaiduSyncSettings settings) {
         if (settings.refreshToken().isBlank() && settings.accessToken().isBlank()) {
             throw new IllegalStateException("请先在插件设置中完成百度网盘授权");
@@ -628,14 +600,13 @@ public class BaiduSyncService {
         }
     }
 
-    // 示例：同步进行中请求预览时抛出提示，避免读取中间状态。
+    // 同步进行中拒绝预览：不让调用方读到传输到一半的中间状态。
     private void ensureSyncIdle() {
         if (status.running()) {
             throw new IllegalStateException("同步进行中，请稍后重试");
         }
     }
 
-    // 示例：relative=cards/a.md 解析到 notes/cards/a.md；../outside 会被拒绝。
     private Path resolveLocal(Path root,
                               String relative) {
         Path target = root.resolve(relative.replace('/', java.io.File.separatorChar)).normalize();
@@ -654,7 +625,6 @@ public class BaiduSyncService {
 
     record FileFingerprint(long size, long modifiedAtSeconds) {
 
-        // 示例：size=120、mtime=42_999 毫秒生成指纹 120:42。
         static FileFingerprint of(long size,
                                   long modifiedAtMillis) {
             return new FileFingerprint(size, Math.floorDiv(modifiedAtMillis, 1000L));
@@ -663,7 +633,6 @@ public class BaiduSyncService {
         /**
          * 基线持久化格式为 size:mtimeSeconds；旧 MD5 等无法解析的值视为缺失。
          */
-        // 示例："120:42" 可解析；旧 MD5 字符串或非法格式返回 null。
         static FileFingerprint parse(String value) {
             if (value == null) {
                 return null;
@@ -681,7 +650,6 @@ public class BaiduSyncService {
             }
         }
 
-        // 示例：指纹 (120, 42) 持久化为 "120:42"。
         String toStorage() {
             return size + ":" + modifiedAtSeconds;
         }
@@ -698,7 +666,6 @@ public class BaiduSyncService {
     }
 
     private record LocalItem(Path file, String relative, long modifiedAt, long size) {
-        // 示例：relative=cards/a.md 返回 cards，a.md 返回空字符串。
         private String parent() {
             int slash = relative.lastIndexOf('/');
             return slash < 0 ? "" : relative.substring(0, slash);
@@ -713,7 +680,7 @@ public class BaiduSyncService {
     }
 
     private record FileChange(String relative, FileAction action, LocalItem local, BaiduPanEntry remote, boolean overwrite, boolean conflict) {
-        // 示例：UPLOAD 且 overwrite=true 显示为 overwrite-remote。
+        // 动作字符串与界面侧的预览展示约定。
         private String previewAction() {
             return switch (action) {
                 case UPLOAD -> overwrite ? "overwrite-remote" : "upload";

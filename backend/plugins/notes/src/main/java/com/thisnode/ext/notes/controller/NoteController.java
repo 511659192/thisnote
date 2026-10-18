@@ -30,7 +30,7 @@ public class NoteController {
 
     @PostMapping("/create")
     public NoteDTO create(@RequestBody CreateNoteRequest req) {
-        return noteService.create(req);
+        return noteService.create("", req.bookId(), List.of());
     }
 
     @GetMapping("/get-detail")
