@@ -188,14 +188,16 @@ const confirmDialog = ref<{
 const groupNameDialog = ref<{
   open: boolean
   title: string
+  label: string
   value: string
   action: ((name: string) => Promise<void>) | null
-}>({ open: false, title: '', value: '', action: null })
+}>({ open: false, title: '', label: '', value: '', action: null })
 
 function promptNewGroup() {
   groupNameDialog.value = {
     open: true,
     title: '新建分组',
+    label: '分组名称',
     value: '',
     action: async (name) => {
       try {
@@ -212,6 +214,7 @@ function renameGroup(id: string, current: string) {
   groupNameDialog.value = {
     open: true,
     title: '重命名分组',
+    label: '新的名称',
     value: current,
     action: async (name) => {
       if (name === current) return
@@ -380,6 +383,16 @@ watch(
     :message="confirmDialog.message"
     @cancel="closeConfirmation"
     @confirm="confirmAction"
+  />
+  <PromptDialog
+    :open="groupNameDialog.open"
+    :title="groupNameDialog.title"
+    :model-value="groupNameDialog.value"
+    :label="groupNameDialog.label"
+    placeholder="输入分组名称"
+    @update:model-value="groupNameDialog.value = $event"
+    @cancel="cancelGroupName"
+    @confirm="confirmGroupName"
   />
 </template>
 
