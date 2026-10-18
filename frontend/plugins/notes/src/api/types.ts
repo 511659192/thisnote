@@ -40,8 +40,6 @@ export interface Card {
 export interface CardView {
   card: CardMeta
   contentMd: string
-  /** Client-only transient flags. */
-  selected?: boolean
 }
 
 /**

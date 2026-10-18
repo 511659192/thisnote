@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { pluginApi, type PluginInfo } from '@/api/plugins'
 import { request } from '@/core/http'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { ConfirmDialog } from '@thisnode/plugin-api'
 import {
   pluginSettings,
   refreshPluginAvailability,
@@ -142,11 +142,6 @@ function healthClass(plugin: PluginInfo): string {
   return `health-${plugin.health.status}`
 }
 
-/** 只有「不可停用」的插件需要一枚徽标；其余没有分类标签（分类由插槽事实决定，不靠声明）。 */
-function coreLabel(plugin: PluginInfo): string {
-  return plugin.undeactivatable ? '核心' : ''
-}
-
 async function refresh() {
   await Promise.all([refreshPlugins(), refreshNotesRoot()])
 }
@@ -226,7 +221,8 @@ onMounted(async () => {
 
         <div v-for="plugin in plugins" :key="plugin.id" class="plugin-card">
           <div class="plugin-head">
-            <span v-if="plugin.undeactivatable" class="kind kind-core">{{ coreLabel(plugin) }}</span>
+            <!-- 只有「不可停用」的插件需要一枚徽标；其余没有分类标签（分类由插槽事实决定，不靠声明） -->
+            <span v-if="plugin.undeactivatable" class="kind kind-core">核心</span>
             <b>{{ plugin.title }}</b>
             <span class="small muted mono">v{{ plugin.version }}</span>
             <span class="small" :class="healthClass(plugin)">● {{ plugin.health.message }}</span>
@@ -347,10 +343,6 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--c-text-3);
 }
-.tabs button.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
 .body {
   grid-column: 2;
   grid-row: 2;
@@ -375,20 +367,6 @@ onMounted(async () => {
 .panel h3:first-child {
   margin-top: 0;
 }
-.grow {
-  flex: 1;
-}
-.file-btn {
-  position: relative;
-}
-.report {
-  margin-top: var(--space-3);
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  background: var(--c-surface);
-}
 .warn {
   color: var(--warning);
   margin: 0;
@@ -397,40 +375,6 @@ onMounted(async () => {
 .notes-root-active {
   overflow-wrap: anywhere;
   margin: var(--space-2) 0 0;
-}
-.kv {
-  display: grid;
-  grid-template-columns: 130px 1fr;
-  gap: 5px var(--space-3);
-  margin: var(--space-2) 0;
-  font-size: 13px;
-}
-.kv dt {
-  color: var(--c-text-3);
-}
-.kv dd {
-  margin: 0;
-  word-break: break-all;
-}
-.event {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 5px 0;
-  border-bottom: 1px solid var(--c-border);
-}
-.wrap {
-  flex-wrap: wrap;
-}
-/* 同步报告明细：等宽、限高可滚，避免一次备份几百条把页面撑爆 */
-.lines {
-  margin: var(--space-2) 0 0;
-  padding-left: 1.1em;
-  max-height: 260px;
-  overflow-y: auto;
-}
-.lines li {
-  line-height: 1.6;
 }
 
 @media (max-width: 640px) {
@@ -513,8 +457,5 @@ onMounted(async () => {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px dashed var(--c-border);
-}
-.plugin-migration {
-  margin-top: var(--space-2);
 }
 </style>

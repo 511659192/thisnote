@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { firstHeading, plainText, renderMarkdown, wordCount } from '../src/core/markdown'
+import { renderMarkdown } from '../src/core/markdown'
 
 describe('markdown rendering', () => {
   it('escapes raw HTML instead of executing it', () => {
@@ -15,21 +15,5 @@ describe('markdown rendering', () => {
     expect(html).toContain('type="checkbox"')
     expect(html).toContain('checked')
     expect(html).toContain('<table>')
-  })
-})
-
-describe('markdown helpers', () => {
-  it('finds the first heading for the title fallback', () => {
-    expect(firstHeading('text\n\n## 标题\nmore')).toBe('标题')
-    expect(firstHeading('no heading')).toBeNull()
-  })
-
-  it('strips regular Markdown syntax for card previews', () => {
-    expect(plainText('# 标题\n\n- [ ] 一项 **加粗** [链接](https://example.com)', 100))
-      .toBe('标题 [ ] 一项 加粗 链接')
-  })
-
-  it('counts CJK characters and latin words', () => {
-    expect(wordCount('中文三字 abc def')).toBe(6)
   })
 })

@@ -1,4 +1,4 @@
-import { registerNoteListFilter, registerNoteTool, unregisterPlugin } from '@thisnode/plugin-api'
+import { createPluginLifecycle, registerNoteListFilter, registerNoteTool } from '@thisnode/plugin-api'
 import FavoriteTool from './src/components/FavoriteTool.vue'
 import { favoriteApi, FAVORITE_PLUGIN_ID } from './src/api/favoriteApi'
 import { registerFavoriteActions } from './src/actions'
@@ -17,10 +17,6 @@ import { registerFavoriteActions } from './src/actions'
  *
  * <p>核心那边没有一处提到「收藏」这两个字：没有侧栏筛选项、没有 ★ 图标、没有 favorite 接口、
  * 数据库里也没有那一列。停用插件，这两处入口一起消失。
- *
- * <p>本模块是一个 **qiankun 微应用**：注册动作放进 `mount()` 生命周期（宿主停用/重载插件时
- * `unmount()` 会调 unregisterPlugin 把注册整体撤走）；独立运行（直接打开本 dev server）时
- * import 即注册，便于单独调试界面。
  */
 function register(): void {
   registerNoteTool({
@@ -43,21 +39,8 @@ function register(): void {
   registerFavoriteActions()
 }
 
-export async function bootstrap() {}
-
-export async function mount() {
-  register()
-}
-
-export async function unmount() {
-  unregisterPlugin(FAVORITE_PLUGIN_ID)
-}
-
-if (!window.__POWERED_BY_QIANKUN__) {
-  register()
-  document.getElementById('plugin-root')?.replaceChildren(
-    Object.assign(document.createElement('p'), {
-      textContent: '收藏插件独立预览：完整的界面（★ 工具、列表筛选）渲染在 thisnote 宿主里。',
-    }),
-  )
-}
+export const { bootstrap, mount, unmount } = createPluginLifecycle({
+  pluginId: FAVORITE_PLUGIN_ID,
+  register,
+  standaloneHint: '收藏插件独立预览：完整的界面（★ 工具、列表筛选）渲染在 thisnote 宿主里。',
+})

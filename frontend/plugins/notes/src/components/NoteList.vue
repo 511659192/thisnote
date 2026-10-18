@@ -491,10 +491,6 @@ watch(() => props.nodes, loadActionStates)
   font: inherit;
   outline: none;
 }
-.row-1 .fav {
-  font-size: 11px;
-  opacity: 0.7;
-}
 /* 右上角删除：悬停行时显现，点它不触发行打开 */
 .row-del {
   flex: 0 0 auto;
@@ -534,9 +530,6 @@ watch(() => props.nodes, loadActionStates)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.fav {
-  color: var(--warning);
 }
 
 /* 行内快捷操作（收藏 / 记忆曲线）：常驻显示，位于标题行右侧 */

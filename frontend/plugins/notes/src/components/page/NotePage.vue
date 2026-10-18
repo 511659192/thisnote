@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, MAX_ZOOM, MIN_ZOOM, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
-import { activeCardPlugins, host, onPluginStateChange, toast } from '@thisnode/plugin-api'
+import { activeCardPlugins, createPreviewImageInteractions, host, onPluginStateChange, toast } from '@thisnode/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
 import type { CardView } from '@/api/types'
@@ -133,8 +133,7 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   unsubscribePluginState?.()
   unsubscribePluginState = null
-  window.removeEventListener('mousemove', onPreviewMouseMove)
-  window.removeEventListener('mouseup', onPreviewMouseUp)
+  disposePreviewInteractions()
   root.value?.removeEventListener('wheel', onWheel)
   window.removeEventListener('pointerdown', onWindowPointerDown, true)
   window.removeEventListener('pointermove', onPointerMove)
@@ -536,80 +535,12 @@ function closeCardPreview() {
   previewCard.value = null
 }
 
-// 预览图片缩放拖移：滚轮缩放 + 左键拖移作用于浮层内的图片；状态挂在图片元素上，
-// 浮层关闭随 DOM 一起丢弃（与复习页同一套交互）。
-const PREVIEW_IMG_MIN_SCALE = 0.2
-const PREVIEW_IMG_MAX_SCALE = 8
-type PreviewImgTransform = { scale: number; x: number; y: number }
-const previewImgTransforms = new WeakMap<HTMLImageElement, PreviewImgTransform>()
-let previewImgDrag: {
-  image: HTMLImageElement
-  startX: number
-  startY: number
-  baseX: number
-  baseY: number
-} | null = null
-
-function transformOf(image: HTMLImageElement): PreviewImgTransform {
-  let transform = previewImgTransforms.get(image)
-  if (!transform) {
-    transform = { scale: 1, x: 0, y: 0 }
-    previewImgTransforms.set(image, transform)
-  }
-  return transform
-}
-
-function applyImgTransform(image: HTMLImageElement) {
-  const t = transformOf(image)
-  // translate 在 scale 之前，保证拖移位移始终按屏幕像素计算
-  image.style.transform = 'translate(' + t.x + 'px, ' + t.y + 'px) scale(' + t.scale + ')'
-}
-
-function onPreviewWheel(event: WheelEvent) {
-  // 预览浮层内的滚轮不落回画布：否则滚动会平移/缩放遮罩后面的页面
-  event.stopPropagation()
-  const image = (event.target as HTMLElement).closest?.('img')
-  if (!image) return
-  event.preventDefault()
-  const transform = transformOf(image)
-  const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2
-  transform.scale = Math.min(PREVIEW_IMG_MAX_SCALE, Math.max(PREVIEW_IMG_MIN_SCALE, transform.scale * factor))
-  applyImgTransform(image)
-}
-
-function onPreviewMouseDown(event: MouseEvent) {
-  if (event.button !== 0) return
-  const image = (event.target as HTMLElement).closest?.('img')
-  if (!image) return
-  event.preventDefault()
-  const transform = transformOf(image)
-  previewImgDrag = {
-    image,
-    startX: event.clientX,
-    startY: event.clientY,
-    baseX: transform.x,
-    baseY: transform.y,
-  }
-  image.classList.add('preview-img-grabbing')
-  window.addEventListener('mousemove', onPreviewMouseMove)
-  window.addEventListener('mouseup', onPreviewMouseUp)
-}
-
-function onPreviewMouseMove(event: MouseEvent) {
-  if (!previewImgDrag) return
-  const transform = transformOf(previewImgDrag.image)
-  transform.x = previewImgDrag.baseX + (event.clientX - previewImgDrag.startX)
-  transform.y = previewImgDrag.baseY + (event.clientY - previewImgDrag.startY)
-  applyImgTransform(previewImgDrag.image)
-}
-
-function onPreviewMouseUp() {
-  if (!previewImgDrag) return
-  previewImgDrag.image.classList.remove('preview-img-grabbing')
-  previewImgDrag = null
-  window.removeEventListener('mousemove', onPreviewMouseMove)
-  window.removeEventListener('mouseup', onPreviewMouseUp)
-}
+// 预览图片缩放拖移：滚轮缩放 + 左键拖移作用于浮层内的图片，与复习页共用同一套交互
+//（实现见 @thisnode/plugin-api 的 createPreviewImageInteractions）。
+const { onPreviewWheel, onPreviewMouseDown, dispose: disposePreviewInteractions } = createPreviewImageInteractions({
+  grabbingClass: 'preview-img-grabbing',
+  stopWheelPropagation: true,
+})
 
 /**
  * 一键自动布局：打乱卡片顺序后逐个找「最靠上的空位」放下（优先填洞），

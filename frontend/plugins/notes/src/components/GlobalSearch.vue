@@ -4,10 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { http } from '@thisnode/plugin-api'
 
 /**
- * 顶栏模糊查询（logo 右侧）：跨标题与摘要的模糊匹配，下拉结果可直接跳转。
+ * 顶栏模糊查询（logo 右侧）：标题模糊匹配，下拉结果可直接跳转。
  *
- * <p>匹配规则：查询词按空白拆成多个词，笔记的 title+summary 里**每个词都包含**才算命中
- * （大小写不敏感）；标题命中排在摘要命中前面。纯界面侧：拉一次全量列表（limit 2000，
+ * <p>匹配规则：查询词按空白拆成多个词，笔记标题里**每个词都包含**才算命中
+ * （大小写不敏感）。纯界面侧：拉一次全量列表（limit 2000，
  * 本地工具足够），短 TTL 缓存，不新增端点。搜索随 notes 核心微应用装载，不再是独立插件。
  *
  * <p>键盘：↑↓ 选择、Enter 打开、Esc 关闭；点击结果或点击外部同样关闭。
@@ -17,7 +17,6 @@ import { http } from '@thisnode/plugin-api'
 interface NoteDtoLite {
   noteId: string
   title: string
-  summary?: string
 }
 
 const router = useRouter()
@@ -43,17 +42,13 @@ async function allNotes(): Promise<NoteDtoLite[]> {
   }
 }
 
-/** 命中：每个查询词都出现在 title+summary 里；返回 0..2 的排序权重（标题命中优先）。 */
+/** 命中：每个查询词都出现在标题里（大小写不敏感）。 */
 function matchScore(note: NoteDtoLite, tokens: string[]): number {
   const title = (note.title ?? '').toLowerCase()
-  const summary = (note.summary ?? '').toLowerCase()
   let score = 0
   for (const t of tokens) {
-    const inTitle = title.includes(t)
-    const inSummary = summary.includes(t)
-    if (!inTitle && !inSummary) return -1
-    if (inTitle) score += 2
-    if (inSummary) score += 1
+    if (!title.includes(t)) return -1
+    score += 2
   }
   return score
 }
@@ -141,17 +136,6 @@ function titleSegments(title: string): Array<{ text: string; hit: boolean }> {
     { text: title.slice(at + t.length), hit: false },
   ].filter((seg) => seg.text.length > 0)
 }
-
-/** 摘要片段：围绕首个命中词取前后 ~40 字。 */
-function summarySnippet(note: NoteDtoLite): string {
-  const summary = note.summary ?? ''
-  const t = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)[0]
-  if (!t) return summary.slice(0, 80)
-  const at = summary.toLowerCase().indexOf(t)
-  if (at < 0) return summary.slice(0, 80)
-  const from = Math.max(0, at - 30)
-  return (from > 0 ? '…' : '') + summary.slice(from, at + t.length + 50) + '…'
-}
 </script>
 
 <template>
@@ -183,7 +167,6 @@ function summarySnippet(note: NoteDtoLite): string {
             :class="seg.hit ? 'hit' : ''"
           >{{ seg.text }}</span>
         </span>
-        <span v-if="r.note.summary" class="snippet small muted">{{ summarySnippet(r.note) }}</span>
       </button>
     </div>
   </div>
@@ -260,10 +243,5 @@ function summarySnippet(note: NoteDtoLite): string {
   color: var(--accent);
   border-radius: 3px;
   padding: 0 1px;
-}
-.result .snippet {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>

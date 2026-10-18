@@ -1,20 +1,14 @@
+import { createPluginLifecycle, registerCardPlugin, registerNavEntry, registerPluginRoute } from '@thisnode/plugin-api'
 import { memoryCycleApi } from './src/api/memoryCycleApi'
 import { memoryCycle } from './src/stores/memoryCycle'
 import { registerMemoryCycleActions } from './src/actions'
-import {
-  registerCardPlugin,
-  registerNavEntry,
-  registerPluginRoute,
-  unregisterPlugin,
-} from '@thisnode/plugin-api'
 import MemoryCycleTool from './src/components/MemoryCycleTool.vue'
 
 /**
- * 本模块是一个 **qiankun 微应用**：注册动作在 `mount()` 里发生，`unmount()` 注销 ——
- * 宿主停用/重载插件时六个插槽的注册一起撤走，再启用时重新注册，无需刷新页面。
- * 独立运行（直接打开本 dev server）时 import 即注册，便于单独调试。
+ * 宿主停用/重载插件时 `unmount()` 把六个插槽的注册一起撤走，再启用时重新注册，
+ * 无需刷新页面。独立运行（直接打开本 dev server）时 import 即注册，便于单独调试。
  */
-export function register(): void {
+function register(): void {
   registerCardPlugin({
     id: 'memory-cycle',
     title: '记忆周期',
@@ -50,27 +44,14 @@ export function register(): void {
   registerMemoryCycleActions()
 }
 
-export async function bootstrap() {}
-
-export async function mount() {
-  register()
-}
-
-export async function unmount() {
-  unregisterPlugin('memory-cycle')
-}
+export const { bootstrap, mount, unmount } = createPluginLifecycle({
+  pluginId: 'memory-cycle',
+  register,
+  standaloneHint: '记忆周期插件独立预览：完整的界面（🧠 卡片徽标、复习页）渲染在 thisnote 宿主里。',
+})
 
 if (import.meta.hot) {
   import.meta.hot.accept((next) => {
     next?.register()
   })
-}
-
-if (!window.__POWERED_BY_QIANKUN__) {
-  register()
-  document.getElementById('plugin-root')?.replaceChildren(
-    Object.assign(document.createElement('p'), {
-      textContent: '记忆周期插件独立预览：完整的界面（🧠 卡片徽标、复习页）渲染在 thisnote 宿主里。',
-    }),
-  )
 }

@@ -1,10 +1,3 @@
-.sidebar-panel.collapsed {
-  width: 46px;
-}
-.sidebar-panel.collapsed .nav-item {
-  justify-content: center;
-  padding: 5px 0;
-}
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -15,6 +8,7 @@ import {
   activeNavEntries,
   activeNoteListFilters,
   clearActiveListFilter,
+  ConfirmDialog,
   navBadges,
   onPluginStateChange,
   refreshPluginAvailability,
@@ -24,7 +18,6 @@ import {
   toast,
 } from '@thisnode/plugin-api'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PromptDialog from '@/components/PromptDialog.vue'
 import type { Book } from '@/api/types'
 
@@ -381,6 +374,7 @@ watch(
     :open="confirmDialog.open"
     :title="confirmDialog.title"
     :message="confirmDialog.message"
+    confirm-label="删除"
     @cancel="closeConfirmation"
     @confirm="confirmAction"
   />

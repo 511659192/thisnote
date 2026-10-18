@@ -69,7 +69,6 @@ export const usePageStore = defineStore('notePage', () => {
   const selection = ref<string[]>([])
   const raisedCardIds = ref<string[]>([])
   const viewport = ref<Viewport>({ x: 0, y: 0, zoom: 1 })
-  const gridVisible = ref(localStorage.getItem('thisnote.page.grid') !== 'off')
   const snapToGrid = ref(localStorage.getItem('thisnote.page.snap') === 'on')
 
   const selectedBlocks = computed(() =>
@@ -428,13 +427,6 @@ export const usePageStore = defineStore('notePage', () => {
     }
   }
 
-  async function setColor(color: string | null) {
-    if (!selection.value.length) return
-    await commit(cards.value
-      .filter((view) => selection.value.includes(view.card.cardId))
-      .map((view) => ({ cardId: view.card.cardId, color })))
-  }
-
   // ---------------------------------------------------------------- viewport
 
   function screenToWorld(p: { x: number; y: number }) {
@@ -488,17 +480,6 @@ export const usePageStore = defineStore('notePage', () => {
 
   function viewportKey(id: string) {
     return `thisnode.page.viewport.${id}`
-  }
-
-  function copyViewport(oldId: string, newId: string) {
-    try {
-      const previous = localStorage.getItem(viewportKey(oldId))
-      if (previous && !localStorage.getItem(viewportKey(newId))) {
-        localStorage.setItem(viewportKey(newId), previous)
-      }
-    } catch {
-      /* Viewport preferences are best-effort when IDs change. */
-    }
   }
 
   let saveViewportTimer: ReturnType<typeof setTimeout> | null = null
@@ -555,26 +536,10 @@ export const usePageStore = defineStore('notePage', () => {
     viewport.value = next
   }
 
-  function toggleGrid() {
-    gridVisible.value = !gridVisible.value
-    localStorage.setItem('thisnote.page.grid', gridVisible.value ? 'on' : 'off')
-  }
-
   function toggleSnap() {
     snapToGrid.value = !snapToGrid.value
     localStorage.setItem('thisnote.page.snap', snapToGrid.value ? 'on' : 'off')
   }
-
-  /** Bounding box of all cards, for the minimap-less "fit" maths and the status bar. */
-  const bounds = computed(() => {
-    const list = cards.value.map((b) => b.card)
-    if (!list.length) return { x: 0, y: 0, w: 900, h: 600 }
-    const minX = Math.min(...list.map((b) => b.x))
-    const minY = Math.min(...list.map((b) => b.y))
-    const maxX = Math.max(...list.map((b) => b.x + b.w))
-    const maxY = Math.max(...list.map((b) => b.y + b.h))
-    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) }
-  })
 
   return {
     noteId,
@@ -584,14 +549,11 @@ export const usePageStore = defineStore('notePage', () => {
     savingContent,
     editingCardId,
     selection,
-    selectedBlocks,
     singleSelected,
     viewport,
-    gridVisible,
     snapToGrid,
     pendingCount,
     sentinelY,
-    bounds,
     load,
     loadMore,
     reload,
@@ -605,20 +567,15 @@ export const usePageStore = defineStore('notePage', () => {
     addBlock,
     addBlockFromContent,
     deleteBlock,
-    sizeForContent,
-    defaultCardWidth,
-    defaultCardHeight,
     clampWidths,
     writeContent,
     markManualHeight,
     clearManualHeight,
     isManualHeight,
-    setColor,
     screenToWorld,
     zoomAt,
     fit,
     resetView,
-    toggleGrid,
     toggleSnap,
   }
 })

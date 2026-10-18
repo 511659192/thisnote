@@ -1,11 +1,11 @@
 import {
+  createPluginLifecycle,
   http,
   registerListHeader,
   registerNoteListFilter,
   registerPluginRoute,
   registerSidebarPanel,
   registerTopbarSearch,
-  unregisterPlugin,
 } from '@thisnode/plugin-api'
 import GlobalSearch from './src/components/GlobalSearch.vue'
 import TitleSearchBox from './src/components/TitleSearchBox.vue'
@@ -23,14 +23,11 @@ import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stor
  *   <li><b>插件路由</b>：/notes（列表）与 /notes/:id（笔记页面）；</li>
  *   <li><b>侧栏主面板</b>：新建/筛选/分组树/标签（原宿主 AppSidebar 的业务部分）；</li>
  *   <li><b>标题搜索</b>：列表页头按标题过滤；</li>
- *   <li><b>模糊搜索</b>：顶栏跨标题/摘要查询。两者随 notes 核心微应用一起装载。</li>
+ *   <li><b>模糊搜索</b>：顶栏跨标题查询。两者随 notes 核心微应用一起装载。</li>
  * </ol>
  *
  * <p>favorite ★ 与 memory-cycle 🧠 通过卡片工具/笔记工具/列表筛选插槽插进本域的视图 ——
  * 注册表在共享的 @thisnode/plugin-api 实例里（shallowReactive），装载顺序无关。
- *
- * <p>本模块是一个 **qiankun 微应用**：注册动作放进 mount()（宿主停用/重载时 unmount()
- * 经 unregisterPlugin 整体撤走）；独立运行（直接打开本 dev server）时 import 即注册。
  */
 function register(): void {
   registerSidebarPanel({ pluginId: PLUGIN_ID, component: NotesSidebarPanel })
@@ -64,23 +61,12 @@ function register(): void {
   })
 }
 
-export async function bootstrap() {}
-
-export async function mount() {
-  register()
-}
-
-export async function unmount() {
-  setQuery('')
-  setMatchCount(null)
-  unregisterPlugin(PLUGIN_ID)
-}
-
-if (!window.__POWERED_BY_QIANKUN__) {
-  register()
-  document.getElementById('plugin-root')?.replaceChildren(
-    Object.assign(document.createElement('p'), {
-      textContent: '笔记域独立预览：完整界面（列表、页面、侧栏面板）渲染在 thisnote 宿主里。',
-    }),
-  )
-}
+export const { bootstrap, mount, unmount } = createPluginLifecycle({
+  pluginId: PLUGIN_ID,
+  register,
+  beforeUnmount: () => {
+    setQuery('')
+    setMatchCount(null)
+  },
+  standaloneHint: '笔记域独立预览：完整界面（列表、页面、侧栏面板）渲染在 thisnote 宿主里。',
+})

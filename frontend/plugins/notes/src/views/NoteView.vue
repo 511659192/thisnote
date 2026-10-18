@@ -7,6 +7,7 @@ import {
   activeListFilter_,
   activeNoteListFilters,
   activeNoteTools,
+  ConfirmDialog,
   modifierLabel,
   toast,
 } from '@thisnode/plugin-api'
@@ -15,7 +16,6 @@ import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import type { NoteDto, CardView } from '@/api/types'
 import { copyImageToClipboard } from '@/components/page/clipboardImage'
 

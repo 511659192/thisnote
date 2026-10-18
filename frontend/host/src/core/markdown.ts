@@ -56,36 +56,4 @@ export function renderMarkdown(source: string): string {
   return source ? md.render(source) : ''
 }
 
-export function renderInline(source: string): string {
-  return source ? md.renderInline(source) : ''
-}
-
-/** Plain-text projection used by card previews and list rows. */
-export function plainText(source: string, maxChars = 200): string {
-  if (!source) return ''
-  const text = source
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
-    .replace(/^\s{0,3}>\s?/gm, '')
-    .replace(/^\s{0,3}[-*+]\s+/gm, '')
-    .replace(/\*\*|__|~~|\*|_|`/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return text.length > maxChars ? `${text.slice(0, maxChars)}…` : text
-}
-
-/** First Markdown heading, mirroring the backend's title fallback. */
-export function firstHeading(source: string): string | null {
-  const match = /^#{1,6}\s+(.+?)\s*$/m.exec(source ?? '')
-  return match ? match[1].trim() : null
-}
-
-export function wordCount(source: string): number {
-  const cjk = (source.match(/[\u3400-\u9fff]/g) || []).length
-  const latin = (source.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_'-]+/g) || []).length
-  return cjk + latin
-}
-
 export default md

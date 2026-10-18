@@ -14,7 +14,7 @@ import {
   type ScheduleHistoryEntry,
 } from '../api/memoryCycleApi'
 import { memoryCycle } from '../stores/memoryCycle'
-import { host, emitPluginStateChange, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
+import { createPreviewImageInteractions, host, emitPluginStateChange, isPluginActive, refreshPluginAvailability } from '@thisnode/plugin-api'
 import ReviewCardTile from '../components/ReviewCardTile.vue'
 
 const PLUGIN_ID = 'memory-cycle'
@@ -46,6 +46,33 @@ const enabledCardsError = ref('')
 /** 今日到期 / 开启记忆的列数（默认分别是 3 列与 5 列）。 */
 const dueColumns = ref<3 | 5 | 7>(3)
 const enabledColumns = ref<3 | 5 | 7>(5)
+
+/**
+ * 「今日到期」与「开启记忆」两个页签共用同一渲染段，差异（文案、列数、数据源、
+ * loading 条件——到期页还要等历史拉完）集中在这里。
+ */
+const cardTab = computed(() => {
+  if (activeTab.value === 'due') {
+    return {
+      caption: '今日到期的卡片（含过期；历史上任意一次排期落在今天也算）',
+      columns: dueColumns.value,
+      setColumns: (n: 3 | 5 | 7) => (dueColumns.value = n),
+      loading: enabledCardsLoading.value || (enabledCardsLoaded.value && !historiesLoaded.value),
+      loadingText: '加载今日到期卡片…',
+      cards: dueTodayCards.value,
+      emptyTitle: '今天没有到期的卡片',
+    }
+  }
+  return {
+    caption: '已开启记忆周期的卡片（包含未到期卡片）',
+    columns: enabledColumns.value,
+    setColumns: (n: 3 | 5 | 7) => (enabledColumns.value = n),
+    loading: enabledCardsLoading.value,
+    loadingText: '加载已开启卡片…',
+    cards: enabledCards.value,
+    emptyTitle: '没有开启记忆周期的卡片',
+  }
+})
 const loading = ref(true)
 const reviewedCount = ref(0)
 const busyIds = ref(new Set<string>())
@@ -239,77 +266,11 @@ function closePreview() {
 
 // ---------------------------------------------------------------- 预览图片缩放拖移
 
-/** 滚轮缩放 + 左键拖移作用于预览浮层内的图片；状态挂在图片元素上，浮层关闭随 DOM 一起丢弃。 */
-const PREVIEW_IMG_MIN_SCALE = 0.2
-const PREVIEW_IMG_MAX_SCALE = 8
-type PreviewImgTransform = { scale: number; x: number; y: number }
-const previewImgTransforms = new WeakMap<HTMLImageElement, PreviewImgTransform>()
-let previewImgDrag: {
-  image: HTMLImageElement
-  startX: number
-  startY: number
-  baseX: number
-  baseY: number
-} | null = null
-
-function transformOf(image: HTMLImageElement): PreviewImgTransform {
-  let transform = previewImgTransforms.get(image)
-  if (!transform) {
-    transform = { scale: 1, x: 0, y: 0 }
-    previewImgTransforms.set(image, transform)
-  }
-  return transform
-}
-
-function applyImgTransform(image: HTMLImageElement) {
-  const { scale, x, y } = transformOf(image)
-  // translate 在 scale 之前，保证拖移位移始终按屏幕像素计算
-  image.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
-}
-
-function onPreviewWheel(event: WheelEvent) {
-  const image = (event.target as HTMLElement).closest?.('img')
-  if (!image) return
-  event.preventDefault()
-  const transform = transformOf(image)
-  const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2
-  transform.scale = Math.min(PREVIEW_IMG_MAX_SCALE, Math.max(PREVIEW_IMG_MIN_SCALE, transform.scale * factor))
-  applyImgTransform(image)
-}
-
-function onPreviewMouseDown(event: MouseEvent) {
-  if (event.button !== 0) return
-  const image = (event.target as HTMLElement).closest?.('img')
-  if (!image) return
-  event.preventDefault()
-  const transform = transformOf(image)
-  previewImgDrag = {
-    image,
-    startX: event.clientX,
-    startY: event.clientY,
-    baseX: transform.x,
-    baseY: transform.y,
-  }
-  image.classList.add('rv-img-grabbing')
-  window.addEventListener('mousemove', onPreviewMouseMove)
-  window.addEventListener('mouseup', onPreviewMouseUp)
-}
-
-function onPreviewMouseMove(event: MouseEvent) {
-  if (!previewImgDrag) return
-  const transform = transformOf(previewImgDrag.image)
-  transform.x = previewImgDrag.baseX + (event.clientX - previewImgDrag.startX)
-  transform.y = previewImgDrag.baseY + (event.clientY - previewImgDrag.startY)
-  applyImgTransform(previewImgDrag.image)
-}
-
-function onPreviewMouseUp() {
-  if (!previewImgDrag) return
-  previewImgDrag.image.classList.remove('rv-img-grabbing')
-  previewImgDrag = null
-  window.removeEventListener('mousemove', onPreviewMouseMove)
-  window.removeEventListener('mouseup', onPreviewMouseUp)
-}
+/** 滚轮缩放 + 左键拖移作用于预览浮层内的图片，与笔记页共用同一套交互
+ *（实现见 @thisnode/plugin-api 的 createPreviewImageInteractions）。 */
+const { onPreviewWheel, onPreviewMouseDown, dispose: disposePreviewInteractions } = createPreviewImageInteractions({
+  grabbingClass: 'rv-img-grabbing',
+})
 
 /**
  * 插件被全局停用时，本页不能假装「只是没有到期的卡片」——那会误导用户以为一切正常。
@@ -423,8 +384,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('mousemove', onPreviewMouseMove)
-  window.removeEventListener('mouseup', onPreviewMouseUp)
+  disposePreviewInteractions()
 })
 
 const GRADES: { grade: Grade; label: string }[] = [
@@ -551,61 +511,38 @@ const GRADES: { grade: Grade; label: string }[] = [
 
     </template>
 
-    <section v-else-if="!pluginDisabled && activeTab === 'due'" class="rv-enabled-panel">
+    <section
+      v-else-if="!pluginDisabled && (activeTab === 'due' || activeTab === 'enabled')"
+      class="rv-enabled-panel"
+    >
       <div class="rv-enabled-header">
-        <p class="small muted">今日到期的卡片（含过期；历史上任意一次排期落在今天也算）</p>
+        <p class="small muted">{{ cardTab.caption }}</p>
         <div class="rv-columns">
-          <button class="btn sm ghost" :class="{ active: dueColumns === 3 }" title="3 列" @click="dueColumns = 3">3 列</button>
-          <button class="btn sm ghost" :class="{ active: dueColumns === 5 }" title="5 列" @click="dueColumns = 5">5 列</button>
-          <button class="btn sm ghost" :class="{ active: dueColumns === 7 }" title="7 列" @click="dueColumns = 7">7 列</button>
+          <button
+            v-for="n in [3, 5, 7]"
+            :key="n"
+            class="btn sm ghost"
+            :class="{ active: cardTab.columns === n }"
+            :title="`${n} 列`"
+            @click="cardTab.setColumns(n)"
+          >{{ n }} 列</button>
         </div>
         <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
           {{ enabledCardsLoading ? '加载中…' : '刷新' }}
         </button>
       </div>
-      <div v-if="enabledCardsLoading || (enabledCardsLoaded && !historiesLoaded)" class="rv-state small muted">加载今日到期卡片…</div>
+      <div v-if="cardTab.loading" class="rv-state small muted">{{ cardTab.loadingText }}</div>
       <div v-else-if="enabledCardsError" class="rv-state rv-done">
         <p class="small muted">加载失败：{{ enabledCardsError }}</p>
         <button class="btn primary" @click="loadEnabledCardList">重试</button>
       </div>
       <div v-else-if="!enabledCardsLoaded" class="rv-state small muted">正在准备卡片列表…</div>
-      <div v-else-if="!dueTodayCards.length" class="rv-state rv-done">
-        <h3>今天没有到期的卡片</h3>
+      <div v-else-if="!cardTab.cards.length" class="rv-state rv-done">
+        <h3>{{ cardTab.emptyTitle }}</h3>
       </div>
-      <div v-else class="rv-enabled-list" :style="{ columnCount: dueColumns }">
+      <div v-else class="rv-enabled-list" :style="{ columnCount: cardTab.columns }">
         <ReviewCardTile
-          v-for="card in dueTodayCards"
-          :key="card.cardId"
-          :card="card"
-          @preview="openPreview(card)"
-        />
-      </div>
-    </section>
-
-    <section v-else-if="!pluginDisabled && activeTab === 'enabled'" class="rv-enabled-panel">
-      <div class="rv-enabled-header">
-        <p class="small muted">已开启记忆周期的卡片（包含未到期卡片）</p>
-        <div class="rv-columns">
-          <button class="btn sm ghost" :class="{ active: enabledColumns === 3 }" title="3 列" @click="enabledColumns = 3">3 列</button>
-          <button class="btn sm ghost" :class="{ active: enabledColumns === 5 }" title="5 列" @click="enabledColumns = 5">5 列</button>
-          <button class="btn sm ghost" :class="{ active: enabledColumns === 7 }" title="7 列" @click="enabledColumns = 7">7 列</button>
-        </div>
-        <button class="btn sm ghost" :disabled="enabledCardsLoading" @click="loadEnabledCardList">
-          {{ enabledCardsLoading ? '加载中…' : '刷新' }}
-        </button>
-      </div>
-      <div v-if="enabledCardsLoading" class="rv-state small muted">加载已开启卡片…</div>
-      <div v-else-if="enabledCardsError" class="rv-state rv-done">
-        <p class="small muted">加载失败：{{ enabledCardsError }}</p>
-        <button class="btn primary" @click="loadEnabledCardList">重试</button>
-      </div>
-      <div v-else-if="!enabledCardsLoaded" class="rv-state small muted">正在准备卡片列表…</div>
-      <div v-else-if="!enabledCards.length" class="rv-state rv-done">
-        <h3>没有开启记忆周期的卡片</h3>
-      </div>
-      <div v-else class="rv-enabled-list" :style="{ columnCount: enabledColumns }">
-        <ReviewCardTile
-          v-for="card in enabledCards"
+          v-for="card in cardTab.cards"
           :key="card.cardId"
           :card="card"
           @preview="openPreview(card)"

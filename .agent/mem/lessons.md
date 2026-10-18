@@ -23,6 +23,8 @@
 ## 前端 UI
 - 【硬规则】「Enter 与 blur 共用提交函数且提交会关闭编辑态」的实现，入口必须可重入防护（如 `if (!renaming) return` 或在途标记）：卸载引发的 blur 会带同一草稿重入（曾致改标题双发 /api/notes/update）；NoteList 的 `savingNoteId` 是已验证的同类守卫。
 - 【硬规则】UI 指代先定位具体组件层（页眉、页签导航、卡片元数据是不同目标），不从截图或旧界面推断，指代不清先确认。
+- 【硬规则】把函数抽到共享模块后，必须对**被移走的全部符号名**逐个 grep（特别是 `onBeforeUnmount`/事件清理块里的 `removeEventListener` 引用——漏一处就是卸载期 ReferenceError，会打断路由切换的组件卸载，表现为「点菜单/跳转没反应」）。依据：2026-10-18 预览交互抽到 plugin-api 时漏了 onPreviewMouseMove/onPreviewMouseUp 两个名字，侧栏跳转全挂，用户回报后用 Playwright 探针定位。
+- 【硬规则】修「界面没反应」类问题必须用真实浏览器探针走**会挂载目标组件的路径**（如先打开笔记页再点菜单），从列表页走可能永远不触发卸载钩子，探针绿灯是假阴性。
 
 ## 插件与文件持久化
 - 数据根目录统一由 Spring `thisnode.data-root`（默认 `${user.home}/.thisnode`）派生：笔记根 = `data-root/notes`，插件数据 = `data-root/notes/plugins/<pluginId>`；不做旧路径迁移兼容，少调用点的路径拼接直接内联、不留纯封装工具类。

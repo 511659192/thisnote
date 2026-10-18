@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { noteApi } from '@/api/note'
 import { bookApi } from '@/api'
 import type { NoteDto, Book } from '@/api/types'
-import { activeListFilter_, clearActiveListFilter as registryClearFilter, getNoteListFilter, toast } from '@thisnode/plugin-api'
+import { activeListFilter_, getNoteListFilter, toast } from '@thisnode/plugin-api'
 
 /** Notes: list, selection, notebook navigation and title updates. */
 export const useNoteStore = defineStore('notes', () => {
@@ -11,13 +11,9 @@ export const useNoteStore = defineStore('notes', () => {
   const nodes = ref<NoteDto[]>([])
   const current = ref<NoteDto | null>(null)
   const loadingList = ref(false)
-  const loadingNode = ref(false)
   const books = ref<Book[]>([])
-  const bookCounts = ref<Record<string, number>>({})
 
   const activeBookId = ref<string | null>(null)
-  const listQuery = ref('')
-  const selectedIds = ref<string[]>([])
 
   /** 批量操作模式：入口在列表头部的图标按钮，选中态由列表使用。 */
   const batchSelecting = ref(false)
@@ -50,10 +46,7 @@ export const useNoteStore = defineStore('notes', () => {
   async function loadList() {
     loadingList.value = true
     try {
-      nodes.value = await noteApi.list({
-        bookId: activeBookId.value ?? undefined,
-        text: listQuery.value || undefined,
-      })
+      nodes.value = await noteApi.list({ bookId: activeBookId.value ?? undefined })
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -71,16 +64,9 @@ export const useNoteStore = defineStore('notes', () => {
   let metaInflight: Promise<void> | null = null
 
   /**
-   * 插件提供的列表筛选（例如「收藏」）。
-   *
-   * <p>它只是给核心这份列表**加一个条件**：插件回答"哪些 id 命中"，列表渲染、点开笔记、
-   * 内容展示全由核心负责 —— 因此与「全部笔记/最近编辑」天然同构，不需要任何第二套布局。
-   */
-  /**
    * 插件列表筛选：激活指针在注册表里（跨微应用共享 —— 搜索框等插件 UI 也设置它），
    * 这里 watch 指针并调用筛选的 load() 取命中 id。null = 未激活（列表原样）。
    */
-  const pluginFilter = computed(() => activeListFilter_())
   const pluginFilterIds = ref<Set<string> | null>(null)
 
   // 指针在注册表里（搜索框等任意微应用的 UI 都能设置）；这里 watch 它并调用筛选的 load()
@@ -104,27 +90,12 @@ export const useNoteStore = defineStore('notes', () => {
     }
   })
 
-  function clearPluginFilter(): void {
-    registryClearFilter()
-  }
-
   /** 列表真正渲染的内容：没启用插件筛选时就是原样，启用时按 id 过滤。 */
   const notesView = computed(() => {
     const ids = pluginFilterIds.value
     if (!ids) return nodes.value
     return nodes.value.filter((n) => ids.has(n.noteId))
   })
-  async function countNotesByBook(): Promise<Record<string, number>> {
-    const counts: Record<string, number> = {}
-    const pageSize = 500
-    for (let offset = 0; ; offset += pageSize) {
-      const page = await noteApi.list({ limit: pageSize, offset })
-      for (const note of page) {
-        if (note.bookId) counts[note.bookId] = (counts[note.bookId] ?? 0) + 1
-      }
-      if (page.length < pageSize) return counts
-    }
-  }
 
   async function refreshMeta(): Promise<void> {
     if (metaInflight) {
@@ -132,9 +103,7 @@ export const useNoteStore = defineStore('notes', () => {
     }
     metaInflight = (async () => {
       try {
-        const [loadedBooks, counts] = await Promise.all([bookApi.list(), countNotesByBook()])
-        books.value = loadedBooks
-        bookCounts.value = counts
+        books.value = await bookApi.list()
       } catch (e) {
         /* meta refresh is best-effort */
       } finally {
@@ -187,11 +156,6 @@ export const useNoteStore = defineStore('notes', () => {
     setBook(id)
   }
 
-  function setListQuery(q: string) {
-    listQuery.value = q
-    void loadList()
-  }
-
   async function select(id: string | null) {
     if (!id) {
       current.value = null
@@ -199,23 +163,13 @@ export const useNoteStore = defineStore('notes', () => {
     }
     if (current.value?.noteId === id) return
     const token = ++detailToken
-    loadingNode.value = true
     try {
       const detail = await noteApi.get(id)
       if (token !== detailToken) return
       current.value = detail
     } catch (e) {
       toast((e as Error).message, 'error')
-    } finally {
-      if (token === detailToken) loadingNode.value = false
     }
-  }
-
-  async function reloadCurrent() {
-    if (!current.value) return
-    const id = current.value.noteId
-    current.value = await noteApi.get(id)
-    await refreshMeta()
   }
 
   async function updateCurrent(changes: { title?: string }): Promise<NoteDto | null> {
@@ -284,30 +238,14 @@ export const useNoteStore = defineStore('notes', () => {
     }
   }
 
-
-  /** Re-read the current note from disk-backed state (after an external edit). */
-  async function syncFromServer() {
-    await loadList()
-    if (currentId.value) {
-      current.value = await noteApi.get(currentId.value)
-    }
-  }
-
   return {
-    pluginFilter,
-    pluginFilterIds,
-    clearPluginFilter,
     notesView,
     nodes,
     current,
     currentId,
     loadingList,
-    loadingNode,
     books,
-    bookCounts,
     activeBookId,
-    listQuery,
-    selectedIds,
     batchSelecting,
     batchSelected,
     startBatchSelect,
@@ -321,7 +259,6 @@ export const useNoteStore = defineStore('notes', () => {
     refreshAll,
     showAll,
     setBook,
-    setListQuery,
     // 分组列表
     groupsShown,
     createGroup,
@@ -329,12 +266,10 @@ export const useNoteStore = defineStore('notes', () => {
     deleteGroup,
     openGroup,
     select,
-    reloadCurrent,
     updateCurrent,
     createNode,
     deleteForever,
     deleteMany,
     moveMany,
-    syncFromServer,
   }
 })

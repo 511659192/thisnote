@@ -413,7 +413,7 @@ host（qiankun 主应用，:5173）
 | 包 | 作用 |
 |---|---|
 | `frontend/host` (`thisnode-frontend`) | 主应用：壳、设置页、qiankun 装载器、Markdown 渲染与格式化服务 |
-| `frontend/plugin-api` (`@thisnode/plugin-api`) | **界面侧唯一契约**：注册表、可用性桥、插件管理客户端、HTTP、宿主服务、shell 状态、vite 共享依赖插件 |
+| `frontend/plugin-api` (`@thisnode/plugin-api`) | **界面侧唯一契约**：注册表、可用性桥、插件管理客户端、HTTP、宿主服务、shell 状态、vite 共享依赖插件；2026-10-18 起另含跨插件共享 UI（`ConfirmDialog`、`createPreviewImageInteractions`、`createPluginLifecycle`）—— 源码形态进宿主模块图，样式随宿主 CSS 全局生效 |
 | `frontend/plugins/*` | 各自的微应用；产物 `plugin.js` + `plugin.css` + 分片 |
 
 ### 6.2 主应用启动顺序（很重要，深链接靠它）
@@ -591,10 +591,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 2. **memory-cycle 复习页的卡片内容接口形态（已修复）。**
    原先前端按 `{ cards: [...] }` 解包，而后端 `/api/notes/cards/get` 返回裸数组 `List<CardDTO>`；
    现在 `memoryCycleApi.ts` 直接按数组使用，复习页不再报 `item.page.cards is not iterable`。
-3. **顶栏全局搜索的「摘要命中」实际不生效。**
-   `GlobalSearch.vue` 依赖 `note.summary`（`:20,46-58,146-153`），但后端 `NoteDTO` 没有 `summary` 字段
-   （`backend/plugin-api/.../notes/dto/NoteDTO.java:5`），笔记列表类型里也没有。
-   实际效果 = 仅按标题（以及空摘要）匹配，摘要片段永不显示。
+3. ~~顶栏全局搜索的「摘要命中」实际不生效~~（已修复：summary 匹配/摘要片段属不可达死代码，
+    2026-10-18 删除，`GlobalSearch.vue` 现为纯标题匹配）。
 4. **生产插件目录是写死的绝对路径**：`D:/projects/thisnote/backend/runtime/plugins`
    （`backend/app/src/main/resources/application.yml:19`）。换机器/换目录/换用户名即找不到插件；
    dev profile 用相对路径 `plugins-dev` 才不会踩到（`backend/app/src/main/resources/application-dev.yml:22`）。
@@ -611,10 +609,10 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
    属历史遗留，不要在这里加前端依赖。
 10. **`app/pom.xml:93-99` 的注释与实现不符**：注释说 app 在 package 阶段拷插件 jar，实际是各插件模块的
     `maven-antrun-plugin` 干的（`plugins/memory-cycle/pom.xml:86-105` 等），app 模块没有该配置。
-11. **`NotesSidebarPanel.vue:1-7` 有 `<style>` 块之外的 CSS 文本**（同样内容在文件末尾 `:416-422` 重复）；
-    SFC 解析器如何处理块外内容本次未验证，改动该文件时先看一眼。
+11. ~~`NotesSidebarPanel.vue:1-7` 有 `<style>` 块之外的 CSS 文本~~（已修复：2026-10-18 删除头部游离 CSS 残片，
+     块内同名规则保留）。
 12. ~~`registry.ts:9` 注释说「目前有五个插槽」，实际注册表有 9 个~~（已修复：注释改为指向 §6.4 的完整清单，
-    注册表现有 11 个）。
+     注册表现有 11 个）。
 13. **`MemoryCycleStateChangedEventListener` 有两份实例**：一份是插件容器里的 `@Component`
     （`MemoryCycleStateChangedEventListener.java:9`），另一份由 `MemoryCyclePlugin` 手工 new 并注册到主容器
     （`MemoryCyclePlugin.java:64-73`）。当前只有主容器那份会收到事件（事件由主容器发布），但读代码时容易误会。
