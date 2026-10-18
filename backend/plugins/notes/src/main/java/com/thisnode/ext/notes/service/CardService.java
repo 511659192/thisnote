@@ -114,19 +114,21 @@ public class CardService {
     public synchronized CardMetaDTO update(String noteId,
                                            String cardId,
                                            UpdateCardRequest changes) {
-        return notesMapper.toCardMetaDTO(update(getNote(noteId), cardId, changes));
+        NotePO note = noteContainingCard(noteId, cardId);
+        CardMeta meta = applyChanges(cardId, changes);
+        cardRepository.update(meta, null, cardId);
+        mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
+        log.debug("卡片 {} 元数据已更新", cardId);
+        return notesMapper.toCardMetaDTO(meta);
     }
 
-    private CardMeta update(NotePO note,
-                            String cardId,
-                            UpdateCardRequest changes) {
-        noteContainingCard(note, cardId);
-        CardPO card = cardRepository.getOne(cardId);
-        if (card == null || card.getMeta() == null) {
+    /** 校验卡片存在并把变更应用到索引元数据上；只改内存对象，落盘与发事件由调用方决定。 */
+    private CardMeta applyChanges(String cardId,
+                                  UpdateCardRequest changes) {
+        CardMeta meta = cardRepository.getMeta(cardId);
+        if (meta == null) {
             throw new NotFoundException("card " + cardId);
         }
-
-        CardMeta meta = card.getMeta();
         double x = changes.x() == null ? meta.getX() : changes.x();
         double y = changes.y() == null ? meta.getY() : changes.y();
         double w = changes.w() == null ? meta.getW() : Math.max(CardRepository.MIN_W, changes.w());
@@ -138,18 +140,22 @@ public class CardService {
         Optional.ofNullable(changes.color()).ifPresent(meta::setColor);
         Optional.ofNullable(changes.status()).ifPresent(meta::setStatus);
         Optional.ofNullable(changes.collapsed()).ifPresent(meta::setCollapsed);
-        cardRepository.update(meta, null, cardId);
-        mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
-        log.debug("卡片 {} 元数据已更新", cardId);
         return meta;
     }
 
+    /** 批量几何/状态更新：索引一次读一次写，避免逐张全量重写；事件仍逐卡发布（消费方按 cardId 处理）。 */
     public synchronized void batchUpdate(BatchUpdateCardsRequest req) {
         NotePO note = getNote(req.noteId());
+        Map<String, CardMeta> metas = new LinkedHashMap<>();
         for (UpdateCardRequest update : req.cards()) {
             if (update != null && update.cardId() != null) {
-                update(noteContainingCard(note, update.cardId()), update.cardId(), update);
+                noteContainingCard(note, update.cardId());
+                metas.put(update.cardId(), applyChanges(update.cardId(), update));
             }
+        }
+        cardRepository.updateAll(metas);
+        for (String cardId : metas.keySet()) {
+            mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
         }
     }
 

@@ -193,6 +193,33 @@ public class CardRepository {
         return cardId;
     }
 
+    /**
+     * 卡片索引元数据；不在索引或缺文件名返回 null。比 {@link #getOne} 便宜：不读卡片正文。
+     */
+    public synchronized CardMeta getMeta(String cardId) {
+        if (cardId == null || cardId.isBlank()) return null;
+        CardMeta meta = readCardMetadata(cardId);
+        return meta == null || meta.getFileName() == null ? null : meta;
+    }
+
+    /**
+     * 批量更新元数据（几何/颜色…）：索引一次读、合并改、一次写回，避免逐张全量重写。
+     * 任一 cardId 不在索引中则整体抛出、不落盘。
+     */
+    public synchronized void updateAll(Map<String, CardMeta> metas) {
+        if (metas.isEmpty()) return;
+        Map<String, CardMeta> index = readCardMetadata();
+        for (Map.Entry<String, CardMeta> entry : metas.entrySet()) {
+            CardMeta indexed = index.get(entry.getKey());
+            if (indexed == null || indexed.getFileName() == null) {
+                throw new IllegalStateException("卡片 ID 不在索引中：" + entry.getKey());
+            }
+            entry.getValue().setFileName(indexed.getFileName());
+            index.put(entry.getKey(), entry.getValue());
+        }
+        fileHelper.fileWritten(cardMetadataFile, index);
+    }
+
     public synchronized void delete(List<String> cardIds) {
         if (cardIds == null) return;
 

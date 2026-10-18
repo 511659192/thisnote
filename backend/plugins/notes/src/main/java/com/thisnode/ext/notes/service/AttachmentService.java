@@ -115,29 +115,37 @@ public class AttachmentService {
      * 未被管理的附件：attachments 目录里、没有任何卡片引用的 png/jpg/webp。
      */
     public List<AttachmentDTO> unmanagedAttachments() {
-        Set<String> referenced = allReferencedFileNames();
         Path dir = notesConfig.getRootDir().resolve("attachments");
-        List<AttachmentDTO> attachments = new ArrayList<>();
-        if (!Files.isDirectory(dir)) return attachments;
+        if (!Files.isDirectory(dir)) return List.of();
 
+        // 先看目录里有没有候选图片：没有就不必付「全库卡片扫描」的代价（引用关系只存在于卡片正文中）。
+        List<String> candidates = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
             for (Path path : stream) {
                 String fileName = path.getFileName().toString();
-                if (fileName.startsWith(".") || referenced.contains(fileName) || !isImageFile(fileName)) {
-                    continue;
-                }
-                BasicFileAttributes attributes;
-                try {
-                    attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-                } catch (IOException e) {
-                    continue;
-                }
-                if (attributes.isRegularFile() && attributes.size() > 0) {
-                    attachments.add(new AttachmentDTO(fileName, attributes.size()));
+                if (!fileName.startsWith(".") && isImageFile(fileName)) {
+                    candidates.add(fileName);
                 }
             }
         } catch (IOException e) {
             throw new UncheckedIOException("无法读取附件目录 " + dir, e);
+        }
+        if (candidates.isEmpty()) return List.of();
+
+        Set<String> referenced = allReferencedFileNames();
+        List<AttachmentDTO> attachments = new ArrayList<>();
+        for (String fileName : candidates) {
+            if (referenced.contains(fileName)) continue;
+            Path path = dir.resolve(fileName);
+            BasicFileAttributes attributes;
+            try {
+                attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            } catch (IOException e) {
+                continue;
+            }
+            if (attributes.isRegularFile() && attributes.size() > 0) {
+                attachments.add(new AttachmentDTO(fileName, attributes.size()));
+            }
         }
         return attachments;
     }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,6 +61,20 @@ public class NoteRepository {
         if (note == null || StrUtil.isBlank(note.getNoteId())) return;
         note.setUpdatedAt(System.currentTimeMillis());
         put(note);
+    }
+
+    /**
+     * 批量覆写笔记元数据（如批量转移分组）：索引一次读、合并改、一次写回，避免逐篇全量重写。
+     */
+    public synchronized void updateAll(Collection<NotePO> notes) {
+        if (notes == null || notes.isEmpty()) return;
+        Map<String, NotePO> index = noteIndex();
+        for (NotePO note : notes) {
+            if (note == null || StrUtil.isBlank(note.getNoteId())) continue;
+            note.setUpdatedAt(System.currentTimeMillis());
+            index.put(note.getNoteId(), note);
+        }
+        fileHelper.fileWritten(nodeMetadataFile, index);
     }
 
     /**

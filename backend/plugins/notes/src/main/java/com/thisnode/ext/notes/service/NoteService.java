@@ -87,22 +87,22 @@ public class NoteService {
     }
 
     /**
-     * 批量转入分组：只改笔记的 bookId，卡片与附件不动。
+     * 批量转入分组：只改笔记的 bookId，卡片与附件不动；索引一次写回，避免逐篇全量重写。
      */
     public synchronized void moveAll(List<String> noteIds, String bookId) {
         if (noteIds == null || noteIds.isEmpty()) return;
         if (bookId == null || bookId.isBlank() || bookRepository.getOne(bookId) == null) {
             throw new IllegalArgumentException("分组不存在：" + bookId);
         }
-        int moved = 0;
+        List<NotePO> moved = new ArrayList<>();
         for (String noteId : noteIds) {
             NotePO note = noteRepository.getOne(noteId);
             if (note == null) continue;
             note.setBookId(bookId);
-            noteRepository.update(note);
-            moved++;
+            moved.add(note);
         }
-        log.info("将 {} 篇笔记转入分组 {}", moved, bookId);
+        noteRepository.updateAll(moved);
+        log.info("将 {} 篇笔记转入分组 {}", moved.size(), bookId);
     }
 
     public void delete(String id) {

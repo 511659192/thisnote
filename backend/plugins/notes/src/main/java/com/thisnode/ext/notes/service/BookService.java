@@ -66,15 +66,16 @@ public class BookService {
             throw new IllegalArgumentException("「" + BookPO.DEFAULT_GROUP_TITLE + "」是默认分组，不能删除：笔记必须归属一个分组，它是无归属笔记的落脚点");
         }
         BookPO deleted = bookRepository.getOne(id);
-        List<String> movedNoteIds = new ArrayList<>();
+        List<NotePO> moved = new ArrayList<>();
         for (NotePO note : noteRepository.getAll()) {
             if (id.equals(note.getBookId())) {
                 note.setBookId(BookPO.DEFAULT_GROUP_ID);
-                noteRepository.update(note);
-                movedNoteIds.add(note.getNoteId());
+                moved.add(note);
             }
         }
+        noteRepository.updateAll(moved);
         bookRepository.delete(id);
+        List<String> movedNoteIds = moved.stream().map(NotePO::getNoteId).toList();
         if (deleted != null) {
             mainEventPublisher.publishEvent(new BookChangedEvent(
                     id,
