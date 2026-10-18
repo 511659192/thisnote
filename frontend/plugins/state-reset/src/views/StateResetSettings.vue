@@ -14,7 +14,7 @@ async function reset() {
   try {
     await stateResetApi.reset()
     confirming.value = false
-    result.value = '已发出重置事件：收藏、记忆周期排期、网盘同步基线、附件导入记录已重置，笔记与卡片索引已清空。'
+    result.value = '已发出重置事件：收藏、记忆周期排期、网盘同步基线、附件导入记录已重置，笔记/卡片/附件索引已清空。'
     host().notify('插件状态已重置', 'success')
   } catch (e) {
     result.value = `重置失败：${(e as Error).message}`
@@ -34,7 +34,7 @@ async function reset() {
       <li>记忆周期：重置排期文件</li>
       <li>百度网盘同步：重置同步基线（授权凭据保留）</li>
       <li>附件导入：重置导入记录（未引用附件会重新导入）</li>
-      <li>笔记：清空笔记与卡片索引（卡片 md 保留，会被重新导入）</li>
+      <li>笔记：清空笔记/卡片/附件索引（卡片 md 与附件文件保留）</li>
     </ul>
     <p class="warn">此操作不可撤销。</p>
     <div class="actions">

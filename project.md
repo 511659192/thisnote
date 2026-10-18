@@ -251,7 +251,8 @@ host（qiankun 主应用，:5173）
 ├── meta/                       旧格式笔记 meta（C：不迁移、不再读取）
 └── plugins/
     ├── notes/.note-index.json   noteId → NotePO（扁平 map）
-    ├── notes/.card-index.json   cardId → meta（扁平 map；meta.sourceFileName 即文件名）
+    ├── notes/.card-index.json   cardId → meta（扁平 map；meta.fileName 即文件名）
+    ├── notes/.attachment-index.json  fileName → {w,h,size,contentType,uploadedAt}
     └── <pluginId>/              其它插件自己的数据
 ```
 
@@ -277,6 +278,8 @@ host（qiankun 主应用，:5173）
   前端处理见 `frontend/plugins/notes/src/stores/notePage.ts:388-423`）。
 - **附件**：只接受 png/jpg；文件名必须严格匹配 UUID 正则（不含路径分隔符）
   （删除只发生在「全库索引里没有其它卡片引用」时，`AttachmentService.java`）。
+- **附件元数据**：上传时把宽高、字节数、MIME、上传时间写进 `notes/plugins/notes/.attachment-index.json`
+  （`AttachmentService.java`）；附件被删除时同步移除条目；ImageIO 读不出尺寸时宽高记 0。
   正文引用写法是 `../attachments/<uuid>.<ext>`，界面渲染时改写成 blob URL 拉取（`frontend/host/src/core/markdown.ts:27-35`、
   `frontend/host/src/components/MarkdownPreview.vue:21-42`）。
 
@@ -382,7 +385,7 @@ host（qiankun 主应用，:5173）
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
-- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；attachment-importer → 空 `imported.json`（未引用附件下一轮重新导入）；notes → 把 `.note-index.json` 与 `.card-index.json` 重写为空 map（**卡片 md 保留**，随后会被 card-importer 当成无主卡片重新导入）；card-importer / state-reset 无状态文件，只记日志。
+- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `favorites.properties`；memory-cycle → `{}` 的 `scheduling.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `sync-state.json`（保留 `credentials.json`，同步进行中跳过）；attachment-importer → 空 `imported.json`（未引用附件下一轮重新导入）；notes → 把 `.note-index.json`、`.card-index.json` 与 `.attachment-index.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；card-importer / state-reset 无状态文件，只记日志。
 
 ---
 

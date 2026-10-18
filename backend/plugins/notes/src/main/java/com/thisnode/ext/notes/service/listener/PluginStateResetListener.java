@@ -8,7 +8,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
 /**
- * 状态重置：把笔记索引与卡片索引重写为空（卡片 md 文件保留）。
+ * 状态重置：把笔记索引、卡片索引与附件索引重写为空（卡片 md 与附件文件保留）。
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -20,6 +20,6 @@ public class PluginStateResetListener
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
         noteService.resetIndexes();
-        log.info("收到状态重置事件（来自 {}）：笔记与卡片索引已重置（md 保留）", event.getPayload().sourcePluginId());
+        log.info("收到状态重置事件（来自 {}）：笔记/卡片/附件索引已重置（文件保留）", event.getPayload().sourcePluginId());
     }
 }

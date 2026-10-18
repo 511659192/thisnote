@@ -68,4 +68,16 @@ public class CardPO {
         private boolean collapsed;
         private Map<String, Object> ext = new HashMap<>();
     }
+
+    /**
+     * 附件元数据：上传时记录的关键信息。
+     *
+     * @param w           图片宽度（像素；读不出来时为 0）
+     * @param h           图片高度（像素；读不出来时为 0）
+     * @param size        文件字节数
+     * @param contentType 规范化后的 MIME 类型（image/png、image/jpeg）
+     * @param uploadedAt  上传时间（epoch 毫秒）
+     */
+    public record AttachmentMeta(int w, int h, long size, String contentType, long uploadedAt) {
+    }
 }
