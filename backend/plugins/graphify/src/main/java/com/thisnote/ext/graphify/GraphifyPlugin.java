@@ -43,6 +43,7 @@ public class GraphifyPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         indexService = ctx.getBean(GraphifyIndexService.class);
+        indexService.setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(GraphifyAiClient.class).setMainEventPublisher(getMainApplicationContext());
         noteChangedEventListener = new NoteChangedEventListener(indexService);
         cardChangedEventListener = new CardChangedEventListener(indexService);

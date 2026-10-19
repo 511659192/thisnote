@@ -1,6 +1,5 @@
 package com.thisnote.ext.tags.service;
 
-import com.thisnote.ext.tags.client.TagsNotesClient;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,12 +14,9 @@ import java.util.Set;
 public class TagUsageService {
 
     private final TagsService tagsService;
-    private final TagsNotesClient notesClient;
 
-    public TagUsageService(TagsService tagsService,
-                           TagsNotesClient notesClient) {
+    public TagUsageService(TagsService tagsService) {
         this.tagsService = tagsService;
-        this.notesClient = notesClient;
     }
 
     public Map<String, Integer> occurrences() {
@@ -41,11 +37,11 @@ public class TagUsageService {
             return knownTags;
         }
         StringBuilder corpus = new StringBuilder();
-        for (NoteDTO note : notesClient.allNotes()) {
+        for (NoteDTO note : tagsService.allNotes()) {
             if (note == null || note.noteId() == null || note.noteId().isBlank()) {
                 continue;
             }
-            corpus.append(TagTextCounter.noteText(note, notesClient.cards(note.noteId())))
+            corpus.append(TagTextCounter.noteText(note, tagsService.cards(note.noteId())))
                     .append('\n');
         }
         Map<String, Integer> result = new LinkedHashMap<>(knownTags);

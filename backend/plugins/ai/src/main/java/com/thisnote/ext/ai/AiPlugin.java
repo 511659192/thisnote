@@ -37,8 +37,10 @@ public class AiPlugin extends SpringBootPlugin {
 
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
+        AiTagSuggestionService tagSuggestionService = ctx.getBean(AiTagSuggestionService.class);
+        tagSuggestionService.setMainEventPublisher(getMainApplicationContext());
         aiRuntimeEventListener = new AiRuntimeEventListener(ctx.getBean(AiSettingsService.class));
-        noteTagSuggestionEventListener = new NoteTagSuggestionEventListener(ctx.getBean(AiTagSuggestionService.class));
+        noteTagSuggestionEventListener = new NoteTagSuggestionEventListener(tagSuggestionService);
         stateResetListener = new PluginStateResetListener();
         getMainApplicationContext().addApplicationListener(aiRuntimeEventListener);
         getMainApplicationContext().addApplicationListener(noteTagSuggestionEventListener);

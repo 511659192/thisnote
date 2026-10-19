@@ -150,6 +150,10 @@ public class NoteService {
         return notesMapper.toNoteDTO(meta);
     }
 
+    public List<NoteDTO> all() {
+        return noteRepository.getAll().stream().map(notesMapper::toNoteDTO).toList();
+    }
+
     public List<NoteDTO> list(NoteListRequest query) {
         List<NotePO> matched = new ArrayList<>();
         for (NotePO note : noteRepository.getAll()) {

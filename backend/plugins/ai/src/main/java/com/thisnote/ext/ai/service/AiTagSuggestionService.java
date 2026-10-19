@@ -1,12 +1,15 @@
 package com.thisnote.ext.ai.service;
 
-import com.thisnote.ext.ai.client.AiNotesClient;
 import com.thisnote.ext.ai.client.AiProviderClient;
+import com.thisnote.plugin.api.event.AttachmentBytesQueryEvent;
 import com.thisnote.plugin.api.event.AiRuntimeEvent;
+import com.thisnote.plugin.api.event.NoteContentQueryEvent;
 import com.thisnote.plugin.api.event.NoteTagSuggestionEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
+import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,6 +18,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,20 +29,23 @@ public class AiTagSuggestionService {
 
     private static final int MAX_IMAGES = 6;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
+    private static final long QUERY_TIMEOUT_SECONDS = 30;
     private static final Pattern MARKDOWN_IMAGE = Pattern.compile("!\\[[^\\]]*\\]\\((<[^>]+>|(?:\\\\.|[^)])*)\\)");
     private static final Pattern ATTACHMENT_TARGET = Pattern.compile(
             "(?i)(?:\\.\\./)?attachments/(.+?\\.(?:png|jpg|jpeg|webp))(?:[?#].*)?$");
 
     private final AiSettingsService settingsService;
     private final AiProviderClient providerClient;
-    private final AiNotesClient notesClient;
+    private ApplicationEventPublisher eventPublisher;
 
     public AiTagSuggestionService(AiSettingsService settingsService,
-                                  AiProviderClient providerClient,
-                                  AiNotesClient notesClient) {
+                                  AiProviderClient providerClient) {
         this.settingsService = settingsService;
         this.providerClient = providerClient;
-        this.notesClient = notesClient;
+    }
+
+    public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
     }
 
     public void suggest(NoteTagSuggestionEvent event) {
@@ -47,12 +55,13 @@ public class AiTagSuggestionService {
                 event.suggestions().complete(List.of());
                 return;
             }
-            NoteDTO note = notesClient.note(event.noteId());
-            if (note == null) {
+            NoteContentDTO content = noteContent(event.noteId());
+            if (content == null || content.note() == null) {
                 event.suggestions().complete(List.of());
                 return;
             }
-            List<CardDTO> cards = notesClient.cards(event.noteId());
+            NoteDTO note = content.note();
+            List<CardDTO> cards = content.cards();
             int maxTextChars = settingsService.settings().maxTextChars();
             String text = noteText(note, cards, maxTextChars);
             List<AiProviderClient.ImageInput> images = images(cards);
@@ -102,7 +111,7 @@ public class AiTagSuggestionService {
                 if (!seen.add(fileName.toLowerCase(Locale.ROOT))) {
                     continue;
                 }
-                byte[] bytes = notesClient.attachment(fileName);
+                byte[] bytes = attachment(fileName);
                 if (bytes == null || bytes.length == 0 || bytes.length > MAX_IMAGE_BYTES) {
                     continue;
                 }
@@ -113,6 +122,25 @@ public class AiTagSuggestionService {
             }
         }
         return images;
+    }
+
+    private NoteContentDTO noteContent(String noteId) {
+        CompletableFuture<NoteContentDTO> result = new CompletableFuture<>();
+        publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private byte[] attachment(String fileName) {
+        CompletableFuture<byte[]> result = new CompletableFuture<>();
+        publisher().publishEvent(new AttachmentBytesQueryEvent(fileName, result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private ApplicationEventPublisher publisher() {
+        if (eventPublisher == null) {
+            throw new IllegalStateException("Notes 消息管道尚未就绪");
+        }
+        return eventPublisher;
     }
 
     private static String mediaType(String fileName) {

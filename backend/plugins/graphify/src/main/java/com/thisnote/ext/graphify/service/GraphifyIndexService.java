@@ -4,18 +4,22 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.GraphifyPlugin;
-import com.thisnote.ext.graphify.client.GraphifyNotesClient;
 import com.thisnote.ext.graphify.client.GraphifyProcessRunner;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
+import com.thisnote.plugin.api.event.AttachmentBytesQueryEvent;
 import com.thisnote.plugin.api.event.AttachmentChangedEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
+import com.thisnote.plugin.api.event.NoteContentQueryEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
+import com.thisnote.plugin.api.event.NoteListQueryEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
+import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
 import com.thisnote.plugin.api.util.FileHelper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -61,11 +65,11 @@ public class GraphifyIndexService {
             Pattern.CASE_INSENSITIVE);
     private static final String GRAPHIFY_POST_MESSAGE_MARKER = "thisnote-graphify-open-note";
     private static final int RELATED_NOTES_LIMIT = 5;
+    private static final long QUERY_TIMEOUT_SECONDS = 30;
 
     private final FileHelper fileHelper;
     private final GraphifySettingsService settingsService;
     private final GraphifyStateRepository stateRepository;
-    private final GraphifyNotesClient notesClient;
     private final GraphifyProcessRunner processRunner;
     private final Path pluginDir;
     private final Path corpusDir;
@@ -87,17 +91,16 @@ public class GraphifyIndexService {
     private boolean indexQueued;
     private boolean relabelQueued;
     private volatile boolean resetting;
+    private ApplicationEventPublisher eventPublisher;
 
     public GraphifyIndexService(FileHelper fileHelper,
                                 GraphifySettingsService settingsService,
                                 GraphifyStateRepository stateRepository,
-                                GraphifyNotesClient notesClient,
                                 GraphifyProcessRunner processRunner,
                                 @Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
         this.fileHelper = fileHelper;
         this.settingsService = settingsService;
         this.stateRepository = stateRepository;
-        this.notesClient = notesClient;
         this.processRunner = processRunner;
         Path notesRoot = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes");
         this.pluginDir = notesRoot.resolve("plugins").resolve(GraphifyPlugin.PLUGIN_ID);
@@ -110,6 +113,45 @@ public class GraphifyIndexService {
             thread.setDaemon(true);
             return thread;
         });
+    }
+
+    public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
+
+    private List<NoteDTO> allNotes() {
+        CompletableFuture<List<NoteDTO>> result = new CompletableFuture<>();
+        publisher().publishEvent(new NoteListQueryEvent(result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private NoteDTO note(String noteId) {
+        NoteContentDTO content = noteContent(noteId);
+        return content == null ? null : content.note();
+    }
+
+    private List<CardDTO> cards(String noteId) {
+        NoteContentDTO content = noteContent(noteId);
+        return content == null ? List.of() : content.cards();
+    }
+
+    private byte[] attachment(String fileName) {
+        CompletableFuture<byte[]> result = new CompletableFuture<>();
+        publisher().publishEvent(new AttachmentBytesQueryEvent(fileName, result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private NoteContentDTO noteContent(String noteId) {
+        CompletableFuture<NoteContentDTO> result = new CompletableFuture<>();
+        publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private ApplicationEventPublisher publisher() {
+        if (eventPublisher == null) {
+            throw new IllegalStateException("Notes 消息管道尚未就绪");
+        }
+        return eventPublisher;
     }
 
     @PostConstruct
@@ -227,7 +269,7 @@ public class GraphifyIndexService {
         }
 
         Map<String, NoteDTO> notesById = new LinkedHashMap<>();
-        for (NoteDTO note : notesClient.allNotes()) {
+        for (NoteDTO note : allNotes()) {
             if (note != null && note.noteId() != null) {
                 notesById.put(note.noteId(), note);
             }
@@ -536,7 +578,7 @@ public class GraphifyIndexService {
                 warnings.add(stateLoadError);
             }
             currentStatus = statusFor("读取笔记", true, 2, 0, 0, warnings, null);
-            List<NoteDTO> notes = notesClient.allNotes();
+            List<NoteDTO> notes = allNotes();
             log.info("Graphify 笔记读取完成：notes={}", notes.size());
             if (notes.isEmpty()) {
                 resetEmptyGraph("没有笔记，图谱已清空");
@@ -671,7 +713,7 @@ public class GraphifyIndexService {
             int completed = 0;
             boolean projectionChanged = false;
             for (String noteId : changed) {
-                NoteDTO note = notesClient.note(noteId);
+                NoteDTO note = note(noteId);
                 if (note == null) {
                     removeProjection(noteId);
                     noteIds.remove(noteId);
@@ -817,7 +859,7 @@ public class GraphifyIndexService {
     }
 
     private ProjectionMetadata projectNote(NoteDTO note, List<String> warnings) {
-        List<CardDTO> cards = notesClient.cards(note.noteId());
+        List<CardDTO> cards = cards(note.noteId());
         Map<String, CardDTO> cardsById = new HashMap<>();
         if (cards != null) {
             for (CardDTO card : cards) {
@@ -864,7 +906,7 @@ public class GraphifyIndexService {
         Set<String> copiedAttachments = new LinkedHashSet<>();
         boolean changed = false;
         for (String fileName : attachmentNames) {
-            byte[] bytes = notesClient.attachment(fileName);
+            byte[] bytes = attachment(fileName);
             if (bytes == null) {
                 warnings.add("图片附件不存在或无法读取：" + fileName);
                 continue;
@@ -991,11 +1033,11 @@ public class GraphifyIndexService {
 
     private Map<String, String> rebuildCardToNoteMapping() {
         Map<String, String> result = new LinkedHashMap<>();
-        for (NoteDTO note : notesClient.allNotes()) {
+        for (NoteDTO note : allNotes()) {
             if (note == null || note.noteId() == null) {
                 continue;
             }
-            List<CardDTO> cards = notesClient.cards(note.noteId());
+            List<CardDTO> cards = cards(note.noteId());
             if (cards == null) {
                 continue;
             }

@@ -6,11 +6,14 @@ import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
 import com.thisnote.ext.notes.service.BookService;
 import com.thisnote.ext.notes.service.listener.AttachmentAdoptEventListener;
+import com.thisnote.ext.notes.service.listener.AttachmentBytesQueryEventListener;
 import com.thisnote.ext.notes.service.listener.AttachmentQueryEventListener;
 import com.thisnote.ext.notes.service.listener.CardAttachmentCleanupListener;
 import com.thisnote.ext.notes.service.listener.CardCreateRequestListener;
 import com.thisnote.ext.notes.service.listener.CardQueryEventListener;
 import com.thisnote.ext.notes.service.listener.FileChangeEventListener;
+import com.thisnote.ext.notes.service.listener.NoteContentQueryEventListener;
+import com.thisnote.ext.notes.service.listener.NoteListQueryEventListener;
 import com.thisnote.ext.notes.service.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
@@ -43,6 +46,9 @@ public class NotesPlugin extends SpringBootPlugin {
     private CardQueryEventListener cardQueryEventListener;
     private AttachmentQueryEventListener attachmentQueryEventListener;
     private AttachmentAdoptEventListener attachmentAdoptEventListener;
+    private NoteContentQueryEventListener noteContentQueryEventListener;
+    private NoteListQueryEventListener noteListQueryEventListener;
+    private AttachmentBytesQueryEventListener attachmentBytesQueryEventListener;
     private PluginStateResetListener stateResetListener;
 
     public NotesPlugin(PluginWrapper wrapper) {
@@ -80,6 +86,9 @@ public class NotesPlugin extends SpringBootPlugin {
         cardQueryEventListener = new CardQueryEventListener(cardService);
         attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
         attachmentAdoptEventListener = new AttachmentAdoptEventListener(attachmentService);
+        noteContentQueryEventListener = new NoteContentQueryEventListener(noteService, cardService);
+        noteListQueryEventListener = new NoteListQueryEventListener(noteService);
+        attachmentBytesQueryEventListener = new AttachmentBytesQueryEventListener(attachmentService);
         stateResetListener = new PluginStateResetListener(noteService);
         getMainApplicationContext().addApplicationListener(fileChangeListener);
         getMainApplicationContext().addApplicationListener(cardAttachmentCleanupListener);
@@ -87,6 +96,9 @@ public class NotesPlugin extends SpringBootPlugin {
         getMainApplicationContext().addApplicationListener(cardQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentAdoptEventListener);
+        getMainApplicationContext().addApplicationListener(noteContentQueryEventListener);
+        getMainApplicationContext().addApplicationListener(noteListQueryEventListener);
+        getMainApplicationContext().addApplicationListener(attachmentBytesQueryEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
@@ -115,6 +127,18 @@ public class NotesPlugin extends SpringBootPlugin {
         if (attachmentAdoptEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentAdoptEventListener);
             attachmentAdoptEventListener = null;
+        }
+        if (noteContentQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteContentQueryEventListener);
+            noteContentQueryEventListener = null;
+        }
+        if (noteListQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteListQueryEventListener);
+            noteListQueryEventListener = null;
+        }
+        if (attachmentBytesQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(attachmentBytesQueryEventListener);
+            attachmentBytesQueryEventListener = null;
         }
         if (stateResetListener != null) {
             getMainApplicationContext().removeApplicationListener(stateResetListener);

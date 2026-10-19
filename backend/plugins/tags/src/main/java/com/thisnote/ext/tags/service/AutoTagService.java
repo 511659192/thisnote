@@ -1,6 +1,5 @@
 package com.thisnote.ext.tags.service;
 
-import com.thisnote.ext.tags.client.TagsNotesClient;
 import com.thisnote.plugin.api.event.NoteTagSuggestionEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
@@ -19,13 +18,10 @@ public class AutoTagService {
 
     private static final int MAX_AUTO_TAGS = 20;
 
-    private final TagsNotesClient notesClient;
     private final TagsService tagsService;
     private ApplicationEventPublisher eventPublisher;
 
-    public AutoTagService(TagsNotesClient notesClient,
-                          TagsService tagsService) {
-        this.notesClient = notesClient;
+    public AutoTagService(TagsService tagsService) {
         this.tagsService = tagsService;
     }
 
@@ -34,11 +30,11 @@ public class AutoTagService {
     }
 
     public List<String> extract(String noteId) {
-        NoteDTO note = notesClient.note(noteId);
+        NoteDTO note = tagsService.note(noteId);
         if (note == null) {
             throw new IllegalArgumentException("笔记不存在");
         }
-        List<CardDTO> cards = notesClient.cards(noteId);
+        List<CardDTO> cards = tagsService.cards(noteId);
         List<String> documents = new ArrayList<>();
         if (cards != null) {
             for (CardDTO card : cards) {

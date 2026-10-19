@@ -270,7 +270,7 @@ onMounted(async () => {
               <button
                 v-if="!plugin.undeactivatable"
                 class="btn sm"
-                :class="{ primary: plugin.active }"
+                :class="{ primary: plugin.active, 'plugin-state-off': !plugin.active }"
                 :disabled="!!busy"
                 @click="togglePlugin(plugin)"
               >
@@ -475,8 +475,23 @@ onMounted(async () => {
   line-height: 17px;
 }
 .kind-core {
-  background: var(--c-surface-2);
-  color: var(--c-text-2, var(--c-text));
+  background: var(--success);
+  color: #fff;
+  font-weight: 600;
+}
+.btn.plugin-state-off {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn.plugin-state-off:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+  filter: brightness(1.08);
+}
+[data-theme='dark'] .kind-core,
+[data-theme='dark'] .btn.plugin-state-off {
+  color: #14161a;
 }
 .plugin-desc {
   margin: var(--space-1) 0 0;

@@ -40,6 +40,7 @@ public class TagsPlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         TagsService tagsService = ctx.getBean(TagsService.class);
         TagUsageRefreshService tagUsageRefreshService = ctx.getBean(TagUsageRefreshService.class);
+        tagsService.setMainEventPublisher(getMainApplicationContext());
         tagsService.invalidateUsage();
         ctx.getBean(AutoTagService.class).setMainEventPublisher(getMainApplicationContext());
         noteChangedEventListener = new NoteChangedEventListener(tagsService);

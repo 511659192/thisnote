@@ -1,11 +1,14 @@
 package com.thisnote.ext.tags.service;
 
-import com.thisnote.ext.tags.client.TagsNotesClient;
 import com.thisnote.ext.tags.repository.TagsRepository;
 import com.thisnote.ext.tags.repository.TagsRepository.NoteUsage;
+import com.thisnote.plugin.api.event.NoteContentQueryEvent;
+import com.thisnote.plugin.api.event.NoteListQueryEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
+import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -14,20 +17,25 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 public class TagsService {
 
     private static final int MAX_TAG_LENGTH = 64;
+    private static final long QUERY_TIMEOUT_SECONDS = 30;
 
     private final TagsRepository tagsRepository;
-    private final TagsNotesClient notesClient;
+    private ApplicationEventPublisher eventPublisher;
 
-    public TagsService(TagsRepository tagsRepository,
-                       TagsNotesClient notesClient) {
+    public TagsService(TagsRepository tagsRepository) {
         this.tagsRepository = tagsRepository;
-        this.notesClient = notesClient;
+    }
+
+    public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
     }
 
     public Map<String, List<String>> all() {
@@ -127,7 +135,7 @@ public class TagsService {
         Map<String, Map<String, Integer>> refreshed = new LinkedHashMap<>();
         Set<String> notesToRemove = new LinkedHashSet<>();
         Map<String, NoteDTO> notesById = new LinkedHashMap<>();
-        for (NoteDTO note : notesClient.allNotes()) {
+        for (NoteDTO note : allNotes()) {
             if (note != null && note.noteId() != null) {
                 notesById.put(note.noteId(), note);
             }
@@ -141,7 +149,7 @@ public class TagsService {
                 notesToRemove.add(noteId);
                 return;
             }
-            List<CardDTO> cards = notesClient.cards(noteId);
+            List<CardDTO> cards = cards(noteId);
             refreshed.put(noteId, TagTextCounter.counts(
                     TagTextCounter.noteText(note, cards),
                     entry.tags()
@@ -156,12 +164,12 @@ public class TagsService {
         if (current == null || current.tags().isEmpty()) {
             return;
         }
-        NoteDTO note = notesClient.note(normalizedNoteId);
+        NoteDTO note = note(normalizedNoteId);
         if (note == null) {
             tagsRepository.removeNote(normalizedNoteId);
             return;
         }
-        List<CardDTO> cards = notesClient.cards(normalizedNoteId);
+        List<CardDTO> cards = cards(normalizedNoteId);
         tagsRepository.replaceOccurrences(
                 normalizedNoteId,
                 TagTextCounter.counts(TagTextCounter.noteText(note, cards), current.tags())
@@ -190,12 +198,41 @@ public class TagsService {
     }
 
     private String noteText(String noteId) {
-        NoteDTO note = notesClient.note(noteId);
+        NoteDTO note = note(noteId);
         if (note == null) {
             throw new IllegalArgumentException("笔记不存在：" + noteId);
         }
-        List<CardDTO> cards = notesClient.cards(noteId);
+        List<CardDTO> cards = cards(noteId);
         return TagTextCounter.noteText(note, cards);
+    }
+
+    public NoteDTO note(String noteId) {
+        NoteContentDTO content = noteContent(noteId);
+        return content == null ? null : content.note();
+    }
+
+    public List<CardDTO> cards(String noteId) {
+        NoteContentDTO content = noteContent(noteId);
+        return content == null ? List.of() : content.cards();
+    }
+
+    public List<NoteDTO> allNotes() {
+        CompletableFuture<List<NoteDTO>> result = new CompletableFuture<>();
+        publisher().publishEvent(new NoteListQueryEvent(result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private NoteContentDTO noteContent(String noteId) {
+        CompletableFuture<NoteContentDTO> result = new CompletableFuture<>();
+        publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
+        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+    }
+
+    private ApplicationEventPublisher publisher() {
+        if (eventPublisher == null) {
+            throw new IllegalStateException("Notes 消息管道尚未就绪");
+        }
+        return eventPublisher;
     }
 
     private static String requireNoteId(String noteId) {

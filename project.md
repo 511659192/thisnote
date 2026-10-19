@@ -165,6 +165,9 @@ host（qiankun 主应用，:5173）
 | `event/NoteTagSuggestionEvent` | 可选标签建议契约：请求方发起 `noteId + limit`，语义提供者完成 `CompletableFuture<List<String>>`；双方不共享存储 |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
+| `event/NoteContentQueryEvent` | `noteId` + `CompletableFuture<NoteContentDTO>`：notes 侧返回笔记元数据与卡片正文 |
+| `event/NoteListQueryEvent` | `CompletableFuture<List<NoteDTO>>`：notes 侧返回全部笔记元数据 |
+| `event/AttachmentBytesQueryEvent` | `fileName` + `CompletableFuture<byte[]>`：notes 侧返回附件字节，不存在时返回 null |
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
 | `event/AttachmentAdoptEvent` | `CompletableFuture<AttachmentDTO>` + `fileName`：接管一个未被管理的附件（改名为 `<uuid>.<ext>`、原名记入元数据），notes 侧监听填充 |
 | `event/AttachmentChangedEvent` | Notes 发布附件创建、更新、删除、重命名；Graphify 只消费此事件，不解析附件目录 |
@@ -173,7 +176,7 @@ host（qiankun 主应用，:5173）
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
-| `notes/dto/*` | `NoteDTO`、`CardDTO`、`CardMetaDTO`、`BookDTO`、`AttachmentDTO(fileName,size,width,height)` |
+| `notes/dto/*` | `NoteDTO`、`CardDTO`、`CardMetaDTO`、`NoteContentDTO(note,cards)`、`BookDTO`、`AttachmentDTO(fileName,size,width,height)` |
 
 契约包的依赖刻意压到最小（pf4j / spring-context / spring-web / fastjson2 / hutool / guava / lombok，
 `backend/plugin-api/pom.xml:22-60`），不把实现技术栈强加给插件作者。
@@ -449,7 +452,7 @@ host（qiankun 主应用，:5173）
 - 所有笔记被删除时不调用 Graphify 抽取；插件递归清除整个 `corpus/` 生成内容（包括日期目录中的历史 graph、manifest、报告和缓存），并将索引状态置为空语料，避免缩图保护把正常清空误判成失败。
 - thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
 - Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 使用 `openai` extra；缺少对应包时无法验证 provider。
-- 通过 Notes API 分页读取笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
+- 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
 - 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
 - API key 只保存在 AI 插件的 `.credentials.json`，不由 API 返回；Graphify 通过事件取得运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
@@ -460,7 +463,7 @@ host（qiankun 主应用，:5173）
 **ai**
 - AI 是不可停用的基础能力插件，硬依赖 `notes`，独占 Provider、模型与 API key 配置；
   Graphify 与 tags 都在 `plugin.dependencies` 中声明依赖 `ai,notes`。
-- Provider 支持 OpenCode Go；自动标签请求会读取笔记正文和图片附件并直接调用当前 Provider，失败时 tags 回退到本地文本抽取。
+- Provider 支持 OpenCode Go；自动标签请求通过主容器查询事件读取笔记正文和图片附件，并直接调用当前 Provider，失败时 tags 回退到本地文本抽取。
 - 标签抽取文本上限由 `settings.json` 的 `maxTextChars` 控制，默认 `1,000,000` 字符，允许 `1,000..1,000,000`；它是字符数，不是 token 数。
 - Graphify 通过 `AiRuntimeEvent` 取得运行时配置；AI 插件不读写 Graphify 或 tags 的业务数据。
 
@@ -471,7 +474,7 @@ host（qiankun 主应用，:5173）
 - Notes 发布 `NoteTextChangedEvent` 后，tags 将对应笔记标记为待刷新，并由单线程防抖任务重算该笔记，
   不阻塞卡片保存请求。
 - tags 硬依赖 `ai,notes`；AI 自动标签通过 `NoteTagSuggestionEvent` 请求文本与视觉概念，标签落盘仍由 tags 自己完成。
-- 自动抽取通过 Notes API 读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
+- 自动抽取通过主容器消息管道读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
 - AI 候选通过 `NoteTagSuggestionEvent` 获取，再与本地文本候选合并；AI 未配置或请求失败时直接使用本地结果。标签仍只写入 tags 插件自己的 `tags.json`。
 - 打开笔记时若标签少于 10 个，标签工具自动执行一次抽取；标签不足时仍保留可见的自动抽取按钮，供用户手动重试。
 - 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页按标签文本在全部笔记标题与正文中的实际出现次数排行，显示出现次数与覆盖笔记数，并以气泡图展示 Top 60，可从全部笔记中移除某个标签。
@@ -766,8 +769,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 7. **需要真实外部连通性时**：不要放进每次打开管理页都会自动调用的接口，另做一个显式「测试连接」动作。
 8. **Controller 只依赖应用 Service**：不得直接注入 Repository、OAuth/Provider Client 或读取数据根路径；
    Repository 只负责持久化，业务规则放在 Service。AI、Graphify、Tags、百度同步和分组管理已按此方向收口。
-9. **外部访问单独放 `client` 包**：HTTP、OAuth、AI Provider、Notes API Client、CLI 进程与本地代理适配器
-   与 `service` 并列；Service 只编排能力，不直接实现外部协议。
+9. **外部访问单独放 `client` 包**：HTTP、OAuth、AI Provider、CLI 进程与本地代理适配器与 `service`
+   并列；Service 只编排能力，不直接实现外部协议。插件间查询走主容器事件，不通过 HTTP 调用其他插件。
 
 ---
 
