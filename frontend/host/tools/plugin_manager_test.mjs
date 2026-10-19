@@ -99,9 +99,13 @@ check('记忆周期标为卡片插件',
 // 所以断言"卡片显示的版本 == /api/plugins 报的版本"。
 const pluginsInfo = await (await fetch(`${API}/api/plugins`)).json()
 const versionOf = (id) => pluginsInfo.find((p) => p.id === id)?.version
+const dependenciesOf = (id) => pluginsInfo.find((p) => p.id === id)?.dependencies ?? []
 check('显示版本号（与 /api/plugins 一致）',
   (await card('记忆周期').locator('.mono', { hasText: `v${versionOf('memory-cycle')}` }).count()) === 1,
   `memory-cycle=v${versionOf('memory-cycle')}`)
+check('Graphify 显式依赖 AI 与 Notes',
+  dependenciesOf('graphify').join(',') === 'ai,notes',
+  dependenciesOf('graphify').join(','))
 check('显示健康状态与说明',
   (await card('记忆周期').locator('.health-ok').count()) === 1,
   (await card('记忆周期').locator('.health-ok').textContent())?.trim())
@@ -111,11 +115,6 @@ await card('记忆周期').locator('button', { hasText: '设置' }).click()
 await win.waitForTimeout(600)
 check('无配置项的插件给出说明',
   (await card('记忆周期').locator('p', { hasText: '没有可配置项' }).count()) === 1)
-// 迁移目录只在卡片展开后渲染（v-if openPlugin === plugin.id）
-check('展示自带迁移目录',
-  (await card('记忆周期').locator('.plugin-migration', { hasText: 'plugin/memory-cycle/migration' })
-    .count()) === 1)
-
 // 重载：SBP 会重建插件的类加载器与 Spring 子容器（换了 jar / 开发模式改完代码就靠它）
 const reloadBtn = card('记忆周期').locator('.plugin-head button', { hasText: '重载' })
 check('插件卡片有「重载」按钮', (await reloadBtn.count()) === 1)

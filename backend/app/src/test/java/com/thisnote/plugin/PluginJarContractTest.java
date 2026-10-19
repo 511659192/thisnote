@@ -1,5 +1,7 @@
 package com.thisnote.plugin;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -7,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
@@ -55,16 +58,23 @@ class PluginJarContractTest {
 
     @ParameterizedTest(name = "{2} 的 jar 携带完整的插件契约")
     @CsvSource({
-            "notes,plugin-notes,notes,true",
-            "ai,plugin-ai,ai,true",
-            "favorite,plugin-favorite,favorite,true",
-            "memory-cycle,plugin-memory-cycle,memory-cycle,true",
-            "attachment-importer,plugin-attachment-importer,attachment-importer,true",
-            "state-reset,plugin-state-reset,state-reset,true",
-            "graphify,plugin-graphify,graphify,true",
-            "tags,plugin-tags,tags,true"
+            "notes,plugin-notes,notes,'',true,com.thisnote.ext.notes.NotesRegister",
+            "ai,plugin-ai,ai,notes,true,com.thisnote.ext.ai.AiRegister",
+            "favorite,plugin-favorite,favorite,'',false,com.thisnote.ext.favorite.FavoriteRegister",
+            "memory-cycle,plugin-memory-cycle,memory-cycle,'',false,com.thisnote.ext.memorycycle.MemoryCycleRegister",
+            "baidu-sync,plugin-baidu-sync,baidu-sync,'',false,com.thisnote.ext.baidusync.BaiduSyncRegister",
+            "card-importer,plugin-card-importer,card-importer,notes,false,com.thisnote.ext.cardimporter.CardImporterRegister",
+            "attachment-importer,plugin-attachment-importer,attachment-importer,notes,false,com.thisnote.ext.attachmentimporter.AttachmentImporterRegister",
+            "state-reset,plugin-state-reset,state-reset,'',false,com.thisnote.ext.statereset.StateResetRegister",
+            "graphify,plugin-graphify,graphify,'ai,notes',false,com.thisnote.ext.graphify.GraphifyRegister",
+            "tags,plugin-tags,tags,'ai,notes',false,com.thisnote.ext.tags.TagsRegister"
     })
-    void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasAssets) throws Exception {
+    void pluginJarCarriesItsContract(String moduleDir,
+                                     String jarPrefix,
+                                     String pluginId,
+                                     String dependencies,
+                                     boolean undeactivatable,
+                                     String extensionClass) throws Exception {
         // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——
         // 已登记的插件界面产物全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
@@ -80,15 +90,44 @@ class PluginJarContractTest {
             assertThat(props.getProperty("plugin.id")).isEqualTo(pluginId);
             assertThat(props.getProperty("plugin.version")).isNotBlank();
             assertThat(props.getProperty("plugin.provider")).isNotBlank();
+            assertThat(props.getProperty("plugin.dependencies", ""))
+                    .as("插件依赖必须与运行期实际使用一致")
+                    .isEqualTo(dependencies);
 
             // 1a) PF4J 扩展索引：没有它时插件仍能启动，但 PluginRegister 会静默缺失，
             // 核心保护、显示名与状态回调都会退化为默认行为。
             ZipEntry extensions = zip.getEntry("META-INF/extensions.idx");
             assertThat(extensions).as("META-INF/extensions.idx 必须存在").isNotNull();
-            assertThat(new String(zip.getInputStream(extensions).readAllBytes(),
-                                  java.nio.charset.StandardCharsets.UTF_8))
-                    .as("PF4J 扩展索引不能为空")
-                    .isNotBlank();
+            List<String> extensionClasses = Arrays.stream(new String(zip.getInputStream(extensions).readAllBytes(),
+                            java.nio.charset.StandardCharsets.UTF_8).split("\\R"))
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank() && !line.startsWith("#"))
+                    .toList();
+            assertThat(extensionClasses)
+                    .as("PF4J 扩展索引必须包含插件注册类")
+                    .contains(extensionClass);
+
+            ZipEntry metadataEntry = zip.getEntry("META-INF/thisnote/plugin.json");
+            assertThat(metadataEntry).as("必须携带静态插件清单").isNotNull();
+            JSONObject metadata;
+            try (InputStream in = zip.getInputStream(metadataEntry)) {
+                metadata = JSON.parseObject(new String(in.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8));
+            }
+            assertThat(metadata).as("静态插件清单不能为空").isNotNull();
+            assertThat(metadata).doesNotContainKey("schemaVersion");
+            assertThat(metadata).containsKeys(
+                    "title", "description", "undeactivatable", "resetTargets", "backupEnabled", "backupExclude");
+            assertThat(metadata.getString("title")).isNotBlank();
+            assertThat(metadata.getString("description")).isNotBlank();
+            assertThat(metadata.getBooleanValue("undeactivatable"))
+                    .as("核心插件保护必须来自静态清单")
+                    .isEqualTo(undeactivatable);
+            for (Object target : metadata.getJSONArray("resetTargets")) {
+                String value = String.valueOf(target);
+                assertThat(Path.of(value).isAbsolute()).as("重置目标不能是绝对路径").isFalse();
+                assertThat(value.replace('\\', '/')).as("重置目标不能越界").doesNotContain("..");
+            }
 
             // 1b) 版本单源：描述符版本 == 这个 jar 自己的构建版本（父 pom 过滤注入的结果）
             ZipEntry buildInfo = zip.getEntry("META-INF/maven/com.thisnote/" + jarPrefix + "/pom.properties");
@@ -108,12 +147,10 @@ class PluginJarContractTest {
                     .as("%s 必须在 jar 里", pluginClass)
                     .isNotNull();
             // 3) 界面资源不得打进 jar：一律由界面侧自行交付与提供（后端不端出静态资源）
-            if (hasAssets) {
-                assertThat(zip.stream().map(ZipEntry::getName)
-                                .filter((n) -> n.startsWith("plugin/" + pluginId + "/")).count())
-                        .as("界面资源不得打进插件 jar（由界面侧自行交付）")
-                        .isZero();
-            }
+            assertThat(zip.stream().map(ZipEntry::getName)
+                            .filter((n) -> n.startsWith("plugin/" + pluginId + "/")).count())
+                    .as("界面资源不得打进插件 jar（由界面侧自行交付）")
+                    .isZero();
         }
     }
 }

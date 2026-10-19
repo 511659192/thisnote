@@ -1,8 +1,10 @@
 package com.thisnote.ext.tags;
 
 import com.thisnote.ext.tags.service.AutoTagService;
+import com.thisnote.ext.tags.service.TagUsageRefreshService;
 import com.thisnote.ext.tags.service.TagsService;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
+import com.thisnote.plugin.api.event.NoteTextChangedEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +39,7 @@ public class TagsPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         TagsService tagsService = ctx.getBean(TagsService.class);
+        tagsService.invalidateUsage();
         ctx.getBean(AutoTagService.class).setMainEventPublisher(getMainApplicationContext());
         listeners = new MainContainerListeners(getMainApplicationContext());
         listeners.onPayload(NoteChangedEvent.class, change -> {
@@ -44,7 +47,10 @@ public class TagsPlugin extends SpringBootPlugin {
                 log.info("笔记已删除，标签一并清除：{}", change.noteId());
             }
         });
-        listeners.onStateReset("标签已清空", tagsService::clear);
+        listeners.onPayload(NoteTextChangedEvent.class, change -> {
+            ctx.getBean(TagUsageRefreshService.class).request(change.noteId());
+        });
+        listeners.onStateReset(PLUGIN_ID, "标签已清空", tagsService::clear);
     }
 
     @Override

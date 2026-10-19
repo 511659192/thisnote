@@ -1,5 +1,7 @@
 package com.thisnote.plugin.api.event;
 
+import com.thisnote.plugin.api.event.ifaces.PluginNotification;
+
 import java.util.List;
 
 /**
@@ -11,7 +13,7 @@ public record BookChangedEvent(String bookId,
                                    Kind kind,
                                    String title,
                                    String type,
-                                   List<String> movedNoteIds) {
+                                   List<String> movedNoteIds) implements PluginNotification {
 
     public BookChangedEvent {
         movedNoteIds = movedNoteIds == null ? List.of() : List.copyOf(movedNoteIds);

@@ -37,7 +37,7 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
         AttachmentImporterService service = ctx.getBean(AttachmentImporterService.class);
         service.setMainEventPublisher(getMainApplicationContext());
         listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onStateReset("attachment-importer 无自有状态", () -> { });
+        listeners.onStateResetSkipped(PLUGIN_ID, "attachment-importer 无自有状态");
     }
 
     @Override

@@ -2,11 +2,9 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
-import { waitForBackend } from './core/http'
-import { installHostServices } from '@thisnote/plugin-api'
+import { formatBytes, formatRelative, installHostServices, waitForBackend } from '@thisnote/plugin-api'
 import { loadActivePluginFrontends } from './plugins/loader'
 import { useUiStore } from './stores/ui'
-import { formatBytes, formatRelative } from './core/utils'
 import MarkdownView from './components/MarkdownPreview.vue'
 
 

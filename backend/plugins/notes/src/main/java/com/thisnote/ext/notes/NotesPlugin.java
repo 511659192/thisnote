@@ -1,14 +1,17 @@
 package com.thisnote.ext.notes;
 
+import com.thisnote.ext.notes.config.NotesConfig;
 import com.thisnote.ext.notes.model.request.CreateCardRequest;
 import com.thisnote.ext.notes.service.AttachmentService;
 import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
 import com.thisnote.ext.notes.service.BookService;
 import com.thisnote.plugin.api.event.AttachmentAdoptEvent;
+import com.thisnote.plugin.api.event.AttachmentChangedEvent;
 import com.thisnote.plugin.api.event.AttachmentQueryEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.event.CardQueryEvent;
+import com.thisnote.plugin.api.event.FileChangeEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +20,7 @@ import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -69,6 +73,9 @@ public class NotesPlugin extends SpringBootPlugin {
         ctx.getBean(BookService.class).setMainEventPublisher(getMainApplicationContext());
 
         listeners = new MainContainerListeners(getMainApplicationContext());
+        Path attachmentsDirectory = ctx.getBean(NotesConfig.class).getRootDir().resolve("attachments");
+        listeners.onPayload(FileChangeEvent.class,
+                change -> republishAttachmentChange(change, attachmentsDirectory));
         // 卡片被删后清理不再被引用的附件
         listeners.onPayload(CardChangedEvent.class, change -> {
             if (change.kind() == CardChangedEvent.Kind.DELETED) {
@@ -113,7 +120,41 @@ public class NotesPlugin extends SpringBootPlugin {
                 adopt.result().completeExceptionally(e);
             }
         });
-        listeners.onStateReset("笔记/卡片/附件索引已重置（文件保留）", noteService::resetIndexes);
+        listeners.onStateReset(PLUGIN_ID, "笔记/卡片/附件索引已重置（文件保留）", noteService::resetIndexes);
+    }
+
+    private void republishAttachmentChange(FileChangeEvent change,
+                                           Path attachmentsDirectory) {
+        Path current = normalizedWithin(change.url(), attachmentsDirectory);
+        Path previous = change.previousUrl() == null
+                ? null
+                : normalizedWithin(change.previousUrl(), attachmentsDirectory);
+        AttachmentChangedEvent attachmentEvent;
+        if (change.operation() == FileChangeEvent.Operation.RENAME && current != null && previous != null) {
+            attachmentEvent = AttachmentChangedEvent.renamed(
+                    previous.getFileName().toString(),
+                    current.getFileName().toString());
+        } else if (current != null) {
+            attachmentEvent = switch (change.operation()) {
+                case CREATED -> AttachmentChangedEvent.created(current.getFileName().toString());
+                case UPDATED -> AttachmentChangedEvent.updated(current.getFileName().toString());
+                case DELETED, RENAME -> AttachmentChangedEvent.deleted(current.getFileName().toString());
+            };
+        } else if (previous != null) {
+            attachmentEvent = AttachmentChangedEvent.deleted(previous.getFileName().toString());
+        } else {
+            return;
+        }
+        getMainApplicationContext().publishEvent(attachmentEvent);
+    }
+
+    private static Path normalizedWithin(Path path,
+                                         Path directory) {
+        Path normalized = path.toAbsolutePath().normalize();
+        Path normalizedDirectory = directory.toAbsolutePath().normalize();
+        return normalized.startsWith(normalizedDirectory) && !normalized.equals(normalizedDirectory)
+                ? normalized
+                : null;
     }
 
     @Override

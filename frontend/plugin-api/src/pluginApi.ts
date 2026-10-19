@@ -19,6 +19,8 @@ export interface PluginInfo {
   description: string
   /** 不可停用/不可在线重载（承载主体业务领域的插件，如 notes） */
   undeactivatable: boolean
+  /** PF4J 插件依赖；空数组表示无硬依赖 */
+  dependencies?: string[]
   /** 正在运行的实例版本（来自插件 jar 的 plugin.properties） */
   version: string
   /** 全局启停；默认 true */

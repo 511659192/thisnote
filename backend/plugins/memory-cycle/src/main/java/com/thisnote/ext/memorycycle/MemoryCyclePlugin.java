@@ -92,7 +92,7 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
                 log.info("记忆周期已关闭，排期条目一并清除：{}", change.cardId());
             }
         });
-        listeners.onStateReset("记忆周期排期与复习历史已清空", srs::clearAll);
+        listeners.onStateReset(PLUGIN_ID, "记忆周期排期与复习历史已清空", srs::clearAll);
     }
 
     /**

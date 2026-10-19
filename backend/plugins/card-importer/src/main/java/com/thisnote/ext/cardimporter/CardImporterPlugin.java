@@ -30,7 +30,7 @@ public class CardImporterPlugin
                                      GenericApplicationContext ctx) {
         ctx.getBean(CardImporterService.class).setMainEventPublisher(getMainApplicationContext());
         listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onStateReset("card-importer 无自有状态", () -> { });
+        listeners.onStateResetSkipped(PLUGIN_ID, "card-importer 无自有状态");
     }
 
     @Override

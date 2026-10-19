@@ -22,8 +22,6 @@ export interface CardMeta {
   y: number
   w: number
   h: number
-  /** Legacy persisted field; runtime stacking uses geometry plus recent interaction, without persistence. */
-  z: number
   color?: string | null
   status?: string | null
   collapsed: boolean

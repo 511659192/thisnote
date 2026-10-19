@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
-import { bookApi } from '@/api'
 import {
   activeListFilter_,
   activeNavEntries,

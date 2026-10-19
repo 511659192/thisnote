@@ -60,6 +60,11 @@ public class AutoTagService {
             }
         }
         suggestions.addAll(HighLevelTagExtractor.extract(documents, MAX_AUTO_TAGS));
-        return tagsService.mergeUpTo(noteId, new ArrayList<>(suggestions), MAX_AUTO_TAGS);
+        return tagsService.mergeUpTo(
+                noteId,
+                new ArrayList<>(suggestions),
+                MAX_AUTO_TAGS,
+                TagTextCounter.noteText(note, cards)
+        );
     }
 }

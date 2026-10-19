@@ -84,7 +84,7 @@ export async function request<T>(
   let res: Response
   try {
     res = await fetch(url, init)
-  } catch (e) {
+  } catch {
     backendOnline.value = false
     backendMessage.value = '无法连接本地后端（127.0.0.1:45917）'
     throw new ApiError(0, backendMessage.value)

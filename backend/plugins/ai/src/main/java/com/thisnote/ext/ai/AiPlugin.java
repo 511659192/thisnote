@@ -45,6 +45,7 @@ public class AiPlugin extends SpringBootPlugin {
             }
         });
         listeners.onPayload(NoteTagSuggestionEvent.class, ctx.getBean(AiTagSuggestionService.class)::suggest);
+        listeners.onStateResetSkipped(PLUGIN_ID, "AI 配置与凭据保留");
     }
 
     @Override

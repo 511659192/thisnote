@@ -2,8 +2,8 @@ package com.thisnote.ext.graphify;
 
 import com.thisnote.ext.graphify.service.GraphifyIndexService;
 import com.thisnote.ext.graphify.client.GraphifyAiClient;
+import com.thisnote.plugin.api.event.AttachmentChangedEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.FileChangeEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
@@ -44,8 +44,8 @@ public class GraphifyPlugin extends SpringBootPlugin {
         listeners = new MainContainerListeners(getMainApplicationContext());
         listeners.onPayload(NoteChangedEvent.class, indexService::onNoteChanged);
         listeners.onPayload(CardChangedEvent.class, indexService::onCardChanged);
-        listeners.onPayload(FileChangeEvent.class, indexService::onFileChanged);
-        listeners.onStateReset("Graphify 图谱与索引已清空", indexService::resetState);
+        listeners.onPayload(AttachmentChangedEvent.class, indexService::onAttachmentChanged);
+        listeners.onStateResetAsync(PLUGIN_ID, "Graphify 图谱与索引已清空", indexService::resetState);
         log.info("Graphify 插件已启动并注册笔记、卡片和附件监听器");
     }
 

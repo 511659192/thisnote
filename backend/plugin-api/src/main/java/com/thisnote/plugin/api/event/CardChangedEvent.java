@@ -1,5 +1,7 @@
 package com.thisnote.plugin.api.event;
 
+import com.thisnote.plugin.api.event.ifaces.PluginCommand;
+import com.thisnote.plugin.api.event.ifaces.PluginNotification;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 
 import java.util.Set;
@@ -20,7 +22,12 @@ import java.util.Set;
  * （{@code publishEvent(Object)} ↔ {@code ApplicationListener<PayloadApplicationEvent<CardChangedEvent>>}），
  * 不必让事件类继承 {@code ApplicationEvent}。
  */
-public record CardChangedEvent(String cardId, Kind kind, Set<String> removedAttachmentFileNames, CardCreateRequest createRequest) {
+public record CardChangedEvent(String cardId,
+                               Kind kind,
+                               Set<String> removedAttachmentFileNames,
+                               CardCreateRequest createRequest)
+        implements PluginNotification,
+                   PluginCommand {
 
     public CardChangedEvent {
         removedAttachmentFileNames = removedAttachmentFileNames == null ? Set.of() : Set.copyOf(removedAttachmentFileNames);

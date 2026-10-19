@@ -7,8 +7,8 @@ import com.thisnote.ext.graphify.GraphifyPlugin;
 import com.thisnote.ext.graphify.client.GraphifyNotesClient;
 import com.thisnote.ext.graphify.client.GraphifyProcessRunner;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
+import com.thisnote.plugin.api.event.AttachmentChangedEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.FileChangeEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -71,7 +72,6 @@ public class GraphifyIndexService {
     private final Path graphifyOutDir;
     private final Path graphJsonFile;
     private final Path graphHtmlFile;
-    private final Path attachmentsRoot;
     private final ScheduledExecutorService worker;
     private final Object queueLock = new Object();
     private final Set<String> queuedNotes = new LinkedHashSet<>();
@@ -105,7 +105,6 @@ public class GraphifyIndexService {
         this.graphifyOutDir = corpusDir.resolve("graphify-out");
         this.graphJsonFile = graphifyOutDir.resolve("graph.json");
         this.graphHtmlFile = graphifyOutDir.resolve("graph.html");
-        this.attachmentsRoot = notesRoot.resolve("attachments");
         this.worker = Executors.newSingleThreadScheduledExecutor(task -> {
             Thread thread = new Thread(task, "thisnote-graphify-index");
             thread.setDaemon(true);
@@ -436,24 +435,20 @@ public class GraphifyIndexService {
         }
     }
 
-    public void onFileChanged(FileChangeEvent change) {
+    public void onAttachmentChanged(AttachmentChangedEvent change) {
         if (!shouldObserveChanges()) {
             return;
-        }
-        Set<Path> paths = new LinkedHashSet<>();
-        paths.add(change.url().toAbsolutePath().normalize());
-        if (change.previousUrl() != null) {
-            paths.add(change.previousUrl().toAbsolutePath().normalize());
         }
         synchronized (queueLock) {
             if (stopped || !shouldObserveChanges()) {
                 return;
             }
-            for (Path path : paths) {
-                if (!path.startsWith(attachmentsRoot) || path.equals(attachmentsRoot)) {
-                    continue;
-                }
-                String fileName = path.getFileName().toString();
+            Set<String> fileNames = new LinkedHashSet<>();
+            fileNames.add(change.fileName());
+            if (change.previousFileName() != null) {
+                fileNames.add(change.previousFileName());
+            }
+            for (String fileName : fileNames) {
                 if (!SAFE_IMAGE_NAME.matcher(fileName).matches()) {
                     continue;
                 }
@@ -485,10 +480,10 @@ public class GraphifyIndexService {
         processRunner.stop();
     }
 
-    public void resetState() {
+    public CompletableFuture<Void> resetState() {
         synchronized (queueLock) {
             if (stopped) {
-                return;
+                return CompletableFuture.failedFuture(new IllegalStateException("Graphify 索引线程已停止"));
             }
             resetting = true;
             queuedNotes.clear();
@@ -499,8 +494,10 @@ public class GraphifyIndexService {
                 queuedChangesTask = null;
             }
         }
+        CompletableFuture<Void> result = new CompletableFuture<>();
         try {
             worker.execute(() -> {
+                RuntimeException failure = null;
                 try {
                     clearGeneratedContent();
                     stateRepository.clear();
@@ -508,6 +505,7 @@ public class GraphifyIndexService {
                     currentStatus = statusFor("等待首次索引", false, 0, 0, 0, List.of(), null);
                     log.info("Graphify 状态已重置");
                 } catch (RuntimeException e) {
+                    failure = e;
                     currentStatus = statusFor("重置失败", false, currentStatus.progress(),
                             currentStatus.completedNotes(), currentStatus.totalNotes(),
                             currentStatus.warnings(), safeMessage(e));
@@ -515,11 +513,18 @@ public class GraphifyIndexService {
                 } finally {
                     resetting = false;
                 }
+                if (failure == null) {
+                    result.complete(null);
+                } else {
+                    result.completeExceptionally(failure);
+                }
             });
         } catch (RejectedExecutionException e) {
             resetting = false;
             log.warn("Graphify 状态重置未执行：索引线程已停止");
+            result.completeExceptionally(e);
         }
+        return result;
     }
 
     private void indexAll(boolean force) {

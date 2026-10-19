@@ -7,7 +7,6 @@ import org.pf4j.PluginWrapper;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,6 +87,10 @@ public class PluginLifecycle implements SmartInitializingSingleton {
             row.put("undeactivatable", registry.undeactivatable(id));
             row.put("version", wrapper.getDescriptor().getVersion());
             row.put("requires", wrapper.getDescriptor().getRequires());
+            var dependencies = wrapper.getDescriptor().getDependencies();
+            row.put("dependencies", dependencies == null ? List.of() : dependencies.stream()
+                    .map(dependency -> dependency.getPluginId())
+                    .toList());
             row.put("active", active);
             described.add(row);
         }

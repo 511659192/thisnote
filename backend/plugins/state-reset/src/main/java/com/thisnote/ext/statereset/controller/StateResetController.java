@@ -2,12 +2,11 @@ package com.thisnote.ext.statereset.controller;
 
 import com.thisnote.ext.statereset.StateResetPlugin;
 import com.thisnote.ext.statereset.service.StateResetService;
+import com.thisnote.plugin.api.event.PluginStateResetReport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 /**
  * 状态重置插件自己的端点：POST /api/plugins/state-reset/reset。
@@ -22,8 +21,7 @@ public class StateResetController {
     private final StateResetService stateResetService;
 
     @PostMapping("/reset")
-    public Map<String, Object> reset() {
-        stateResetService.resetAll();
-        return Map.of("ok", true);
+    public PluginStateResetReport reset() {
+        return stateResetService.resetAll();
     }
 }

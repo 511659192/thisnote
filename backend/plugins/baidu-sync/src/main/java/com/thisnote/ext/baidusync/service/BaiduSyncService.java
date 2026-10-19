@@ -12,10 +12,13 @@ import com.thisnote.ext.baidusync.model.*;
 import com.thisnote.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnote.ext.baidusync.repository.BaiduSyncStateRepository;
 import com.thisnote.plugin.api.event.FileChangeEvent;
+import com.thisnote.plugin.api.meta.PluginMetadata;
+import com.thisnote.plugin.api.meta.PluginMetadataReader;
 import com.thisnote.plugin.api.util.FileHelper;
-import jakarta.annotation.PostConstruct;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.pf4j.PluginManager;
+import org.pf4j.PluginWrapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -39,7 +42,7 @@ public class BaiduSyncService {
     private final BaiduPanClient panClient;
     private final FileHelper fileHelper;
     private final Path notesRoot;
-    private final Path baiduSyncDirectory;
+    private BackupScope backupScope;
     private volatile BaiduSyncStatus status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
     private CompletableFuture<Void> remoteDirectoryInitialization = CompletableFuture.completedFuture(null);
     private String remoteRoot;
@@ -58,12 +61,21 @@ public class BaiduSyncService {
         this.fileHelper = fileHelper;
         Path root = Path.of(dataRoot).toAbsolutePath().normalize();
         this.notesRoot = root.resolve("notes");
-        this.baiduSyncDirectory = root.resolve("notes").resolve("plugins").resolve("baidu-sync");
     }
 
     @SneakyThrows
-    @PostConstruct
-    public void init() {
+    public void initialize(PluginManager pluginManager) {
+        Map<String, PluginMetadata> installedPlugins = new LinkedHashMap<>();
+        for (PluginWrapper wrapper : pluginManager.getPlugins()) {
+            try {
+                installedPlugins.put(wrapper.getPluginId(), PluginMetadataReader.read(wrapper));
+            } catch (RuntimeException e) {
+                log.warn("插件 {} 的备份清单不可用，已排除其数据目录：{}",
+                        wrapper.getPluginId(), e.getMessage());
+            }
+        }
+        this.backupScope = new BackupScope(notesRoot, installedPlugins);
+
         BaiduSyncSettings settings = settingsRepository.get();
         validateSettings(settings);
         this.settings = settings;
@@ -81,7 +93,7 @@ public class BaiduSyncService {
             return;
         }
 
-        List<String> remoteDirectories = (Files.exists(notesRoot) ? scanLocalSnapshot(notesRoot, baiduSyncDirectory).directories() : Set.<String>of()).stream()
+        List<String> remoteDirectories = scanLocalSnapshot().directories().stream()
                 .sorted(Comparator.comparingInt(directory -> directory.split("/").length))
                 .map(directory -> "/apps/" + settings.appName() + "/notes/" + directory)
                 .toList();
@@ -125,8 +137,7 @@ public class BaiduSyncService {
     /** 状态重置：清空同步基线并复位本次运行的状态（授权凭据保留）。 */
     public void clearSyncState() {
         if (status.running()) {
-            log.warn("同步进行中，跳过同步基线清理");
-            return;
+            throw new IllegalStateException("同步进行中，无法重置同步基线");
         }
         stateRepository.save(BaiduSyncState.empty(notesRoot.toString(), remoteRoot));
         status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
@@ -135,7 +146,7 @@ public class BaiduSyncService {
 
     public BaiduSyncPreview preview() throws IOException {
         ensureSyncIdle();
-        LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
+        LocalSnapshot localSnapshot = scanLocalSnapshot();
         Map<String, LocalItem> local = localSnapshot.files();
 
         String accessToken = oauthClient.accessToken();
@@ -200,7 +211,7 @@ public class BaiduSyncService {
         try {
             String accessToken = oauthClient.accessToken();
 
-            LocalSnapshot localSnapshot = scanLocalSnapshot(notesRoot, baiduSyncDirectory);
+            LocalSnapshot localSnapshot = scanLocalSnapshot();
             Map<String, LocalItem> local = localSnapshot.files();
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
             BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
@@ -220,7 +231,10 @@ public class BaiduSyncService {
 
             // 传入同步前已知的全部路径而不是仅 changes：双端一致但基线缺失的路径不会进入 changes，
             // 只有覆盖全部路径，逐路径写基线的结果才等价于原先的全量重建。
-            Set<String> allPaths = Stream.of(localSnapshot.files.keySet(), remote.files.keySet(), baseline.files().keySet()).flatMap(Set::stream).collect(Collectors.toSet());
+            Set<String> allPaths = Stream.of(localSnapshot.files.keySet(), remote.files.keySet(), baseline.files().keySet())
+                    .flatMap(Set::stream)
+                    .filter(backupScope::includes)
+                    .collect(Collectors.toSet());
             saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, allPaths);
             status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
             log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts);
@@ -243,7 +257,7 @@ public class BaiduSyncService {
     private void syncChangedFiles(Set<Path> changedPaths) {
         SyncCounters counters = new SyncCounters();
         try {
-            Set<String> relativePaths = relativeChangedPaths(notesRoot, changedPaths);
+            Set<String> relativePaths = relativeChangedPaths(changedPaths);
             if (relativePaths.isEmpty()) {
                 status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
                 log.debug("relativePaths size:{}", CollectionUtil.size(relativePaths));
@@ -268,17 +282,17 @@ public class BaiduSyncService {
         }
     }
 
-    private Set<String> relativeChangedPaths(Path notesRoot,
-                                             Set<Path> changedPaths) {
+    private Set<String> relativeChangedPaths(Set<Path> changedPaths) {
         Set<String> relatives = new LinkedHashSet<>();
-        Path normalizedBaiduSyncDirectory = baiduSyncDirectory.toAbsolutePath().normalize();
         for (Path changedPath : changedPaths) {
             Path path = changedPath.toAbsolutePath().normalize();
-            if (!path.startsWith(notesRoot) || path.equals(notesRoot) || (normalizedBaiduSyncDirectory.startsWith(notesRoot) && path.startsWith(normalizedBaiduSyncDirectory))) {
+            if (!path.startsWith(notesRoot) || path.equals(notesRoot)) {
                 continue;
             }
             String relative = notesRoot.relativize(path).toString().replace('\\', '/');
-            relatives.add(relative);
+            if (backupScope.includes(relative)) {
+                relatives.add(relative);
+            }
         }
         return relatives;
     }
@@ -366,8 +380,14 @@ public class BaiduSyncService {
         // 重新读取传输后的两端状态；只有仍匹配的路径才写入基线。
         // 例如上传期间本地文件又被编辑、两端指纹不一致时，移除旧基线，下一轮再按无基线差异决策。
         BaiduSyncState current = stateRepository.get(notesRoot.toString(), remoteRoot);
-        Map<String, String> files = new LinkedHashMap<>(current.files());
-        Set<String> directories = new LinkedHashSet<>(current.directories());
+        Map<String, String> files = new LinkedHashMap<>();
+        current.files().forEach((relative, fingerprint) -> {
+            if (backupScope.includes(relative)) {
+                files.put(relative, fingerprint);
+            }
+        });
+        Set<String> directories = new LinkedHashSet<>();
+        current.directories().stream().filter(backupScope::mayContain).forEach(directories::add);
 
         for (String relative : relativePaths) {
             LocalItem local = localFiles.get(relative);
@@ -456,33 +476,44 @@ public class BaiduSyncService {
         }
     }
 
-    private LocalSnapshot scanLocalSnapshot(Path root,
-                                            Path excluded) throws IOException {
+    private LocalSnapshot scanLocalSnapshot() throws IOException {
+        if (backupScope == null) {
+            throw new IllegalStateException("百度网盘备份范围尚未初始化");
+        }
         Map<String, LocalItem> files = new LinkedHashMap<>();
         Set<String> directories = new LinkedHashSet<>();
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir,
-                                                     BasicFileAttributes attrs) {
-                if (dir.toAbsolutePath().normalize().equals(excluded)) {
-                    return FileVisitResult.SKIP_SUBTREE;
-                }
-                if (!dir.equals(root)) {
-                    directories.add(root.relativize(dir).toString().replace('\\', '/'));
-                }
-                return FileVisitResult.CONTINUE;
+        for (Path root : backupScope.scanRoots()) {
+            if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
+                continue;
             }
+            Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir,
+                                                         BasicFileAttributes attrs) {
+                    if (attrs.isSymbolicLink()) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    String relative = notesRoot.relativize(dir).toString().replace('\\', '/');
+                    if (!backupScope.mayContain(relative)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    if (!relative.isBlank()) {
+                        addParentDirectories(relative, directories);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
 
-            @Override
-            public FileVisitResult visitFile(Path file,
-                                             BasicFileAttributes attrs) throws IOException {
-                if (attrs.isRegularFile() && !Files.isSymbolicLink(file)) {
-                    String relative = root.relativize(file).toString().replace('\\', '/');
-                    files.put(relative, new LocalItem(file, relative, attrs.lastModifiedTime().toMillis(), attrs.size()));
+                @Override
+                public FileVisitResult visitFile(Path file,
+                                                 BasicFileAttributes attrs) throws IOException {
+                    String relative = notesRoot.relativize(file).toString().replace('\\', '/');
+                    if (attrs.isRegularFile() && !Files.isSymbolicLink(file) && backupScope.includes(relative)) {
+                        files.put(relative, new LocalItem(file, relative, attrs.lastModifiedTime().toMillis(), attrs.size()));
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-                return FileVisitResult.CONTINUE;
-            }
-        });
+            });
+        }
         return new LocalSnapshot(files, directories);
     }
 
@@ -500,6 +531,9 @@ public class BaiduSyncService {
                 if (relative.isBlank()) {
                     continue;
                 }
+                if (!backupScope.mayContain(relative)) {
+                    continue;
+                }
                 if (relative.equals(LEGACY_STAGING_DIRECTORY)) {
                     if (!item.directory()) {
                         throw new IllegalStateException("百度网盘历史临时路径已被文件占用：" + LEGACY_STAGING_DIRECTORY);
@@ -509,7 +543,7 @@ public class BaiduSyncService {
                 if (item.directory()) {
                     directoriesSeen.add(relative);
                     directories.addLast(item.path());
-                } else {
+                } else if (backupScope.includes(relative)) {
                     files.put(relative, item);
                 }
             }
@@ -631,7 +665,7 @@ public class BaiduSyncService {
         }
 
         /**
-         * 基线持久化格式为 size:mtimeSeconds；旧 MD5 等无法解析的值视为缺失。
+         * 基线持久化格式为 size:mtimeSeconds；无法解析的值视为缺失。
          */
         static FileFingerprint parse(String value) {
             if (value == null) {

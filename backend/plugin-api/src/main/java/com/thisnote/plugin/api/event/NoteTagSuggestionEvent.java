@@ -1,5 +1,7 @@
 package com.thisnote.plugin.api.event;
 
+import com.thisnote.plugin.api.event.ifaces.PluginQuery;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -12,7 +14,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public record NoteTagSuggestionEvent(String noteId,
                                      int limit,
-                                     CompletableFuture<List<String>> suggestions) {
+                                     CompletableFuture<List<String>> suggestions)
+        implements PluginQuery<List<String>> {
 
     public NoteTagSuggestionEvent {
         if (noteId == null || noteId.isBlank()) {
@@ -28,5 +31,10 @@ public record NoteTagSuggestionEvent(String noteId,
 
     public static NoteTagSuggestionEvent request(String noteId, int limit) {
         return new NoteTagSuggestionEvent(noteId, limit, new CompletableFuture<>());
+    }
+
+    @Override
+    public CompletableFuture<List<String>> result() {
+        return suggestions;
     }
 }

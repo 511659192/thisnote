@@ -6,14 +6,11 @@ import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.notes.dto.AttachmentDTO;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.CardMetaDTO;
-import com.thisnote.plugin.api.util.ImageSize;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -53,13 +50,7 @@ public class AttachmentImporterService {
     private static final double CARD_HORIZONTAL_CHROME = 30d;
     private static final double CARD_VERTICAL_CHROME = 44d;
 
-    private final Path attachmentsDir;
     private ApplicationEventPublisher mainEventPublisher;
-
-    public AttachmentImporterService(@Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
-        Path root = Path.of(dataRoot).toAbsolutePath().normalize();
-        this.attachmentsDir = root.resolve("notes").resolve("attachments");
-    }
 
     public void setMainEventPublisher(ApplicationEventPublisher publisher) {
         this.mainEventPublisher = Objects.requireNonNull(publisher);
@@ -80,7 +71,7 @@ public class AttachmentImporterService {
         List<AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
 
         for (AttachmentDTO attachment : attachments) {
-            String adopted = adopt(attachment.fileName());
+            AttachmentDTO adopted = adopt(attachment.fileName());
             if (adopted != null) {
                 importAttachment(attachment.fileName(), adopted);
             }
@@ -90,12 +81,11 @@ public class AttachmentImporterService {
     /**
      * 交给 notes 把附件改名为 {@code <uuid>.<ext>}（原名记入元数据），返回新文件名。
      */
-    private String adopt(String fileName) {
+    private AttachmentDTO adopt(String fileName) {
         CompletableFuture<AttachmentDTO> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new AttachmentAdoptEvent(result, fileName));
         try {
-            AttachmentDTO adopted = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
-            return adopted == null ? null : adopted.fileName();
+            return result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
         } catch (RuntimeException e) {
             log.warn("附件 {} 接管失败，下一轮重试", fileName, e);
             return null;
@@ -103,8 +93,8 @@ public class AttachmentImporterService {
     }
 
     private void importAttachment(String originalName,
-                                  String fileName) {
-        Path file = attachmentsDir.resolve(fileName);
+                                  AttachmentDTO adopted) {
+        String fileName = adopted.fileName();
         String title = titleOf(originalName);
         if (title.isBlank()) {
             log.warn("附件 {} 没有可用作标题的文件名，已跳过", originalName);
@@ -112,7 +102,7 @@ public class AttachmentImporterService {
         }
 
         // 按图片原始像素尺寸给出初始卡片框体；读不到尺寸时用 notes 的默认宽高。
-        CardMetaDTO meta = imageCardMeta(file);
+        CardMetaDTO meta = imageCardMeta(adopted.width(), adopted.height());
         try {
             mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(new CardDTO(meta, cardContent(title, fileName), null), title, DEFAULT_BOOK_ID));
         } catch (RuntimeException e) {
@@ -144,18 +134,13 @@ public class AttachmentImporterService {
      * 所以「宽 = 图片宽 + 30」时图片按原始尺寸显示；不设宽度上限，大图也不缩放。
      * 读不到尺寸（文件损坏）返回 {@code null}，由 notes 用默认 720×260。
      */
-    private static CardMetaDTO imageCardMeta(Path file) {
-        double[] pixels = imagePixelSize(file);
-        if (pixels == null) {
+    private static CardMetaDTO imageCardMeta(int width,
+                                             int height) {
+        if (width <= 0 || height <= 0) {
             return null;
         }
-        double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, pixels[0] + CARD_HORIZONTAL_CHROME));
-        double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, pixels[1] + CARD_VERTICAL_CHROME));
-        return new CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, 0, null, null, false, null);
-    }
-
-    private static double[] imagePixelSize(Path file) {
-        int[] size = ImageSize.of(file);
-        return size == null ? null : new double[]{size[0], size[1]};
+        double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, width + CARD_HORIZONTAL_CHROME));
+        double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, height + CARD_VERTICAL_CHROME));
+        return new CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, null, null, false, null);
     }
 }

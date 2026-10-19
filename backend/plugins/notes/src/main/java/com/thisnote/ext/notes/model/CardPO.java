@@ -62,7 +62,6 @@ public class CardPO {
         private double y = 0d;
         private double w = DEFAULT_W;
         private double h = DEFAULT_H;
-        private int z = 0;
         private String color;
         private String status;
         private boolean collapsed;

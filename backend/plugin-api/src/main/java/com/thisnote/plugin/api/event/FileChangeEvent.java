@@ -1,5 +1,7 @@
 package com.thisnote.plugin.api.event;
 
+import com.thisnote.plugin.api.event.ifaces.PluginNotification;
+
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -11,7 +13,7 @@ import java.util.Objects;
 public record FileChangeEvent(String sourcePluginId,
                               Operation operation,
                               Path url,
-                              Path previousUrl) {
+                              Path previousUrl) implements PluginNotification {
 
     public FileChangeEvent {
         if (sourcePluginId == null || sourcePluginId.isBlank()) {

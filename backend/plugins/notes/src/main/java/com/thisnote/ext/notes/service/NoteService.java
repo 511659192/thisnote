@@ -11,6 +11,7 @@ import com.thisnote.ext.notes.repository.CardRepository;
 import com.thisnote.ext.notes.repository.NoteRepository;
 import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
+import com.thisnote.plugin.api.event.NoteTextChangedEvent;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -81,6 +82,7 @@ public class NoteService {
                 mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
             }
             mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TITLE_CHANGED, title, List.of()));
+            mainEventPublisher.publishEvent(new NoteTextChangedEvent(noteId));
             log.info("笔记 {} 标题改为「{}」（联动重命名 {} 张卡片）", noteId, title, meta.getCardIds().size());
         }
         return notesMapper.toNoteDTO(meta);

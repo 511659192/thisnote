@@ -2,7 +2,6 @@ package com.thisnote.plugin;
 
 import com.thisnote.plugin.api.exception.ConflictException;
 import com.thisnote.plugin.api.lifecycle.PluginHealth;
-import com.thisnote.plugin.api.lifecycle.PluginRegister;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -58,9 +57,8 @@ public class PluginStateService {
      * 启用/停用插件：落到 PF4J 的 enable/disable（它自己持久化管理状态）并显式 start/stop，
      * 让它在本次运行里立即生效；随后才通知插件本体。
      *
-     * @throws ConflictException 拒绝停用核心插件（notes）——
-     *                           它承载整个应用的笔记领域，停用等于把主体下线；管理页对它不展示停用按钮，
-     *                           这里是最后一道闸。
+     * @throws ConflictException 拒绝停用清单标记为 {@code undeactivatable} 的核心插件；管理页不展示停用按钮，
+     *                           这里仍是最后一道闸。
      */
     public void setActive(String pluginId,
                           boolean active) {
@@ -92,9 +90,8 @@ public class PluginStateService {
      */
     public void reload(String pluginId) {
         if (registry.isRegistered(pluginId) && registry.undeactivatable(pluginId)) {
-            // 不可停用的插件承载全部业务端点，并向 card-importer 提供 Notes 元数据接口；重载会短暂移除这些能力。
-            // 拒绝并提示重启。
-            throw new ConflictException("「" + registry.title(pluginId) + "」承载主体业务，不支持在线重载（它承载全部业务端点）；更换 notes 插件后请重启应用生效");
+            throw new ConflictException("「" + registry.title(pluginId)
+                    + "」承载主体业务，不支持在线重载；更换该插件后请重启应用生效");
         }
         org.pf4j.PluginManager manager = pluginManager.getIfAvailable();
         if (manager instanceof org.laxture.sbp.SpringBootPluginManager sbp) {
@@ -198,6 +195,7 @@ public class PluginStateService {
         out.put("title", registry.title(pluginId));
         out.put("description", registry.description(pluginId));
         out.put("undeactivatable", registry.undeactivatable(pluginId));
+        out.put("dependencies", registry.dependencies(pluginId));
         out.put("version", descriptor.getVersion());
         out.put("active", isActive(pluginId));
         PluginHealth health = healthOf(pluginId);

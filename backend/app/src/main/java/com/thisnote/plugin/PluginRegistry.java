@@ -2,6 +2,8 @@ package com.thisnote.plugin;
 
 import com.thisnote.plugin.api.lifecycle.PluginHealth;
 import com.thisnote.plugin.api.lifecycle.PluginRegister;
+import com.thisnote.plugin.api.meta.PluginMetadata;
+import com.thisnote.plugin.api.meta.PluginMetadataReader;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginDescriptor;
 import org.pf4j.PluginManager;
@@ -21,9 +23,9 @@ import java.util.Map;
  * 扩展（{@code @Extension} 类 —— SBP 会用插件自己的 Spring 容器实例化它们，所以扩展类可以
  * 注入插件容器里的服务）。
  *
- * <p><b>身份/版本/说明一律读 PF4J 描述符</b>（{@code plugin.properties} 的 plugin.id /
- * plugin.version / plugin.provider / plugin.description）。PF4J 没有的两项 —— 管理页显示名、
- * 「不可停用」—— 来自 {@link PluginRegister} 扩展；缺失时回落为「显示名 = id、可停用」。
+ * <p>身份与版本来自 PF4J 描述符；管理面静态信息来自插件 jar 内的
+ * {@code META-INF/thisnote/plugin.json}，因此插件停用后也能稳定读取显示名、说明和核心保护标记。
+ * {@link PluginRegister} 只承担运行时健康检查和状态回调。
  *
  * <p><b>契约版本也走框架</b>：插件在 {@code plugin.requires} 里声明（支持 semver 范围，
  * 例如 {@code >=3.0.0}），这里用 PF4J 的 {@code VersionManager} 校验。不匹配的插件**跳过并告警**
@@ -137,7 +139,7 @@ public class PluginRegistry {
     /**
      * 取插件的 {@link PluginRegister} 扩展（PF4J 原生 {@code getExtensions(type, pluginId)}）。
      *
-     * <p>它承载插件的管理页与生命周期信息；插件没提供时返回 {@code null}，各访问器按默认语义回落。
+     * <p>它承载运行时健康与状态回调；插件没提供时返回 {@code null}，健康检查按默认语义回落。
      */
     private PluginRegister register(String pluginId) {
         PluginManager manager = pluginManager.getIfAvailable();
@@ -148,33 +150,36 @@ public class PluginRegistry {
         return found.isEmpty() ? null : found.get(0);
     }
 
-    /**
-     * 管理页显示名：来自 {@link PluginRegister}；没有该扩展时回落为插件 id。
-     */
-    public String title(String pluginId) {
-        PluginRegister register = register(pluginId);
-        return register == null ? pluginId : register.title();
+    private PluginMetadata metadata(String pluginId) {
+        return PluginMetadataReader.read(get(pluginId));
     }
 
     /**
-     * 一句话说明：优先取 {@link PluginRegister#description()}（Java 源码 UTF-8，中文可靠）；
-     * 没有该扩展时回落到 PF4J 描述符的 {@code plugin.description}。
+     * 管理页显示名。
+     */
+    public String title(String pluginId) {
+        return metadata(pluginId).title();
+    }
+
+    /**
+     * 一句话说明。
      */
     public String description(String pluginId) {
-        PluginRegister register = register(pluginId);
-        if (register != null && register.description() != null && !register.description().isBlank()) {
-            return register.description();
-        }
-        String fromDescriptor = get(pluginId).getDescriptor().getPluginDescription();
-        return fromDescriptor == null ? "" : fromDescriptor;
+        return metadata(pluginId).description();
     }
 
     /**
      * 是否不可停用/不可在线重载（承载主体业务领域的插件）。
      */
     public boolean undeactivatable(String pluginId) {
-        PluginRegister register = register(pluginId);
-        return register != null && register.undeactivatable();
+        return metadata(pluginId).undeactivatable();
+    }
+
+    public List<String> dependencies(String pluginId) {
+        var dependencies = get(pluginId).getDescriptor().getDependencies();
+        return dependencies == null ? List.of() : dependencies.stream()
+                .map(dependency -> dependency.getPluginId())
+                .toList();
     }
 
     /**

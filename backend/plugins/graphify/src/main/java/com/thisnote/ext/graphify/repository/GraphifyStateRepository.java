@@ -59,10 +59,6 @@ public class GraphifyStateRepository {
         cachedIndexState = IndexState.empty();
     }
 
-    public Path indexStateFile() {
-        return indexStateFile;
-    }
-
     public record IndexState(boolean initialized,
                              String lastCompletedAt,
                              Set<String> noteIds,

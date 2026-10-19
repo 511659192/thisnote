@@ -176,7 +176,8 @@ onBeforeUnmount(() => {
       <input v-model="signKey" class="input" type="text" autocomplete="off" :disabled="!!busy">
     </label>
     <p class="small muted security-note">
-      认证信息以明文保存在当前笔记根目录的 plugins/baidu-sync 中；插件会将整个目录排除在网盘同步外。
+      认证信息以明文保存在当前笔记根目录的 plugins/baidu-sync 中；同步范围由插件清单限定，
+      百度插件自身目录与 AI 凭据不会上传。
     </p>
     <button class="btn sm primary" :disabled="!!busy" @click="saveSettings">保存配置</button>
 

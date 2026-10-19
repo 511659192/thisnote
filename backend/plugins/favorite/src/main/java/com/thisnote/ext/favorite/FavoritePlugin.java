@@ -55,7 +55,7 @@ public class FavoritePlugin extends SpringBootPlugin {
                 log.info("笔记已删除，收藏记录一并清除：{}", change.noteId());
             }
         });
-        listeners.onStateReset("收藏已清空", favoriteService::clear);
+        listeners.onStateReset(PLUGIN_ID, "收藏已清空", favoriteService::clear);
     }
 
     @Override

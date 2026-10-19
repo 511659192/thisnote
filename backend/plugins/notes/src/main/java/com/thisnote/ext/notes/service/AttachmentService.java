@@ -78,7 +78,7 @@ public class AttachmentService {
 
         CardPO.AttachmentMeta meta = buildMeta(attachmentId, newFileName, fileName, target, MEDIA_TYPES_BY_EXTENSION.get(extension));
         putMetadata(newFileName, meta);
-        return new AttachmentDTO(newFileName, meta.size());
+        return new AttachmentDTO(newFileName, meta.size(), meta.w(), meta.h());
     }
 
     public Path existingPath(String fileName) {
@@ -144,7 +144,13 @@ public class AttachmentService {
                 continue;
             }
             if (attributes.isRegularFile() && attributes.size() > 0) {
-                attachments.add(new AttachmentDTO(fileName, attributes.size()));
+                int[] pixels = ImageSize.of(path);
+                attachments.add(new AttachmentDTO(
+                        fileName,
+                        attributes.size(),
+                        pixels == null ? 0 : pixels[0],
+                        pixels == null ? 0 : pixels[1]
+                ));
             }
         }
         return attachments;

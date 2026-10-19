@@ -1,0 +1,10 @@
+{
+  "title": "百度网盘同步",
+  "description": "平台级备份适配器：同步笔记域与各插件的可备份目录，排除凭据和本插件自身状态",
+  "undeactivatable": false,
+  "resetTargets": [
+    ".sync-state.json"
+  ],
+  "backupEnabled": false,
+  "backupExclude": []
+}

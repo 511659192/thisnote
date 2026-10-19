@@ -5,13 +5,12 @@ import com.thisnote.plugin.api.util.MainContainerListeners;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
+import org.pf4j.PluginManager;
 import org.pf4j.PluginWrapper;
 import org.springframework.context.support.GenericApplicationContext;
 
 /**
- * 状态重置插件：只负责手动发出一次 {@code PluginStateResetEvent}。
- *
- * <p>清理什么、怎么重建由各插件自己决定；本插件不持有任何状态，也不认识具体插件。
+ * 状态重置插件：活动插件走 {@code PluginStateResetEvent} 自身清理，停用插件按其静态清单清理。
  */
 public class StateResetPlugin extends SpringBootPlugin {
 
@@ -31,9 +30,11 @@ public class StateResetPlugin extends SpringBootPlugin {
 
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
-        ctx.getBean(StateResetService.class).setMainEventPublisher(getMainApplicationContext());
+        StateResetService stateResetService = ctx.getBean(StateResetService.class);
+        stateResetService.setMainEventPublisher(getMainApplicationContext());
+        stateResetService.setPluginManager(getMainApplicationContext().getBean(PluginManager.class));
         listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onStateReset("state-reset 无自有状态", () -> { });
+        listeners.onStateResetSkipped(PLUGIN_ID, "state-reset 无自有状态");
     }
 
     @Override

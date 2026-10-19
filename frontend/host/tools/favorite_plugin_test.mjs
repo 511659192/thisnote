@@ -52,8 +52,8 @@ win.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
 const list = await api('GET', '/api/notes?limit=1')
 check('笔记列表 DTO 里没有 favorite 字段', list.body && !('favorite' in list.body[0]),
   JSON.stringify(Object.keys(list.body?.[0] ?? {}).slice(0, 6)) + '…')
-const legacy = await api('POST', `/api/notes/${list.body[0].id}/favorite?value=true`, {})
-check('核心的收藏端点已移除', !legacy.ok, `HTTP ${legacy.status}`)
+const removedCoreEndpoint = await api('POST', `/api/notes/${list.body[0].id}/favorite?value=true`, {})
+check('核心的收藏端点已移除', !removedCoreEndpoint.ok, `HTTP ${removedCoreEndpoint.status}`)
 
 // 挑一篇没被收藏的笔记来测
 const before = await api('GET', `/api/plugins/${PLUGIN}/get-favorites`)

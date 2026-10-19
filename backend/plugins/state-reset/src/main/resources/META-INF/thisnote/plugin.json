@@ -1,0 +1,8 @@
+{
+  "title": "状态重置",
+  "description": "重置全部已安装插件的缓存、索引和同步基线；活动插件执行自身清理，停用插件按声明清单清理",
+  "undeactivatable": false,
+  "resetTargets": [],
+  "backupEnabled": true,
+  "backupExclude": []
+}

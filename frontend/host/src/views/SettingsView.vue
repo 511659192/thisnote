@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { pluginApi, type PluginInfo } from '@/api/plugins'
-import { request } from '@/core/http'
-import { ConfirmDialog } from '@thisnote/plugin-api'
 import {
+  ConfirmDialog,
+  pluginApi,
   pluginSettings,
   refreshPluginAvailability,
+  request,
+  type PluginInfo,
+} from '@thisnote/plugin-api'
+import {
   loadPluginFrontend,
   unloadPluginFrontend,
   reloadPluginFrontend,
-} from '@/plugins'
+} from '../plugins/loader'
 import { useUiStore } from '@/stores/ui'
 
 const ui = useUiStore()
@@ -281,6 +284,9 @@ onMounted(async () => {
             </div>
 
             <p class="small muted plugin-desc">{{ plugin.description }}</p>
+            <p v-if="plugin.dependencies?.length" class="small muted">
+              依赖：<span class="mono">{{ plugin.dependencies.join(', ') }}</span>
+            </p>
 
             <div v-if="isPluginOpen(plugin.id)" class="plugin-body">
               <!-- 插件自带的设置面板（由插件自己注册，平台不掺和它的内容） -->

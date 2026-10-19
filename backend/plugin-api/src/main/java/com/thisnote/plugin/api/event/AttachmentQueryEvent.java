@@ -1,5 +1,6 @@
 package com.thisnote.plugin.api.event;
 
+import com.thisnote.plugin.api.event.ifaces.PluginQuery;
 import com.thisnote.plugin.api.notes.dto.AttachmentDTO;
 
 import java.util.List;
@@ -16,5 +17,6 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>找不到响应方时 future 不会被完成，发布方应自行设置超时。
  */
-public record AttachmentQueryEvent(CompletableFuture<List<AttachmentDTO>> result) {
+public record AttachmentQueryEvent(CompletableFuture<List<AttachmentDTO>> result)
+        implements PluginQuery<List<AttachmentDTO>> {
 }
