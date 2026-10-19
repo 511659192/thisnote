@@ -69,6 +69,10 @@ export interface NoteToolPlugin {
   glyph: string
   /** 组件接收 noteId prop */
   component: Component
+  /** 挂载位置：默认在标题右侧；'below-title' 渲染为标题下方的独立区域。 */
+  placement?: 'title' | 'below-title'
+  /** 同一挂载位置的排序：小者在前；未给序号的按注册顺序排在已给序号之后。 */
+  order?: number
 }
 
 /**

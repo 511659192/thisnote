@@ -13,4 +13,7 @@ export const PLUGIN_DEV_PORTS: Record<string, number> = {
   'state-reset': 7117,
   'memory-cycle': 7112,
   notes: 7113,
+  graphify: 7118,
+  tags: 7119,
+  ai: 7120,
 }

@@ -24,6 +24,7 @@
 
   <modules>
     <module>plugin-api</module>
+    <module>plugins/ai</module>
     <module>plugins/memory-cycle</module>
     <module>plugins/notes</module>
     <module>plugins/favorite</module>
@@ -31,6 +32,8 @@
     <module>plugins/card-importer</module>
     <module>plugins/attachment-importer</module>
     <module>plugins/state-reset</module>
+    <module>plugins/graphify</module>
+    <module>plugins/tags</module>
     <module>app</module>
   </modules>
 
@@ -51,6 +54,11 @@
       <dependency>
         <groupId>com.thisnote</groupId>
         <artifactId>plugin-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnote</groupId>
+        <artifactId>plugin-ai</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -81,6 +89,16 @@
       <dependency>
         <groupId>com.thisnote</groupId>
         <artifactId>plugin-state-reset</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnote</groupId>
+        <artifactId>plugin-graphify</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnote</groupId>
+        <artifactId>plugin-tags</artifactId>
         <version>${project.version}</version>
       </dependency>
 

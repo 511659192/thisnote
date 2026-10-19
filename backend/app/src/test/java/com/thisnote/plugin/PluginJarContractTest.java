@@ -46,6 +46,7 @@ class PluginJarContractTest {
         try (var entries = Files.list(target)) {
             List<Path> jars = entries
                     .filter(p -> p.getFileName().toString().matches(jarPrefix + "-\\d.*\\.jar"))
+                    .filter(p -> !p.getFileName().toString().endsWith("-standalone.jar"))
                     .toList();
             Assumptions.assumeTrue(!jars.isEmpty(), "插件 jar 尚未构建：" + target);
             return jars.get(0);
@@ -55,14 +56,17 @@ class PluginJarContractTest {
     @ParameterizedTest(name = "{2} 的 jar 携带完整的插件契约")
     @CsvSource({
             "notes,plugin-notes,notes,true",
+            "ai,plugin-ai,ai,true",
             "favorite,plugin-favorite,favorite,true",
             "memory-cycle,plugin-memory-cycle,memory-cycle,true",
             "attachment-importer,plugin-attachment-importer,attachment-importer,true",
-            "state-reset,plugin-state-reset,state-reset,true"
+            "state-reset,plugin-state-reset,state-reset,true",
+            "graphify,plugin-graphify,graphify,true",
+            "tags,plugin-tags,tags,true"
     })
     void pluginJarCarriesItsContract(String moduleDir, String jarPrefix, String pluginId, boolean hasAssets) throws Exception {
         // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——
-        // 五个插件都有界面产物，全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
+        // 已登记的插件界面产物全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
 
         try (ZipFile zip = new ZipFile(jar.toFile())) {
@@ -76,6 +80,15 @@ class PluginJarContractTest {
             assertThat(props.getProperty("plugin.id")).isEqualTo(pluginId);
             assertThat(props.getProperty("plugin.version")).isNotBlank();
             assertThat(props.getProperty("plugin.provider")).isNotBlank();
+
+            // 1a) PF4J 扩展索引：没有它时插件仍能启动，但 PluginRegister 会静默缺失，
+            // 核心保护、显示名与状态回调都会退化为默认行为。
+            ZipEntry extensions = zip.getEntry("META-INF/extensions.idx");
+            assertThat(extensions).as("META-INF/extensions.idx 必须存在").isNotNull();
+            assertThat(new String(zip.getInputStream(extensions).readAllBytes(),
+                                  java.nio.charset.StandardCharsets.UTF_8))
+                    .as("PF4J 扩展索引不能为空")
+                    .isNotBlank();
 
             // 1b) 版本单源：描述符版本 == 这个 jar 自己的构建版本（父 pom 过滤注入的结果）
             ZipEntry buildInfo = zip.getEntry("META-INF/maven/com.thisnote/" + jarPrefix + "/pom.properties");

@@ -106,7 +106,7 @@ const pluginFilters = computed<NoteListFilter[]>(() => activeNoteListFilters().f
 const activePluginFilter = computed<NoteListFilter | null>(() => {
   const active = activeListFilter_()
   if (!active) return null
-  return pluginFilters.value.find(
+  return activeNoteListFilters().find(
     (filter) => filter.pluginId === active.pluginId && filter.id === active.filterId,
   ) ?? null
 })

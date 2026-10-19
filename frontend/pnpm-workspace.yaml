@@ -8,6 +8,9 @@ packages:
   - 'plugins/notes'
   - 'plugins/attachment-importer'
   - 'plugins/state-reset'
+  - 'plugins/graphify'
+  - 'plugins/tags'
+  - 'plugins/ai'
 
 allowBuilds:
   esbuild: true

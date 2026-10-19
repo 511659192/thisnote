@@ -18,12 +18,15 @@ New-Item -ItemType Directory -Force -Path $devRoot | Out-Null
 # plugin.id -> Maven 模块目录
 $plugins = [ordered]@{
     'notes'        = 'plugins/notes'
+    'ai'           = 'plugins/ai'
     'favorite'     = 'plugins/favorite'
     'memory-cycle' = 'plugins/memory-cycle'
     'baidu-sync'   = 'plugins/baidu-sync'
     'card-importer' = 'plugins/card-importer'
     'attachment-importer' = 'plugins/attachment-importer'
     'state-reset' = 'plugins/state-reset'
+    'graphify' = 'plugins/graphify'
+    'tags' = 'plugins/tags'
 }
 
 foreach ($id in $plugins.Keys) {

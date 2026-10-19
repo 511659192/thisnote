@@ -25,7 +25,8 @@ const confirmation = ref<{
 
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
-const openPlugin = ref('')
+const openPlugins = ref<Set<string>>(new Set())
+let defaultPluginPanelsOpened = false
 const notesRootDir = ref('')
 const activeTab = ref<'storage' | 'plugins'>('storage')
 
@@ -36,6 +37,15 @@ interface NotesRootSettings {
 async function refreshPlugins() {
   try {
     plugins.value = await pluginApi.list()
+    if (!defaultPluginPanelsOpened) {
+      const configured = plugins.value
+        .filter((plugin) => Boolean(pluginSettings(plugin.id)))
+        .map((plugin) => plugin.id)
+      if (configured.length) {
+        openPlugins.value = new Set(configured)
+        defaultPluginPanelsOpened = true
+      }
+    }
   } catch {
     plugins.value = []
   }
@@ -134,8 +144,18 @@ function reloadPlugin(plugin: PluginInfo) {
   )
 }
 
+function isPluginOpen(pluginId: string): boolean {
+  return openPlugins.value.has(pluginId)
+}
+
 function togglePluginPanel(plugin: PluginInfo) {
-  openPlugin.value = openPlugin.value === plugin.id ? '' : plugin.id
+  const next = new Set(openPlugins.value)
+  if (next.has(plugin.id)) {
+    next.delete(plugin.id)
+  } else {
+    next.add(plugin.id)
+  }
+  openPlugins.value = next
 }
 
 function healthClass(plugin: PluginInfo): string {
@@ -219,53 +239,55 @@ onMounted(async () => {
 
         <div v-if="!plugins.length" class="small muted">没有已注册的插件。</div>
 
-        <div v-for="plugin in plugins" :key="plugin.id" class="plugin-card">
-          <div class="plugin-head">
-            <!-- 只有「不可停用」的插件需要一枚徽标；其余没有分类标签（分类由插槽事实决定，不靠声明） -->
-            <span v-if="plugin.undeactivatable" class="kind kind-core">核心</span>
-            <b>{{ plugin.title }}</b>
-            <span class="small muted mono">v{{ plugin.version }}</span>
-            <span class="small" :class="healthClass(plugin)">● {{ plugin.health.message }}</span>
-            <div class="spacer"></div>
-            <!-- 换了磁盘上的 jar（版本不同）时给一条明确提示；重载按钮总是可用 —— 开发模式下
-                 换的是同一版本的 target/classes，没有它就只能重启应用。 -->
-            <span v-if="plugin.reloadAvailable" class="small warn">
-              磁盘上是 v{{ plugin.diskVersion }}
-            </span>
-            <!-- 重载与停用对核心插件都不可用（后端直接拒绝）：它是全部笔记端点的宿主，
-                 重建容器期间路由与索引会短暂缺失。这里直接不渲染这两个按钮。 -->
-            <button
-              v-if="!plugin.undeactivatable"
-              class="btn sm ghost"
-              :disabled="!!busy"
-              :title="plugin.reloadAvailable
-                ? `按磁盘上的 v${plugin.diskVersion} 重建该插件的容器`
-                : '按磁盘上的 jar 重建该插件的容器（改了插件代码/换了 jar 之后用）'"
-              @click="reloadPlugin(plugin)"
-            >
-              重载
-            </button>
-            <button class="btn sm ghost" @click="togglePluginPanel(plugin)">
-              {{ openPlugin === plugin.id ? '收起' : '设置' }}
-            </button>
-            <button
-              v-if="!plugin.undeactivatable"
-              class="btn sm"
-              :class="{ primary: plugin.active }"
-              :disabled="!!busy"
-              @click="togglePlugin(plugin)"
-            >
-              {{ plugin.active ? '已启用' : '已停用' }}
-            </button>
-          </div>
+        <div v-if="plugins.length" class="plugin-list">
+          <div v-for="plugin in plugins" :key="plugin.id" class="plugin-card">
+            <div class="plugin-head">
+              <!-- 只有「不可停用」的插件需要一枚徽标；其余没有分类标签（分类由插槽事实决定，不靠声明） -->
+              <span v-if="plugin.undeactivatable" class="kind kind-core">核心</span>
+              <b>{{ plugin.title }}</b>
+              <span class="small muted mono">v{{ plugin.version }}</span>
+              <span class="small" :class="healthClass(plugin)">● {{ plugin.health.message }}</span>
+              <div class="spacer"></div>
+              <!-- 换了磁盘上的 jar（版本不同）时给一条明确提示；重载按钮总是可用 —— 开发模式下
+                   换的是同一版本的 target/classes，没有它就只能重启应用。 -->
+              <span v-if="plugin.reloadAvailable" class="small warn">
+                磁盘上是 v{{ plugin.diskVersion }}
+              </span>
+              <!-- 重载与停用对核心插件都不可用（后端直接拒绝）：它是全部笔记端点的宿主，
+                   重建容器期间路由与索引会短暂缺失。这里直接不渲染这两个按钮。 -->
+              <button
+                v-if="!plugin.undeactivatable"
+                class="btn sm ghost"
+                :disabled="!!busy"
+                :title="plugin.reloadAvailable
+                  ? `按磁盘上的 v${plugin.diskVersion} 重建该插件的容器`
+                  : '按磁盘上的 jar 重建该插件的容器（改了插件代码/换了 jar 之后用）'"
+                @click="reloadPlugin(plugin)"
+              >
+                重载
+              </button>
+              <button class="btn sm ghost" @click="togglePluginPanel(plugin)">
+                {{ isPluginOpen(plugin.id) ? '收起' : '设置' }}
+              </button>
+              <button
+                v-if="!plugin.undeactivatable"
+                class="btn sm"
+                :class="{ primary: plugin.active }"
+                :disabled="!!busy"
+                @click="togglePlugin(plugin)"
+              >
+                {{ plugin.active ? '已启用' : '已停用' }}
+              </button>
+            </div>
 
-          <p class="small muted plugin-desc">{{ plugin.description }}</p>
+            <p class="small muted plugin-desc">{{ plugin.description }}</p>
 
-          <div v-if="openPlugin === plugin.id" class="plugin-body">
-            <!-- 插件自带的设置面板（由插件自己注册，平台不掺和它的内容） -->
-            <component :is="pluginSettings(plugin.id)" v-if="pluginSettings(plugin.id)" />
-            <p v-else class="small muted">这个插件没有自己的设置面板。</p>
+            <div v-if="isPluginOpen(plugin.id)" class="plugin-body">
+              <!-- 插件自带的设置面板（由插件自己注册，平台不掺和它的内容） -->
+              <component :is="pluginSettings(plugin.id)" v-if="pluginSettings(plugin.id)" />
+              <p v-else class="small muted">这个插件没有自己的设置面板。</p>
 
+            </div>
           </div>
         </div>
       </section>
@@ -412,12 +434,29 @@ onMounted(async () => {
 }
 
 /* --- 插件管理 --- */
+#settings-panel-plugins {
+  max-width: none;
+}
+
+.plugin-list {
+  column-count: 5;
+  column-width: auto;
+  column-gap: var(--space-3);
+  margin-top: var(--space-3);
+}
 .plugin-card {
-  margin: var(--space-3) 0;
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0 0 var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--c-border);
   border-radius: 10px;
   background: var(--c-surface);
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
 }
 .plugin-head {
   display: flex;
@@ -457,5 +496,29 @@ onMounted(async () => {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px dashed var(--c-border);
+}
+
+@media (max-width: 1700px) {
+  .plugin-list {
+    column-count: 4;
+  }
+}
+
+@media (max-width: 1360px) {
+  .plugin-list {
+    column-count: 3;
+  }
+}
+
+@media (max-width: 1050px) {
+  .plugin-list {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 700px) {
+  .plugin-list {
+    column-count: 1;
+  }
 }
 </style>

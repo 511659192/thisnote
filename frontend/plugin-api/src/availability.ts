@@ -69,7 +69,9 @@ export function activeNavEntries(): PluginNavEntry[] {
 
 /** 只保留仍在运行的插件的笔记工具。 */
 export function activeNoteTools(): NoteToolPlugin[] {
-  return noteTools().filter((tool) => isPluginActive(tool.pluginId))
+  return noteTools()
+    .filter((tool) => isPluginActive(tool.pluginId))
+    .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))
 }
 /** 仍在运行的插件提供的列表筛选（例如「收藏」）；插件停用即从侧栏消失。 */
 export function activeNoteListFilters(): NoteListFilter[] {

@@ -425,7 +425,9 @@ const GRADES: { grade: Grade; label: string }[] = [
         :aria-selected="activeTab === 'review'"
         @click="selectTab('review')"
       >
-        今日复习 <span v-if="queue.length" class="rv-tab-count">{{ queue.length }}</span>
+        今日复习
+        <span v-if="loading" class="rv-tab-count">…</span>
+        <span v-else class="rv-tab-count">{{ queue.length }}</span>
       </button>
       <button
         class="rv-tab"

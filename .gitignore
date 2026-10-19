@@ -50,3 +50,6 @@ docs/
 graphify-out/
 Thumbs.db
 .DS_Store
+.agents
+.agent
+.archify

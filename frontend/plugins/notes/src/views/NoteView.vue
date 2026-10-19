@@ -14,7 +14,6 @@ import {
 import { usePageStore } from '@/stores/notePage'
 import NoteList from '@/components/NoteList.vue'
 import NotePage from '@/components/page/NotePage.vue'
-import StatusBar from '@/components/StatusBar.vue'
 import ContextMenu, { type MenuEntry } from '@/components/ContextMenu.vue'
 import type { NoteDto, CardView } from '@/api/types'
 import { copyImageToClipboard } from '@/components/page/clipboardImage'
@@ -28,6 +27,12 @@ const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
 const noteListRef = ref<InstanceType<typeof NoteList> | null>(null)
 /** 插件贡献的笔记工具（按插件启用状态过滤）。 */
 const noteToolList = computed(() => activeNoteTools())
+const titleNoteTools = computed(() =>
+  noteToolList.value.filter((tool) => tool.placement !== 'below-title'),
+)
+const belowTitleNoteTools = computed(() =>
+  noteToolList.value.filter((tool) => tool.placement === 'below-title'),
+)
 type NoteManagementFilter = ReturnType<typeof activeNoteListFilters>[number] & { hideNoteManagement?: boolean }
 const allowNoteManagement = computed(() => {
   const active = activeListFilter_()
@@ -529,18 +534,22 @@ onBeforeUnmount(() => {
                               <!-- 实体插件贡献的笔记工具（收藏就是这一类）——核心不认识任何具体插件 -->
                 <component
                   :is="tool.component"
-                  v-for="tool in noteToolList"
+                  v-for="tool in titleNoteTools"
                   :key="tool.pluginId"
                   :note-id="nodes.current.noteId"
                 />
             </div>
-
+            <div v-if="belowTitleNoteTools.length" class="note-tools-below-title">
+              <component
+                :is="tool.component"
+                v-for="tool in belowTitleNoteTools"
+                :key="tool.pluginId"
+                :note-id="nodes.current.noteId"
+              />
+            </div>
           </header>
 
           <NotePage ref="pageRef" @context="onPageContext" />
-          <div class="page-toolbar">
-            <span class="small muted">双击空白处新建卡片 · Ctrl+V 粘贴 · 拖动卡片摆放 · 双击卡片输入</span>
-          </div>
         </div>
       </template>
 
@@ -614,7 +623,6 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </Teleport>
-    <StatusBar />
   </div>
 </template>
 
@@ -638,6 +646,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+.note-tools-below-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 8px;
+  min-width: 0;
 }
 .title {
   margin: 0;
@@ -674,12 +689,6 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-}
-.page-toolbar {
-  flex: 0 0 auto;
-  padding: 5px var(--space-4);
-  border-top: 1px solid var(--c-border);
-  background: var(--c-surface);
 }
 .title-prompt-overlay {
   position: fixed;

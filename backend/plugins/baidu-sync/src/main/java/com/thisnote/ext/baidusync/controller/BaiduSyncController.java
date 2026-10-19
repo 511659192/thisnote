@@ -1,63 +1,49 @@
 package com.thisnote.ext.baidusync.controller;
 
-import com.thisnote.ext.baidusync.client.BaiduOAuthClient;
 import com.thisnote.ext.baidusync.model.BaiduSyncPreview;
-import com.thisnote.ext.baidusync.model.BaiduSyncSettings;
 import com.thisnote.ext.baidusync.model.BaiduSyncStatus;
 import com.thisnote.ext.baidusync.model.request.ExchangeCodeRequest;
 import com.thisnote.ext.baidusync.model.request.UpdateSettingsRequest;
 import com.thisnote.ext.baidusync.model.view.SettingsView;
-import com.thisnote.ext.baidusync.repository.BaiduSyncSettingsRepository;
+import com.thisnote.ext.baidusync.service.BaiduSyncSettingsService;
 import com.thisnote.ext.baidusync.service.BaiduSyncService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Map;
-import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/plugins/baidu-sync")
 @RequiredArgsConstructor
 public class BaiduSyncController {
 
-    private final BaiduSyncSettingsRepository baiduSyncSettingsRepository;
-    private final BaiduOAuthClient baiduOAuthClient;
+    private final BaiduSyncSettingsService baiduSyncSettingsService;
     private final BaiduSyncService baiduSyncService;
-    @Value("${thisnote.data-root:${user.home}/.thisnote}")
-    private String dataRoot;
 
     @GetMapping("/get-settings")
     public SettingsView getSettings() {
-        return settingsView(baiduSyncSettingsRepository.get());
+        return baiduSyncSettingsService.getSettings();
     }
 
     @PostMapping("/update-settings")
     public SettingsView updateSettings(@RequestBody UpdateSettingsRequest request) {
-        BaiduSyncSettings settings = baiduSyncSettingsRepository.updateCredentials(Objects.toString(request.appName(), ""),
-                                                                                   Objects.toString(request.appKey(), ""),
-                                                                                   Objects.toString(request.secretKey(), ""),
-                                                                                   Objects.toString(request.signKey(), ""));
-        return settingsView(settings);
+        return baiduSyncSettingsService.updateSettings(request);
     }
 
     @GetMapping("/get-authorization-url")
     public Map<String, String> authorizationUrl() {
-        return Map.of("url", baiduOAuthClient.authorizationUrl());
+        return baiduSyncSettingsService.authorizationUrl();
     }
 
     @PostMapping("/exchange-code")
     public SettingsView exchangeCode(@RequestBody ExchangeCodeRequest request) {
-        baiduOAuthClient.exchangeCode(Objects.toString(request.code(), "").trim());
-        return settingsView(baiduSyncSettingsRepository.get());
+        return baiduSyncSettingsService.exchangeCode(request);
     }
 
     @PostMapping("/update-auto-sync")
     public SettingsView updateAutoSync(@RequestParam boolean value) {
-        baiduSyncSettingsRepository.updateAutoSync(value);
-        return settingsView(baiduSyncSettingsRepository.get());
+        return baiduSyncSettingsService.updateAutoSync(value);
     }
 
     @PostMapping("/sync")
@@ -75,12 +61,4 @@ public class BaiduSyncController {
         return baiduSyncService.preview();
     }
 
-    private SettingsView settingsView(BaiduSyncSettings settings) {
-        Path data = Path.of(dataRoot).toAbsolutePath().normalize();
-        Path notesRoot = data.resolve("notes");
-        String remoteDirectory = settings.appName().isBlank() ? "" : "/apps/" + settings.appName() + "/notes";
-        return new SettingsView(settings.appName(), !settings.appKey().isBlank(), !settings.secretKey().isBlank(), !settings.signKey().isBlank(),
-                                !settings.refreshToken().isBlank() || !settings.accessToken().isBlank(), settings.autoSync(), notesRoot.toString(),
-                                remoteDirectory);
-    }
 }

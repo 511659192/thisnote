@@ -1,7 +1,6 @@
 package com.thisnote.ext.notes;
 
 import com.thisnote.ext.notes.model.request.CreateCardRequest;
-import com.thisnote.ext.notes.repository.BookRepository;
 import com.thisnote.ext.notes.service.AttachmentService;
 import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
@@ -61,8 +60,7 @@ public class NotesPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        BookRepository bookRepository = ctx.getBean(BookRepository.class);
-        bookRepository.initializeDefaultGroup();
+        ctx.getBean(BookService.class).initializeDefaultGroup();
         CardService cardService = ctx.getBean(CardService.class);
         NoteService noteService = ctx.getBean(NoteService.class);
         AttachmentService attachmentService = ctx.getBean(AttachmentService.class);

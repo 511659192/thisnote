@@ -39,7 +39,8 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 |---|---|---|
 | 后端端口 | `45917`（可用 `THISNOTE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNOTE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
-| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117` | `frontend/host/src/plugins/devPorts.ts:8-16` |
+| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120` | `frontend/host/src/plugins/devPorts.ts` |
+| 后端插件模块数 | 10（notes + ai + 8 个功能插件） | `backend/pom.xml` |
 | 数据根目录 | `${thisnote.data-root:${user.home}/.thisnote}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnote/ext/notes/config/NotesConfig.java:18-20` |
 | 插件契约版本 | `0.0.1` | `backend/plugin-api/src/main/java/com/thisnote/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
@@ -62,7 +63,7 @@ thisnote/
 ├── backend/                  Maven 反应堆（从 backend/ 构建，仓库根不放 Maven 文件）
 │   ├── pom.xml               父 POM：模块、版本、plugin.properties 过滤 profile
 │   ├── plugin-api/           插件契约（扩展点 / 事件 / DTO / 异常 / FileHelper）
-│   ├── plugins/              7 个插件模块（各产出一个独立 jar）
+│   ├── plugins/              10 个插件模块（各产出一个独立 jar）
 │   ├── app/                  平台主体（纯 API，无业务、无数据库）
 │   ├── runtime/plugins/      后端交付目录：<pluginId>.jar + disabled.txt（不入库）
 │   ├── plugins-dev/          dev 模式插件目录（目录联接，不入库）
@@ -70,7 +71,7 @@ thisnote/
 ├── frontend/                 pnpm 工作区（界面侧）
 │   ├── host/                 主应用（qiankun 宿主 + 设置页 + 壳）
 │   ├── plugin-api/           界面侧插件契约（**注意：目前未被 git 跟踪，见 §9**）
-│   ├── plugins/              7 个微应用源码
+│   ├── plugins/              10 个微应用源码
 │   ├── runtime/plugins/      界面交付目录（不入库）
 │   └── tools/deliver.mjs     dist → runtime/plugins 的交付脚本
 └── scripts/seed-notes.mjs    压测/造数据脚本（通过 HTTP API 灌 1000 篇笔记）
@@ -165,6 +166,8 @@ host（qiankun 主应用，:5173）
 | `util/MainContainerListeners` | 插件跨容器监听器统一注册口：`add`/`onPayload`（按 payload 类型分发）/`onStateReset` 注册、`removeAll` 在插件 stop 时统一摘除 |
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
 | `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED`（2026-10-18 删除无引用的 `REQUEST` 分支与 `NoteCreateRequest` 载荷） |
+| `event/AiRuntimeEvent` | Graphify 向 AI 核心插件查询当前 Provider、模型与 API key；运行时通过事件传递，不读取配置文件 |
+| `event/NoteTagSuggestionEvent` | 可选标签建议契约：请求方发起 `noteId + limit`，语义提供者完成 `CompletableFuture<List<String>>`；双方不共享存储 |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
@@ -188,12 +191,15 @@ host（qiankun 主应用，:5173）
 | id | 角色 | 不可停用 | `plugin.requires` | 依赖插件 | 自有存储 |
 |---|---|---|---|---|---|
 | `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=0.0.1` | 无 | `<data-root>/notes/**` |
+| `ai` | 统一 AI Provider、模型、凭据与文本/视觉调用 | 是 | `>=0.0.1` | 无 | `notes/plugins/ai/{settings.json,.credentials.json}` |
 | `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=0.0.1` | 无 | `notes/plugins/favorite/.favorites.properties` |
 | `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/.scheduling.json`（排期）、`.schedule-history.json`（复习历史） |
 | `baidu-sync` | 百度网盘双向同步 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{.credentials,.sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（只通过事件协作） |
 | `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（每轮按引用关系判断） |
 | `state-reset` | 手动发出状态重置事件 | 否 | `>=0.0.1` | 无 | 无（事件触发器） |
+| `graphify` | Graphify 知识图谱与社区自动标签 | 否 | `>=0.0.1` | `ai` | `notes/plugins/graphify/`（CLI 设置、索引映射与投影语料） |
+| `tags` | 独立笔记标签、标签页与标签筛选 | 否 | `>=0.0.1` | `ai` | `notes/plugins/tags/tags.json` |
 
 出处：各模块 `src/main/resources/plugin.properties`。
 
@@ -254,13 +260,22 @@ host（qiankun 主应用，:5173）
     ├── notes/.note-metadata.json   noteId → NotePO（扁平 map）
     ├── notes/.card-metadata.json   cardId → meta（扁平 map；meta.fileName 即文件名）
     ├── notes/.attachment-metadata.json  fileName → {attachmentId,fileName,originalName,cardId,noteId,w,h,size,contentType,uploadedAt}
+    ├── ai/settings.json / .credentials.json   Provider、模型、标签文本上限与 API key
+    ├── graphify/
+    │   ├── settings.json / index-state.json
+    │   └── corpus/<noteId>/note.md + attachments/；corpus/graphify-out/{graph.json,graph.html,...}
+    ├── tags/tags.json            noteId → 标签列表（独立插件存储）
     └── <pluginId>/              其它插件自己的数据
 ```
 
-- **插件持久化文件统一隐藏命名**：插件状态文件一律以 `.` 开头 —— notes 的 `.note-metadata.json`、
+- **既有插件持久化文件多使用隐藏命名**：notes 的 `.note-metadata.json`、
   `.card-metadata.json`、`.attachment-metadata.json`，favorite 的 `.favorites.properties`，
   memory-cycle 的 `.scheduling.json` / `.schedule-history.json`，baidu-sync 的 `.credentials.json` /
-  `.sync-state.json`，notes 分组台账 `book/.books.json`。卡片 md 与附件等内容文件保持原命名。
+  `.sync-state.json`，notes 分组台账 `book/.books.json`。AI 插件使用 `ai/settings.json` 与
+  `.credentials.json`；Graphify 只保留 CLI 设置和索引状态；标签插件单独使用 `tags/tags.json`。
+  卡片 md 与附件等内容文件保持原命名。
+- **空 notes 索引必须保留为空 JSON**：`.note-metadata.json`、`.card-metadata.json`、
+  `.attachment-metadata.json` 缺失会被 `FileHelper.readMapIndex` 判定为损坏，手工清库后应写回 `{}`。
 - **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
   `notes/plugins/notes/.card-metadata.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
   （`CardPO.java:50-70`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
@@ -352,6 +367,16 @@ host（qiankun 主应用，:5173）
 
 **state-reset**：`POST /api/plugins/state-reset/reset`（手动触发一次状态重置，见 §5.9）。
 
+**ai**：`GET/POST /api/plugins/ai/settings`、`POST /api/plugins/ai/test`。设置响应包含 `maxTextChars`
+与 `keyConfigured`，但不返回 API key。
+
+**graphify**：`GET/POST /api/plugins/graphify/settings`、`GET .../status`、
+`POST .../index`、`GET .../graph`、`GET .../graph.html`、`GET .../tags`、`GET .../related`、
+`POST .../communities/relabel`。Graphify 设置只写 CLI 路径，Provider 信息来自 AI 插件。
+
+**tags**：`GET /api/plugins/tags/tags`、`POST .../tags/add`、`POST .../tags/remove`、
+`POST .../tags/delete`、`POST .../tags/auto`。标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
+
 ### 5.9 各插件业务规则（读代码得到的事实）
 
 **notes**
@@ -404,7 +429,37 @@ host（qiankun 主应用，:5173）
 
 **state-reset**
 - 只做触发器：`POST /api/plugins/state-reset/reset`（设置页按钮 + 二次确认）经主容器发布 `PluginStateResetEvent`，不在启动时自动执行。
-- 所有插件都订阅 `PluginStateResetEvent`；有状态文件的插件把文件**重写为初始内容**：favorite → 空 `.favorites.properties`；memory-cycle → `{}` 的 `.scheduling.json` 与 `.schedule-history.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `.sync-state.json`（保留 `.credentials.json`，同步进行中跳过）；notes → 把 `.note-metadata.json`、`.card-metadata.json` 与 `.attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
+- 当前已接入的插件（notes、favorite、memory-cycle、baidu-sync、attachment-importer、card-importer、state-reset、tags、graphify）都订阅 `PluginStateResetEvent`；Graphify 的重置任务进入自己的单线程队列，清空投影、图谱、缓存与索引状态后回到「等待首次索引」。
+- 有状态文件的已接入插件把文件**重写为初始内容**：favorite → 空 `.favorites.properties`；memory-cycle → `{}` 的 `.scheduling.json` 与 `.schedule-history.json`；baidu-sync → `BaiduSyncState.empty(...)` 写回 `.sync-state.json`（保留 `.credentials.json`，同步进行中跳过）；notes → 把 `.note-metadata.json`、`.card-metadata.json` 与 `.attachment-metadata.json` 重写为空 map（**卡片 md 与附件文件保留**，卡片随后会被 card-importer 当成无主卡片重新导入）；attachment-importer / card-importer / state-reset 无状态文件，只记日志。
+
+**graphify**
+- 首次索引由用户在界面手动启动；后续笔记、卡片与引用图片变更进入 2 秒防抖的单线程队列。Graphify CLI 从 thisnote 的 `PATH` 查找，也可在设置中指定路径。
+- Graphify 硬依赖不可停用的 `ai` 插件；通过 `AiRuntimeEvent` 获取 Provider、模型与 API key，本身不保存凭据。
+- 所有笔记被删除时不调用 Graphify 抽取；插件递归清除整个 `corpus/` 生成内容（包括日期目录中的历史 graph、manifest、报告和缓存），并将索引状态置为空语料，避免缩图保护把正常清空误判成失败。
+- thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
+- Graphify headless API 后端依赖 CLI 可选 extra：OpenAI 与 OpenCode Go 使用 `openai` extra，Claude 使用 `anthropic` extra；缺少对应包时无法验证 provider。
+- 通过 Notes API 分页读取笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
+- `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
+- 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
+- API key 只保存在 AI 插件的 `.credentials.json`，不由 API 返回；Graphify 通过事件取得运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
+  文件未加密；启用百度同步时，凭据文件会作为普通文件同步到云端。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
+- 模型供应商为 OpenCode Go（默认 `glm-5.3-flash`）、Claude 与 OpenAI；独立 Kimi/Gemini 供应商已移除。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；旧设置不自动迁移，现存凭据不会因移除选项而自动删除。
+- 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
+
+**ai**
+- AI 是不可停用的基础能力插件，独占 Provider、模型与 API key 配置；Graphify 与 tags 都在 `plugin.dependencies` 中声明依赖它。
+- Provider 支持 OpenCode Go、Claude 与 OpenAI；自动标签请求会读取笔记正文和图片附件并直接调用当前 Provider，失败时 tags 回退到本地文本抽取。
+- 标签抽取文本上限由 `settings.json` 的 `maxTextChars` 控制，默认 `1,000,000` 字符，允许 `1,000..1,000,000`；它是字符数，不是 token 数。
+- Graphify 通过 `AiRuntimeEvent` 取得运行时配置；AI 插件不读写 Graphify 或 tags 的业务数据。
+
+**tags**
+- 标签是独立插件的业务状态，存储在 `notes/plugins/tags/tags.json`；插件不读取 Graphify、notes 或其他插件的数据目录。
+- tags 硬依赖不可停用的 `ai` 插件；AI 自动标签通过 `NoteTagSuggestionEvent` 请求文本与视觉概念，标签落盘仍由 tags 自己完成。
+- 自动抽取通过 Notes API 读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
+- 同一 `plugin-api` 事件先请求 Graphify 提供视觉索引中的高层候选，再与本地文本候选合并；Graphify 停用、未索引或事件无响应时直接使用本地结果。标签仍只写入 tags 插件自己的 `tags.json`。
+- 打开笔记时若标签少于 10 个，标签工具自动执行一次抽取；标签不足时仍保留可见的自动抽取按钮，供用户手动重试。
+- 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页按标签文本在全部笔记标题与正文中的实际出现次数排行，显示出现次数与覆盖笔记数，并以气泡图展示 Top 60，可从全部笔记中移除某个标签。
+- 笔记删除或状态重置由主容器事件驱动；插件停用后标签工具、标签页和筛选入口一起下线，数据保留。
 
 ---
 
@@ -412,7 +467,7 @@ host（qiankun 主应用，:5173）
 
 ### 6.1 工作区
 
-`frontend/pnpm-workspace.yaml:1-10`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes}`。
+`frontend/pnpm-workspace.yaml`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes,graphify,tags,ai}`。
 
 | 包 | 作用 |
 |---|---|
@@ -458,7 +513,7 @@ host（qiankun 主应用，:5173）
 | 插槽 | 注册函数 | 消费方 |
 |---|---|---|
 | 卡片工具 | `registerCardPlugin` | `NoteCard`（`activeCardPlugins()`） |
-| 笔记工具 | `registerNoteTool` | `NoteView`（`activeNoteTools()`，如 ★） |
+| 笔记工具 | `registerNoteTool` | `NoteView`（`activeNoteTools()`，如 ★；`placement: 'below-title'` 的组件渲染到标题下方） |
 | 设置面板 | `registerPluginSettings` | 设置页「插件管理」展开区 |
 | 侧栏入口 | `registerNavEntry` | notes 侧栏（`activeNavEntries()`，带徽标） |
 | 插件路由 | `registerPluginRoute` | `loader.syncPluginRoutes` |
@@ -471,6 +526,8 @@ host（qiankun 主应用，:5173）
 
 - 行内动作 / 批量动作都使用 `NoteRef`（`{noteId,title,cardIds}`）：状态的读写、`loadState`、`isActive`、`toggle` 全在插件里，
   核心只渲染注册表并把所选笔记递进去（favorite、memory-cycle 各在自己的 `src/actions.ts`）。
+- 笔记工具默认渲染在标题右侧；插件可声明 `placement: 'below-title'`，宿主会把它放进标题下方的独立区域，组件仍只接收 `noteId`；
+  同一位置的多个工具可用可选 `order` 稳定排序。
 
 - **插件状态变化事件**（`pluginState.ts`）：插件改完自己的数据（收藏、记忆曲线…）调
   `emitPluginStateChange({pluginId, noteIds?, cardIds?})`；核心侧栏订阅后强制刷新徽标，
@@ -519,6 +576,9 @@ host（qiankun 主应用，:5173）
 | card-importer | 只有设置面板 | `frontend/plugins/card-importer/index.ts:6-8` |
 | attachment-importer | 只有设置面板（静态说明，不读后端） | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
+| graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 | `frontend/plugins/graphify/index.ts` |
+| tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 标题下方标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
+| ai | 只有设置面板：Provider、模型、API key、连接测试 | `frontend/plugins/ai/index.ts` |
 | notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
 复习页（`ReviewView.vue`）：三个页签 —— **今日复习**（到期队列逐张评分）、**今日到期**（最新一条排期在今天或更早（含过期），
@@ -532,7 +592,7 @@ host（qiankun 主应用，:5173）
 - 插件产物：`vite build`（lib 模式，ES 格式，入口 `plugin.js`，样式 `plugin.css`，外部化共享依赖），
   然后 `node ../../tools/deliver.mjs <id>` 把 `dist/` 同步到 `frontend/runtime/plugins/<id>/`（先清后拷）。
 - 主应用产物：`frontend/host/dist/`，由界面侧自行部署（`frontend/host/vite.config.ts:74-88`）。
-- 开发：`pnpm dev` 全起；`pnpm dev:host` 只起宿主；`pnpm dev:plugins` 起 4 个功能插件（不含 notes）。
+- 开发：`pnpm dev` 全起；`pnpm dev:host` 只起宿主；`pnpm dev:plugins` 起功能插件（不含 notes）。
 
 ---
 
@@ -572,7 +632,7 @@ pnpm -r build                                   # 各包构建（插件 build �
 
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
-| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 5 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
+| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 8 个插件 jar 的契约：`plugin.properties` 在 jar 根、`plugin.class` 存在、`META-INF/extensions.idx` 非空、版本必须来自 Maven 过滤、界面资源不得进 jar；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
 | `frontend/host/tests/markdown.test.ts` | HTML 转义、标题/列表/表格/任务项、`plainText`/`firstHeading`/`wordCount` | `pnpm --filter thisnote-frontend test` |
 | `frontend/host/tests/plugin_boundary.test.ts` | 插件界面不得出现 `from '@/…'`（只检查 memory-cycle、favorite 两个目录） | 同上 |
 | `frontend/host/tools/*.mjs` | 约 20 个 Playwright/HTTP 手动探针（卡片模式、拖拽、标题改名、插件管理、qiankun 冒烟等） | 手工 `node tools/xxx.mjs`，**未接进 `test` 脚本** |
@@ -629,6 +689,7 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
     （`NoteRepository.java:35-44`），重名检查只做在改名路径上（`NoteService.java:67`）。自动导入
     （card-importer、attachment-importer）用文件名作标题，若与已有笔记同名会覆盖那份 meta ——
     旧笔记的 `cardIds` 清单随之丢失。改动导入逻辑前先想清楚标题去重。
+16. **Graphify 图谱 HTML 依赖外部 CDN**：`graph.html` 从 `unpkg.com` 加载 `vis-network`；离线或 CDN 不可访问时交互可视化不能使用，但 `graph.json` 仍可读取。
 
 ---
 
@@ -686,6 +747,10 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 6. **优先复用**：`FileHelper`（文件 + 事件）、既有 `http` 客户端、`host()` 服务、已有事件类型。
 7. **需要真实外部连通性时**：不要放进 `PluginHealth`（它每次刷管理页都会被调用），另做一个显式「测试连接」动作
    （`PluginHealth.java:5-9`）。
+8. **Controller 只依赖应用 Service**：不得直接注入 Repository、OAuth/Provider Client 或读取数据根路径；
+   Repository 只负责持久化，业务规则放在 Service。AI、Graphify、Tags、百度同步和分组管理已按此方向收口。
+9. **外部访问单独放 `client` 包**：HTTP、OAuth、AI Provider、Notes API Client、CLI 进程与本地代理适配器
+   与 `service` 并列；Service 只编排能力，不直接实现外部协议。
 
 ---
 
