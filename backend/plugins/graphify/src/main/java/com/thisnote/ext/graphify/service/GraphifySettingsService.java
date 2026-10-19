@@ -14,9 +14,7 @@ public class GraphifySettingsService {
     public static final String OPENCODE_GO_PROVIDER = "opencode-go";
 
     private static final Map<String, Provider> PROVIDERS = Map.of(
-            OPENCODE_GO_PROVIDER, new Provider("glm-5.3-flash", List.of("OPENAI_API_KEY")),
-            "claude", new Provider("claude-sonnet-4-6", List.of("ANTHROPIC_API_KEY")),
-            "openai", new Provider("gpt-4.1-mini", List.of("OPENAI_API_KEY"))
+            OPENCODE_GO_PROVIDER, new Provider("glm-5.3-flash", List.of("OPENAI_API_KEY"))
     );
     private static final List<String> ENVIRONMENT_KEY_NAMES_TO_CLEAR = List.of(
             "GEMINI_API_KEY", "GOOGLE_API_KEY", "MOONSHOT_API_KEY",

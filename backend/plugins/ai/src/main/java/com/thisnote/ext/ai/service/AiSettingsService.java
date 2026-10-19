@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class AiSettingsService {
@@ -16,10 +17,9 @@ public class AiSettingsService {
     public static final int MIN_MAX_TEXT_CHARS = 1_000;
     public static final int MAX_MAX_TEXT_CHARS = 1_000_000;
 
+    private static final Set<String> REMOVED_PROVIDERS = Set.of("claude", "openai");
     private static final Map<String, Provider> PROVIDERS = Map.of(
-            OPENCODE_GO_PROVIDER, new Provider("glm-5.3-flash"),
-            "claude", new Provider("claude-sonnet-4-6"),
-            "openai", new Provider("gpt-4.1-mini")
+            OPENCODE_GO_PROVIDER, new Provider("glm-5.3-flash")
     );
 
     private final AiSettingsRepository settingsRepository;
@@ -38,6 +38,12 @@ public class AiSettingsService {
         }
         if (stored.provider() == null || stored.provider().isBlank()) {
             throw new IllegalStateException("AI 设置缺少模型供应商");
+        }
+        String storedProvider = stored.provider().trim().toLowerCase();
+        if (REMOVED_PROVIDERS.contains(storedProvider)) {
+            return new Settings(OPENCODE_GO_PROVIDER,
+                    PROVIDERS.get(OPENCODE_GO_PROVIDER).defaultModel(),
+                    normalizeMaxTextChars(stored.maxTextChars()));
         }
         Provider provider = supportedProvider(stored.provider());
         String model = stored.model() == null || stored.model().isBlank()
@@ -124,7 +130,7 @@ public class AiSettingsService {
     private static Provider supportedProvider(String value) {
         Provider provider = value == null ? null : PROVIDERS.get(value.trim().toLowerCase());
         if (provider == null) {
-            throw new IllegalArgumentException("当前仅支持 OpenCode Go、Claude 与 OpenAI");
+            throw new IllegalArgumentException("当前仅支持 OpenCode Go");
         }
         return new Provider(value.trim().toLowerCase(), provider.defaultModel());
     }

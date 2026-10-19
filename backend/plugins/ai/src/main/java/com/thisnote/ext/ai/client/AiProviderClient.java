@@ -24,8 +24,6 @@ import java.util.regex.Pattern;
 public class AiProviderClient {
 
     private static final String OPENCODE_GO_URL = "https://opencode.ai/inference/go/openai/v1/chat/completions";
-    private static final String OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String CLAUDE_URL = "https://api.anthropic.com/v1/messages";
     private static final String TAG_PROMPT = """
             Extract 10 to 20 high-level, reusable business tags from the note text and images.
             Return JSON only in the form {"tags":["tag"]}.
@@ -64,9 +62,7 @@ public class AiProviderClient {
                             String userText,
                             List<ImageInput> images,
                             int maxTokens) {
-        HttpRequest request = "claude".equals(runtime.provider())
-                ? claudeRequest(runtime, system, userText, images, maxTokens)
-                : openAiRequest(runtime, system, userText, images, maxTokens);
+        HttpRequest request = chatRequest(runtime, system, userText, images, maxTokens);
         HttpResponse<String> response;
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -82,40 +78,33 @@ public class AiProviderClient {
                     + (body.isBlank() ? "" : "：" + body.substring(0, Math.min(400, body.length()))));
         }
         JSONObject body = JSON.parseObject(response.body().getBytes(StandardCharsets.UTF_8));
-        if ("claude".equals(runtime.provider())) {
-            return claudeText(body);
-        }
-        return openAiText(body);
+        return chatText(body);
     }
 
-    private HttpRequest openAiRequest(AiRuntimeEvent.Runtime runtime,
-                                      String system,
-                                      String userText,
-                                      List<ImageInput> images,
-                                      int maxTokens) {
+    private HttpRequest chatRequest(AiRuntimeEvent.Runtime runtime,
+                                    String system,
+                                    String userText,
+                                    List<ImageInput> images,
+                                    int maxTokens) {
         JSONObject body = new JSONObject();
         body.put("model", runtime.model());
         body.put("max_tokens", maxTokens);
         JSONArray messages = new JSONArray();
         messages.add(object("role", "system", "content", system));
-        messages.add(object("role", "user", "content", openAiContent(userText, images)));
+        messages.add(object("role", "user", "content", chatContent(userText, images)));
         body.put("messages", messages);
 
-        String provider = runtime.provider();
-        String url = "openai".equals(provider) ? OPENAI_URL : OPENCODE_GO_URL;
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url))
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(OPENCODE_GO_URL))
                 .timeout(Duration.ofSeconds(120))
                 .header("Authorization", "Bearer " + runtime.apiKey())
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "thisnote-ai/1.0")
+                .header("x-opencode-session", "ses_" + UUID.randomUUID())
                 .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString(), StandardCharsets.UTF_8));
-        if (!"openai".equals(provider)) {
-            request.header("x-opencode-session", "ses_" + UUID.randomUUID());
-        }
         return request.build();
     }
 
-    private Object openAiContent(String text, List<ImageInput> images) {
+    private Object chatContent(String text, List<ImageInput> images) {
         if (images.isEmpty()) {
             return text;
         }
@@ -128,37 +117,7 @@ public class AiProviderClient {
         return content;
     }
 
-    private HttpRequest claudeRequest(AiRuntimeEvent.Runtime runtime,
-                                      String system,
-                                      String userText,
-                                      List<ImageInput> images,
-                                      int maxTokens) {
-        JSONObject body = new JSONObject();
-        body.put("model", runtime.model());
-        body.put("max_tokens", maxTokens);
-        body.put("system", system);
-
-        JSONArray content = new JSONArray();
-        content.add(object("type", "text", "text", userText));
-        for (ImageInput image : images) {
-            content.add(object("type", "image", "source", object(
-                    "type", "base64",
-                    "media_type", image.mediaType(),
-                    "data", image.base64())));
-        }
-        JSONArray messages = new JSONArray();
-        messages.add(object("role", "user", "content", content));
-        body.put("messages", messages);
-        return HttpRequest.newBuilder(URI.create(CLAUDE_URL))
-                .timeout(Duration.ofSeconds(120))
-                .header("x-api-key", runtime.apiKey())
-                .header("anthropic-version", "2023-06-01")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString(), StandardCharsets.UTF_8))
-                .build();
-    }
-
-    private String openAiText(JSONObject body) {
+    private String chatText(JSONObject body) {
         JSONArray choices = body == null ? null : body.getJSONArray("choices");
         if (choices == null || choices.size() == 0) {
             return "";
@@ -178,23 +137,6 @@ public class AiProviderClient {
             return result.toString();
         }
         return "";
-    }
-
-    private String claudeText(JSONObject body) {
-        JSONArray content = body == null ? null : body.getJSONArray("content");
-        if (content == null) {
-            return "";
-        }
-        StringBuilder result = new StringBuilder();
-        for (Object part : content) {
-            if (part instanceof JSONObject item && "text".equals(item.getString("type"))) {
-                String text = item.getString("text");
-                if (text != null) {
-                    result.append(text);
-                }
-            }
-        }
-        return result.toString();
     }
 
     private List<String> parseTags(String response) {

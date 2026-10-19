@@ -448,19 +448,19 @@ host（qiankun 主应用，:5173）
   通过 `AttachmentChangedEvent` 失效附件相关笔记，本身不保存凭据。
 - 所有笔记被删除时不调用 Graphify 抽取；插件递归清除整个 `corpus/` 生成内容（包括日期目录中的历史 graph、manifest、报告和缓存），并将索引状态置为空语料，避免缩图保护把正常清空误判成失败。
 - thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
-- Graphify headless API 后端依赖 CLI 可选 extra：OpenAI 与 OpenCode Go 使用 `openai` extra，Claude 使用 `anthropic` extra；缺少对应包时无法验证 provider。
+- Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 使用 `openai` extra；缺少对应包时无法验证 provider。
 - 通过 Notes API 分页读取笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
 - 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
 - API key 只保存在 AI 插件的 `.credentials.json`，不由 API 返回；Graphify 通过事件取得运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
   文件未加密；百度备份清单会排除该凭据文件。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
-- 模型供应商为 OpenCode Go（默认 `glm-5.3-flash`）、Claude 与 OpenAI；独立 Kimi/Gemini 供应商已移除。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；旧设置不自动迁移，现存凭据不会因移除选项而自动删除。
+- 模型供应商为 OpenCode Go（默认 `glm-5.3-flash`）；Claude、OpenAI 与独立 Kimi/Gemini 供应商已移除。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；旧设置不自动迁移，现存凭据不会因移除选项而自动删除。
 - 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
 
 **ai**
 - AI 是不可停用的基础能力插件，硬依赖 `notes`，独占 Provider、模型与 API key 配置；
   Graphify 与 tags 都在 `plugin.dependencies` 中声明依赖 `ai,notes`。
-- Provider 支持 OpenCode Go、Claude 与 OpenAI；自动标签请求会读取笔记正文和图片附件并直接调用当前 Provider，失败时 tags 回退到本地文本抽取。
+- Provider 支持 OpenCode Go；自动标签请求会读取笔记正文和图片附件并直接调用当前 Provider，失败时 tags 回退到本地文本抽取。
 - 标签抽取文本上限由 `settings.json` 的 `maxTextChars` 控制，默认 `1,000,000` 字符，允许 `1,000..1,000,000`；它是字符数，不是 token 数。
 - Graphify 通过 `AiRuntimeEvent` 取得运行时配置；AI 插件不读写 Graphify 或 tags 的业务数据。
 

@@ -4,8 +4,6 @@ import { aiApi, type AiSettings } from '../api/aiApi'
 
 const providers = [
   { value: 'opencode-go', label: 'OpenCode Go', model: 'glm-5.3-flash' },
-  { value: 'claude', label: 'Claude API', model: 'claude-sonnet-4-6' },
-  { value: 'openai', label: 'OpenAI', model: 'gpt-4.1-mini' },
 ]
 
 const settings = ref<AiSettings>({
