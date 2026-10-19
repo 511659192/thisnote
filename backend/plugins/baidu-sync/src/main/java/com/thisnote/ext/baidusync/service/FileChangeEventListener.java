@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +19,6 @@ public class FileChangeEventListener
     private final BaiduSyncService syncService;
 
     @Async
-    @EventListener
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<FileChangeEvent> event) {
         FileChangeEvent change = event.getPayload();

@@ -1,32 +1,24 @@
 package com.thisnote.ext.notes;
 
 import com.thisnote.ext.notes.config.NotesConfig;
-import com.thisnote.ext.notes.model.request.CreateCardRequest;
 import com.thisnote.ext.notes.service.AttachmentService;
 import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
 import com.thisnote.ext.notes.service.BookService;
-import com.thisnote.plugin.api.event.AttachmentAdoptEvent;
-import com.thisnote.plugin.api.event.AttachmentChangedEvent;
-import com.thisnote.plugin.api.event.AttachmentQueryEvent;
-import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.CardQueryEvent;
-import com.thisnote.plugin.api.event.FileChangeEvent;
-import com.thisnote.plugin.api.event.PluginResetResult;
-import com.thisnote.plugin.api.event.PluginStateResetEvent;
+import com.thisnote.ext.notes.service.listener.AttachmentAdoptEventListener;
+import com.thisnote.ext.notes.service.listener.AttachmentQueryEventListener;
+import com.thisnote.ext.notes.service.listener.CardAttachmentCleanupListener;
+import com.thisnote.ext.notes.service.listener.CardCreateRequestListener;
+import com.thisnote.ext.notes.service.listener.CardQueryEventListener;
+import com.thisnote.ext.notes.service.listener.FileChangeEventListener;
+import com.thisnote.ext.notes.service.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.PayloadApplicationEvent;
-import org.springframework.context.event.GenericApplicationListener;
-import org.springframework.core.ResolvableType;
 
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * 笔记核心插件：主体原来的业务领域（笔记 / 卡片 / 搜索 / 标签 / 快照 / IO / 笔记目录同步）。
@@ -41,15 +33,17 @@ import java.util.List;
  * <p><b>本插件不允许停用/在线重载</b>（覆写 {@code undeactivatable()}）：管理面直接拒绝
  * （{@code 409}），否则整个应用的笔记能力会随一次误点整体下线。
  */
-@Slf4j
-public class NotesPlugin extends SpringBootPlugin implements GenericApplicationListener {
+public class NotesPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "notes";
 
-    private AttachmentService attachmentService;
-    private NoteService noteService;
-    private CardService cardService;
-    private Path attachmentsDirectory;
+    private FileChangeEventListener fileChangeListener;
+    private CardAttachmentCleanupListener cardAttachmentCleanupListener;
+    private CardCreateRequestListener cardCreateRequestListener;
+    private CardQueryEventListener cardQueryEventListener;
+    private AttachmentQueryEventListener attachmentQueryEventListener;
+    private AttachmentAdoptEventListener attachmentAdoptEventListener;
+    private PluginStateResetListener stateResetListener;
 
     public NotesPlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -72,113 +66,60 @@ public class NotesPlugin extends SpringBootPlugin implements GenericApplicationL
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
         ctx.getBean(BookService.class).initializeDefaultGroup();
-        cardService = ctx.getBean(CardService.class);
-        noteService = ctx.getBean(NoteService.class);
-        attachmentService = ctx.getBean(AttachmentService.class);
+        CardService cardService = ctx.getBean(CardService.class);
+        NoteService noteService = ctx.getBean(NoteService.class);
+        AttachmentService attachmentService = ctx.getBean(AttachmentService.class);
         cardService.setMainEventPublisher(getMainApplicationContext());
         noteService.setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(BookService.class).setMainEventPublisher(getMainApplicationContext());
 
-        attachmentsDirectory = ctx.getBean(NotesConfig.class).getRootDir().resolve("attachments");
-        getMainApplicationContext().addApplicationListener(this);
-    }
-
-    @Override
-    public boolean supportsEventType(ResolvableType eventType) {
-        return eventType.toClass() == PayloadApplicationEvent.class;
-    }
-
-    @Override
-    public void onApplicationEvent(ApplicationEvent event) {
-        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)) {
-            return;
-        }
-        Object payload = payloadEvent.getPayload();
-        if (payload instanceof FileChangeEvent change) {
-            republishAttachmentChange(change, attachmentsDirectory);
-        } else if (payload instanceof CardChangedEvent change) {
-            if (change.kind() == CardChangedEvent.Kind.DELETED) {
-                attachmentService.deleteIfUnreferenced(change.removedAttachmentFileNames());
-            } else if (change.kind() == CardChangedEvent.Kind.REQUEST) {
-                var request = change.createRequest();
-                var note = noteService.create(request.noteTitle(), request.bookId(), List.of());
-                // 申请方可以在 meta 里给出初始宽高（附件导入按图片尺寸算）；缺失时用默认 720×260。
-                var meta = request.card().meta();
-                Double width = meta == null || meta.w() <= 0 ? null : meta.w();
-                Double height = meta == null || meta.h() <= 0 ? null : meta.h();
-                cardService.create(note.noteId(), new CreateCardRequest(null, 0d, 0d, width, height, request.card().content(), null), request.card().sourceFileName());
-            }
-        } else if (payload instanceof CardQueryEvent query) {
-            try {
-                query.result().complete(cardService.listUnowned());
-            } catch (Exception e) {
-                query.result().completeExceptionally(e);
-            }
-        } else if (payload instanceof AttachmentQueryEvent query) {
-            try {
-                query.result().complete(attachmentService.unmanagedAttachments());
-            } catch (Exception e) {
-                // 读取卡片/目录时可能撞上正在写入/被删除的文件，按查询失败处理，不打断事件总线
-                query.result().completeExceptionally(e);
-            }
-        } else if (payload instanceof AttachmentAdoptEvent adopt) {
-            try {
-                adopt.result().complete(attachmentService.adopt(adopt.fileName()));
-            } catch (Exception e) {
-                adopt.result().completeExceptionally(e);
-            }
-        } else if (payload instanceof PluginStateResetEvent resetEvent) {
-            try {
-                noteService.resetIndexes();
-                if (resetEvent.expects(PLUGIN_ID)) {
-                    resetEvent.complete(PLUGIN_ID, PluginResetResult.reset(PLUGIN_ID, "笔记/卡片/附件索引已重置（文件保留）"));
-                }
-            } catch (RuntimeException e) {
-                if (resetEvent.expects(PLUGIN_ID)) {
-                    resetEvent.complete(PLUGIN_ID, PluginResetResult.failed(PLUGIN_ID, e));
-                }
-                log.warn("插件 {} 状态重置失败", PLUGIN_ID, e);
-            }
-        }
-    }
-
-    private void republishAttachmentChange(FileChangeEvent change,
-                                           Path attachmentsDirectory) {
-        Path current = normalizedWithin(change.url(), attachmentsDirectory);
-        Path previous = change.previousUrl() == null
-                ? null
-                : normalizedWithin(change.previousUrl(), attachmentsDirectory);
-        AttachmentChangedEvent attachmentEvent;
-        if (change.operation() == FileChangeEvent.Operation.RENAME && current != null && previous != null) {
-            attachmentEvent = AttachmentChangedEvent.renamed(
-                    previous.getFileName().toString(),
-                    current.getFileName().toString());
-        } else if (current != null) {
-            attachmentEvent = switch (change.operation()) {
-                case CREATED -> AttachmentChangedEvent.created(current.getFileName().toString());
-                case UPDATED -> AttachmentChangedEvent.updated(current.getFileName().toString());
-                case DELETED, RENAME -> AttachmentChangedEvent.deleted(current.getFileName().toString());
-            };
-        } else if (previous != null) {
-            attachmentEvent = AttachmentChangedEvent.deleted(previous.getFileName().toString());
-        } else {
-            return;
-        }
-        getMainApplicationContext().publishEvent(attachmentEvent);
-    }
-
-    private static Path normalizedWithin(Path path,
-                                         Path directory) {
-        Path normalized = path.toAbsolutePath().normalize();
-        Path normalizedDirectory = directory.toAbsolutePath().normalize();
-        return normalized.startsWith(normalizedDirectory) && !normalized.equals(normalizedDirectory)
-                ? normalized
-                : null;
+        Path attachmentsDirectory = ctx.getBean(NotesConfig.class).getRootDir().resolve("attachments");
+        fileChangeListener = new FileChangeEventListener(attachmentsDirectory, getMainApplicationContext());
+        cardAttachmentCleanupListener = new CardAttachmentCleanupListener(attachmentService);
+        cardCreateRequestListener = new CardCreateRequestListener(cardService, noteService);
+        cardQueryEventListener = new CardQueryEventListener(cardService);
+        attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
+        attachmentAdoptEventListener = new AttachmentAdoptEventListener(attachmentService);
+        stateResetListener = new PluginStateResetListener(noteService);
+        getMainApplicationContext().addApplicationListener(fileChangeListener);
+        getMainApplicationContext().addApplicationListener(cardAttachmentCleanupListener);
+        getMainApplicationContext().addApplicationListener(cardCreateRequestListener);
+        getMainApplicationContext().addApplicationListener(cardQueryEventListener);
+        getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
+        getMainApplicationContext().addApplicationListener(attachmentAdoptEventListener);
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
     public void stop() {
-        getMainApplicationContext().removeApplicationListener(this);
+        if (fileChangeListener != null) {
+            getMainApplicationContext().removeApplicationListener(fileChangeListener);
+            fileChangeListener = null;
+        }
+        if (cardAttachmentCleanupListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardAttachmentCleanupListener);
+            cardAttachmentCleanupListener = null;
+        }
+        if (cardCreateRequestListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardCreateRequestListener);
+            cardCreateRequestListener = null;
+        }
+        if (cardQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardQueryEventListener);
+            cardQueryEventListener = null;
+        }
+        if (attachmentQueryEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(attachmentQueryEventListener);
+            attachmentQueryEventListener = null;
+        }
+        if (attachmentAdoptEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(attachmentAdoptEventListener);
+            attachmentAdoptEventListener = null;
+        }
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
+        }
         super.stop();
     }
 

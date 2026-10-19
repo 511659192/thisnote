@@ -2,28 +2,22 @@ package com.thisnote.ext.baidusync;
 
 import com.thisnote.ext.baidusync.service.FileChangeEventListener;
 import com.thisnote.ext.baidusync.service.BaiduSyncService;
-import com.thisnote.plugin.api.event.PluginResetResult;
-import com.thisnote.plugin.api.event.PluginStateResetEvent;
+import com.thisnote.ext.baidusync.service.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginManager;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.support.GenericApplicationContext;
-import org.springframework.context.event.GenericApplicationListener;
-import org.springframework.core.ResolvableType;
 import org.pf4j.PluginWrapper;
 
-@Slf4j
-public class BaiduSyncPlugin extends SpringBootPlugin implements GenericApplicationListener {
+public class BaiduSyncPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "baidu-sync";
 
     private BaiduSyncService baiduSyncService;
     private FileChangeEventListener fileChangeListener;
+    private PluginStateResetListener stateResetListener;
 
     public BaiduSyncPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -47,40 +41,20 @@ public class BaiduSyncPlugin extends SpringBootPlugin implements GenericApplicat
                 getMainApplicationContext().getBean(PluginManager.class));
         // 必须用插件容器里的 @Async 代理实例：网盘同步耗时，不能在事件发布方线程内执行。
         fileChangeListener = ctx.getBean(FileChangeEventListener.class);
+        stateResetListener = new PluginStateResetListener(baiduSyncService);
         getMainApplicationContext().addApplicationListener(fileChangeListener);
-        getMainApplicationContext().addApplicationListener(this);
-    }
-
-    @Override
-    public boolean supportsEventType(ResolvableType eventType) {
-        return eventType.toClass() == PayloadApplicationEvent.class;
-    }
-
-    @Override
-    public void onApplicationEvent(ApplicationEvent event) {
-        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)
-                || !(payloadEvent.getPayload() instanceof PluginStateResetEvent resetEvent)) {
-            return;
-        }
-        try {
-            baiduSyncService.clearSyncState();
-            if (resetEvent.expects(PLUGIN_ID)) {
-                resetEvent.complete(PLUGIN_ID, PluginResetResult.reset(PLUGIN_ID, "同步基线已清理"));
-            }
-        } catch (RuntimeException e) {
-            if (resetEvent.expects(PLUGIN_ID)) {
-                resetEvent.complete(PLUGIN_ID, PluginResetResult.failed(PLUGIN_ID, e));
-            }
-            log.warn("插件 {} 状态重置失败", PLUGIN_ID, e);
-        }
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
     public void stop() {
-        getMainApplicationContext().removeApplicationListener(this);
         if (fileChangeListener != null) {
             getMainApplicationContext().removeApplicationListener(fileChangeListener);
             fileChangeListener = null;
+        }
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
         }
         super.stop();
     }

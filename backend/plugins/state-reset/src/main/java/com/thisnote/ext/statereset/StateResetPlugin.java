@@ -1,25 +1,22 @@
 package com.thisnote.ext.statereset;
 
 import com.thisnote.ext.statereset.service.StateResetService;
-import com.thisnote.plugin.api.event.PluginResetResult;
-import com.thisnote.plugin.api.event.PluginStateResetEvent;
+import com.thisnote.ext.statereset.service.PluginStateResetListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginManager;
 import org.pf4j.PluginWrapper;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.support.GenericApplicationContext;
-import org.springframework.context.event.GenericApplicationListener;
-import org.springframework.core.ResolvableType;
 
 /**
  * 状态重置插件：活动插件走 {@code PluginStateResetEvent} 自身清理，停用插件按其静态清单清理。
  */
-public class StateResetPlugin extends SpringBootPlugin implements GenericApplicationListener {
+public class StateResetPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "state-reset";
+
+    private PluginStateResetListener stateResetListener;
 
     public StateResetPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -35,26 +32,16 @@ public class StateResetPlugin extends SpringBootPlugin implements GenericApplica
         StateResetService stateResetService = ctx.getBean(StateResetService.class);
         stateResetService.setMainEventPublisher(getMainApplicationContext());
         stateResetService.setPluginManager(getMainApplicationContext().getBean(PluginManager.class));
-        getMainApplicationContext().addApplicationListener(this);
-    }
-
-    @Override
-    public boolean supportsEventType(ResolvableType eventType) {
-        return eventType.toClass() == PayloadApplicationEvent.class;
-    }
-
-    @Override
-    public void onApplicationEvent(ApplicationEvent event) {
-        if (event instanceof PayloadApplicationEvent<?> payloadEvent
-                && payloadEvent.getPayload() instanceof PluginStateResetEvent resetEvent
-                && resetEvent.expects(PLUGIN_ID)) {
-            resetEvent.complete(PLUGIN_ID, PluginResetResult.skipped(PLUGIN_ID, "state-reset 无自有状态"));
-        }
+        stateResetListener = new PluginStateResetListener();
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
     public void stop() {
-        getMainApplicationContext().removeApplicationListener(this);
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
+        }
         super.stop();
     }
 }

@@ -1,31 +1,25 @@
 package com.thisnote.ext.tags;
 
 import com.thisnote.ext.tags.service.AutoTagService;
+import com.thisnote.ext.tags.service.NoteChangedEventListener;
+import com.thisnote.ext.tags.service.NoteTextChangedEventListener;
+import com.thisnote.ext.tags.service.PluginStateResetListener;
 import com.thisnote.ext.tags.service.TagUsageRefreshService;
 import com.thisnote.ext.tags.service.TagsService;
-import com.thisnote.plugin.api.event.NoteChangedEvent;
-import com.thisnote.plugin.api.event.NoteTextChangedEvent;
-import com.thisnote.plugin.api.event.PluginResetResult;
-import com.thisnote.plugin.api.event.PluginStateResetEvent;
 import com.thisnote.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.support.GenericApplicationContext;
-import org.springframework.context.event.GenericApplicationListener;
-import org.springframework.core.ResolvableType;
 
-@Slf4j
-public class TagsPlugin extends SpringBootPlugin implements GenericApplicationListener {
+public class TagsPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "tags";
 
-    private TagsService tagsService;
-    private TagUsageRefreshService tagUsageRefreshService;
+    private NoteChangedEventListener noteChangedEventListener;
+    private NoteTextChangedEventListener noteTextChangedEventListener;
+    private PluginStateResetListener stateResetListener;
 
     public TagsPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -44,48 +38,32 @@ public class TagsPlugin extends SpringBootPlugin implements GenericApplicationLi
 
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
-        tagsService = ctx.getBean(TagsService.class);
-        tagUsageRefreshService = ctx.getBean(TagUsageRefreshService.class);
+        TagsService tagsService = ctx.getBean(TagsService.class);
+        TagUsageRefreshService tagUsageRefreshService = ctx.getBean(TagUsageRefreshService.class);
         tagsService.invalidateUsage();
         ctx.getBean(AutoTagService.class).setMainEventPublisher(getMainApplicationContext());
-        getMainApplicationContext().addApplicationListener(this);
-    }
-
-    @Override
-    public boolean supportsEventType(ResolvableType eventType) {
-        return eventType.toClass() == PayloadApplicationEvent.class;
-    }
-
-    @Override
-    public void onApplicationEvent(ApplicationEvent event) {
-        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)) {
-            return;
-        }
-        Object payload = payloadEvent.getPayload();
-        if (payload instanceof NoteChangedEvent change) {
-            if (change.kind() == NoteChangedEvent.Kind.DELETED && tagsService.removeNote(change.noteId())) {
-                log.info("笔记已删除，标签一并清除：{}", change.noteId());
-            }
-        } else if (payload instanceof NoteTextChangedEvent change) {
-            tagUsageRefreshService.request(change.noteId());
-        } else if (payload instanceof PluginStateResetEvent resetEvent) {
-            try {
-                tagsService.clear();
-                if (resetEvent.expects(PLUGIN_ID)) {
-                    resetEvent.complete(PLUGIN_ID, PluginResetResult.reset(PLUGIN_ID, "标签已清空"));
-                }
-            } catch (RuntimeException e) {
-                if (resetEvent.expects(PLUGIN_ID)) {
-                    resetEvent.complete(PLUGIN_ID, PluginResetResult.failed(PLUGIN_ID, e));
-                }
-                log.warn("插件 {} 状态重置失败", PLUGIN_ID, e);
-            }
-        }
+        noteChangedEventListener = new NoteChangedEventListener(tagsService);
+        noteTextChangedEventListener = new NoteTextChangedEventListener(tagUsageRefreshService);
+        stateResetListener = new PluginStateResetListener(tagsService);
+        getMainApplicationContext().addApplicationListener(noteChangedEventListener);
+        getMainApplicationContext().addApplicationListener(noteTextChangedEventListener);
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
     public void stop() {
-        getMainApplicationContext().removeApplicationListener(this);
+        if (noteChangedEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteChangedEventListener);
+            noteChangedEventListener = null;
+        }
+        if (noteTextChangedEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteTextChangedEventListener);
+            noteTextChangedEventListener = null;
+        }
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
+        }
         super.stop();
     }
 }

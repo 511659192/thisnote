@@ -1,22 +1,16 @@
 package com.thisnote.ext.memorycycle;
 
+import com.thisnote.ext.memorycycle.service.CardChangedEventListener;
 import com.thisnote.ext.memorycycle.service.MemoryCycleService;
-import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.MemoryCycleStateChangedEvent;
-import com.thisnote.plugin.api.event.NoteChangedEvent;
-import com.thisnote.plugin.api.event.PluginResetResult;
-import com.thisnote.plugin.api.event.PluginStateResetEvent;
+import com.thisnote.ext.memorycycle.service.MemoryCycleStateChangedEventListener;
+import com.thisnote.ext.memorycycle.service.NoteChangedEventListener;
+import com.thisnote.ext.memorycycle.service.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.PayloadApplicationEvent;
-import org.springframework.context.event.GenericApplicationListener;
-import org.springframework.core.ResolvableType;
 
 /**
  * 记忆周期插件：thisnote 的**卡片插件**参考实现（参考 Anki 的 SM-2 间隔重复）。
@@ -28,13 +22,15 @@ import org.springframework.core.ResolvableType;
  *
  * <p>id 与版本来自 {@code plugin.properties}（由 {@code descriptor()} 从 PF4J 描述符取），不在这里硬编码。
  */
-@Slf4j
-public class MemoryCyclePlugin extends SpringBootPlugin implements GenericApplicationListener {
+public class MemoryCyclePlugin extends SpringBootPlugin {
 
     /** 端点前缀；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "memory-cycle";
 
-    private MemoryCycleService memoryCycleService;
+    private CardChangedEventListener cardChangedEventListener;
+    private NoteChangedEventListener noteChangedEventListener;
+    private MemoryCycleStateChangedEventListener stateChangedEventListener;
+    private PluginStateResetListener stateResetListener;
 
     public MemoryCyclePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -68,54 +64,16 @@ public class MemoryCyclePlugin extends SpringBootPlugin implements GenericApplic
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        memoryCycleService = ctx.getBean(MemoryCycleService.class);
+        MemoryCycleService memoryCycleService = ctx.getBean(MemoryCycleService.class);
         memoryCycleService.setMainEventPublisher(getMainApplicationContext());
-        getMainApplicationContext().addApplicationListener(this);
-    }
-
-    @Override
-    public boolean supportsEventType(ResolvableType eventType) {
-        return eventType.toClass() == PayloadApplicationEvent.class;
-    }
-
-    @Override
-    public void onApplicationEvent(ApplicationEvent event) {
-        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)) {
-            return;
-        }
-        Object payload = payloadEvent.getPayload();
-        if (payload instanceof CardChangedEvent change) {
-            if (change.kind() == CardChangedEvent.Kind.DELETED && memoryCycleService.delete(change.cardId())) {
-                log.info("卡片已删除，复习状态一并清除：{}", change.cardId());
-            }
-        } else if (payload instanceof NoteChangedEvent change) {
-            if (change.kind() != NoteChangedEvent.Kind.DELETED) {
-                return;
-            }
-            int removedCards = 0;
-            for (String cardId : change.cardIds()) {
-                if (memoryCycleService.delete(cardId)) {
-                    removedCards++;
-                }
-            }
-            log.info("笔记已删除，相关复习状态已清理：noteId={}, cards={}", change.noteId(), removedCards);
-        } else if (payload instanceof MemoryCycleStateChangedEvent change) {
-            if (!change.enabled() && memoryCycleService.delete(change.cardId())) {
-                log.info("记忆周期已关闭，排期条目一并清除：{}", change.cardId());
-            }
-        } else if (payload instanceof PluginStateResetEvent resetEvent) {
-            try {
-                memoryCycleService.clearAll();
-                if (resetEvent.expects(PLUGIN_ID)) {
-                    resetEvent.complete(PLUGIN_ID, PluginResetResult.reset(PLUGIN_ID, "记忆周期排期与复习历史已清空"));
-                }
-            } catch (RuntimeException e) {
-                if (resetEvent.expects(PLUGIN_ID)) {
-                    resetEvent.complete(PLUGIN_ID, PluginResetResult.failed(PLUGIN_ID, e));
-                }
-                log.warn("插件 {} 状态重置失败", PLUGIN_ID, e);
-            }
-        }
+        cardChangedEventListener = new CardChangedEventListener(memoryCycleService);
+        noteChangedEventListener = new NoteChangedEventListener(memoryCycleService);
+        stateChangedEventListener = new MemoryCycleStateChangedEventListener(memoryCycleService);
+        stateResetListener = new PluginStateResetListener(memoryCycleService);
+        getMainApplicationContext().addApplicationListener(cardChangedEventListener);
+        getMainApplicationContext().addApplicationListener(noteChangedEventListener);
+        getMainApplicationContext().addApplicationListener(stateChangedEventListener);
+        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     /**
@@ -124,7 +82,22 @@ public class MemoryCyclePlugin extends SpringBootPlugin implements GenericApplic
      */
     @Override
     public void stop() {
-        getMainApplicationContext().removeApplicationListener(this);
+        if (cardChangedEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardChangedEventListener);
+            cardChangedEventListener = null;
+        }
+        if (noteChangedEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteChangedEventListener);
+            noteChangedEventListener = null;
+        }
+        if (stateChangedEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateChangedEventListener);
+            stateChangedEventListener = null;
+        }
+        if (stateResetListener != null) {
+            getMainApplicationContext().removeApplicationListener(stateResetListener);
+            stateResetListener = null;
+        }
         super.stop();
     }
 

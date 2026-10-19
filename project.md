@@ -155,7 +155,6 @@ host（qiankun 主应用，:5173）
 | 内容 | 说明 |
 |---|---|
 | `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`）；另含 `readMapIndex`/`readMapOrEmpty` 两个 JSON 索引读取原语（缺失/损坏语义不同） |
-| `util/MainContainerListeners` | 插件跨容器监听器统一注册口：`add`/`onPayload`（按 payload 类型分发）、`removeAll` 在插件 stop 时统一摘除 |
 | `event/PluginEvent` | 所有跨插件事件的强类型标记，不使用 `String + Map` 的通用事件替代具体载荷 |
 | `event/PluginNotification` / `PluginCommand` / `PluginControl` | 单向通知、无返回值命令、平台控制信号的类型分类 |
 | `event/PluginQuery<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
@@ -180,9 +179,10 @@ host（qiankun 主应用，:5173）
 `backend/plugin-api/pom.xml:22-60`），不把实现技术栈强加给插件作者。
 
 **跨插件事件的硬约定（实测得出，不是风格偏好）**：Spring 事件只在发布它的容器里广播 ——
-发布方必须拿主容器发（`SpringBootPlugin#getMainApplicationContext()`），订阅方也必须把 listener 注册到主容器；
-插件 `stop()` 时必须把 listener 摘掉，否则泄漏且重复注册（`CardChangedEvent.java:10-21`，
-`MemoryCyclePlugin.java:57-95`）。
+发布方必须拿主容器发（`SpringBootPlugin#getMainApplicationContext()`）；订阅方按事件类型各写一个
+`ApplicationListener<PayloadApplicationEvent<T>>`，由插件创建并直接注册到主容器。插件 `stop()` 时必须
+逐个 `removeApplicationListener(...)`，否则泄漏且重复注册（`CardChangedEvent.java:10-21`，
+`NotesPlugin.java:84,120`）。
 
 ### 5.3 插件清单
 
@@ -695,10 +695,9 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
      注册表现有 11 个）。
 13. ~~`MemoryCycleStateChangedEventListener` 有两份实例~~（已修复：2026-10-18 删除插件容器内的 `@Component` 死注册——
     跨插件事件只经主容器广播，插件容器内那份从未收到过事件；notes 的 `CardAttachmentCleanupListener` 同形态同批修复。
-    同批把 7 个插件的「listener 注册/摘除」样板下沉为 `plugin-api` 的
-    `MainContainerListeners`（`add`/`onPayload`/`removeAll`）；状态重置监听由各插件在
-    `afterPluginBootstrap` 中直接注册。业务 listener 以 lambda 内联进各 Plugin 类；
-    `FileChangeEventListener` 例外保留类形态——
+    各插件按事件类型各写一个 `ApplicationListener<PayloadApplicationEvent<T>>`，在
+    `afterPluginBootstrap` 中直接注册到主容器，`stop()` 中逐个摘除；
+    `FileChangeEventListener` 保留独立类形态——
     `BaiduSyncStarter` 的 `@EnableAsync` 使其 `@Async` 代理真实生效，必须保持异步执行）。
 14. **历史日志不能当现状依据**：`backend/app/backend-run.log` 与各处 `*.log` 是 2026-10-12 的运行记录，
     里面还是 `memory-curve`、契约版本 `4.0.0`（`backend-run.log:31-37`）。
@@ -724,7 +723,9 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 4. Java：`XxxPlugin extends SpringBootPlugin`、`XxxStarter`（`@SpringBootApplication`，需要定时任务再加
    `@EnableScheduling`）。
 5. 在两个 `onPluginBootstrap` / `afterPluginBootstrap` 里：`ctx.registerBean(FileHelper.class, …)`；
-   需要跨插件监听就 `new` 一个 listener 注册到 `getMainApplicationContext()`，并在 `stop()` 里摘掉。
+   需要跨插件监听就按事件类型各写一个 `ApplicationListener<PayloadApplicationEvent<T>>`，在
+   `afterPluginBootstrap` 里逐个 `getMainApplicationContext().addApplicationListener(...)`，
+   并在 `stop()` 里逐个摘掉。
 6. 端点放 `/api/plugins/<pluginId>/…`；业务异常用 `plugin-api` 的契约异常。
 7. 数据路径：`${thisnote.data-root}` → `notes/plugins/<pluginId>/`，不要自造根目录。
 8. `backend/tools/dev_plugins.ps1` 的 `$plugins` 表加一行（dev 模式需要）。
