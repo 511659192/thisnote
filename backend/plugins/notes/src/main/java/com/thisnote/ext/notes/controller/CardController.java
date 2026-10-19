@@ -2,7 +2,6 @@ package com.thisnote.ext.notes.controller;
 
 import com.thisnote.ext.notes.model.request.*;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
-import com.thisnote.plugin.api.notes.dto.CardMetaDTO;
 import com.thisnote.ext.notes.service.CardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -47,7 +46,7 @@ public class CardController {
     }
 
     @PostMapping("/update")
-    public CardMetaDTO update(@RequestBody UpdateCardRequest changes) {
+    public CardDTO.CardMetaDTO update(@RequestBody UpdateCardRequest changes) {
         return cardService.update(changes.noteId(), changes.cardId(), changes);
     }
 

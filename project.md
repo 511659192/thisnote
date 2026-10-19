@@ -17,7 +17,7 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
    （`backend/app/src/main/java/com/thisnote/ThisnoteApplication.java:12`；插件说明见 `backend/plugins/notes/src/main/resources/application.yml:4`）。
 2. **产物分离。** 后端不端出任何静态资源（`backend/app/src/main/resources/application.yml:37-41` 的 `add-mappings: false`），
    界面由界面侧独立构建、交付、提供服务。
-3. **平台不认识业务，业务全在插件里。** 主体按 SBP/PF4J 最佳实践做成纯平台（插件发现/契约校验/启停/健康 + 管理面），
+3. **平台不认识业务，业务全在插件里。** 主体按 SBP/PF4J 最佳实践做成纯平台（插件发现/契约校验/启停 + 管理面），
    笔记域本身也是插件（`notes`，`undeactivatable=true`），功能插件各自独立存储
    （`backend/plugins/notes/src/main/java/com/thisnote/ext/notes/NotesRegister.java:33-35`）。
 
@@ -89,8 +89,8 @@ thisnote/
 ```
                  ┌──────────────────────── backend/app（纯平台）────────────────────────┐
  HTTP 127.0.0.1  │ HealthController  /api/health/get                                  │
-   :45917 ──────►│ PluginController  /api/plugins/{get,get-detail,active,reload,       │
-                 │                              get-health}                            │
+   :45917 ──────►│ PluginController  /api/plugins/{get,get-detail,active,reload}        │
+                 │                                                                      │
                  │ ApiExceptionHandler（统一 JSON 错误）  ThisnoteConfig（CORS/JSON/闸门）│
                  │ PluginRegistry / PluginStateService / PluginLifecycle               │
                  └───────────────▲───────────────────────────────▲────────────────────┘
@@ -136,8 +136,8 @@ host（qiankun 主应用，:5173）
 | `ThisnoteApplication` | 启动 | `@EnableScheduling`；扫描范围不含插件包 |
 | `ThisnoteConfig` | Web 装配 | 宽松 CORS（只监听本机）；`/api/plugins/**` 挂闸门；用 fastjson2 替换 Jackson |
 | `PluginRegistry` | PF4J 直通 + 扩展查询 | **PF4J 是唯一来源**；按 `plugin.requires` 用 `VersionManager` 过滤不满足契约的插件 |
-| `PluginStateService` | 全局启停/重载/健康/管理视图 | 状态真相在 PF4J，不另存标记；不可停用插件拒绝停用与在线重载（409） |
-| `PluginLifecycle` | 启动四阶段 | 发现 → 校验契约 → 激活 → 健康检查；`SmartInitializingSingleton` 时机；结果存 `report()` |
+| `PluginStateService` | 全局启停/重载/管理视图 | 状态真相在 PF4J，不另存标记；不可停用插件拒绝停用与在线重载（409） |
+| `PluginLifecycle` | 启动三阶段 | 发现 → 校验契约 → 激活；`SmartInitializingSingleton` 时机；结果存 `report()` |
 | `PluginController` | 插件管理面 | 非 RESTful：查询 GET + 动作 POST + `@RequestParam`（无路径变量） |
 | `PluginEndpointHandlerInterceptor` | 停用闸门 | 停用插件的自有端点返回 409；管理面路径永远放行 |
 | `ApiExceptionHandler` | 统一错误 | 插件里抛的契约异常也能被兜住（advice 必须在主体） |
@@ -151,19 +151,17 @@ host（qiankun 主应用，:5173）
   （`PluginStateService.java:65-82`）；停用外置插件后不再向已关闭的容器发通知（`PluginStateService.java:170-180`）。
 - **重载**：SBP 重建类加载器与 Spring 子容器；装载失败（`reloadPlugins` 返回 null）抛 409 而非假装成功
   （`PluginStateService.java:93-114`）；`undeactivatable` 插件拒绝在线重载。
-- **健康**：停用的外置插件不真的去问（容器已关闭），直接给 `unknown`，避免一条健康检查把整个插件列表打挂
-  （`PluginStateService.java:142-161`）。
-- **管理视图**：`id/title/description/undeactivatable/dependencies/version/active/health/diskVersion/reloadAvailable`，
+- **管理视图**：`id/title/description/undeactivatable/dependencies/version/active/diskVersion/reloadAvailable`，
   `diskVersion ≠ version` 即表示「换了 jar 还没重载」（`PluginStateService.java:194-210`）。
 
 ### 5.2 插件契约 `backend/plugin-api`
 
 | 内容 | 说明 |
 |---|---|
-| `lifecycle/PluginRegister` | 运行时 PF4J 扩展点：仅包含 `health/onGlobalStateChanged` |
-| `lifecycle/PluginHealth` | `ok / degraded / error / unknown` + 一句话；**刻意不发起网络请求** |
+| `lifecycle/PluginRegister` | 运行时 PF4J 扩展点：包含 `onGlobalStateChanged` 生命周期回调 |
 | `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`）；另含 `readMapIndex`/`readMapOrEmpty` 两个 JSON 索引读取原语（缺失/损坏语义不同） |
-| `util/MainContainerListeners` | 插件跨容器监听器统一注册口：`add`/`onPayload`（按 payload 类型分发）/`onStateReset` 注册、`removeAll` 在插件 stop 时统一摘除 |
+| `util/MainContainerListeners` | 插件跨容器监听器统一注册口：`add`/`onPayload`（按 payload 类型分发）、`removeAll` 在插件 stop 时统一摘除 |
+| `util/PluginStateResetSupport` | 状态重置协议：`registerSync`/`registerAsync`/`registerSkipped` 注册监听并完成 `PluginStateResetEvent` 的结果回报 |
 | `event/PluginEvent` | 所有跨插件事件的强类型标记，不使用 `String + Map` 的通用事件替代具体载荷 |
 | `event/PluginNotification` / `PluginCommand` / `PluginControl` | 单向通知、无返回值命令、平台控制信号的类型分类 |
 | `event/PluginQuery<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
@@ -211,7 +209,7 @@ host（qiankun 主应用，:5173）
 
 每个插件 jar 还携带 `META-INF/thisnote/plugin.json`，平台在**不启动插件容器**时读取它：
 `title/description/undeactivatable` 是管理面的权威值，`resetTargets` 供停用插件状态重置，
-`backupEnabled/backupExclude` 供百度备份适配器限定同步范围。`PluginRegister` 只负责运行时健康与回调。
+`backupEnabled/backupExclude` 供百度备份适配器限定同步范围。`PluginRegister` 只负责运行时生命周期回调。
 
 ### 5.4 装载、启停、交付
 
@@ -231,7 +229,7 @@ host（qiankun 主应用，:5173）
 `PluginEndpointHandlerInterceptor`（`PluginEndpointHandlerInterceptor.java:33-75`）：
 
 1. 只处理 `/api/plugins/` 前缀；未注册的插件 id 直接放行（交给控制器回「未知插件」）。
-2. 管理面段（`get/get-detail/get-health/active/reload`，白名单在 `PluginController.MANAGEMENT_SEGMENTS`）永远放行。
+2. 管理面段（`get/get-detail/active/reload`，白名单在 `PluginController.MANAGEMENT_SEGMENTS`）永远放行。
 3. 不可停用插件永远放行（双保险）。
 4. 其余请求在插件停用时返回 **409 + JSON**（`{"status":409,...,"message":"插件「X」已停用…"}`）。
 
@@ -326,7 +324,6 @@ host（qiankun 主应用，:5173）
 | GET | `/api/plugins/get-detail?pluginId=` | 单个插件 |
 | POST | `/api/plugins/active?pluginId=&value=` | 全局启停 |
 | POST | `/api/plugins/reload?pluginId=` | 重载（换 jar / dev 改代码后） |
-| GET | `/api/plugins/get-health?pluginId=` | 健康 |
 | * | `/sbp/list`、`/sbp/start`、`/sbp/stop`、`/sbp/reload/{id}`、`/sbp/reload-all` | SBP 官方管理端点，留给运维/脚本 |
 
 **notes**（`NoteController` / `CardController` / `BookController` / `AttachmentController` / `NotesSettingsController`）
@@ -705,7 +702,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 13. ~~`MemoryCycleStateChangedEventListener` 有两份实例~~（已修复：2026-10-18 删除插件容器内的 `@Component` 死注册——
     跨插件事件只经主容器广播，插件容器内那份从未收到过事件；notes 的 `CardAttachmentCleanupListener` 同形态同批修复。
     同批把 7 个插件的「listener 注册/摘除」样板与 7 份同构的 `PluginStateResetListener` 下沉为
-    `plugin-api` 的 `MainContainerListeners`（`add`/`onPayload`/`onStateReset`/`removeAll`），
+    `plugin-api` 的 `MainContainerListeners`（`add`/`onPayload`/`removeAll`）与
+    `PluginStateResetSupport`（`registerSync`/`registerAsync`/`registerSkipped`），
     业务 listener 以 lambda 内联进各 Plugin 类；`FileChangeEventListener` 例外保留类形态——
     `BaiduSyncStarter` 的 `@EnableAsync` 使其 `@Async` 代理真实生效，必须保持异步执行）。
 14. **历史日志不能当现状依据**：`backend/app/backend-run.log` 与各处 `*.log` 是 2026-10-12 的运行记录，
@@ -772,8 +770,7 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 5. **后端纯 API**：不要开 `add-mappings`，不要往 jar 里塞界面资源（会触发 SBP 资源链 500，且违反产物分离，
    契约测试会失败）。
 6. **优先复用**：`FileHelper`（文件 + 事件）、既有 `http` 客户端、`host()` 服务、已有事件类型。
-7. **需要真实外部连通性时**：不要放进 `PluginHealth`（它每次刷管理页都会被调用），另做一个显式「测试连接」动作
-   （`PluginHealth.java:5-9`）。
+7. **需要真实外部连通性时**：不要放进每次打开管理页都会自动调用的接口，另做一个显式「测试连接」动作。
 8. **Controller 只依赖应用 Service**：不得直接注入 Repository、OAuth/Provider Client 或读取数据根路径；
    Repository 只负责持久化，业务规则放在 Service。AI、Graphify、Tags、百度同步和分组管理已按此方向收口。
 9. **外部访问单独放 `client` 包**：HTTP、OAuth、AI Provider、Notes API Client、CLI 进程与本地代理适配器

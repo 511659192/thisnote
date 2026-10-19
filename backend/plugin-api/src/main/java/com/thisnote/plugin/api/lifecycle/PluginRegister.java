@@ -3,7 +3,7 @@ package com.thisnote.plugin.api.lifecycle;
 import org.pf4j.ExtensionPoint;
 
 /**
- * 插件向平台提供的管理页与生命周期信息。领域能力可以通过 plugin-api 中的专用扩展点提供。
+ * 插件向平台提供的生命周期回调。领域能力可以通过 plugin-api 中的专用扩展点提供。
  *
  * <p>本平台的插件契约几乎全是 PF4J 原生机制：插件是 {@code plugins/*.jar}，身份/版本/provider
  * 来自 {@code plugin.properties}（PF4J 的 {@code PropertiesPluginDescriptorFinder}），契约版本用
@@ -25,11 +25,6 @@ public interface PluginRegister extends ExtensionPoint {
      * <p>只有明确要求时才修改它：不随公开契约的改动自动递增。
      */
     String CONTRACT_VERSION = "0.0.1";
-
-    /** 自报健康；不覆写即「运行正常」。 */
-    default PluginHealth health() {
-        return PluginHealth.ok("运行正常");
-    }
 
     /**
      * 自己的全局启停。收到 {@code false} 之后，平台会拦下该插件自有端点的请求（管理面除外）。

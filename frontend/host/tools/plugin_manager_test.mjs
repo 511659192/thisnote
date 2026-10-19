@@ -106,10 +106,6 @@ check('显示版本号（与 /api/plugins 一致）',
 check('Graphify 显式依赖 AI 与 Notes',
   dependenciesOf('graphify').join(',') === 'ai,notes',
   dependenciesOf('graphify').join(','))
-check('显示健康状态与说明',
-  (await card('记忆周期').locator('.health-ok').count()) === 1,
-  (await card('记忆周期').locator('.health-ok').textContent())?.trim())
-
 // 通用配置表单暂时没有测试对象：剩下两个插件都没声明配置项（带配置的百度网盘插件已暂时移除）。
 await card('记忆周期').locator('button', { hasText: '设置' }).click()
 await win.waitForTimeout(600)

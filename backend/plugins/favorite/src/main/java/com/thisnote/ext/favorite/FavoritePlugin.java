@@ -4,6 +4,7 @@ import com.thisnote.ext.favorite.service.FavoriteService;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -55,7 +56,7 @@ public class FavoritePlugin extends SpringBootPlugin {
                 log.info("笔记已删除，收藏记录一并清除：{}", change.noteId());
             }
         });
-        listeners.onStateReset(PLUGIN_ID, "收藏已清空", favoriteService::clear);
+        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "收藏已清空", favoriteService::clear);
     }
 
     @Override

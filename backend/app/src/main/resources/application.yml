@@ -19,7 +19,7 @@ spring:
     plugins-root: D:/projects/thisnote/backend/runtime/plugins
     # 插件界面产物由界面侧工具构建并交付到 frontend/runtime/plugins/<id>/；公共 URL 仍为 /plugin-assets/<id>/。
     # 官方管理端点（PluginManagerController）：/sbp/list、/sbp/start|stop|reload/{id}、/sbp/reload-all。
-    # 界面上的插件管理页走我们自己的 /api/plugins/get 等动作接口（那边有插件级启停、健康与停用闸门），
+    # 界面上的插件管理页走我们自己的 /api/plugins/get 等动作接口（那边有插件级启停与停用闸门），
     # 这一份留给运维与脚本；服务只监听 127.0.0.1，不存在对外暴露。
     controller:
       base-path: /sbp

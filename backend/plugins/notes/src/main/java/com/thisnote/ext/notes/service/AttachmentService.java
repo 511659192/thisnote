@@ -4,7 +4,7 @@ import com.alibaba.fastjson2.TypeReference;
 import com.thisnote.ext.notes.config.NotesConfig;
 import com.thisnote.ext.notes.model.CardPO;
 import com.thisnote.ext.notes.repository.CardRepository;
-import com.thisnote.plugin.api.notes.dto.AttachmentDTO;
+import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.ImageSize;
 import org.springframework.http.MediaType;
@@ -66,7 +66,7 @@ public class AttachmentService {
      *
      * @return 改名后的附件；文件不存在或名字非法时返回 null
      */
-    public synchronized AttachmentDTO adopt(String fileName) {
+    public synchronized CardDTO.AttachmentDTO adopt(String fileName) {
         Path source = imagePathOrNull(fileName);
         if (source == null || !Files.isRegularFile(source)) return null;
 
@@ -78,7 +78,7 @@ public class AttachmentService {
 
         CardPO.AttachmentMeta meta = buildMeta(attachmentId, newFileName, fileName, target, MEDIA_TYPES_BY_EXTENSION.get(extension));
         putMetadata(newFileName, meta);
-        return new AttachmentDTO(newFileName, meta.size(), meta.w(), meta.h());
+        return new CardDTO.AttachmentDTO(newFileName, meta.size(), meta.w(), meta.h());
     }
 
     public Path existingPath(String fileName) {
@@ -114,7 +114,7 @@ public class AttachmentService {
     /**
      * 未被管理的附件：attachments 目录里、没有任何卡片引用的 png/jpg/webp。
      */
-    public List<AttachmentDTO> unmanagedAttachments() {
+    public List<CardDTO.AttachmentDTO> unmanagedAttachments() {
         Path dir = notesConfig.getRootDir().resolve("attachments");
         if (!Files.isDirectory(dir)) return List.of();
 
@@ -133,7 +133,7 @@ public class AttachmentService {
         if (candidates.isEmpty()) return List.of();
 
         Set<String> referenced = allReferencedFileNames();
-        List<AttachmentDTO> attachments = new ArrayList<>();
+        List<CardDTO.AttachmentDTO> attachments = new ArrayList<>();
         for (String fileName : candidates) {
             if (referenced.contains(fileName)) continue;
             Path path = dir.resolve(fileName);
@@ -145,7 +145,7 @@ public class AttachmentService {
             }
             if (attributes.isRegularFile() && attributes.size() > 0) {
                 int[] pixels = ImageSize.of(path);
-                attachments.add(new AttachmentDTO(
+                attachments.add(new CardDTO.AttachmentDTO(
                         fileName,
                         attributes.size(),
                         pixels == null ? 0 : pixels[0],

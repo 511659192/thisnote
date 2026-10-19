@@ -7,6 +7,7 @@ import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.event.NoteTextChangedEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -50,7 +51,7 @@ public class TagsPlugin extends SpringBootPlugin {
         listeners.onPayload(NoteTextChangedEvent.class, change -> {
             ctx.getBean(TagUsageRefreshService.class).request(change.noteId());
         });
-        listeners.onStateReset(PLUGIN_ID, "标签已清空", tagsService::clear);
+        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "标签已清空", tagsService::clear);
     }
 
     @Override

@@ -1,7 +1,5 @@
 package com.thisnote.plugin;
 
-import com.thisnote.plugin.api.lifecycle.PluginHealth;
-
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 插件管理面：列表、全局启停与健康；各插件的业务状态由各自端点负责。
+ * 插件管理面：列表与全局启停；各插件的业务状态由各自端点负责。
  *
  * <p>URL 约定：<b>非 RESTful</b> —— 纯查询使用 GET，写操作使用带动作路径的 POST，没有任何路径
  * 变量，标识一律走 {@code @RequestParam}（插件 id 用 {@code pluginId}）。
@@ -26,7 +24,7 @@ public class PluginController {
 
     /** 管理面用到的子路径；插件自有端点不得占用这些名字。 */
     static final List<String> MANAGEMENT_SEGMENTS =
-            List.of("get", "get-detail", "get-health", "active", "reload");
+            List.of("get", "get-detail", "active", "reload");
 
     private final PluginRegistry registry;
     private final PluginStateService states;
@@ -36,7 +34,7 @@ public class PluginController {
         this.states = states;
     }
 
-    /** 全部插件的管理视图：描述 + 全局启停 + 健康。 */
+    /** 全部插件的管理视图：描述 + 全局启停。 */
     @GetMapping("/get")
     public List<Map<String, Object>> plugins() {
         return registry.ids().stream().map(states::describe).toList();
@@ -71,9 +69,4 @@ public class PluginController {
         return states.describe(pluginId);
     }
 
-    @GetMapping("/get-health")
-    public PluginHealth health(@RequestParam String pluginId) {
-        registry.get(pluginId);
-        return states.healthOf(pluginId);
-    }
 }

@@ -1,6 +1,5 @@
 package com.thisnote.plugin;
 
-import com.thisnote.plugin.api.lifecycle.PluginHealth;
 import com.thisnote.plugin.api.lifecycle.PluginRegister;
 import com.thisnote.plugin.api.meta.PluginMetadata;
 import com.thisnote.plugin.api.meta.PluginMetadataReader;
@@ -25,7 +24,7 @@ import java.util.Map;
  *
  * <p>身份与版本来自 PF4J 描述符；管理面静态信息来自插件 jar 内的
  * {@code META-INF/thisnote/plugin.json}，因此插件停用后也能稳定读取显示名、说明和核心保护标记。
- * {@link PluginRegister} 只承担运行时健康检查和状态回调。
+ * {@link PluginRegister} 只承担运行时状态回调。
  *
  * <p><b>契约版本也走框架</b>：插件在 {@code plugin.requires} 里声明（支持 semver 范围，
  * 例如 {@code >=3.0.0}），这里用 PF4J 的 {@code VersionManager} 校验。不匹配的插件**跳过并告警**
@@ -139,7 +138,7 @@ public class PluginRegistry {
     /**
      * 取插件的 {@link PluginRegister} 扩展（PF4J 原生 {@code getExtensions(type, pluginId)}）。
      *
-     * <p>它承载运行时健康与状态回调；插件没提供时返回 {@code null}，健康检查按默认语义回落。
+     * <p>它承载运行时状态回调；插件没提供时返回 {@code null}。
      */
     private PluginRegister register(String pluginId) {
         PluginManager manager = pluginManager.getIfAvailable();
@@ -180,14 +179,6 @@ public class PluginRegistry {
         return dependencies == null ? List.of() : dependencies.stream()
                 .map(dependency -> dependency.getPluginId())
                 .toList();
-    }
-
-    /**
-     * 插件自报健康；没提供扩展即视为「运行正常」。
-     */
-    public PluginHealth health(String pluginId) {
-        PluginRegister register = register(pluginId);
-        return register == null ? PluginHealth.ok("运行正常") : register.health();
     }
 
     /**

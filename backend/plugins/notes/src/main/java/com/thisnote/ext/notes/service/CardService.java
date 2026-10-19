@@ -14,7 +14,6 @@ import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.event.NoteTextChangedEvent;
 import com.thisnote.plugin.api.exception.ConflictException;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
-import com.thisnote.plugin.api.notes.dto.CardMetaDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -114,9 +113,9 @@ public class CardService {
         return notesMapper.toCardDTO(saved == null ? new CardPO(cardMeta, body) : saved);
     }
 
-    public synchronized CardMetaDTO update(String noteId,
-                                           String cardId,
-                                           UpdateCardRequest changes) {
+    public synchronized CardDTO.CardMetaDTO update(String noteId,
+                                                   String cardId,
+                                                   UpdateCardRequest changes) {
         NotePO note = noteContainingCard(noteId, cardId);
         CardMeta meta = applyChanges(cardId, changes);
         cardRepository.update(meta, null, cardId);

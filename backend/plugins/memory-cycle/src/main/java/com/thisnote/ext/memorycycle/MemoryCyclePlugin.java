@@ -6,6 +6,7 @@ import com.thisnote.plugin.api.event.MemoryCycleStateChangedEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import lombok.extern.slf4j.Slf4j;
 
 import org.laxture.sbp.SpringBootPlugin;
@@ -92,7 +93,7 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
                 log.info("记忆周期已关闭，排期条目一并清除：{}", change.cardId());
             }
         });
-        listeners.onStateReset(PLUGIN_ID, "记忆周期排期与复习历史已清空", srs::clearAll);
+        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "记忆周期排期与复习历史已清空", srs::clearAll);
     }
 
     /**

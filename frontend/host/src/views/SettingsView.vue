@@ -161,10 +161,6 @@ function togglePluginPanel(plugin: PluginInfo) {
   openPlugins.value = next
 }
 
-function healthClass(plugin: PluginInfo): string {
-  return `health-${plugin.health.status}`
-}
-
 async function refresh() {
   await Promise.all([refreshPlugins(), refreshNotesRoot()])
 }
@@ -249,7 +245,6 @@ onMounted(async () => {
               <span v-if="plugin.undeactivatable" class="kind kind-core">核心</span>
               <b>{{ plugin.title }}</b>
               <span class="small muted mono">v{{ plugin.version }}</span>
-              <span class="small" :class="healthClass(plugin)">● {{ plugin.health.message }}</span>
               <div class="spacer"></div>
               <!-- 换了磁盘上的 jar（版本不同）时给一条明确提示；重载按钮总是可用 —— 开发模式下
                    换的是同一版本的 target/classes，没有它就只能重启应用。 -->
@@ -482,18 +477,6 @@ onMounted(async () => {
 .kind-core {
   background: var(--c-surface-2);
   color: var(--c-text-2, var(--c-text));
-}
-.health-ok {
-  color: var(--success, #3a9);
-}
-.health-degraded {
-  color: var(--warning);
-}
-.health-error {
-  color: var(--danger, #d55);
-}
-.health-unknown {
-  color: var(--c-text-3);
 }
 .plugin-desc {
   margin: var(--space-1) 0 0;

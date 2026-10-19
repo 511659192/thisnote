@@ -4,6 +4,7 @@ import com.thisnote.ext.baidusync.service.FileChangeEventListener;
 import com.thisnote.ext.baidusync.service.BaiduSyncService;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -41,7 +42,7 @@ public class BaiduSyncPlugin extends SpringBootPlugin {
         listeners = new MainContainerListeners(getMainApplicationContext());
         // 必须用插件容器里的 @Async 代理实例：网盘同步耗时，不能在事件发布方线程内执行。
         listeners.add(ctx.getBean(FileChangeEventListener.class));
-        listeners.onStateReset(PLUGIN_ID, "同步基线已清理", service::clearSyncState);
+        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "同步基线已清理", service::clearSyncState);
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.thisnote.ext.cardimporter;
 
 import com.thisnote.ext.cardimporter.service.CardImporterService;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -30,7 +31,7 @@ public class CardImporterPlugin
                                      GenericApplicationContext ctx) {
         ctx.getBean(CardImporterService.class).setMainEventPublisher(getMainApplicationContext());
         listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onStateResetSkipped(PLUGIN_ID, "card-importer 无自有状态");
+        PluginStateResetSupport.registerSkipped(listeners, PLUGIN_ID, "card-importer 无自有状态");
     }
 
     @Override

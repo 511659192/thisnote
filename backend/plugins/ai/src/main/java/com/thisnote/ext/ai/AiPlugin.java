@@ -6,6 +6,7 @@ import com.thisnote.plugin.api.event.AiRuntimeEvent;
 import com.thisnote.plugin.api.event.NoteTagSuggestionEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -45,7 +46,7 @@ public class AiPlugin extends SpringBootPlugin {
             }
         });
         listeners.onPayload(NoteTagSuggestionEvent.class, ctx.getBean(AiTagSuggestionService.class)::suggest);
-        listeners.onStateResetSkipped(PLUGIN_ID, "AI 配置与凭据保留");
+        PluginStateResetSupport.registerSkipped(listeners, PLUGIN_ID, "AI 配置与凭据保留");
     }
 
     @Override

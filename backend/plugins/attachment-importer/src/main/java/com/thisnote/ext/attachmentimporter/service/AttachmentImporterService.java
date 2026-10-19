@@ -3,9 +3,7 @@ package com.thisnote.ext.attachmentimporter.service;
 import com.thisnote.plugin.api.event.AttachmentAdoptEvent;
 import com.thisnote.plugin.api.event.AttachmentQueryEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.notes.dto.AttachmentDTO;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
-import com.thisnote.plugin.api.notes.dto.CardMetaDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -66,12 +64,12 @@ public class AttachmentImporterService {
     }
 
     private void importNewAttachments() {
-        CompletableFuture<List<AttachmentDTO>> result = new CompletableFuture<>();
+        CompletableFuture<List<CardDTO.AttachmentDTO>> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new AttachmentQueryEvent(result));
-        List<AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+        List<CardDTO.AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
 
-        for (AttachmentDTO attachment : attachments) {
-            AttachmentDTO adopted = adopt(attachment.fileName());
+        for (CardDTO.AttachmentDTO attachment : attachments) {
+            CardDTO.AttachmentDTO adopted = adopt(attachment.fileName());
             if (adopted != null) {
                 importAttachment(attachment.fileName(), adopted);
             }
@@ -81,8 +79,8 @@ public class AttachmentImporterService {
     /**
      * 交给 notes 把附件改名为 {@code <uuid>.<ext>}（原名记入元数据），返回新文件名。
      */
-    private AttachmentDTO adopt(String fileName) {
-        CompletableFuture<AttachmentDTO> result = new CompletableFuture<>();
+    private CardDTO.AttachmentDTO adopt(String fileName) {
+        CompletableFuture<CardDTO.AttachmentDTO> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new AttachmentAdoptEvent(result, fileName));
         try {
             return result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
@@ -93,7 +91,7 @@ public class AttachmentImporterService {
     }
 
     private void importAttachment(String originalName,
-                                  AttachmentDTO adopted) {
+                                  CardDTO.AttachmentDTO adopted) {
         String fileName = adopted.fileName();
         String title = titleOf(originalName);
         if (title.isBlank()) {
@@ -102,7 +100,7 @@ public class AttachmentImporterService {
         }
 
         // 按图片原始像素尺寸给出初始卡片框体；读不到尺寸时用 notes 的默认宽高。
-        CardMetaDTO meta = imageCardMeta(adopted.width(), adopted.height());
+        CardDTO.CardMetaDTO meta = imageCardMeta(adopted.width(), adopted.height());
         try {
             mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(new CardDTO(meta, cardContent(title, fileName), null), title, DEFAULT_BOOK_ID));
         } catch (RuntimeException e) {
@@ -134,13 +132,13 @@ public class AttachmentImporterService {
      * 所以「宽 = 图片宽 + 30」时图片按原始尺寸显示；不设宽度上限，大图也不缩放。
      * 读不到尺寸（文件损坏）返回 {@code null}，由 notes 用默认 720×260。
      */
-    private static CardMetaDTO imageCardMeta(int width,
-                                             int height) {
+    private static CardDTO.CardMetaDTO imageCardMeta(int width,
+                                                     int height) {
         if (width <= 0 || height <= 0) {
             return null;
         }
         double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, width + CARD_HORIZONTAL_CHROME));
         double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, height + CARD_VERTICAL_CHROME));
-        return new CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, null, null, false, null);
+        return new CardDTO.CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, null, null, false, null);
     }
 }

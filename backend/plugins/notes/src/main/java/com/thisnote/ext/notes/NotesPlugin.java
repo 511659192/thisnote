@@ -14,6 +14,7 @@ import com.thisnote.plugin.api.event.CardQueryEvent;
 import com.thisnote.plugin.api.event.FileChangeEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -120,7 +121,7 @@ public class NotesPlugin extends SpringBootPlugin {
                 adopt.result().completeExceptionally(e);
             }
         });
-        listeners.onStateReset(PLUGIN_ID, "笔记/卡片/附件索引已重置（文件保留）", noteService::resetIndexes);
+        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "笔记/卡片/附件索引已重置（文件保留）", noteService::resetIndexes);
     }
 
     private void republishAttachmentChange(FileChangeEvent change,

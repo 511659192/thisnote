@@ -2,6 +2,7 @@ package com.thisnote.ext.attachmentimporter;
 
 import com.thisnote.ext.attachmentimporter.service.AttachmentImporterService;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -37,7 +38,7 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
         AttachmentImporterService service = ctx.getBean(AttachmentImporterService.class);
         service.setMainEventPublisher(getMainApplicationContext());
         listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onStateResetSkipped(PLUGIN_ID, "attachment-importer 无自有状态");
+        PluginStateResetSupport.registerSkipped(listeners, PLUGIN_ID, "attachment-importer 无自有状态");
     }
 
     @Override

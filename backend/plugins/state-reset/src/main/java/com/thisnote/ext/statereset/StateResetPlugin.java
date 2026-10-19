@@ -2,6 +2,7 @@ package com.thisnote.ext.statereset;
 
 import com.thisnote.ext.statereset.service.StateResetService;
 import com.thisnote.plugin.api.util.MainContainerListeners;
+import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -34,7 +35,7 @@ public class StateResetPlugin extends SpringBootPlugin {
         stateResetService.setMainEventPublisher(getMainApplicationContext());
         stateResetService.setPluginManager(getMainApplicationContext().getBean(PluginManager.class));
         listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onStateResetSkipped(PLUGIN_ID, "state-reset 无自有状态");
+        PluginStateResetSupport.registerSkipped(listeners, PLUGIN_ID, "state-reset 无自有状态");
     }
 
     @Override

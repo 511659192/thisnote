@@ -1,7 +1,6 @@
 package com.thisnote.plugin;
 
 import com.thisnote.plugin.api.exception.ConflictException;
-import com.thisnote.plugin.api.lifecycle.PluginHealth;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -137,27 +136,6 @@ public class PluginStateService {
     // ------------------------------------------------------------------ 通知插件本体
 
     /**
-     * 问一个插件的健康。
-     *
-     * <p><b>不能在停用的外置插件上直接问</b>：它的 Spring 子容器已经关闭，而 {@code health()}
-     * 通常要读自己的 bean，于是抛 {@code IllegalStateException: … has been closed already}，
-     * 进了全局异常处理器就变成 <b>409</b> —— 一个插件停用会把整个插件列表（每项都要 describe）
-     * 一起打挂，调用方连"它现在是停用的"都读不到。所以：没在服务的插件给静态结论，
-     * 真抛异常也降级成 unknown；管理面永远读得出来。
-     */
-    public PluginHealth healthOf(String pluginId) {
-        if (isExternal(pluginId) && !isActive(pluginId)) {
-            return PluginHealth.unknown("插件已停用，容器未运行");
-        }
-        try {
-            return registry.health(pluginId);
-        } catch (RuntimeException e) {
-            log.warn("插件 {} 的健康检查抛异常：{}", pluginId, e.toString());
-            return PluginHealth.unknown("健康检查失败：" + e.getMessage());
-        }
-    }
-
-    /**
      * 全局启停变化后通知插件本体（<b>尽力而为</b>）。
      *
      * <p>停用外置插件时容器已经关掉，再往里通知只会抛"容器已关闭"；而插件自己的
@@ -186,7 +164,7 @@ public class PluginStateService {
     // ------------------------------------------------------------------ 管理视图
 
     /**
-     * 管理页要的所有东西：描述 + 全局启停 + 健康 + 磁盘版本。
+     * 管理页要的所有东西：描述 + 全局启停 + 磁盘版本。
      */
     public Map<String, Object> describe(String pluginId) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -198,8 +176,6 @@ public class PluginStateService {
         out.put("dependencies", registry.dependencies(pluginId));
         out.put("version", descriptor.getVersion());
         out.put("active", isActive(pluginId));
-        PluginHealth health = healthOf(pluginId);
-        out.put("health", Map.of("status", health.status(), "message", health.message()));
         // 磁盘上那个 jar 的版本：与 version（正在跑的实例）不同就说明"换了 jar，还没重载"。
         String diskVersion = diskVersion(pluginId);
         out.put("diskVersion", diskVersion);
