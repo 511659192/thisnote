@@ -7,5 +7,6 @@ import com.thisnote.plugin.api.event.ifaces.PluginNotification;
  *
  * <p>Publish through the main application context and register cross-plugin listeners there.
  */
-public record MemoryCycleStateChangedEvent(String cardId, boolean enabled) implements PluginNotification {
+public record MemoryCycleStateChangedEvent(String cardId, boolean enabled)
+        implements PluginNotification {
 }

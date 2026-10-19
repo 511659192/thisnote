@@ -6,12 +6,7 @@ import java.util.Objects;
 /**
  * Static plugin metadata that must stay readable without starting the plugin container.
  */
-public record PluginMetadata(String title,
-                             String description,
-                             boolean undeactivatable,
-                             List<String> resetTargets,
-                             boolean backupEnabled,
-                             List<String> backupExclude) {
+public record PluginMetadata(String title, String description, boolean undeactivatable, List<String> resetTargets, boolean backupEnabled, List<String> backupExclude) {
 
     public PluginMetadata {
         title = Objects.requireNonNull(title, "title");

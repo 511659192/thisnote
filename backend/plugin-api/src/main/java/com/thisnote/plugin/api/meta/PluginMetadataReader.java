@@ -92,13 +92,7 @@ public final class PluginMetadataReader {
         if (backupExclude == null) {
             throw new IllegalArgumentException("插件清单缺少 backupExclude");
         }
-        return new PluginMetadata(
-                title.trim(),
-                description.trim(),
-                raw.getBooleanValue("undeactivatable"),
-                resetTargets.toJavaList(String.class),
-                raw.getBooleanValue("backupEnabled"),
-                backupExclude.toJavaList(String.class)
-        );
+        return new PluginMetadata(title.trim(), description.trim(), raw.getBooleanValue("undeactivatable"), resetTargets.toJavaList(String.class), raw.getBooleanValue("backupEnabled"),
+                                  backupExclude.toJavaList(String.class));
     }
 }

@@ -11,17 +11,14 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>停用插件不启动容器，由状态重置插件按静态插件清单清理；笔记数据不在清理范围内。
  */
-public record PluginStateResetEvent(String sourcePluginId,
-                                    Map<String, CompletableFuture<PluginResetResult>> participants)
+public record PluginStateResetEvent(String sourcePluginId, Map<String, CompletableFuture<PluginResetResult>> participants)
         implements PluginControl {
 
     public PluginStateResetEvent {
         if (sourcePluginId == null || sourcePluginId.isBlank()) {
             throw new IllegalArgumentException("sourcePluginId 不能为空");
         }
-        participants = participants == null
-                ? Map.of()
-                : Map.copyOf(new LinkedHashMap<>(participants));
+        participants = participants == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(participants));
     }
 
     public boolean expects(String pluginId) {

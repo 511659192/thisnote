@@ -24,9 +24,7 @@ public record AiRuntimeEvent(CompletableFuture<Runtime> runtime)
         return runtime;
     }
 
-    public record Runtime(String provider,
-                          String model,
-                          String apiKey) {
+    public record Runtime(String provider, String model, String apiKey) {
 
         public Runtime {
             provider = provider == null ? "" : provider;

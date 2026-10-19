@@ -9,19 +9,14 @@ import java.util.List;
  *
  * @param movedNoteIds note IDs reassigned to the default notebook when deleted; empty otherwise
  */
-public record BookChangedEvent(String bookId,
-                                   Kind kind,
-                                   String title,
-                                   String type,
-                                   List<String> movedNoteIds) implements PluginNotification {
+public record BookChangedEvent(String bookId, Kind kind, String title, String type, List<String> movedNoteIds)
+        implements PluginNotification {
 
     public BookChangedEvent {
         movedNoteIds = movedNoteIds == null ? List.of() : List.copyOf(movedNoteIds);
     }
 
     public enum Kind {
-        CREATED,
-        UPDATED,
-        DELETED
+        CREATED, UPDATED, DELETED
     }
 }

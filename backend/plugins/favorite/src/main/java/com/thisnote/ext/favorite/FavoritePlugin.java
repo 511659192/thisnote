@@ -2,14 +2,18 @@ package com.thisnote.ext.favorite;
 
 import com.thisnote.ext.favorite.service.FavoriteService;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
+import com.thisnote.plugin.api.event.PluginResetResult;
+import com.thisnote.plugin.api.event.PluginStateResetEvent;
 import com.thisnote.plugin.api.util.FileHelper;
-import com.thisnote.plugin.api.util.MainContainerListeners;
-import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.PayloadApplicationEvent;
+import org.springframework.context.event.GenericApplicationListener;
+import org.springframework.core.ResolvableType;
 
 /**
  * 收藏插件：thisnote 的**实体插件**参考实现。
@@ -21,13 +25,12 @@ import org.pf4j.PluginWrapper;
  * id 与版本来自 {@code plugin.properties}，不在这里硬编码。
  */
 @Slf4j
-public class FavoritePlugin extends SpringBootPlugin {
+public class FavoritePlugin extends SpringBootPlugin implements GenericApplicationListener {
 
     /** 端点前缀；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "favorite";
 
-    /** 本插件注册到主容器的全部跨插件监听器（停止时统一摘除）。 */
-    private MainContainerListeners listeners;
+    private FavoriteService favoriteService;
 
     public FavoritePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -49,22 +52,43 @@ public class FavoritePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        FavoriteService favoriteService = ctx.getBean(FavoriteService.class);
-        listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onPayload(NoteChangedEvent.class, change -> {
+        favoriteService = ctx.getBean(FavoriteService.class);
+        getMainApplicationContext().addApplicationListener(this);
+    }
+
+    @Override
+    public boolean supportsEventType(ResolvableType eventType) {
+        return eventType.toClass() == PayloadApplicationEvent.class;
+    }
+
+    @Override
+    public void onApplicationEvent(ApplicationEvent event) {
+        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)) {
+            return;
+        }
+        Object payload = payloadEvent.getPayload();
+        if (payload instanceof NoteChangedEvent change) {
             if (change.kind() == NoteChangedEvent.Kind.DELETED && favoriteService.removeFavorite(change.noteId())) {
                 log.info("笔记已删除，收藏记录一并清除：{}", change.noteId());
             }
-        });
-        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "收藏已清空", favoriteService::clear);
+        } else if (payload instanceof PluginStateResetEvent resetEvent) {
+            try {
+                favoriteService.clear();
+                if (resetEvent.expects(PLUGIN_ID)) {
+                    resetEvent.complete(PLUGIN_ID, PluginResetResult.reset(PLUGIN_ID, "收藏已清空"));
+                }
+            } catch (RuntimeException e) {
+                if (resetEvent.expects(PLUGIN_ID)) {
+                    resetEvent.complete(PLUGIN_ID, PluginResetResult.failed(PLUGIN_ID, e));
+                }
+                log.warn("插件 {} 状态重置失败", PLUGIN_ID, e);
+            }
+        }
     }
 
     @Override
     public void stop() {
-        if (listeners != null) {
-            listeners.removeAll();
-            listeners = null;
-        }
+        getMainApplicationContext().removeApplicationListener(this);
         super.stop();
     }
 

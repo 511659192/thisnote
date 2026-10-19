@@ -6,7 +6,8 @@ package com.thisnote.plugin.api.exception;
  * <p>放在契约里的原因见 {@link NotFoundException}：异常要穿过「核心插件 → 主体平台」
  * 的容器边界被统一渲染，类型必须双方可见。
  */
-public class ConflictException extends RuntimeException {
+public class ConflictException
+        extends RuntimeException {
 
     public ConflictException(String message) {
         super(message);

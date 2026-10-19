@@ -5,9 +5,8 @@ import com.thisnote.plugin.api.event.ifaces.PluginNotification;
 /**
  * Notes-owned attachment lifecycle notification.
  */
-public record AttachmentChangedEvent(Operation operation,
-                                     String fileName,
-                                     String previousFileName) implements PluginNotification {
+public record AttachmentChangedEvent(Operation operation, String fileName, String previousFileName)
+        implements PluginNotification {
 
     public AttachmentChangedEvent {
         if (operation == null) {
@@ -33,14 +32,12 @@ public record AttachmentChangedEvent(Operation operation,
         return new AttachmentChangedEvent(Operation.DELETED, fileName, null);
     }
 
-    public static AttachmentChangedEvent renamed(String previousFileName, String fileName) {
+    public static AttachmentChangedEvent renamed(String previousFileName,
+                                                 String fileName) {
         return new AttachmentChangedEvent(Operation.RENAME, fileName, previousFileName);
     }
 
     public enum Operation {
-        CREATED,
-        UPDATED,
-        DELETED,
-        RENAME
+        CREATED, UPDATED, DELETED, RENAME
     }
 }

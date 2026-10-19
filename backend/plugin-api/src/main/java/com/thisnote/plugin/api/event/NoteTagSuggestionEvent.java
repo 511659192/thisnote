@@ -12,9 +12,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>请求方负责保存标签；提供方只读取自己的索引并完成 future，双方不共享存储。
  * 没有提供者时 future 保持未完成，请求方应立即走本地回退。
  */
-public record NoteTagSuggestionEvent(String noteId,
-                                     int limit,
-                                     CompletableFuture<List<String>> suggestions)
+public record NoteTagSuggestionEvent(String noteId, int limit, CompletableFuture<List<String>> suggestions)
         implements PluginQuery<List<String>> {
 
     public NoteTagSuggestionEvent {
@@ -29,7 +27,8 @@ public record NoteTagSuggestionEvent(String noteId,
         suggestions = Objects.requireNonNull(suggestions, "suggestions");
     }
 
-    public static NoteTagSuggestionEvent request(String noteId, int limit) {
+    public static NoteTagSuggestionEvent request(String noteId,
+                                                 int limit) {
         return new NoteTagSuggestionEvent(noteId, limit, new CompletableFuture<>());
     }
 

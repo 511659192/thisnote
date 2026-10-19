@@ -27,6 +27,12 @@ public record PluginResetResult(String pluginId, Status status, String message) 
         return new PluginResetResult(pluginId, Status.FAILED, message);
     }
 
+    public static PluginResetResult failed(String pluginId, Throwable error) {
+        String message = error.getClass().getSimpleName()
+                + (error.getMessage() == null || error.getMessage().isBlank() ? "" : "：" + error.getMessage());
+        return failed(pluginId, message);
+    }
+
     public enum Status {
         RESET,
         SKIPPED,

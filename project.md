@@ -17,9 +17,9 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
    （`backend/app/src/main/java/com/thisnote/ThisnoteApplication.java:12`；插件说明见 `backend/plugins/notes/src/main/resources/application.yml:4`）。
 2. **产物分离。** 后端不端出任何静态资源（`backend/app/src/main/resources/application.yml:37-41` 的 `add-mappings: false`），
    界面由界面侧独立构建、交付、提供服务。
-3. **平台不认识业务，业务全在插件里。** 主体按 SBP/PF4J 最佳实践做成纯平台（插件发现/契约校验/启停 + 管理面），
+3. **平台不认识业务，业务全在插件里。** 主体按 SBP/PF4J 最佳实践做成纯平台（插件发现/启停 + 管理面），
    笔记域本身也是插件（`notes`，`undeactivatable=true`），功能插件各自独立存储
-   （`backend/plugins/notes/src/main/java/com/thisnote/ext/notes/NotesRegister.java:33-35`）。
+   （`backend/plugins/notes/src/main/java/com/thisnote/ext/notes/NotesPlugin.java:38-39`）。
 
 术语口径（`frontend/tools/deliver.mjs:13-20` 明确写死了这套叫法）：
 
@@ -42,7 +42,6 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 | 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120` | `frontend/host/src/plugins/devPorts.ts` |
 | 后端插件模块数 | 10（notes + ai + 8 个功能插件） | `backend/pom.xml` |
 | 数据根目录 | `${thisnote.data-root:${user.home}/.thisnote}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnote/ext/notes/config/NotesConfig.java:18-20` |
-| 插件契约版本 | `0.0.1` | `backend/plugin-api/src/main/java/com/thisnote/plugin/api/lifecycle/PluginRegister.java:27` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
@@ -97,9 +96,9 @@ thisnote/
                                  │ 契约（编译期唯一可见）           │ SBP/PF4J 装载
                         ┌────────┴────────┐              ┌────────┴─────────────────────┐
                         │   plugin-api    │              │ runtime/plugins/*.jar         │
-                        │ PluginRegister  │              │ notes / favorite /            │
-                        │ 事件 / DTO / 异常│              │ memory-cycle / baidu-sync /   │
-                        │ FileHelper      │              │ card-importer /               │
+                        │ 事件 / DTO / 异常│              │ notes / favorite /            │
+                        │ FileHelper      │              │ memory-cycle / baidu-sync /   │
+                        │                 │              │ card-importer /               │
                         │                 │              │ attachment-importer /         │
                         │                 │              │ state-reset                   │
                         └─────────────────┘              └───────────────────────────────┘
@@ -135,9 +134,9 @@ host（qiankun 主应用，:5173）
 |---|---|---|
 | `ThisnoteApplication` | 启动 | `@EnableScheduling`；扫描范围不含插件包 |
 | `ThisnoteConfig` | Web 装配 | 宽松 CORS（只监听本机）；`/api/plugins/**` 挂闸门；用 fastjson2 替换 Jackson |
-| `PluginRegistry` | PF4J 直通 + 扩展查询 | **PF4J 是唯一来源**；按 `plugin.requires` 用 `VersionManager` 过滤不满足契约的插件 |
+| `PluginRegistry` | PF4J 直通 | **PF4J 是唯一来源**；按 id 查询插件与描述符 |
 | `PluginStateService` | 全局启停/重载/管理视图 | 状态真相在 PF4J，不另存标记；不可停用插件拒绝停用与在线重载（409） |
-| `PluginLifecycle` | 启动三阶段 | 发现 → 校验契约 → 激活；`SmartInitializingSingleton` 时机；结果存 `report()` |
+| `PluginLifecycle` | 启动两阶段 | 发现 → 激活；`SmartInitializingSingleton` 时机；结果存 `report()` |
 | `PluginController` | 插件管理面 | 非 RESTful：查询 GET + 动作 POST + `@RequestParam`（无路径变量） |
 | `PluginEndpointHandlerInterceptor` | 停用闸门 | 停用插件的自有端点返回 409；管理面路径永远放行 |
 | `ApiExceptionHandler` | 统一错误 | 插件里抛的契约异常也能被兜住（advice 必须在主体） |
@@ -145,10 +144,7 @@ host（qiankun 主应用，:5173）
 
 关键行为：
 
-- **契约版本校验**：`plugin.requires` 为空则不校验；不满足的插件被**跳过并 warn**，不炸进程
-  （`PluginRegistry.java:72-83`）。
-- **启停**：`setActive` 走 PF4J 的 `enable/disable` + 显式 `start/stop`，然后尽力通知插件
-  （`PluginStateService.java:65-82`）；停用外置插件后不再向已关闭的容器发通知（`PluginStateService.java:170-180`）。
+- **启停**：`setActive` 走 PF4J 的 `enable/disable` + 显式 `start/stop`（`PluginStateService.java:65-82`）。
 - **重载**：SBP 重建类加载器与 Spring 子容器；装载失败（`reloadPlugins` 返回 null）抛 409 而非假装成功
   （`PluginStateService.java:93-114`）；`undeactivatable` 插件拒绝在线重载。
 - **管理视图**：`id/title/description/undeactivatable/dependencies/version/active/diskVersion/reloadAvailable`，
@@ -158,10 +154,8 @@ host（qiankun 主应用，:5173）
 
 | 内容 | 说明 |
 |---|---|
-| `lifecycle/PluginRegister` | 运行时 PF4J 扩展点：包含 `onGlobalStateChanged` 生命周期回调 |
 | `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`）；另含 `readMapIndex`/`readMapOrEmpty` 两个 JSON 索引读取原语（缺失/损坏语义不同） |
 | `util/MainContainerListeners` | 插件跨容器监听器统一注册口：`add`/`onPayload`（按 payload 类型分发）、`removeAll` 在插件 stop 时统一摘除 |
-| `util/PluginStateResetSupport` | 状态重置协议：`registerSync`/`registerAsync`/`registerSkipped` 注册监听并完成 `PluginStateResetEvent` 的结果回报 |
 | `event/PluginEvent` | 所有跨插件事件的强类型标记，不使用 `String + Map` 的通用事件替代具体载荷 |
 | `event/PluginNotification` / `PluginCommand` / `PluginControl` | 单向通知、无返回值命令、平台控制信号的类型分类 |
 | `event/PluginQuery<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
@@ -192,24 +186,24 @@ host（qiankun 主应用，:5173）
 
 ### 5.3 插件清单
 
-| id | 角色 | 不可停用 | `plugin.requires` | 依赖插件 | 自有存储 |
-|---|---|---|---|---|---|
-| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | `>=0.0.1` | 无 | `<data-root>/notes/**` |
-| `ai` | 统一 AI Provider、模型、凭据与文本/视觉调用 | 是 | `>=0.0.1` | `notes` | `notes/plugins/ai/{settings.json,.credentials.json}` |
-| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | `>=0.0.1` | 无 | `notes/plugins/favorite/.favorites.properties` |
-| `memory-cycle` | 间隔重复（Anki 式） | 否 | `>=0.0.1` | 无 | `notes/plugins/memory-cycle/.scheduling.json`（排期）、`.schedule-history.json`（复习历史） |
-| `baidu-sync` | 平台级百度网盘备份适配器 | 否 | `>=0.0.1` | 无 | `notes/plugins/baidu-sync/{.credentials,.sync-state}.json` |
-| `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（只通过事件协作） |
-| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `>=0.0.1` | `notes` | 无（每轮按引用关系判断） |
-| `state-reset` | 重置全部已安装插件并汇总结果 | 否 | `>=0.0.1` | 无 | 无（平台控制插件） |
-| `graphify` | Graphify 知识图谱与社区自动标签 | 否 | `>=0.0.1` | `ai,notes` | `notes/plugins/graphify/`（CLI 设置、索引映射与投影语料） |
-| `tags` | 独立笔记标签、标签页与标签筛选 | 否 | `>=0.0.1` | `ai,notes` | `notes/plugins/tags/tags.json` |
+| id | 角色 | 不可停用 | 依赖插件 | 自有存储 |
+|---|---|---|---|---|
+| `notes` | 核心业务域（笔记/卡片/搜索/附件） | 是 | 无 | `<data-root>/notes/**` |
+| `ai` | 统一 AI Provider、模型、凭据与文本/视觉调用 | 是 | `notes` | `notes/plugins/ai/{settings.json,.credentials.json}` |
+| `favorite` | 笔记收藏（★ + 列表筛选） | 否 | 无 | `notes/plugins/favorite/.favorites.properties` |
+| `memory-cycle` | 间隔重复（Anki 式） | 否 | 无 | `notes/plugins/memory-cycle/.scheduling.json`（排期）、`.schedule-history.json`（复习历史） |
+| `baidu-sync` | 平台级百度网盘备份适配器 | 否 | 无 | `notes/plugins/baidu-sync/{.credentials,.sync-state}.json` |
+| `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `notes` | 无（只通过事件协作） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `notes` | 无（每轮按引用关系判断） |
+| `state-reset` | 重置全部已安装插件并汇总结果 | 否 | 无 | 无（平台控制插件） |
+| `graphify` | Graphify 知识图谱与社区自动标签 | 否 | `ai,notes` | `notes/plugins/graphify/`（CLI 设置、索引映射与投影语料） |
+| `tags` | 独立笔记标签、标签页与标签筛选 | 否 | `ai,notes` | `notes/plugins/tags/tags.json` |
 
 出处：各模块 `src/main/resources/plugin.properties`。
 
 每个插件 jar 还携带 `META-INF/thisnote/plugin.json`，平台在**不启动插件容器**时读取它：
 `title/description/undeactivatable` 是管理面的权威值，`resetTargets` 供停用插件状态重置，
-`backupEnabled/backupExclude` 供百度备份适配器限定同步范围。`PluginRegister` 只负责运行时生命周期回调。
+`backupEnabled/backupExclude` 供百度备份适配器限定同步范围。
 
 ### 5.4 装载、启停、交付
 
@@ -701,10 +695,10 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
      注册表现有 11 个）。
 13. ~~`MemoryCycleStateChangedEventListener` 有两份实例~~（已修复：2026-10-18 删除插件容器内的 `@Component` 死注册——
     跨插件事件只经主容器广播，插件容器内那份从未收到过事件；notes 的 `CardAttachmentCleanupListener` 同形态同批修复。
-    同批把 7 个插件的「listener 注册/摘除」样板与 7 份同构的 `PluginStateResetListener` 下沉为
-    `plugin-api` 的 `MainContainerListeners`（`add`/`onPayload`/`removeAll`）与
-    `PluginStateResetSupport`（`registerSync`/`registerAsync`/`registerSkipped`），
-    业务 listener 以 lambda 内联进各 Plugin 类；`FileChangeEventListener` 例外保留类形态——
+    同批把 7 个插件的「listener 注册/摘除」样板下沉为 `plugin-api` 的
+    `MainContainerListeners`（`add`/`onPayload`/`removeAll`）；状态重置监听由各插件在
+    `afterPluginBootstrap` 中直接注册。业务 listener 以 lambda 内联进各 Plugin 类；
+    `FileChangeEventListener` 例外保留类形态——
     `BaiduSyncStarter` 的 `@EnableAsync` 使其 `@Async` 代理真实生效，必须保持异步执行）。
 14. **历史日志不能当现状依据**：`backend/app/backend-run.log` 与各处 `*.log` 是 2026-10-12 的运行记录，
     里面还是 `memory-curve`、契约版本 `4.0.0`（`backend-run.log:31-37`）。
@@ -723,12 +717,12 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 1. `backend/pom.xml`：`<modules>` 加模块；若需要新的第三方依赖，在 `dependencyManagement` 锁版本。
 2. `backend/plugins/<id>/pom.xml`：父 POM、`plugin-api` + `sbp-core` + 所需 Spring 依赖、
    `spring-boot-maven-plugin`（standalone）、`maven-antrun-plugin` 拷 jar（`<plugin.id>` 属性）。
-3. `src/main/resources/plugin.properties`：`plugin.id/class/version=@project.version@/requires/dependencies`；
+3. `src/main/resources/plugin.properties`：`plugin.id/class/version=@project.version@/dependencies`；
    **不要**把中文说明写进描述符（ISO-8859-1 会乱码）。
    同时提供 `src/main/resources/META-INF/thisnote/plugin.json`，声明显示名、说明、核心保护、
    重置目标与备份范围；平台在插件停用时也直接读取这份 UTF-8 清单。
 4. Java：`XxxPlugin extends SpringBootPlugin`、`XxxStarter`（`@SpringBootApplication`，需要定时任务再加
-   `@EnableScheduling`）、`XxxRegister implements PluginRegister`（`@Extension`，要注入服务才加 `@Component`）。
+   `@EnableScheduling`）。
 5. 在两个 `onPluginBootstrap` / `afterPluginBootstrap` 里：`ctx.registerBean(FileHelper.class, …)`；
    需要跨插件监听就 `new` 一个 listener 注册到 `getMainApplicationContext()`，并在 `stop()` 里摘掉。
 6. 端点放 `/api/plugins/<pluginId>/…`；业务异常用 `plugin-api` 的契约异常。
@@ -750,8 +744,6 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 
 ### 改动公开契约时
 
-- `PluginRegister.CONTRACT_VERSION` 只有明确要求时才修改，**不随公开类型/扩展点改动自动递增**；
-  若确实修改，同步各插件 `plugin.properties` 的 `plugin.requires`。
 - 改 DTO 字段名 → 后端控制器/服务、`plugin-api` DTO、**每个前端消费点的属性访问**一起改
   （`.agent/mem/lessons.md:13,32` 记录了两次踩坑）。
 - 改端点形态（GET/POST、参数名、返回包裹）→ 同步 `frontend/plugins/*/src/api/*.ts` 与

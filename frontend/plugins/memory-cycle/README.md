@@ -239,8 +239,7 @@ NoteCard 渲染卡片时：
 
 ## 7. 它用到的 plugin-api 契约清单
 
-后端（唯一的 PF4J 扩展点，见 `plugin-api`）：`PluginRegister`（生命周期回调）·
-`FileHelper`（通用文件工具）· `CardChangedEvent`（跨插件消息）
+后端（见 `plugin-api`）：`FileHelper`（通用文件工具）· `CardChangedEvent`（跨插件消息）
 
 界面侧：`registerCardPlugin` · `registerNavEntry` · `registerPluginRoute` · `unregisterPlugin` ·
 插件自己的 `memoryCycleApi` · `host()`（`notify` / `MarkdownView`）· `http` · `isPluginActive` · `refreshPluginAvailability`

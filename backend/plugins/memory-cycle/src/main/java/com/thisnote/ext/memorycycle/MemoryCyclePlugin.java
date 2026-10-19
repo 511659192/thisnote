@@ -4,15 +4,19 @@ import com.thisnote.ext.memorycycle.service.MemoryCycleService;
 import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.event.MemoryCycleStateChangedEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
+import com.thisnote.plugin.api.event.PluginResetResult;
+import com.thisnote.plugin.api.event.PluginStateResetEvent;
 import com.thisnote.plugin.api.util.FileHelper;
-import com.thisnote.plugin.api.util.MainContainerListeners;
-import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import lombok.extern.slf4j.Slf4j;
 
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.PayloadApplicationEvent;
+import org.springframework.context.event.GenericApplicationListener;
+import org.springframework.core.ResolvableType;
 
 /**
  * 记忆周期插件：thisnote 的**卡片插件**参考实现（参考 Anki 的 SM-2 间隔重复）。
@@ -25,13 +29,12 @@ import org.pf4j.PluginWrapper;
  * <p>id 与版本来自 {@code plugin.properties}（由 {@code descriptor()} 从 PF4J 描述符取），不在这里硬编码。
  */
 @Slf4j
-public class MemoryCyclePlugin extends SpringBootPlugin {
+public class MemoryCyclePlugin extends SpringBootPlugin implements GenericApplicationListener {
 
     /** 端点前缀；必须与 {@code plugin.properties} 里的 plugin.id 一致。 */
     public static final String PLUGIN_ID = "memory-cycle";
 
-    /** 本插件注册到主容器的全部跨插件监听器（停止时统一摘除）。 */
-    private MainContainerListeners listeners;
+    private MemoryCycleService memoryCycleService;
 
     public MemoryCyclePlugin(PluginWrapper wrapper) {
         // SBP 的构造器要的是 (PluginWrapper, IPluginConfigurer[])；本插件没有需要共享的 configurer。
@@ -65,35 +68,54 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        MemoryCycleService srs = ctx.getBean(MemoryCycleService.class);
-        srs.setMainEventPublisher(getMainApplicationContext());
-        listeners = new MainContainerListeners(getMainApplicationContext());
-        listeners.onPayload(CardChangedEvent.class, payload -> {
-            if (payload.kind() != CardChangedEvent.Kind.DELETED) {
-                return;
+        memoryCycleService = ctx.getBean(MemoryCycleService.class);
+        memoryCycleService.setMainEventPublisher(getMainApplicationContext());
+        getMainApplicationContext().addApplicationListener(this);
+    }
+
+    @Override
+    public boolean supportsEventType(ResolvableType eventType) {
+        return eventType.toClass() == PayloadApplicationEvent.class;
+    }
+
+    @Override
+    public void onApplicationEvent(ApplicationEvent event) {
+        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)) {
+            return;
+        }
+        Object payload = payloadEvent.getPayload();
+        if (payload instanceof CardChangedEvent change) {
+            if (change.kind() == CardChangedEvent.Kind.DELETED && memoryCycleService.delete(change.cardId())) {
+                log.info("卡片已删除，复习状态一并清除：{}", change.cardId());
             }
-            if (srs.delete(payload.cardId())) {
-                log.info("卡片已删除，复习状态一并清除：{}", payload.cardId());
-            }
-        });
-        listeners.onPayload(NoteChangedEvent.class, change -> {
+        } else if (payload instanceof NoteChangedEvent change) {
             if (change.kind() != NoteChangedEvent.Kind.DELETED) {
                 return;
             }
             int removedCards = 0;
             for (String cardId : change.cardIds()) {
-                if (srs.delete(cardId)) {
+                if (memoryCycleService.delete(cardId)) {
                     removedCards++;
                 }
             }
             log.info("笔记已删除，相关复习状态已清理：noteId={}, cards={}", change.noteId(), removedCards);
-        });
-        listeners.onPayload(MemoryCycleStateChangedEvent.class, change -> {
-            if (!change.enabled() && srs.delete(change.cardId())) {
+        } else if (payload instanceof MemoryCycleStateChangedEvent change) {
+            if (!change.enabled() && memoryCycleService.delete(change.cardId())) {
                 log.info("记忆周期已关闭，排期条目一并清除：{}", change.cardId());
             }
-        });
-        PluginStateResetSupport.registerSync(listeners, PLUGIN_ID, "记忆周期排期与复习历史已清空", srs::clearAll);
+        } else if (payload instanceof PluginStateResetEvent resetEvent) {
+            try {
+                memoryCycleService.clearAll();
+                if (resetEvent.expects(PLUGIN_ID)) {
+                    resetEvent.complete(PLUGIN_ID, PluginResetResult.reset(PLUGIN_ID, "记忆周期排期与复习历史已清空"));
+                }
+            } catch (RuntimeException e) {
+                if (resetEvent.expects(PLUGIN_ID)) {
+                    resetEvent.complete(PLUGIN_ID, PluginResetResult.failed(PLUGIN_ID, e));
+                }
+                log.warn("插件 {} 状态重置失败", PLUGIN_ID, e);
+            }
+        }
     }
 
     /**
@@ -102,10 +124,7 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
      */
     @Override
     public void stop() {
-        if (listeners != null) {
-            listeners.removeAll();
-            listeners = null;
-        }
+        getMainApplicationContext().removeApplicationListener(this);
         super.stop();
     }
 

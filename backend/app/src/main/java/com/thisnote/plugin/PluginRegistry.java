@@ -1,9 +1,7 @@
 package com.thisnote.plugin;
 
-import com.thisnote.plugin.api.lifecycle.PluginRegister;
 import com.thisnote.plugin.api.meta.PluginMetadata;
 import com.thisnote.plugin.api.meta.PluginMetadataReader;
-import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginDescriptor;
 import org.pf4j.PluginManager;
 import org.pf4j.PluginWrapper;
@@ -18,23 +16,13 @@ import java.util.Map;
 /**
  * 插件注册表：**PF4J 是唯一来源**。
  *
- * <p>它只做两件事：按 id 交出 PF4J 的 {@link PluginWrapper}；按类型取出插件贡献的 PF4J
- * 扩展（{@code @Extension} 类 —— SBP 会用插件自己的 Spring 容器实例化它们，所以扩展类可以
- * 注入插件容器里的服务）。
- *
- * <p>身份与版本来自 PF4J 描述符；管理面静态信息来自插件 jar 内的
+ * <p>它按 id 交出 PF4J 的 {@link PluginWrapper}；管理面静态信息来自插件 jar 内的
  * {@code META-INF/thisnote/plugin.json}，因此插件停用后也能稳定读取显示名、说明和核心保护标记。
- * {@link PluginRegister} 只承担运行时状态回调。
- *
- * <p><b>契约版本也走框架</b>：插件在 {@code plugin.requires} 里声明（支持 semver 范围，
- * 例如 {@code >=3.0.0}），这里用 PF4J 的 {@code VersionManager} 校验。不匹配的插件**跳过并告警**
- * —— 它是运行期装进来的，不该把进程搞崩，也不该以错误的接口对外服务。
  *
  * <p>惰性查询而非构造时快照：SBP 是在应用启动过程中装载插件的（此刻注册表可能还没有插件），
  * 而且运行期还能停用/重载。
  */
 @Component
-@Slf4j
 public class PluginRegistry {
 
     private final ObjectProvider<PluginManager> pluginManager;
@@ -46,7 +34,7 @@ public class PluginRegistry {
     // ------------------------------------------------------------------ PF4J 直通
 
     /**
-     * 当前装载且满足契约版本的插件，按 id 索引；每次调用都实时查询。
+     * 当前装载的插件，按 id 索引；每次调用都实时查询。
      */
     private Map<String, PluginWrapper> loaded() {
         Map<String, PluginWrapper> out = new LinkedHashMap<>();
@@ -56,31 +44,9 @@ public class PluginRegistry {
         }
         for (PluginWrapper wrapper : manager.getPlugins()) {
             String id = wrapper.getDescriptor().getPluginId();
-            if (!contractSatisfied(wrapper)) {
-                continue;
-            }
             out.putIfAbsent(id, wrapper);
         }
         return out;
-    }
-
-    /**
-     * 插件的 {@code plugin.requires} 是否被本核心的契约版本满足。
-     *
-     * <p>没声明 requires 的插件不校验（等于"不挑版本"）—— 校验机制用的是 PF4J 自己的
-     * {@code VersionManager}，所以范围表达式（{@code >=3.0.0}、{@code [3.0,4.0)}）都由框架解析。
-     */
-    private boolean contractSatisfied(PluginWrapper wrapper) {
-        String requires = wrapper.getDescriptor().getRequires();
-        if (requires == null || requires.isBlank()) {
-            return true;
-        }
-        PluginManager manager = pluginManager.getIfAvailable();
-        boolean ok = manager != null && manager.getVersionManager().checkVersionConstraint(PluginRegister.CONTRACT_VERSION, requires);
-        if (!ok) {
-            log.warn("插件 {} 要求 plugin.requires={}，本核心契约版本是 {} —— 已跳过", wrapper.getDescriptor().getPluginId(), requires, PluginRegister.CONTRACT_VERSION);
-        }
-        return ok;
     }
 
     /**
@@ -91,7 +57,7 @@ public class PluginRegistry {
     }
 
     /**
-     * PF4J 原生描述符（身份/版本/说明/provider/requires）。
+     * PF4J 原生描述符（身份/版本/说明/provider）。
      */
     public PluginDescriptor descriptor(String pluginId) {
         return get(pluginId).getDescriptor();
@@ -117,36 +83,6 @@ public class PluginRegistry {
      */
     public List<String> ids() {
         return new ArrayList<>(loaded().keySet());
-    }
-
-    /**
-     * 外置插件的类加载器；未找到该 id 返回 null。
-     *
-     * <p>插件要按它去解析自己 jar 里的资源（默认解析器是应用类加载器，看不到插件内部）。
-     */
-    public ClassLoader pluginClassLoader(String pluginId) {
-        PluginManager manager = pluginManager.getIfAvailable();
-        if (manager == null) {
-            return null;
-        }
-        PluginWrapper wrapper = manager.getPlugin(pluginId);
-        return wrapper == null ? null : wrapper.getPluginClassLoader();
-    }
-
-    // ------------------------------------------------------------------ 扩展点查询
-
-    /**
-     * 取插件的 {@link PluginRegister} 扩展（PF4J 原生 {@code getExtensions(type, pluginId)}）。
-     *
-     * <p>它承载运行时状态回调；插件没提供时返回 {@code null}。
-     */
-    private PluginRegister register(String pluginId) {
-        PluginManager manager = pluginManager.getIfAvailable();
-        if (manager == null || manager.getPlugin(pluginId) == null) {
-            return null;
-        }
-        List<PluginRegister> found = manager.getExtensions(PluginRegister.class, pluginId);
-        return found.isEmpty() ? null : found.get(0);
     }
 
     private PluginMetadata metadata(String pluginId) {
@@ -181,14 +117,4 @@ public class PluginRegistry {
                 .toList();
     }
 
-    /**
-     * 通知插件的全局启停（尽力而为：没有提供扩展就跳过）。
-     */
-    public void globalStateChanged(String pluginId,
-                                   boolean enabled) {
-        PluginRegister register = register(pluginId);
-        if (register != null) {
-            register.onGlobalStateChanged(enabled);
-        }
-    }
 }

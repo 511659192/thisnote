@@ -9,7 +9,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
@@ -58,23 +57,22 @@ class PluginJarContractTest {
 
     @ParameterizedTest(name = "{2} 的 jar 携带完整的插件契约")
     @CsvSource({
-            "notes,plugin-notes,notes,'',true,com.thisnote.ext.notes.NotesRegister",
-            "ai,plugin-ai,ai,notes,true,com.thisnote.ext.ai.AiRegister",
-            "favorite,plugin-favorite,favorite,'',false,com.thisnote.ext.favorite.FavoriteRegister",
-            "memory-cycle,plugin-memory-cycle,memory-cycle,'',false,com.thisnote.ext.memorycycle.MemoryCycleRegister",
-            "baidu-sync,plugin-baidu-sync,baidu-sync,'',false,com.thisnote.ext.baidusync.BaiduSyncRegister",
-            "card-importer,plugin-card-importer,card-importer,notes,false,com.thisnote.ext.cardimporter.CardImporterRegister",
-            "attachment-importer,plugin-attachment-importer,attachment-importer,notes,false,com.thisnote.ext.attachmentimporter.AttachmentImporterRegister",
-            "state-reset,plugin-state-reset,state-reset,'',false,com.thisnote.ext.statereset.StateResetRegister",
-            "graphify,plugin-graphify,graphify,'ai,notes',false,com.thisnote.ext.graphify.GraphifyRegister",
-            "tags,plugin-tags,tags,'ai,notes',false,com.thisnote.ext.tags.TagsRegister"
+            "notes,plugin-notes,notes,'',true",
+            "ai,plugin-ai,ai,notes,true",
+            "favorite,plugin-favorite,favorite,'',false",
+            "memory-cycle,plugin-memory-cycle,memory-cycle,'',false",
+            "baidu-sync,plugin-baidu-sync,baidu-sync,'',false",
+            "card-importer,plugin-card-importer,card-importer,notes,false",
+            "attachment-importer,plugin-attachment-importer,attachment-importer,notes,false",
+            "state-reset,plugin-state-reset,state-reset,'',false",
+            "graphify,plugin-graphify,graphify,'ai,notes',false",
+            "tags,plugin-tags,tags,'ai,notes',false"
     })
     void pluginJarCarriesItsContract(String moduleDir,
                                      String jarPrefix,
                                      String pluginId,
                                      String dependencies,
-                                     boolean undeactivatable,
-                                     String extensionClass) throws Exception {
+                                     boolean undeactivatable) throws Exception {
         // 前后端拆分对齐后：notes 也有自己的界面侧（宿主 UI 的笔记域迁成了 notes 微应用）——
         // 已登记的插件界面产物全部走 frontend/runtime/plugins/<id>/ 磁盘交付。
         Path jar = jarOf(moduleDir, jarPrefix);
@@ -93,19 +91,6 @@ class PluginJarContractTest {
             assertThat(props.getProperty("plugin.dependencies", ""))
                     .as("插件依赖必须与运行期实际使用一致")
                     .isEqualTo(dependencies);
-
-            // 1a) PF4J 扩展索引：没有它时插件仍能启动，但 PluginRegister 会静默缺失，
-            // 核心保护、显示名与状态回调都会退化为默认行为。
-            ZipEntry extensions = zip.getEntry("META-INF/extensions.idx");
-            assertThat(extensions).as("META-INF/extensions.idx 必须存在").isNotNull();
-            List<String> extensionClasses = Arrays.stream(new String(zip.getInputStream(extensions).readAllBytes(),
-                            java.nio.charset.StandardCharsets.UTF_8).split("\\R"))
-                    .map(String::trim)
-                    .filter(line -> !line.isBlank() && !line.startsWith("#"))
-                    .toList();
-            assertThat(extensionClasses)
-                    .as("PF4J 扩展索引必须包含插件注册类")
-                    .contains(extensionClass);
 
             ZipEntry metadataEntry = zip.getEntry("META-INF/thisnote/plugin.json");
             assertThat(metadataEntry).as("必须携带静态插件清单").isNotNull();

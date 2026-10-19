@@ -4,20 +4,25 @@ import com.thisnote.ext.ai.service.AiTagSuggestionService;
 import com.thisnote.ext.ai.service.AiSettingsService;
 import com.thisnote.plugin.api.event.AiRuntimeEvent;
 import com.thisnote.plugin.api.event.NoteTagSuggestionEvent;
+import com.thisnote.plugin.api.event.PluginResetResult;
+import com.thisnote.plugin.api.event.PluginStateResetEvent;
 import com.thisnote.plugin.api.util.FileHelper;
-import com.thisnote.plugin.api.util.MainContainerListeners;
-import com.thisnote.plugin.api.util.PluginStateResetSupport;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
 import org.pf4j.PluginWrapper;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.context.event.GenericApplicationListener;
+import org.springframework.core.ResolvableType;
 
-public class AiPlugin extends SpringBootPlugin {
+public class AiPlugin extends SpringBootPlugin implements GenericApplicationListener {
 
     public static final String PLUGIN_ID = "ai";
 
-    private MainContainerListeners listeners;
+    private AiSettingsService settingsService;
+    private AiTagSuggestionService aiTagSuggestionService;
 
     public AiPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -36,25 +41,40 @@ public class AiPlugin extends SpringBootPlugin {
 
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
-        listeners = new MainContainerListeners(getMainApplicationContext());
-        AiSettingsService settingsService = ctx.getBean(AiSettingsService.class);
-        listeners.onPayload(AiRuntimeEvent.class, event -> {
+        settingsService = ctx.getBean(AiSettingsService.class);
+        aiTagSuggestionService = ctx.getBean(AiTagSuggestionService.class);
+        getMainApplicationContext().addApplicationListener(this);
+    }
+
+    @Override
+    public boolean supportsEventType(ResolvableType eventType) {
+        return eventType.toClass() == PayloadApplicationEvent.class;
+    }
+
+    @Override
+    public void onApplicationEvent(ApplicationEvent event) {
+        if (!(event instanceof PayloadApplicationEvent<?> payloadEvent)) {
+            return;
+        }
+        Object payload = payloadEvent.getPayload();
+        if (payload instanceof AiRuntimeEvent runtimeEvent) {
             try {
-                event.runtime().complete(settingsService.runtime());
+                runtimeEvent.runtime().complete(settingsService.runtime());
             } catch (RuntimeException e) {
-                event.runtime().complete(new AiRuntimeEvent.Runtime("", "", ""));
+                runtimeEvent.runtime().complete(new AiRuntimeEvent.Runtime("", "", ""));
             }
-        });
-        listeners.onPayload(NoteTagSuggestionEvent.class, ctx.getBean(AiTagSuggestionService.class)::suggest);
-        PluginStateResetSupport.registerSkipped(listeners, PLUGIN_ID, "AI 配置与凭据保留");
+        } else if (payload instanceof NoteTagSuggestionEvent suggestionEvent) {
+            aiTagSuggestionService.suggest(suggestionEvent);
+        } else if (payload instanceof PluginStateResetEvent resetEvent) {
+            if (resetEvent.expects(PLUGIN_ID)) {
+                resetEvent.complete(PLUGIN_ID, PluginResetResult.skipped(PLUGIN_ID, "AI 配置与凭据保留"));
+            }
+        }
     }
 
     @Override
     public void stop() {
-        if (listeners != null) {
-            listeners.removeAll();
-            listeners = null;
-        }
+        getMainApplicationContext().removeApplicationListener(this);
         super.stop();
     }
 }

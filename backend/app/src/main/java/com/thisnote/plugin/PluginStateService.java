@@ -54,7 +54,7 @@ public class PluginStateService {
 
     /**
      * 启用/停用插件：落到 PF4J 的 enable/disable（它自己持久化管理状态）并显式 start/stop，
-     * 让它在本次运行里立即生效；随后才通知插件本体。
+     * 让它在本次运行里立即生效。
      *
      * @throws ConflictException 拒绝停用清单标记为 {@code undeactivatable} 的核心插件；管理页不展示停用按钮，
      *                           这里仍是最后一道闸。
@@ -74,7 +74,6 @@ public class PluginStateService {
                 manager.disablePlugin(pluginId);
             }
         }
-        notifyGlobalState(pluginId, active);
         log.info("插件 {} 全局启停 → {}", pluginId, active ? "启用" : "停用");
     }
 
@@ -106,7 +105,6 @@ public class PluginStateService {
             setActive(pluginId, false);
             setActive(pluginId, true);
         }
-        notifyGlobalState(pluginId, isActive(pluginId));
     }
 
     /**
@@ -132,34 +130,6 @@ public class PluginStateService {
         }
     }
 
-
-    // ------------------------------------------------------------------ 通知插件本体
-
-    /**
-     * 全局启停变化后通知插件本体（<b>尽力而为</b>）。
-     *
-     * <p>停用外置插件时容器已经关掉，再往里通知只会抛"容器已关闭"；而插件自己的
-     * {@code stop()} 生命周期已经通知过它了，所以这里直接跳过，不让管理请求失败。
-     * 启动时同理：管理上停用的插件根本没起容器，不该被通知（否则启动就炸）。
-     */
-    public void notifyGlobalState(String pluginId,
-                                  boolean active) {
-        if (!active && isExternal(pluginId)) {
-            return;
-        }
-        try {
-            registry.globalStateChanged(pluginId, active);
-        } catch (RuntimeException e) {
-            log.warn("通知插件 {} 全局状态={} 失败：{}", pluginId, active, e.toString());
-        }
-    }
-
-    /**
-     * 该 id 是不是 PF4J/SBP 装载的外置插件（内置插件没有自己的类加载器）。
-     */
-    private boolean isExternal(String pluginId) {
-        return registry.pluginClassLoader(pluginId) != null;
-    }
 
     // ------------------------------------------------------------------ 管理视图
 

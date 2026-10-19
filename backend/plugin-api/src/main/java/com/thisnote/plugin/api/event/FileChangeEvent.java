@@ -10,10 +10,8 @@ import java.util.Objects;
  * {@code url} and optional {@code previousUrl} are normalized absolute paths;
  * a rename is represented as {@link Operation#RENAME} with both locations.
  */
-public record FileChangeEvent(String sourcePluginId,
-                              Operation operation,
-                              Path url,
-                              Path previousUrl) implements PluginNotification {
+public record FileChangeEvent(String sourcePluginId, Operation operation, Path url, Path previousUrl)
+        implements PluginNotification {
 
     public FileChangeEvent {
         if (sourcePluginId == null || sourcePluginId.isBlank()) {
@@ -24,9 +22,6 @@ public record FileChangeEvent(String sourcePluginId,
     }
 
     public enum Operation {
-        CREATED,
-        DELETED,
-        UPDATED,
-        RENAME
+        CREATED, DELETED, UPDATED, RENAME
     }
 }
