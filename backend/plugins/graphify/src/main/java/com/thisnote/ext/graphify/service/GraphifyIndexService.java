@@ -14,7 +14,7 @@ import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.event.NoteListQueryEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
-import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
+import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import com.thisnote.plugin.api.util.FileHelper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -126,12 +126,12 @@ public class GraphifyIndexService {
     }
 
     private NoteDTO note(String noteId) {
-        NoteContentDTO content = noteContent(noteId);
+        NoteCardDTO content = noteContent(noteId);
         return content == null ? null : content.note();
     }
 
     private List<CardDTO> cards(String noteId) {
-        NoteContentDTO content = noteContent(noteId);
+        NoteCardDTO content = noteContent(noteId);
         return content == null ? List.of() : content.cards();
     }
 
@@ -141,8 +141,8 @@ public class GraphifyIndexService {
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
-    private NoteContentDTO noteContent(String noteId) {
-        CompletableFuture<NoteContentDTO> result = new CompletableFuture<>();
+    private NoteCardDTO noteContent(String noteId) {
+        CompletableFuture<NoteCardDTO> result = new CompletableFuture<>();
         publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }

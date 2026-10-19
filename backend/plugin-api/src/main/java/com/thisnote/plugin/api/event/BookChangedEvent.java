@@ -13,7 +13,7 @@ public record BookChangedEvent(String bookId, Kind kind, String title, String ty
         implements PluginNotification {
 
     public BookChangedEvent {
-        movedNoteIds = movedNoteIds == null ? List.of() : List.copyOf(movedNoteIds);
+        movedNoteIds = movedNoteIds == null ? List.of() : movedNoteIds;
     }
 
     public enum Kind {

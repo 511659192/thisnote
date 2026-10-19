@@ -4,7 +4,7 @@ import com.thisnote.ext.notes.exception.NotFoundException;
 import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
 import com.thisnote.plugin.api.event.NoteContentQueryEvent;
-import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
+import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
@@ -20,7 +20,7 @@ public class NoteContentQueryEventListener
     public void onApplicationEvent(PayloadApplicationEvent<NoteContentQueryEvent> event) {
         NoteContentQueryEvent query = event.getPayload();
         try {
-            query.result().complete(new NoteContentDTO(
+            query.result().complete(new NoteCardDTO(
                     noteService.get(query.noteId()),
                     cardService.cards(query.noteId(), null)));
         } catch (NotFoundException e) {

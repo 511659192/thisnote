@@ -165,7 +165,7 @@ host（qiankun 主应用，:5173）
 | `event/NoteTagSuggestionEvent` | 可选标签建议契约：请求方发起 `noteId + limit`，语义提供者完成 `CompletableFuture<List<String>>`；双方不共享存储 |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
-| `event/NoteContentQueryEvent` | `noteId` + `CompletableFuture<NoteContentDTO>`：notes 侧返回笔记元数据与卡片正文 |
+| `event/NoteContentQueryEvent` | `noteId` + `CompletableFuture<NoteCardDTO>`：notes 侧返回笔记元数据与卡片正文 |
 | `event/NoteListQueryEvent` | `CompletableFuture<List<NoteDTO>>`：notes 侧返回全部笔记元数据 |
 | `event/AttachmentBytesQueryEvent` | `fileName` + `CompletableFuture<byte[]>`：notes 侧返回附件字节，不存在时返回 null |
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
@@ -176,7 +176,7 @@ host（qiankun 主应用，:5173）
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
-| `notes/dto/*` | `NoteDTO`、`CardDTO`、`CardMetaDTO`、`NoteContentDTO(note,cards)`、`BookDTO`、`AttachmentDTO(fileName,size,width,height)` |
+| `notes/dto/*` | `NoteDTO`、`CardDTO`、`CardMetaDTO`、`NoteCardDTO(note,cards)`、`BookDTO`、`AttachmentDTO(fileName,size,width,height)` |
 
 契约包的依赖刻意压到最小（pf4j / spring-context / spring-web / fastjson2 / hutool / guava / lombok，
 `backend/plugin-api/pom.xml:22-60`），不把实现技术栈强加给插件作者。

@@ -11,7 +11,7 @@ public record PluginMetadata(String title, String description, boolean undeactiv
     public PluginMetadata {
         title = Objects.requireNonNull(title, "title");
         description = Objects.requireNonNull(description, "description");
-        resetTargets = List.copyOf(Objects.requireNonNull(resetTargets, "resetTargets"));
-        backupExclude = List.copyOf(Objects.requireNonNull(backupExclude, "backupExclude"));
+        resetTargets = Objects.requireNonNull(resetTargets, "resetTargets");
+        backupExclude = Objects.requireNonNull(backupExclude, "backupExclude");
     }
 }

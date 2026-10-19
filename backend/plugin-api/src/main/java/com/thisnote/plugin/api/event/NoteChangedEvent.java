@@ -11,7 +11,7 @@ public record NoteChangedEvent(String noteId, Kind kind, String title, List<Stri
         implements PluginNotification {
 
     public NoteChangedEvent {
-        cardIds = cardIds == null ? List.of() : List.copyOf(cardIds);
+        cardIds = cardIds == null ? List.of() : cardIds;
     }
 
     public enum Kind {

@@ -7,7 +7,7 @@ import com.thisnote.plugin.api.event.NoteContentQueryEvent;
 import com.thisnote.plugin.api.event.NoteTagSuggestionEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
-import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
+import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -55,7 +55,7 @@ public class AiTagSuggestionService {
                 event.suggestions().complete(List.of());
                 return;
             }
-            NoteContentDTO content = noteContent(event.noteId());
+            NoteCardDTO content = noteContent(event.noteId());
             if (content == null || content.note() == null) {
                 event.suggestions().complete(List.of());
                 return;
@@ -124,8 +124,8 @@ public class AiTagSuggestionService {
         return images;
     }
 
-    private NoteContentDTO noteContent(String noteId) {
-        CompletableFuture<NoteContentDTO> result = new CompletableFuture<>();
+    private NoteCardDTO noteContent(String noteId) {
+        CompletableFuture<NoteCardDTO> result = new CompletableFuture<>();
         publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }

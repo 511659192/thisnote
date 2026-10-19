@@ -6,7 +6,7 @@ import com.thisnote.plugin.api.event.NoteContentQueryEvent;
 import com.thisnote.plugin.api.event.NoteListQueryEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
-import com.thisnote.plugin.api.notes.dto.NoteContentDTO;
+import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -207,12 +207,12 @@ public class TagsService {
     }
 
     public NoteDTO note(String noteId) {
-        NoteContentDTO content = noteContent(noteId);
+        NoteCardDTO content = noteContent(noteId);
         return content == null ? null : content.note();
     }
 
     public List<CardDTO> cards(String noteId) {
-        NoteContentDTO content = noteContent(noteId);
+        NoteCardDTO content = noteContent(noteId);
         return content == null ? List.of() : content.cards();
     }
 
@@ -222,8 +222,8 @@ public class TagsService {
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
-    private NoteContentDTO noteContent(String noteId) {
-        CompletableFuture<NoteContentDTO> result = new CompletableFuture<>();
+    private NoteCardDTO noteContent(String noteId) {
+        CompletableFuture<NoteCardDTO> result = new CompletableFuture<>();
         publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }

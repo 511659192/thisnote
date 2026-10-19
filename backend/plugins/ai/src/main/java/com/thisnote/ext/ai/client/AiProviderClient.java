@@ -13,11 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.regex.Pattern;
 
 @Component
@@ -31,16 +27,12 @@ public class AiProviderClient {
             Prefer concepts that help find the note later. Deduplicate and keep every tag under 24 characters.
             Use the note's dominant language for the tag labels.
             """;
-    private static final Pattern FILE_EXTENSION = Pattern.compile(
-            ".*\\.(?:java|md|json|yml|yaml|xml|ts|tsx|js|jsx|css|html|properties)$",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern FILE_EXTENSION = Pattern.compile(".*\\.(?:java|md|json|yml|yaml|xml|ts|tsx|js|jsx|css|html|properties)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern CAMEL_CASE = Pattern.compile("[a-z][A-Z]");
     private static final Pattern PATH_OR_CODE = Pattern.compile("[/\\\\`()\\[\\]{}<>=|$]");
     private static final Pattern SENTENCE_PUNCTUATION = Pattern.compile("[，,、;；:：。.!?！？]");
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 
     public void test(AiRuntimeEvent.Runtime runtime) {
         String response = complete(runtime, "Reply with exactly OK.", "Connection test", List.of(), 32);
@@ -74,8 +66,7 @@ public class AiProviderClient {
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String body = response.body() == null ? "" : response.body();
-            throw new IllegalStateException("AI provider 返回 HTTP " + response.statusCode()
-                    + (body.isBlank() ? "" : "：" + body.substring(0, Math.min(400, body.length()))));
+            throw new IllegalStateException("AI provider 返回 HTTP " + response.statusCode() + (body.isBlank() ? "" : "：" + body.substring(0, Math.min(400, body.length()))));
         }
         JSONObject body = JSON.parseObject(response.body().getBytes(StandardCharsets.UTF_8));
         return chatText(body);
@@ -104,15 +95,15 @@ public class AiProviderClient {
         return request.build();
     }
 
-    private Object chatContent(String text, List<ImageInput> images) {
+    private Object chatContent(String text,
+                               List<ImageInput> images) {
         if (images.isEmpty()) {
             return text;
         }
         JSONArray content = new JSONArray();
         content.add(object("type", "text", "text", text));
         for (ImageInput image : images) {
-            content.add(object("type", "image_url", "image_url",
-                    object("url", "data:" + image.mediaType() + ";base64," + image.base64())));
+            content.add(object("type", "image_url", "image_url", object("url", "data:" + image.mediaType() + ";base64," + image.base64())));
         }
         return content;
     }
@@ -147,8 +138,7 @@ public class AiProviderClient {
         int end = response.lastIndexOf('}');
         if (start >= 0 && end > start) {
             try {
-                JSONObject object = JSON.parseObject(
-                        response.substring(start, end + 1).getBytes(StandardCharsets.UTF_8));
+                JSONObject object = JSON.parseObject(response.substring(start, end + 1).getBytes(StandardCharsets.UTF_8));
                 return cleanTags(object.getJSONArray("tags"));
             } catch (RuntimeException ignored) {
                 // Try an array-only response next.
@@ -158,8 +148,7 @@ public class AiProviderClient {
         int arrayEnd = response.lastIndexOf(']');
         if (arrayStart >= 0 && arrayEnd > arrayStart) {
             try {
-                return cleanTags(JSON.parseArray(
-                        response.substring(arrayStart, arrayEnd + 1).getBytes(StandardCharsets.UTF_8)));
+                return cleanTags(JSON.parseArray(response.substring(arrayStart, arrayEnd + 1).getBytes(StandardCharsets.UTF_8)));
             } catch (RuntimeException ignored) {
                 // Fall through to an empty result.
             }
@@ -198,10 +187,7 @@ public class AiProviderClient {
     }
 
     private String cleanTag(String raw) {
-        String value = raw == null ? "" : raw.trim()
-                .replaceFirst("^#+\\s*", "")
-                .replaceAll("^[\"'“”]+|[\"'“”]+$", "")
-                .trim();
+        String value = raw == null ? "" : raw.trim().replaceFirst("^#+\\s*", "").replaceAll("^[\"'“”]+|[\"'“”]+$", "").trim();
         if (!isMeaningfulTag(value)) {
             return null;
         }
@@ -209,13 +195,8 @@ public class AiProviderClient {
     }
 
     private boolean isMeaningfulTag(String value) {
-        return value.length() >= 2
-                && value.length() <= 24
-                && !FILE_EXTENSION.matcher(value).matches()
-                && !CAMEL_CASE.matcher(value).find()
-                && !PATH_OR_CODE.matcher(value).find()
-                && !SENTENCE_PUNCTUATION.matcher(value).find()
-                && !value.matches("^(?:\\d+|[0-9a-fA-F]{8,})$");
+        return value.length() >= 2 && value.length() <= 24 && !FILE_EXTENSION.matcher(value).matches() && !CAMEL_CASE.matcher(value).find() && !PATH_OR_CODE.matcher(value)
+                .find() && !SENTENCE_PUNCTUATION.matcher(value).find() && !value.matches("^(?:\\d+|[0-9a-fA-F]{8,})$");
     }
 
     private List<String> dedupe(List<String> tags) {

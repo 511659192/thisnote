@@ -8,7 +8,7 @@ import java.util.List;
 public record PluginStateResetReport(boolean ok, List<PluginResetResult> results) {
 
     public PluginStateResetReport {
-        results = results == null ? List.of() : List.copyOf(results);
+        results = results == null ? List.of() : results;
         ok = results.stream().noneMatch(result -> result.status() == PluginResetResult.Status.FAILED);
     }
 }
