@@ -1,10 +1,5 @@
 {
   "title": "AI 能力",
   "description": "统一管理模型供应商、API key 与文本/视觉能力；Graphify 与标签插件依赖此核心能力",
-  "undeactivatable": true,
-  "resetTargets": [],
-  "backupEnabled": true,
-  "backupExclude": [
-    ".credentials.json"
-  ]
+  "undeactivatable": true
 }

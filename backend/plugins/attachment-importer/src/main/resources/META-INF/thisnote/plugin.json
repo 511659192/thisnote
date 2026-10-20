@@ -1,8 +1,5 @@
 {
   "title": "附件导入",
   "description": "每 10 秒查询未被卡片引用的图片附件，并提交笔记与卡片创建申请",
-  "undeactivatable": false,
-  "resetTargets": [],
-  "backupEnabled": true,
-  "backupExclude": []
+  "undeactivatable": false
 }

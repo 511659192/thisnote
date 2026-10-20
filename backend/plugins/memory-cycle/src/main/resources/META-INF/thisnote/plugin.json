@@ -1,11 +1,5 @@
 {
   "title": "记忆周期",
   "description": "参考 Anki 的 SM-2 间隔重复：按卡片安排复习，遗忘即回退，间隔随掌握程度增长",
-  "undeactivatable": false,
-  "resetTargets": [
-    ".scheduling.json",
-    ".schedule-history.json"
-  ],
-  "backupEnabled": true,
-  "backupExclude": []
+  "undeactivatable": false
 }

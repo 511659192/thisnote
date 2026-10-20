@@ -10,7 +10,7 @@ import org.pf4j.PluginWrapper;
 import org.springframework.context.support.GenericApplicationContext;
 
 /**
- * 状态重置插件：活动插件走 {@code PluginStateResetEvent} 自身清理，停用插件按其静态清单清理。
+ * 状态重置插件：活动插件走 {@code PluginStateResetEvent} 自身清理，停用插件不启动、不清理。
  */
 public class StateResetPlugin extends SpringBootPlugin {
 

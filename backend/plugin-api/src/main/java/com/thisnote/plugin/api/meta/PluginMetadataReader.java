@@ -1,7 +1,6 @@
 package com.thisnote.plugin.api.meta;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginWrapper;
@@ -83,18 +82,6 @@ public final class PluginMetadataReader {
         if (!raw.containsKey("undeactivatable")) {
             throw new IllegalArgumentException("插件清单缺少 undeactivatable");
         }
-        JSONArray resetTargets = raw.getJSONArray("resetTargets");
-        JSONArray backupExclude = raw.getJSONArray("backupExclude");
-        if (resetTargets == null) {
-            throw new IllegalArgumentException("插件清单缺少 resetTargets");
-        }
-        if (!raw.containsKey("backupEnabled")) {
-            throw new IllegalArgumentException("插件清单缺少 backupEnabled");
-        }
-        if (backupExclude == null) {
-            throw new IllegalArgumentException("插件清单缺少 backupExclude");
-        }
-        return new PluginMetadata(title.trim(), description.trim(), raw.getBooleanValue("undeactivatable"), resetTargets.toJavaList(String.class), raw.getBooleanValue("backupEnabled"),
-                                  backupExclude.toJavaList(String.class));
+        return new PluginMetadata(title.trim(), description.trim(), raw.getBooleanValue("undeactivatable"));
     }
 }

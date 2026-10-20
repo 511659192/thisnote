@@ -101,19 +101,13 @@ class PluginJarContractTest {
             }
             assertThat(metadata).as("静态插件清单不能为空").isNotNull();
             assertThat(metadata).doesNotContainKey("schemaVersion");
-            assertThat(metadata).containsKeys(
-                    "title", "description", "undeactivatable", "resetTargets", "backupEnabled", "backupExclude");
+            assertThat(metadata).containsKeys("title", "description", "undeactivatable");
+            assertThat(metadata).doesNotContainKeys("resetTargets", "backupEnabled", "backupExclude");
             assertThat(metadata.getString("title")).isNotBlank();
             assertThat(metadata.getString("description")).isNotBlank();
             assertThat(metadata.getBooleanValue("undeactivatable"))
                     .as("核心插件保护必须来自静态清单")
                     .isEqualTo(undeactivatable);
-            for (Object target : metadata.getJSONArray("resetTargets")) {
-                String value = String.valueOf(target);
-                assertThat(Path.of(value).isAbsolute()).as("重置目标不能是绝对路径").isFalse();
-                assertThat(value.replace('\\', '/')).as("重置目标不能越界").doesNotContain("..");
-            }
-
             // 1b) 版本单源：描述符版本 == 这个 jar 自己的构建版本（父 pom 过滤注入的结果）
             ZipEntry buildInfo = zip.getEntry("META-INF/maven/com.thisnote/" + jarPrefix + "/pom.properties");
             assertThat(buildInfo).as("jar 里应带 Maven 构建信息（pom.properties）").isNotNull();

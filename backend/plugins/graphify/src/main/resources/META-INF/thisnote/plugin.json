@@ -1,11 +1,5 @@
 {
   "title": "Graphify 知识图谱",
   "description": "使用 Graphify 将笔记、卡片和图片整理为可查询的知识图谱，并以社区提供只读自动标签",
-  "undeactivatable": false,
-  "resetTargets": [
-    "corpus",
-    "index-state.json"
-  ],
-  "backupEnabled": true,
-  "backupExclude": []
+  "undeactivatable": false
 }

@@ -1,12 +1,5 @@
 {
   "title": "笔记核心",
   "description": "笔记、卡片、搜索、标签、快照与导入导出等笔记领域能力",
-  "undeactivatable": true,
-  "resetTargets": [
-    ".note-metadata.json",
-    ".card-metadata.json",
-    ".attachment-metadata.json"
-  ],
-  "backupEnabled": true,
-  "backupExclude": []
+  "undeactivatable": true
 }

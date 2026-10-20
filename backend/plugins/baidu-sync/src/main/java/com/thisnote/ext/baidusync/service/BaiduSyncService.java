@@ -12,7 +12,6 @@ import com.thisnote.ext.baidusync.model.*;
 import com.thisnote.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnote.ext.baidusync.repository.BaiduSyncStateRepository;
 import com.thisnote.plugin.api.event.FileChangeEvent;
-import com.thisnote.plugin.api.meta.PluginMetadata;
 import com.thisnote.plugin.api.meta.PluginMetadataReader;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.SneakyThrows;
@@ -65,15 +64,16 @@ public class BaiduSyncService {
 
     @SneakyThrows
     public void initialize(PluginManager pluginManager) {
-        Map<String, PluginMetadata> installedPlugins = new LinkedHashMap<>();
+        Set<String> installedPluginIds = new LinkedHashSet<>();
         for (PluginWrapper wrapper : pluginManager.getPlugins()) {
             try {
-                installedPlugins.put(wrapper.getPluginId(), PluginMetadataReader.read(wrapper));
+                PluginMetadataReader.read(wrapper);
+                installedPluginIds.add(wrapper.getPluginId());
             } catch (Exception e) {
                 log.error("插件 {} 的备份清单不可用，已排除其数据目录", wrapper.getPluginId(), e);
             }
         }
-        this.backupScope = new BackupScope(notesRoot, installedPlugins);
+        this.backupScope = new BackupScope(notesRoot, installedPluginIds);
 
         BaiduSyncSettings settings = settingsRepository.get();
         validateSettings(settings);

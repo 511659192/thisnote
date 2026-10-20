@@ -170,7 +170,7 @@ host（qiankun 主应用，:5173）
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
 | `event/AttachmentAdoptEvent` | `CompletableFuture<AttachmentDTO>` + `fileName`：接管一个未被管理的附件（改名为 `<uuid>.<ext>`、原名记入元数据），notes 侧监听填充 |
 | `event/AttachmentChangedEvent` | Notes 发布附件创建、更新、删除、重命名；Graphify 只消费此事件，不解析附件目录 |
-| `event/PluginStateResetEvent` | 状态重置（`sourcePluginId` + 活动插件 future 表）：各插件完成清理并回报 `PluginResetResult` |
+| `event/PluginStateResetEvent` | 状态重置（`sourcePluginId` + 活动插件 future 表）：各活动插件完成清理并回报 `PluginResetResult` |
 | `event/PluginStateResetReport` | 全部已安装插件的重置汇总；状态为 `RESET / SKIPPED / FAILED` |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
@@ -203,8 +203,7 @@ host（qiankun 主应用，:5173）
 出处：各模块 `src/main/resources/plugin.properties`。
 
 每个插件 jar 还携带 `META-INF/thisnote/plugin.json`，平台在**不启动插件容器**时读取它：
-`title/description/undeactivatable` 是管理面的权威值，`resetTargets` 供停用插件状态重置，
-`backupEnabled/backupExclude` 供百度备份适配器限定同步范围。
+`title/description/undeactivatable` 是管理面的权威值；静态清单不再承载重置目标或备份范围。
 
 ### 5.4 装载、启停、交付
 
@@ -405,9 +404,9 @@ host（qiankun 主应用，:5173）
 
 **baidu-sync**
 - 平台级备份适配器，不再是严格数据闭环插件：只同步 `cards/`、`attachments/`、`plugins/notes/`
-  和清单声明 `backupEnabled=true` 的已安装插件目录；未知目录不进入备份范围。
-- AI 的 `.credentials.json` 由 `backupExclude` 排除，`baidu-sync` 自身 `backupEnabled=false`；
-  本地清单、事件增量同步和远端下载共用同一个 `BackupScope` 判断。
+  和所有已安装插件目录；未知目录不进入备份范围。
+- 备份端不额外排除自身插件或 `.credentials.json`；本地清单、事件增量同步和远端下载共用同一个
+  `BackupScope` 判断。
 - 远端目录形如 `/apps/<appName>/notes/`；同步范围外的远端历史文件保持不动。
 - 双端比较与基线都用 **`size:mtimeSeconds`** 指纹，不用云端 MD5（`.agent/mem/lessons.md:7`；
   `BaiduSyncService.java:531-578`）。
@@ -436,8 +435,7 @@ host（qiankun 主应用，:5173）
 **state-reset**
 - `POST /api/plugins/state-reset/reset` 覆盖**全部已安装插件**。活动插件通过 `PluginStateResetEvent`
   执行自身清理并返回 future；state-reset 汇总结果，Graphify 异步清理完成后请求才结束。
-- 停用插件不启动容器，按 `plugin.json.resetTargets` 删除自己声明的状态文件。目标必须是插件私有目录内的
-  相对路径，拒绝绝对路径、`..` 与符号链接逃逸。
+- 停用插件不启动容器，也不执行状态清理；结果标记为 `SKIPPED`。
 - 有状态文件的活动插件重写为初始内容：favorite、memory-cycle、tags、baidu-sync、notes 与 Graphify
   分别走自己的 reset；baidu 同步进行中时该插件返回 `FAILED`，不伪报成功。
 - AI 的 Provider、模型、API key，Graphify 的 `settings.json`，百度授权凭据和 Notes 卡片/附件文件均保留。
@@ -454,7 +452,7 @@ host（qiankun 主应用，:5173）
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
 - 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
 - API key 只保存在 AI 插件的 `.credentials.json`，不由 API 返回；Graphify 通过事件取得运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
-  文件未加密；百度备份清单会排除该凭据文件。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
+  文件未加密；百度备份当前也会包含该凭据文件，排除需要使用者自行处理。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
 - 模型供应商为 OpenCode Go（默认 `glm-5.3-flash`）；Claude、OpenAI 与独立 Kimi/Gemini 供应商已移除。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；旧设置不自动迁移，现存凭据不会因移除选项而自动删除。
 - 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
 
@@ -650,9 +648,9 @@ pnpm -r build                                   # 各包构建（插件 build �
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
 | `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 10 个插件 jar 的契约：描述符、依赖、注册类索引、静态插件清单、版本与产物分离；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
-| `backend/app/src/test/.../PluginMetadataReaderTest.java` | 停用场景所需的静态清单可从开发目录读取，重置与备份字段解析正确 | `mvn test`（从 `backend/`） |
+| `backend/app/src/test/.../PluginMetadataReaderTest.java` | 停用场景所需的静态清单可从开发目录读取，管理字段解析正确 | `mvn test`（从 `backend/`） |
 | `backend/plugins/notes/src/test/.../AttachmentServiceTest.java` | 未被管理的附件返回真实像素宽高，附件导入无需读取 Notes 目录 | `mvn test`（从 `backend/`） |
-| `backend/plugins/baidu-sync/src/test/.../BackupScopeTest.java` | 备份范围只含声明目录，排除凭据、百度自身和未知插件目录 | `mvn test`（从 `backend/`） |
+| `backend/plugins/baidu-sync/src/test/.../BackupScopeTest.java` | 备份范围包含笔记与所有已安装插件目录，拒绝未知/越界路径 | `mvn test`（从 `backend/`） |
 | `frontend/host/tests/markdown.test.ts` | HTML 转义、标题/列表/表格/任务项、`plainText`/`firstHeading`/`wordCount` | `pnpm --filter thisnote-frontend test` |
 | `frontend/host/tests/plugin_boundary.test.ts` | 全部插件不得引用宿主内部路径、跨插件相对路径或其他插件包；同时检查 `package.json` 依赖 | 同上 |
 | `frontend/host/tools/*.mjs` | 约 20 个 Playwright/HTTP 手动探针（卡片模式、拖拽、标题改名、插件管理、qiankun 冒烟等） | 手工 `node tools/xxx.mjs`，**未接进 `test` 脚本** |
@@ -720,8 +718,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
    `spring-boot-maven-plugin`（standalone）、`maven-antrun-plugin` 拷 jar（`<plugin.id>` 属性）。
 3. `src/main/resources/plugin.properties`：`plugin.id/class/version=@project.version@/dependencies`；
    **不要**把中文说明写进描述符（ISO-8859-1 会乱码）。
-   同时提供 `src/main/resources/META-INF/thisnote/plugin.json`，声明显示名、说明、核心保护、
-   重置目标与备份范围；平台在插件停用时也直接读取这份 UTF-8 清单。
+    同时提供 `src/main/resources/META-INF/thisnote/plugin.json`，声明显示名、说明与核心保护；
+    平台在插件停用时也直接读取这份 UTF-8 清单。
 4. Java：`XxxPlugin extends SpringBootPlugin`、`XxxStarter`（`@SpringBootApplication`，需要定时任务再加
    `@EnableScheduling`）。
 5. 在两个 `onPluginBootstrap` / `afterPluginBootstrap` 里：`ctx.registerBean(FileHelper.class, …)`；

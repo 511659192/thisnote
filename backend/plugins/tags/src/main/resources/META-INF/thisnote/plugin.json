@@ -1,10 +1,5 @@
 {
   "title": "标签",
   "description": "为笔记维护独立标签，提供标签页与列表筛选；关闭插件即整体下线，数据保留",
-  "undeactivatable": false,
-  "resetTargets": [
-    "tags.json"
-  ],
-  "backupEnabled": true,
-  "backupExclude": []
+  "undeactivatable": false
 }

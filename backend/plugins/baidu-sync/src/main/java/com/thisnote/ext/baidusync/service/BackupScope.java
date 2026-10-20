@@ -1,12 +1,8 @@
 package com.thisnote.ext.baidusync.service;
 
-import com.thisnote.plugin.api.meta.PluginMetadata;
-
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -16,36 +12,21 @@ public final class BackupScope {
 
     private final Path notesRoot;
     private final Set<String> roots = new LinkedHashSet<>();
-    private final Map<String, List<String>> excludesByPlugin = new LinkedHashMap<>();
 
     public BackupScope(Path notesRoot,
-                       Map<String, PluginMetadata> installedPlugins) {
+                       Set<String> installedPluginIds) {
         this.notesRoot = notesRoot.toAbsolutePath().normalize();
         roots.add("cards");
         roots.add("attachments");
         roots.add("plugins/notes");
-        installedPlugins.forEach((pluginId, metadata) -> {
-            if (pluginId == null || pluginId.isBlank()) {
-                return;
-            }
-            String normalizedId = pluginId.trim();
-            if (normalizedId.contains("/") || normalizedId.contains("\\") || normalizedId.equals("..")) {
-                return;
-            }
-            if (!metadata.backupEnabled()) {
-                return;
-            }
-            String pluginRoot = "plugins/" + normalizedId;
-            roots.add(pluginRoot);
-            List<String> excludes = metadata.backupExclude().stream()
-                    .map(String::trim)
-                    .filter(value -> !value.isBlank())
-                    .map(value -> normalize(pluginRoot + "/" + value))
-                    .toList();
-            if (!excludes.isEmpty()) {
-                excludesByPlugin.put(pluginRoot, excludes);
-            }
-        });
+        installedPluginIds.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(pluginId -> !pluginId.isBlank()
+                        && !pluginId.contains("/")
+                        && !pluginId.contains("\\")
+                        && !pluginId.equals(".."))
+                .forEach(pluginId -> roots.add("plugins/" + pluginId));
     }
 
     public Set<Path> scanRoots() {
@@ -62,17 +43,7 @@ public final class BackupScope {
             return false;
         }
         boolean underRoot = roots.stream().anyMatch(root -> normalized.equals(root) || normalized.startsWith(root + "/"));
-        if (!underRoot) {
-            return false;
-        }
-        for (List<String> excludes : excludesByPlugin.values()) {
-            for (String exclude : excludes) {
-                if (normalized.equals(exclude) || normalized.startsWith(exclude + "/")) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return underRoot;
     }
 
     public boolean mayContain(String relativeDirectory) {

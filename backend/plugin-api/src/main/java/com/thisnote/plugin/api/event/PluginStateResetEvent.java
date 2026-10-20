@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 插件状态重置：由「状态重置」插件经主容器发布，活动插件清理自己的持久状态并回报结果。
  *
- * <p>停用插件不启动容器，由状态重置插件按静态插件清单清理；笔记数据不在清理范围内。
+ * <p>停用插件不启动容器，也不执行状态清理；笔记数据不在清理范围内。
  */
 public record PluginStateResetEvent(String sourcePluginId, Map<String, CompletableFuture<PluginResetResult>> participants)
         implements PluginControl {

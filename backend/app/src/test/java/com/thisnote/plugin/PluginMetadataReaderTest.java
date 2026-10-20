@@ -27,10 +27,7 @@ class PluginMetadataReaderTest {
                 {
                   "title": "测试插件",
                   "description": "停用后仍可读取",
-                  "undeactivatable": true,
-                  "resetTargets": ["state.json"],
-                  "backupEnabled": true,
-                  "backupExclude": [".credentials.json"]
+                  "undeactivatable": true
                 }
                 """, StandardCharsets.UTF_8);
         PluginWrapper wrapper = mock(PluginWrapper.class);
@@ -42,8 +39,5 @@ class PluginMetadataReaderTest {
 
         assertThat(metadata.title()).isEqualTo("测试插件");
         assertThat(metadata.undeactivatable()).isTrue();
-        assertThat(metadata.resetTargets()).containsExactly("state.json");
-        assertThat(metadata.backupEnabled()).isTrue();
-        assertThat(metadata.backupExclude()).containsExactly(".credentials.json");
     }
 }
