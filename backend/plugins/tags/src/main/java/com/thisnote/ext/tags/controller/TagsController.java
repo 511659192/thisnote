@@ -2,6 +2,7 @@ package com.thisnote.ext.tags.controller;
 
 import com.thisnote.ext.tags.service.AutoTagService;
 import com.thisnote.ext.tags.service.TagUsageService;
+import com.thisnote.ext.tags.service.TagsSettingsService;
 import com.thisnote.ext.tags.service.TagsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,13 +21,27 @@ public class TagsController {
     private final TagsService tagsService;
     private final AutoTagService autoTagService;
     private final TagUsageService tagUsageService;
+    private final TagsSettingsService settingsService;
 
     public TagsController(TagsService tagsService,
                           AutoTagService autoTagService,
-                          TagUsageService tagUsageService) {
+                          TagUsageService tagUsageService,
+                          TagsSettingsService settingsService) {
         this.tagsService = tagsService;
         this.autoTagService = autoTagService;
         this.tagUsageService = tagUsageService;
+        this.settingsService = settingsService;
+    }
+
+    @GetMapping("/settings")
+    public TagsSettingsService.SettingsResponse settings() {
+        return settingsService.response();
+    }
+
+    @PostMapping("/settings")
+    public TagsSettingsService.SettingsResponse saveSettings(
+            @RequestBody TagsSettingsService.SettingsUpdate update) {
+        return settingsService.save(update);
     }
 
     @GetMapping("/tags")

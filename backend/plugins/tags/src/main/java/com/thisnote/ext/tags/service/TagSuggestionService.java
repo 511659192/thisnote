@@ -39,7 +39,12 @@ public class TagSuggestionService {
             Prefer concepts that help find the note later. Deduplicate and keep every tag under 24 characters.
             Use the note's dominant language for the tag labels.
             """;
+    private final TagsSettingsService settingsService;
     private ApplicationEventPublisher eventPublisher;
+
+    public TagSuggestionService(TagsSettingsService settingsService) {
+        this.settingsService = settingsService;
+    }
 
     public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
         this.eventPublisher = eventPublisher;
@@ -62,7 +67,13 @@ public class TagSuggestionService {
 
     private String complete(String text,
                             List<AiCompletionFutureEvent.ImageInput> images) {
-        AiCompletionFutureEvent request = AiCompletionFutureEvent.request(TAG_PROMPT, text, images, MAX_TOKENS);
+        AiCompletionFutureEvent request = AiCompletionFutureEvent.request(
+                settingsService.aiProfileId(),
+                TAG_PROMPT,
+                text,
+                images,
+                MAX_TOKENS
+        );
         publisher().publishEvent(request);
         return request.completion().orTimeout(COMPLETION_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }

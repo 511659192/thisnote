@@ -5,6 +5,7 @@ import com.thisnote.plugin.api.util.FileHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -26,17 +27,37 @@ public class GraphifySettingsRepository {
             return "";
         }
         try {
-            StoredCliSettings stored = JSON.parseObject(Files.readString(settingsFile), StoredCliSettings.class);
+            StoredCliSettings stored = read();
             return stored == null || stored.executablePath() == null ? "" : stored.executablePath();
         } catch (Exception e) {
             throw new IllegalStateException("Graphify 设置文件无法读取", e);
         }
     }
 
-    public synchronized void updateExecutablePath(String executablePath) {
-        fileHelper.fileWritten(settingsFile, new StoredCliSettings(executablePath));
+    public synchronized String getAiProfileId() {
+        if (!Files.exists(settingsFile)) {
+            return "";
+        }
+        try {
+            StoredCliSettings stored = read();
+            return stored == null || stored.aiProfileId() == null ? "" : stored.aiProfileId();
+        } catch (Exception e) {
+            throw new IllegalStateException("Graphify 设置文件无法读取", e);
+        }
     }
 
-    private record StoredCliSettings(String executablePath) {
+    public synchronized void update(String executablePath,
+                                    String aiProfileId) {
+        fileHelper.fileWritten(settingsFile, new StoredCliSettings(executablePath, aiProfileId));
+    }
+
+    private StoredCliSettings read() throws IOException {
+        var raw = JSON.parseObject(Files.readString(settingsFile));
+        return raw == null
+                ? new StoredCliSettings("", "")
+                : new StoredCliSettings(raw.getString("executablePath"), raw.getString("aiProfileId"));
+    }
+
+    private record StoredCliSettings(String executablePath, String aiProfileId) {
     }
 }

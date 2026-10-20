@@ -598,9 +598,9 @@ public class GraphifyIndexService {
     }
 
     private String requireApiKey(GraphifySettingsService.Settings settings) {
-        String apiKey = settingsService.apiKey(settings.provider());
+        String apiKey = settingsService.apiKey(settings.aiProfileId());
         if (apiKey.isBlank()) {
-            throw new IllegalStateException("请先在 AI 能力插件中配置当前 Provider 的 API key");
+            throw new IllegalStateException("请先在 AI 能力插件中为所选 profile 配置 API key");
         }
         return apiKey;
     }

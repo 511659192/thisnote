@@ -2,6 +2,8 @@ package com.thisnote.ext.graphify.service;
 
 import com.thisnote.ext.graphify.client.GraphifyAiClient;
 import com.thisnote.ext.graphify.repository.GraphifySettingsRepository;
+import com.thisnote.plugin.api.event.AiProfileSummary;
+import com.thisnote.plugin.api.event.AiProfilesFutureEvent;
 import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
 import org.springframework.stereotype.Service;
 
@@ -27,18 +29,36 @@ public class GraphifySettingsService {
     }
 
     public Settings settings() {
-        AiRuntimeFutureEvent.Runtime runtime = aiClient.runtime();
-        return new Settings(runtime.provider(), runtime.model(), settingsRepository.getExecutablePath());
+        String profileId = selectedProfileId();
+        String executablePath = settingsRepository.getExecutablePath();
+        try {
+            AiRuntimeFutureEvent.Runtime runtime = aiClient.runtime(profileId);
+            return new Settings(profileId, runtime.provider(), runtime.model(), executablePath);
+        } catch (Exception e) {
+            return new Settings(profileId, "", "", executablePath);
+        }
     }
 
-    public String apiKey(String provider) {
-        supportedProvider(provider);
-        return aiClient.runtime().apiKey();
+    public String apiKey(String profileId) {
+        return aiClient.runtime(profileId).apiKey();
     }
 
     public SettingsResponse response() {
         Settings settings = settings();
-        return new SettingsResponse(settings.provider(), settings.model(), settings.executablePath(), !apiKey(settings.provider()).isBlank());
+        boolean keyConfigured = false;
+        try {
+            keyConfigured = !apiKey(settings.aiProfileId()).isBlank();
+        } catch (Exception ignored) {
+            // 配置缺失时仍要能打开设置页重新选择。
+        }
+        return new SettingsResponse(
+                settings.aiProfileId(),
+                settings.provider(),
+                settings.model(),
+                settings.executablePath(),
+                keyConfigured,
+                profiles()
+        );
     }
 
     public synchronized SettingsResponse save(SettingsUpdate update) {
@@ -46,8 +66,26 @@ public class GraphifySettingsService {
             throw new IllegalArgumentException("设置不能为空");
         }
         String executablePath = update.executablePath() == null ? "" : update.executablePath().trim();
-        settingsRepository.updateExecutablePath(executablePath);
+        String profileId = update.aiProfileId() == null || update.aiProfileId().isBlank()
+                ? AiProfilesFutureEvent.DEFAULT_PROFILE_ID
+                : update.aiProfileId().trim();
+        List<AiProfileSummary> available = profiles();
+        if (available.isEmpty()) {
+            throw new IllegalStateException("AI 核心插件未返回可用的 completion 配置");
+        }
+        if (available.stream().noneMatch(profile -> profileId.equals(profile.id()))) {
+            throw new IllegalArgumentException("AI profile 不存在：" + profileId);
+        }
+        settingsRepository.update(executablePath, profileId);
         return response();
+    }
+
+    public List<AiProfileSummary> profiles() {
+        try {
+            return aiClient.profiles();
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     public static List<String> environmentKeyNamesToClear() {
@@ -61,6 +99,11 @@ public class GraphifySettingsService {
     public static String graphifyBackend(String provider) {
         String name = supportedProvider(provider).name();
         return OPENCODE_GO_PROVIDER.equals(name) ? "openai" : name;
+    }
+
+    private String selectedProfileId() {
+        String stored = settingsRepository.getAiProfileId();
+        return stored == null || stored.isBlank() ? AiProfilesFutureEvent.DEFAULT_PROFILE_ID : stored;
     }
 
     private static Provider supportedProvider(String value) {
@@ -78,12 +121,20 @@ public class GraphifySettingsService {
         }
     }
 
-    public record Settings(String provider, String model, String executablePath) {
+    public record Settings(String aiProfileId,
+                           String provider,
+                           String model,
+                           String executablePath) {
     }
 
-    public record SettingsResponse(String provider, String model, String executablePath, boolean keyConfigured) {
+    public record SettingsResponse(String aiProfileId,
+                                   String provider,
+                                   String model,
+                                   String executablePath,
+                                   boolean keyConfigured,
+                                   List<AiProfileSummary> profiles) {
     }
 
-    public record SettingsUpdate(String executablePath) {
+    public record SettingsUpdate(String executablePath, String aiProfileId) {
     }
 }

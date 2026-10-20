@@ -10,5 +10,5 @@ function register(): void {
 export const { bootstrap, mount, unmount } = createPluginLifecycle({
   pluginId: PLUGIN_ID,
   register,
-  standaloneHint: 'AI 能力插件独立预览：Provider 设置渲染在 thisnote 插件管理中。',
+  standaloneHint: 'AI 能力插件独立预览：profile 与 Provider 设置渲染在 thisnote 插件管理中。',
 })

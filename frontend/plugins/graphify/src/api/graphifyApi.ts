@@ -20,14 +20,25 @@ export interface GraphifyStatus {
 }
 
 export interface GraphifySettings {
+  aiProfileId: string
   provider: string
   model: string
   executablePath: string
+  keyConfigured: boolean
+  profiles: GraphifyAiProfile[]
+}
+
+export interface GraphifyAiProfile {
+  id: string
+  label: string
+  provider: string
+  model: string
   keyConfigured: boolean
 }
 
 export interface GraphifySettingsUpdate {
   executablePath: string
+  aiProfileId: string
 }
 
 export interface GraphifyNoteTags {

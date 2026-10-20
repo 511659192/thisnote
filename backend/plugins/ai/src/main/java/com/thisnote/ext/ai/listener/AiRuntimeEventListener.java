@@ -18,10 +18,10 @@ public class AiRuntimeEventListener
     public void onApplicationEvent(PayloadApplicationEvent<AiRuntimeFutureEvent> event) {
         AiRuntimeFutureEvent runtimeEvent = event.getPayload();
         try {
-            runtimeEvent.runtime().complete(settingsService.runtime());
+            runtimeEvent.runtime().complete(settingsService.runtime(runtimeEvent.profileId()));
         } catch (Exception e) {
-            log.error("读取 AI 运行时配置失败", e);
-            runtimeEvent.runtime().complete(new AiRuntimeFutureEvent.Runtime("", "", ""));
+            log.error("读取 AI 运行时配置失败：profileId={}", runtimeEvent.profileId(), e);
+            runtimeEvent.runtime().completeExceptionally(e);
         }
     }
 }

@@ -3,10 +3,12 @@ import { onMounted, ref } from 'vue'
 import { graphifyApi, type GraphifySettings, type GraphifyStatus } from '../api/graphifyApi'
 
 const settings = ref<GraphifySettings>({
+  aiProfileId: '',
   provider: '',
   model: '',
   executablePath: '',
   keyConfigured: false,
+  profiles: [],
 })
 const status = ref<GraphifyStatus | null>(null)
 const loading = ref(true)
@@ -34,6 +36,7 @@ async function save(): Promise<void> {
   try {
     settings.value = await graphifyApi.saveSettings({
       executablePath: settings.value.executablePath.trim(),
+      aiProfileId: settings.value.aiProfileId,
     })
     message.value = 'Graphify 设置已保存'
   } catch (e) {
@@ -50,7 +53,7 @@ onMounted(load)
   <section class="graphify-settings">
     <div class="settings-heading">
       <h3>Graphify 知识图谱</h3>
-      <p class="muted">模型、视觉能力与 API key 由 AI 能力插件统一提供。</p>
+      <p class="muted">模型、视觉能力与 API key 由 AI 能力插件统一提供；这里选择 Graphify 使用的配置。</p>
     </div>
 
     <p v-if="loading" class="muted">正在读取设置…</p>
@@ -72,6 +75,19 @@ onMounted(load)
 
       <form class="settings-form" @submit.prevent="save">
         <label>
+          <span>AI 模型配置</span>
+          <select v-model="settings.aiProfileId">
+            <option value="">请选择 completion 配置</option>
+            <option v-for="profile in settings.profiles" :key="profile.id" :value="profile.id">
+              {{ profile.label || profile.id }} · {{ profile.model }}
+            </option>
+          </select>
+          <small v-if="!settings.profiles.length" class="muted">
+            AI 能力插件中还没有 completion 配置。
+          </small>
+        </label>
+
+        <label>
           <span>Graphify 可执行文件路径</span>
           <input
             v-model="settings.executablePath"
@@ -81,7 +97,7 @@ onMounted(load)
         </label>
 
         <div class="form-actions">
-          <button type="submit" :disabled="saving">
+          <button type="submit" :disabled="saving || !settings.aiProfileId">
             {{ saving ? '保存中…' : '保存设置' }}
           </button>
         </div>
@@ -90,7 +106,7 @@ onMounted(load)
       <div class="privacy-note">
         <strong>数据发送说明</strong>
         <p>
-          Graphify 索引时，AI 插件会把笔记标题、卡片正文和被引用的图片发送给当前 Provider。
+          Graphify 索引时，AI 插件会把笔记标题、卡片正文和被引用的图片发送给所选配置的 Provider。
           测试连接与模型配置请到 AI 能力插件中操作。
         </p>
         <p>
@@ -163,7 +179,8 @@ onMounted(load)
   font-size: 13px;
 }
 
-.settings-form input {
+.settings-form input,
+.settings-form select {
   width: 100%;
   box-sizing: border-box;
   min-height: 34px;

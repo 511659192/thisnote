@@ -9,7 +9,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 通用 AI completion 请求，不绑定具体业务语义。
  */
-public record AiCompletionFutureEvent(String systemPrompt,
+public record AiCompletionFutureEvent(String profileId,
+                                      String systemPrompt,
                                       String userText,
                                       List<ImageInput> images,
                                       int maxTokens,
@@ -17,6 +18,10 @@ public record AiCompletionFutureEvent(String systemPrompt,
         implements PluginFutureEvent<String> {
 
     public AiCompletionFutureEvent {
+        profileId = Objects.requireNonNull(profileId, "profileId").trim();
+        if (profileId.isEmpty()) {
+            throw new IllegalArgumentException("profileId 不能为空");
+        }
         systemPrompt = systemPrompt == null ? "" : systemPrompt;
         userText = Objects.requireNonNull(userText, "userText");
         images = images == null ? List.of() : List.copyOf(images);
@@ -26,11 +31,12 @@ public record AiCompletionFutureEvent(String systemPrompt,
         completion = Objects.requireNonNull(completion, "completion");
     }
 
-    public static AiCompletionFutureEvent request(String systemPrompt,
+    public static AiCompletionFutureEvent request(String profileId,
+                                                  String systemPrompt,
                                                   String userText,
                                                   List<ImageInput> images,
                                                   int maxTokens) {
-        return new AiCompletionFutureEvent(systemPrompt, userText, images, maxTokens, new CompletableFuture<>());
+        return new AiCompletionFutureEvent(profileId, systemPrompt, userText, images, maxTokens, new CompletableFuture<>());
     }
 
     @Override

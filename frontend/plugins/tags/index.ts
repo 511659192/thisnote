@@ -4,8 +4,10 @@ import {
   registerNoteListFilter,
   registerNoteTool,
   registerPluginRoute,
+  registerPluginSettings,
 } from '@thisnote/plugin-api'
 import TagsNoteTool from './src/components/TagsNoteTool.vue'
+import TagsSettings from './src/components/TagsSettings.vue'
 import {
   TAGS_FILTER_ID,
   TAGS_PLUGIN_ID,
@@ -13,6 +15,7 @@ import {
 } from './src/tagFilter'
 
 function register(): void {
+  registerPluginSettings({ pluginId: TAGS_PLUGIN_ID, component: TagsSettings })
   registerNavEntry({
     pluginId: TAGS_PLUGIN_ID,
     label: '标签',

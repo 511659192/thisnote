@@ -6,17 +6,22 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 查询 AI 能力插件当前运行配置。调用方不读取 AI 插件的配置文件。
+ * 查询指定 AI profile 的运行配置。调用方不读取 AI 插件的配置文件。
  */
-public record AiRuntimeFutureEvent(CompletableFuture<Runtime> runtime)
+public record AiRuntimeFutureEvent(String profileId,
+                                   CompletableFuture<Runtime> runtime)
         implements PluginFutureEvent<AiRuntimeFutureEvent.Runtime> {
 
     public AiRuntimeFutureEvent {
+        profileId = Objects.requireNonNull(profileId, "profileId").trim();
+        if (profileId.isEmpty()) {
+            throw new IllegalArgumentException("profileId 不能为空");
+        }
         runtime = Objects.requireNonNull(runtime, "runtime");
     }
 
-    public static AiRuntimeFutureEvent request() {
-        return new AiRuntimeFutureEvent(new CompletableFuture<>());
+    public static AiRuntimeFutureEvent request(String profileId) {
+        return new AiRuntimeFutureEvent(profileId, new CompletableFuture<>());
     }
 
     @Override
@@ -24,16 +29,24 @@ public record AiRuntimeFutureEvent(CompletableFuture<Runtime> runtime)
         return runtime;
     }
 
-    public record Runtime(String provider, String model, String apiKey) {
+    public record Runtime(String profileId,
+                          String provider,
+                          String model,
+                          String endpoint,
+                          String apiKey,
+                          int maxTextChars) {
 
         public Runtime {
+            profileId = profileId == null ? "" : profileId;
             provider = provider == null ? "" : provider;
             model = model == null ? "" : model;
+            endpoint = endpoint == null ? "" : endpoint;
             apiKey = apiKey == null ? "" : apiKey;
         }
 
         public boolean configured() {
-            return !provider.isBlank() && !model.isBlank() && !apiKey.isBlank();
+            return !profileId.isBlank() && !provider.isBlank() && !model.isBlank()
+                    && !endpoint.isBlank() && !apiKey.isBlank();
         }
     }
 }

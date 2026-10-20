@@ -2,11 +2,14 @@ package com.thisnote.ext.ai.service;
 
 import com.thisnote.ext.ai.client.AiProviderClient;
 import com.thisnote.ext.ai.repository.AiSettingsRepository;
+import com.thisnote.plugin.api.event.AiProfileSummary;
 import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -18,7 +21,9 @@ public class AiSettingsService {
     public static final int MIN_MAX_TEXT_CHARS = 1_000;
     public static final int MAX_MAX_TEXT_CHARS = 1_000_000;
 
-    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider("deepseek-v4.1-flash"));
+    private static final Map<String, Provider> PROVIDERS = Map.of(
+            OPENCODE_GO_PROVIDER, new Provider("deepseek-v4.1-flash", AiSettingsRepository.DEFAULT_ENDPOINT)
+    );
 
     private final AiSettingsRepository settingsRepository;
     private final AiProviderClient providerClient;
@@ -29,55 +34,109 @@ public class AiSettingsService {
         this.providerClient = providerClient;
     }
 
-    public synchronized Settings settings() {
-        AiSettingsRepository.StoredSettings stored = settingsRepository.getSettings();
-        if (stored == null) {
-            return defaults();
-        }
-        if (stored.provider() == null || stored.provider().isBlank()) {
-            throw new IllegalStateException("AI 设置缺少模型供应商");
-        }
-        Provider provider = supportedProvider(stored.provider());
-        String model = stored.model() == null || stored.model().isBlank() ? provider.defaultModel() : stored.model().trim();
-        return new Settings(provider.name(), model, normalizeMaxTextChars(stored.maxTextChars()));
+    public synchronized List<Profile> profiles() {
+        Map<String, String> apiKeys = settingsRepository.getAllApiKeys();
+        return settingsRepository.getProfiles().stream()
+                .map(profile -> toProfile(profile, apiKeys))
+                .toList();
     }
 
-    public AiRuntimeFutureEvent.Runtime runtime() {
-        Settings settings = settings();
-        return new AiRuntimeFutureEvent.Runtime(settings.provider(), settings.model(), settingsRepository.getApiKey(settings.provider()));
+    public synchronized List<AiProfileSummary> summaries() {
+        Map<String, String> apiKeys = settingsRepository.getAllApiKeys();
+        return settingsRepository.getProfiles().stream()
+                .map(profile -> new AiProfileSummary(
+                        profile.id(),
+                        profile.label(),
+                        profile.provider(),
+                        profile.model(),
+                        !apiKeys.getOrDefault(profile.id(), "").isBlank()
+                ))
+                .toList();
     }
 
-    public SettingsResponse response() {
-        Settings settings = settings();
-        return new SettingsResponse(settings.provider(), settings.model(), settings.maxTextChars(), !settingsRepository.getApiKey(settings.provider()).isBlank());
+    public AiRuntimeFutureEvent.Runtime runtime(String profileId) {
+        AiSettingsRepository.StoredProfile profile = requireProfile(profileId);
+        return runtime(profile);
     }
 
-    public synchronized SettingsResponse save(SettingsUpdate update) {
+    public synchronized SettingsResponse response() {
+        return new SettingsResponse(profiles());
+    }
+
+    public synchronized Profile save(ProfileUpdate update) {
         if (update == null) {
             throw new IllegalArgumentException("设置不能为空");
         }
-        Provider provider = supportedProvider(update.provider());
-        String model = update.model() == null ? "" : update.model().trim();
+        String id = update.id() == null ? "" : update.id().trim();
+        if (!id.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")) {
+            throw new IllegalArgumentException("配置 ID 只能包含字母、数字、点、下划线和连字符");
+        }
+
+        List<AiSettingsRepository.StoredProfile> stored = new ArrayList<>(settingsRepository.getProfiles());
+        int index = -1;
+        for (int i = 0; i < stored.size(); i++) {
+            if (id.equals(stored.get(i).id())) {
+                index = i;
+                break;
+            }
+        }
+        AiSettingsRepository.StoredProfile existing = index < 0 ? null : stored.get(index);
+        String providerName = blank(update.provider())
+                ? (existing == null ? OPENCODE_GO_PROVIDER : existing.provider())
+                : update.provider().trim().toLowerCase();
+        Provider provider = supportedProvider(providerName);
+        String model = blank(update.model())
+                ? (existing == null || existing.model().isBlank() ? provider.defaultModel() : existing.model())
+                : update.model().trim();
         if (model.isBlank()) {
             throw new IllegalArgumentException("模型名称不能为空");
         }
-        int maxTextChars = update.maxTextChars() == null ? settings().maxTextChars() : requireMaxTextChars(update.maxTextChars());
-        Settings next = new Settings(provider.name(), model, maxTextChars);
+        String endpoint = blank(update.endpoint())
+                ? (existing == null || existing.endpoint().isBlank() ? provider.defaultEndpoint() : existing.endpoint())
+                : update.endpoint().trim();
+        if (endpoint.isBlank()) {
+            throw new IllegalArgumentException("endpoint 不能为空");
+        }
+        Integer maxTextChars = update.maxTextChars() != null
+                ? requireMaxTextChars(update.maxTextChars())
+                : (existing == null || existing.maxTextChars() == null
+                ? DEFAULT_MAX_TEXT_CHARS
+                : normalizeMaxTextChars(existing.maxTextChars()));
+        String label = blank(update.label()) ? id : update.label().trim();
+        AiSettingsRepository.StoredProfile next = new AiSettingsRepository.StoredProfile(
+                id, label, providerName, model, endpoint, maxTextChars
+        );
+        if (index < 0) {
+            stored.add(next);
+        } else {
+            stored.set(index, next);
+        }
 
         Map<String, String> apiKeys = new LinkedHashMap<>(settingsRepository.getAllApiKeys());
         if (Boolean.TRUE.equals(update.clearApiKey())) {
-            apiKeys.remove(provider.name());
+            apiKeys.remove(id);
         } else if (update.apiKey() != null && !update.apiKey().isBlank()) {
-            apiKeys.put(provider.name(), update.apiKey().trim());
+            apiKeys.put(id, update.apiKey().trim());
         }
 
-        settingsRepository.updateSettings(new AiSettingsRepository.StoredSettings(next.provider(), next.model(), next.maxTextChars()));
+        settingsRepository.updateProfiles(stored);
         settingsRepository.updateApiKeys(apiKeys);
-        return new SettingsResponse(next.provider(), next.model(), next.maxTextChars(), !apiKeys.getOrDefault(next.provider(), "").isBlank());
+        return toProfile(next, apiKeys);
     }
 
-    public TestResponse test() {
-        AiRuntimeFutureEvent.Runtime runtime = runtime();
+    public synchronized void delete(String profileId) {
+        AiSettingsRepository.StoredProfile profile = requireProfile(profileId);
+        List<AiSettingsRepository.StoredProfile> stored = new ArrayList<>(settingsRepository.getProfiles());
+        stored.removeIf(item -> item.id().equals(profile.id()));
+        Map<String, String> apiKeys = new LinkedHashMap<>(settingsRepository.getAllApiKeys());
+        apiKeys.remove(profile.id());
+        settingsRepository.updateProfiles(stored);
+        settingsRepository.updateApiKeys(apiKeys);
+    }
+
+    public TestResponse test(String profileId) {
+        AiSettingsRepository.StoredProfile profile = requireProfile(profileId);
+        AiRuntimeFutureEvent.Runtime runtime = runtime(profile);
         if (!runtime.configured()) {
             return new TestResponse(false, "请先配置 Provider、模型和 API key");
         }
@@ -90,8 +149,40 @@ public class AiSettingsService {
         }
     }
 
-    private static Settings defaults() {
-        return new Settings(OPENCODE_GO_PROVIDER, PROVIDERS.get(OPENCODE_GO_PROVIDER).defaultModel(), DEFAULT_MAX_TEXT_CHARS);
+    private AiRuntimeFutureEvent.Runtime runtime(AiSettingsRepository.StoredProfile profile) {
+        Provider provider = supportedProvider(profile.provider());
+        return new AiRuntimeFutureEvent.Runtime(
+                profile.id(),
+                profile.provider(),
+                profile.model(),
+                profile.endpoint().isBlank() ? provider.defaultEndpoint() : profile.endpoint(),
+                settingsRepository.getApiKey(profile.id()),
+                normalizeMaxTextChars(profile.maxTextChars())
+        );
+    }
+
+    private static Profile toProfile(AiSettingsRepository.StoredProfile profile,
+                                     Map<String, String> apiKeys) {
+        return new Profile(
+                profile.id(),
+                profile.label(),
+                profile.provider(),
+                profile.model(),
+                profile.endpoint(),
+                profile.maxTextChars(),
+                !apiKeys.getOrDefault(profile.id(), "").isBlank()
+        );
+    }
+
+    private AiSettingsRepository.StoredProfile requireProfile(String profileId) {
+        String id = profileId == null ? "" : profileId.trim();
+        if (id.isEmpty()) {
+            throw new IllegalArgumentException("profileId 不能为空");
+        }
+        return settingsRepository.getProfiles().stream()
+                .filter(profile -> id.equals(profile.id()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("AI profile 不存在：" + id));
     }
 
     private static int normalizeMaxTextChars(Integer value) {
@@ -111,24 +202,38 @@ public class AiSettingsService {
     private static Provider supportedProvider(String value) {
         Provider provider = value == null ? null : PROVIDERS.get(value.trim().toLowerCase());
         if (provider == null) {
-            throw new IllegalArgumentException("当前仅支持 OpenCode Go");
+            throw new IllegalArgumentException("不支持的 AI Provider：" + value);
         }
-        return new Provider(value.trim().toLowerCase(), provider.defaultModel());
+        return provider;
     }
 
-    private record Provider(String name, String defaultModel) {
-        private Provider(String defaultModel) {
-            this("", defaultModel);
-        }
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 
-    public record Settings(String provider, String model, int maxTextChars) {
+    private record Provider(String defaultModel, String defaultEndpoint) {
     }
 
-    public record SettingsResponse(String provider, String model, int maxTextChars, boolean keyConfigured) {
+    public record Profile(String id,
+                          String label,
+                          String provider,
+                          String model,
+                          String endpoint,
+                          Integer maxTextChars,
+                          boolean keyConfigured) {
     }
 
-    public record SettingsUpdate(String provider, String model, String apiKey, Boolean clearApiKey, Integer maxTextChars) {
+    public record SettingsResponse(List<Profile> profiles) {
+    }
+
+    public record ProfileUpdate(String id,
+                                String label,
+                                String provider,
+                                String model,
+                                String endpoint,
+                                Integer maxTextChars,
+                                String apiKey,
+                                Boolean clearApiKey) {
     }
 
     public record TestResponse(boolean success, String message) {

@@ -6,7 +6,23 @@ const BASE = '/api/plugins/tags'
 
 export type TagsByNote = Record<string, string[]>
 
+export interface TagsAiProfile {
+  id: string
+  label: string
+  provider: string
+  model: string
+  keyConfigured: boolean
+}
+
+export interface TagsSettings {
+  aiProfileId: string
+  profiles: TagsAiProfile[]
+}
+
 export const tagsApi = {
+  settings: () => http.get<TagsSettings>(BASE + '/settings'),
+  saveSettings: (aiProfileId: string) =>
+    http.post<TagsSettings>(BASE + '/settings', { aiProfileId }),
   tags: () => http.get<TagsByNote>(BASE + '/tags'),
   usage: () => http.get<Record<string, number>>(BASE + '/tags/usage'),
   add: (noteId: string, tag: string) =>

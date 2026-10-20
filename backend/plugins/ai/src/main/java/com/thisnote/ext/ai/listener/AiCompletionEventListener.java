@@ -21,12 +21,11 @@ public class AiCompletionEventListener
     public void onApplicationEvent(PayloadApplicationEvent<AiCompletionFutureEvent> event) {
         AiCompletionFutureEvent request = event.getPayload();
         try {
-            AiRuntimeFutureEvent.Runtime runtime = settingsService.runtime();
+            AiRuntimeFutureEvent.Runtime runtime = settingsService.runtime(request.profileId());
             if (!runtime.configured()) {
-                request.completion().complete("");
-                return;
+                throw new IllegalStateException("AI profile「" + request.profileId() + "」尚未配置完整");
             }
-            String text = truncate(request.userText(), settingsService.settings().maxTextChars());
+            String text = truncate(request.userText(), runtime.maxTextChars());
             request.completion().complete(providerClient.complete(
                     runtime,
                     request.systemPrompt(),
@@ -35,8 +34,8 @@ public class AiCompletionEventListener
                     request.maxTokens()
             ));
         } catch (Exception e) {
-            log.error("AI completion 失败", e);
-            request.completion().complete("");
+            log.error("AI completion 失败：profileId={}", request.profileId(), e);
+            request.completion().completeExceptionally(e);
         }
     }
 

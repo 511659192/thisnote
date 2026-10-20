@@ -17,7 +17,7 @@
     <plugin.id>ai</plugin.id>
   </properties>
 
-  <description>AI 能力插件：统一管理模型供应商、凭据与文本/视觉调用</description>
+  <description>AI 能力插件：统一管理 profile、模型供应商、凭据与文本/视觉调用</description>
 
   <dependencies>
     <dependency>

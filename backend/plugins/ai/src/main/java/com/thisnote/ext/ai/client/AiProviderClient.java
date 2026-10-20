@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 @Component
 public class AiProviderClient {
 
-    private static final String OPENCODE_GO_URL = "https://opencode.ai/inference/go/openai/v1/chat/completions";
+    private static final String OPENCODE_GO_PROVIDER = "opencode-go";
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(60)).build();
 
@@ -69,13 +69,15 @@ public class AiProviderClient {
         messages.add(object("role", "user", "content", chatContent(userText, images)));
         body.put("messages", messages);
 
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(OPENCODE_GO_URL))
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(runtime.endpoint()))
                 .timeout(Duration.ofSeconds(120))
                 .header("Authorization", "Bearer " + runtime.apiKey())
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "thisnote-ai/1.0")
-                .header("x-opencode-session", "ses_" + UUID.randomUUID())
                 .POST(HttpRequest.BodyPublishers.ofString(body.toJSONString(), StandardCharsets.UTF_8));
+        if (OPENCODE_GO_PROVIDER.equals(runtime.provider())) {
+            request.header("x-opencode-session", "ses_" + UUID.randomUUID());
+        }
         return request.build();
     }
 

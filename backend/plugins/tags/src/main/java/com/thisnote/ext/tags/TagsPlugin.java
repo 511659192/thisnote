@@ -7,6 +7,7 @@ import com.thisnote.ext.tags.repository.TagsRepository;
 import com.thisnote.ext.tags.service.TagSuggestionService;
 import com.thisnote.ext.tags.service.TagUsageRefreshService;
 import com.thisnote.ext.tags.service.TagsService;
+import com.thisnote.ext.tags.service.TagsSettingsService;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -44,6 +45,7 @@ public class TagsPlugin extends SpringBootPlugin {
         tagsService.setMainEventPublisher(getMainApplicationContext());
         tagsService.invalidateUsage();
         ctx.getBean(TagSuggestionService.class).setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(TagsSettingsService.class).setMainEventPublisher(getMainApplicationContext());
         noteChangedEventListener = new NoteChangedEventListener(tagsRepository, tagUsageRefreshService);
         stateResetListener = new PluginStateResetListener(tagsRepository);
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);

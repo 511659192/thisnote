@@ -22,13 +22,21 @@ public class AiController {
         return settingsService.response();
     }
 
-    @PostMapping("/settings")
-    public AiSettingsService.SettingsResponse save(@RequestBody AiSettingsService.SettingsUpdate update) {
+    @PostMapping("/profiles/save")
+    public AiSettingsService.Profile save(@RequestBody AiSettingsService.ProfileUpdate update) {
         return settingsService.save(update);
     }
 
-    @PostMapping("/test")
-    public AiSettingsService.TestResponse test() {
-        return settingsService.test();
+    @PostMapping("/profiles/delete")
+    public void delete(@RequestBody ProfileRequest request) {
+        settingsService.delete(request.profileId());
+    }
+
+    @PostMapping("/profiles/test")
+    public AiSettingsService.TestResponse test(@RequestBody ProfileRequest request) {
+        return settingsService.test(request.profileId());
+    }
+
+    public record ProfileRequest(String profileId) {
     }
 }

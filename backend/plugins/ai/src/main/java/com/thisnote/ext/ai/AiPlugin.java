@@ -1,6 +1,7 @@
 package com.thisnote.ext.ai;
 
 import com.thisnote.ext.ai.client.AiProviderClient;
+import com.thisnote.ext.ai.listener.AiProfilesEventListener;
 import com.thisnote.ext.ai.listener.AiCompletionEventListener;
 import com.thisnote.ext.ai.listener.AiRuntimeEventListener;
 import com.thisnote.ext.ai.service.AiSettingsService;
@@ -16,6 +17,7 @@ public class AiPlugin extends SpringBootPlugin {
     public static final String PLUGIN_ID = "ai";
 
     private AiRuntimeEventListener aiRuntimeEventListener;
+    private AiProfilesEventListener aiProfilesEventListener;
     private AiCompletionEventListener aiCompletionEventListener;
 
     public AiPlugin(PluginWrapper wrapper) {
@@ -36,11 +38,13 @@ public class AiPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         aiRuntimeEventListener = new AiRuntimeEventListener(ctx.getBean(AiSettingsService.class));
+        aiProfilesEventListener = new AiProfilesEventListener(ctx.getBean(AiSettingsService.class));
         aiCompletionEventListener = new AiCompletionEventListener(
                 ctx.getBean(AiSettingsService.class),
                 ctx.getBean(AiProviderClient.class)
         );
         getMainApplicationContext().addApplicationListener(aiRuntimeEventListener);
+        getMainApplicationContext().addApplicationListener(aiProfilesEventListener);
         getMainApplicationContext().addApplicationListener(aiCompletionEventListener);
     }
 
@@ -49,6 +53,10 @@ public class AiPlugin extends SpringBootPlugin {
         if (aiRuntimeEventListener != null) {
             getMainApplicationContext().removeApplicationListener(aiRuntimeEventListener);
             aiRuntimeEventListener = null;
+        }
+        if (aiProfilesEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(aiProfilesEventListener);
+            aiProfilesEventListener = null;
         }
         if (aiCompletionEventListener != null) {
             getMainApplicationContext().removeApplicationListener(aiCompletionEventListener);
