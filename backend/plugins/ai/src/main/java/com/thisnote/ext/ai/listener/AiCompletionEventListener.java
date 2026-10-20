@@ -3,7 +3,7 @@ package com.thisnote.ext.ai.listener;
 import com.thisnote.ext.ai.client.AiProviderClient;
 import com.thisnote.ext.ai.service.AiSettingsService;
 import com.thisnote.plugin.api.event.AiCompletionFutureEvent;
-import com.thisnote.plugin.api.event.AiRuntimeFututeEvent;
+import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
@@ -21,7 +21,7 @@ public class AiCompletionEventListener
     public void onApplicationEvent(PayloadApplicationEvent<AiCompletionFutureEvent> event) {
         AiCompletionFutureEvent request = event.getPayload();
         try {
-            AiRuntimeFututeEvent.Runtime runtime = settingsService.runtime();
+            AiRuntimeFutureEvent.Runtime runtime = settingsService.runtime();
             if (!runtime.configured()) {
                 request.completion().complete("");
                 return;

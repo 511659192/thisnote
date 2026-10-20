@@ -5,6 +5,7 @@ import com.thisnote.ext.graphify.listener.AttachmentChangedEventListener;
 import com.thisnote.ext.graphify.listener.CardChangedEventListener;
 import com.thisnote.ext.graphify.listener.NoteChangedEventListener;
 import com.thisnote.ext.graphify.listener.PluginStateResetListener;
+import com.thisnote.ext.graphify.service.GraphifyGraphReader;
 import com.thisnote.ext.graphify.service.GraphifyIndexService;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,7 @@ public class GraphifyPlugin
                                      GenericApplicationContext ctx) {
         indexService = ctx.getBean(GraphifyIndexService.class);
         indexService.setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(GraphifyGraphReader.class).setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(GraphifyAiClient.class).setMainEventPublisher(getMainApplicationContext());
 
         noteChangedEventListener = new NoteChangedEventListener(indexService);

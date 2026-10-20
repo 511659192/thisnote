@@ -42,6 +42,11 @@ public class TagsService {
         return tagsRepository.getAll();
     }
 
+    public List<String> noteTags(String noteId) {
+        NoteUsage current = tagsRepository.getAllEntries().get(requireNoteId(noteId));
+        return current == null ? List.of() : List.copyOf(current.tags());
+    }
+
     public synchronized List<String> add(String noteId,
                                          String tag) {
         String normalizedNoteId = requireNoteId(noteId);

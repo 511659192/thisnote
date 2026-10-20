@@ -8,15 +8,15 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 查询 AI 能力插件当前运行配置。调用方不读取 AI 插件的配置文件。
  */
-public record AiRuntimeFututeEvent(CompletableFuture<Runtime> runtime)
-        implements PluginFutureEvent<AiRuntimeFututeEvent.Runtime> {
+public record AiRuntimeFutureEvent(CompletableFuture<Runtime> runtime)
+        implements PluginFutureEvent<AiRuntimeFutureEvent.Runtime> {
 
-    public AiRuntimeFututeEvent {
+    public AiRuntimeFutureEvent {
         runtime = Objects.requireNonNull(runtime, "runtime");
     }
 
-    public static AiRuntimeFututeEvent request() {
-        return new AiRuntimeFututeEvent(new CompletableFuture<>());
+    public static AiRuntimeFutureEvent request() {
+        return new AiRuntimeFutureEvent(new CompletableFuture<>());
     }
 
     @Override

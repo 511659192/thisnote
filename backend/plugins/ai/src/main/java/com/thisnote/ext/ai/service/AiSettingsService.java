@@ -2,7 +2,7 @@ package com.thisnote.ext.ai.service;
 
 import com.thisnote.ext.ai.client.AiProviderClient;
 import com.thisnote.ext.ai.repository.AiSettingsRepository;
-import com.thisnote.plugin.api.event.AiRuntimeFututeEvent;
+import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -42,9 +42,9 @@ public class AiSettingsService {
         return new Settings(provider.name(), model, normalizeMaxTextChars(stored.maxTextChars()));
     }
 
-    public AiRuntimeFututeEvent.Runtime runtime() {
+    public AiRuntimeFutureEvent.Runtime runtime() {
         Settings settings = settings();
-        return new AiRuntimeFututeEvent.Runtime(settings.provider(), settings.model(), settingsRepository.getApiKey(settings.provider()));
+        return new AiRuntimeFutureEvent.Runtime(settings.provider(), settings.model(), settingsRepository.getApiKey(settings.provider()));
     }
 
     public SettingsResponse response() {
@@ -77,7 +77,7 @@ public class AiSettingsService {
     }
 
     public TestResponse test() {
-        AiRuntimeFututeEvent.Runtime runtime = runtime();
+        AiRuntimeFutureEvent.Runtime runtime = runtime();
         if (!runtime.configured()) {
             return new TestResponse(false, "请先配置 Provider、模型和 API key");
         }

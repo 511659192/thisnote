@@ -3,12 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { aiApi, type AiSettings } from '../api/aiApi'
 
 const providers = [
-  { value: 'opencode-go', label: 'OpenCode Go', model: 'glm-5.3-flash' },
+  { value: 'opencode-go', label: 'OpenCode Go' },
 ]
 
 const settings = ref<AiSettings>({
   provider: 'opencode-go',
-  model: 'glm-5.3-flash',
+  model: '',
   maxTextChars: 1_000_000,
   keyConfigured: false,
 })
@@ -21,25 +21,15 @@ const testing = ref(false)
 const error = ref('')
 const message = ref('')
 
-const modelPlaceholder = computed(
-  () => providers.find((provider) => provider.value === settings.value.provider)?.model ?? '',
-)
+const modelPlaceholder = computed(() => settings.value.model || '后端默认模型')
 const providerChanged = computed(() => settings.value.provider !== savedProvider.value)
 const keyStatusText = computed(() => {
   if (providerChanged.value) return '保存切换后才能确认新 Provider 的 key 状态。'
   return settings.value.keyConfigured ? '当前 Provider 已配置 key。' : '当前 Provider 尚未配置 key。'
 })
 
-let providerBeforeSelection = settings.value.provider
-
 function providerSelectionChanged(event: Event): void {
-  const previous = providerBeforeSelection
   const provider = (event.currentTarget as HTMLSelectElement).value
-  providerBeforeSelection = provider
-  const previousDefault = providers.find((item) => item.value === previous)?.model
-  if (!settings.value.model.trim() || settings.value.model.trim() === previousDefault) {
-    settings.value.model = providers.find((item) => item.value === provider)?.model ?? ''
-  }
   settings.value.provider = provider
   apiKey.value = ''
   clearApiKey.value = false
@@ -51,7 +41,6 @@ async function load(): Promise<void> {
   try {
     settings.value = await aiApi.settings()
     savedProvider.value = settings.value.provider
-    providerBeforeSelection = settings.value.provider
   } catch (e) {
     error.value = '读取 AI 设置失败：' + (e as Error).message
   } finally {
@@ -82,7 +71,6 @@ async function save(): Promise<boolean> {
       maxTextChars,
     })
     savedProvider.value = settings.value.provider
-    providerBeforeSelection = settings.value.provider
     apiKey.value = ''
     clearApiKey.value = false
     message.value = 'AI 设置已保存'

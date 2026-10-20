@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { CardView } from '@/api/types'
 import { activeCardPlugins, host, toast } from '@thisnote/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
@@ -8,7 +8,7 @@ import CustomSizeDialog from './CustomSizeDialog.vue'
 
 /** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
 const MarkdownView = host().MarkdownView
-import { BLOCK_MIN_H } from '@/stores/notePage'
+import { useCardSizing } from './useCardSizing'
 
 /**
  * One card on a note's page.
@@ -65,36 +65,6 @@ const rootEl = ref<HTMLElement | null>(null)
 
 const card = computed(() => props.view.card)
 const content = computed(() => props.view.contentMd ?? '')
-/** 图片卡 1:1 宽度（原图宽 + 内边距），用于判断当前是否停在 1:1。 */
-const imageFitWidth = ref<number | null>(null)
-
-/** 按当前宽度反推选中的档位：命中 1:1/百分比则高亮对应项，否则高亮「自定义」。 */
-const activePreset = computed<string>(() => {
-  const width = Math.round(card.value.w)
-  if (imageFitWidth.value && Math.abs(width - imageFitWidth.value) <= 2) return '1:1'
-  const base = props.fitBaseWidth
-  if (base) {
-    for (const ratio of [0.25, 0.5, 0.75, 1]) {
-      if (Math.abs(width - Math.round(base * ratio)) <= 2) return `${Math.round(ratio * 100)}%`
-    }
-  }
-  return 'custom'
-})
-
-// 图片异步加载：拿到原图宽度后，1:1 档位的高亮才能与当前宽度对上
-onMounted(() => {
-  void nextTick(() => {
-    const images = Array.from(readBody.value?.querySelectorAll('img') ?? [])
-    const sync = () => {
-      const loaded = images.filter((image) => image.naturalWidth > 0)
-      imageFitWidth.value = loaded.length
-        ? Math.max(...loaded.map((image) => image.naturalWidth)) + 30
-        : null
-    }
-    sync()
-    for (const image of images) image.addEventListener('load', sync, { once: true })
-  })
-})
 /** 内容只有一张图片：图片按卡片内容宽度等比伸缩（初始尺寸即原图 1:1）。 */
 const IMAGE_ONLY = /^!\[[^\]]*\]\(.+\)$/
 const isImageOnly = computed(() => IMAGE_ONLY.test(content.value.trim()))
@@ -103,6 +73,29 @@ const formatMode = ref<CardFormat>('auto')
 const detectedFormat = computed(() => (isMarkdown(props.editing ? draft.value : content.value) ? 'markdown' : 'text'))
 const effectiveFormat = computed(() => formatMode.value === 'auto' ? detectedFormat.value : formatMode.value)
 const detectedFormatLabel = computed(() => detectedFormat.value === 'markdown' ? 'Markdown' : '普通文本')
+const {
+  activePreset,
+  fitHeight,
+  autoFit,
+  chooseFitWidth,
+  customSizeOpen,
+  customWidthDraft,
+  customHeightDraft,
+  chooseCustomSize,
+  applyCustomSize,
+} = useCardSizing(
+  props,
+  emit,
+  card,
+  content,
+  isImageOnly,
+  readBody,
+  measure,
+  textarea,
+  rootEl,
+  autoFitImageWidth,
+  fitPastedImage,
+)
 
 function readFormatMode(cardId: string): CardFormat {
   try {
@@ -353,204 +346,12 @@ function onKeydown(e: KeyboardEvent) {
   e.stopPropagation()
 }
 
-/**
- * 量预览内容的 max-content 宽度：克隆到屏外按「不换行一行放下」布局取宽。
- * 不在当前渲染上量行宽——按当前换行量、缩完再换行会死循环，把难看的断行锁死。
- */
-function measureMaxContentWidth(): number {
-  // 编辑态 readBody 不渲染：量屏外 twin（与 textarea 同字体宽度），同样是「最长一行」的宽度。
-  const body = readBody.value ?? measure.value
-  if (!body) return 0
-  const clone = body.cloneNode(true) as HTMLElement
-  clone.style.cssText += ';position:fixed;left:-10000px;top:0;width:max-content;max-width:none;overflow:visible;'
-  document.body.appendChild(clone)
-  const width = Math.ceil(clone.scrollWidth)
-  clone.remove()
-  return width
-}
-
-/**
- * 让卡片高度贴合内容，双向：长文长高、删改后收缩 —— 卡片下部不再留大片空白。
- * 展示上限（长文到浏览器底缘、超出滚动）由页面在 onFitHeight 里按视口折算。
- *
- * <p>编辑态量**屏外 twin**：textarea 会撑满卡片，量它自己等于"自己量自己"，只会越量越高。
- * 预览态量内容根节点的自然高度再补容器 padding——滚动容器的 scrollHeight 会被自身
- * client 高度兜底，量它永远缩不回去。8px 迟滞防止一次输入恰好跨过阈值时
- * 反复拉扯；88px 下限与页面的 BLOCK_MIN_H 一致。宽度只扩不缩：内容超出右缘才贴过去。
- */
-function fitHeight(force = false) {
-  if (card.value.collapsed) return
-  const el = contentEl()
-  if (!el) return
-  // 有了真实信号才挂观察器（见 armFitObserver）：避免"每次打开笔记都贴合一次"。
-  armFitObserver()
-
-  const images = Array.from(el.querySelectorAll('img'))
-  const pendingImages = images.filter((image) => !image.complete)
-  if (pendingImages.length) {
-    // MarkdownView 的图片异步加载：加载完成前量的高度不含图片。
-    // 不消费一次性贴合信号，等最后一张就位（或确认失败）后带 force 重贴。
-    for (const image of pendingImages) {
-      if (image.dataset.fitRefitArmed) continue
-      image.dataset.fitRefitArmed = '1'
-      image.addEventListener('load', () => fitHeight(true), { once: true })
-      image.addEventListener('error', () => fitHeight(true), { once: true })
-    }
-    return
-  }
-  const loadedImages = images.filter((image) => image.naturalWidth > 0)
-  imageFitWidth.value = loadedImages.length
-    ? Math.max(...loadedImages.map((image) => image.naturalWidth)) + 30
-    : null
-  const waitingForAttachmentImage = autoFitImageWidth.value && images.some(
-    (image) => image.dataset.thisnoteAttachment && image.getAttribute('src') === 'about:blank',
-  )
-
-  // 高度基准：量**内容根节点的自然高度**——.body.read 是滚动容器，scrollHeight 会被
-  // 自身 client 高度兜底，直接量它高度永远缩不回去（贴合后底部仍大片空白的原因）。
-  // 内容自然高度 + 容器真实竖向 padding（预览态 30/12，编辑态按 textarea 计算样式）+ 边框。
-  let needed: number
-  if (props.editing && textarea.value) {
-    const boxStyle = getComputedStyle(textarea.value)
-    const verticalPadding = parseFloat(boxStyle.paddingTop) + parseFloat(boxStyle.paddingBottom)
-    needed = Math.ceil(el.offsetHeight + verticalPadding) + 2
-  } else if (readBody.value) {
-    const bodyStyle = getComputedStyle(readBody.value)
-    const verticalPadding = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
-    needed = Math.ceil(el.offsetHeight + verticalPadding) + 2
-  } else {
-    return
-  }
-  let target = Math.max(BLOCK_MIN_H, needed)
-
-  // 宽度贴合只在显式触发时做（⤢ / 图片粘贴）：日常输入若跟随内容调宽，卡片会随键击抖动。
-  // 只扩不缩的 scrollWidth 量不出换行文本的最长行，这里改量**最长可见行**的实际渲染宽度，
-  // 双向贴合：短行多的卡收窄贴右边框，长行/代码/图片的卡扩到放得下。
-  let width: number | undefined
-  if (force || autoFitImageWidth.value) {
-    const desiredWidths: number[] = []
-    // 图片按原图宽度（卡片宽 = 图片宽 + 30，内容区与图片 1:1）
-    const imageWidth = loadedImages.length
-      ? Math.max(...loadedImages.map((image) => image.naturalWidth)) + 30
-      : 0
-    if (imageWidth > 0) desiredWidths.push(imageWidth)
-    const maxContentWidth = measureMaxContentWidth()
-    // 克隆体已含 .body.read 左右 28px 内边距，再补卡片左右边框 2px
-    if (maxContentWidth > 0) desiredWidths.push(maxContentWidth + 2)
-    if (desiredWidths.length) {
-      if (!waitingForAttachmentImage) autoFitImageWidth.value = false
-      // 纯图片卡以图片原始宽度为准，不受文本量出来的宽度干扰
-      const desired = isImageOnly.value && imageWidth > 0
-        ? imageWidth
-        : Math.max(...desiredWidths)
-      // 4px 容差避免分数像素来回拉扯；上限由页面侧 maxCardWidth 钳制
-      if (Math.abs(desired - card.value.w) > 4) width = desired
-    }
-  }
-
-  // 宽度变化时图片渲染高度随 max-width 缩放：上面量的 scrollHeight 反映旧宽度，
-  // 按各图片纵横比把目标高度折算到新宽度，避免「宽度贴合了、高度还是旧宽度的高度」。
-  if (width !== undefined && rootEl.value) {
-    const zoom = rootEl.value.getBoundingClientRect().width / card.value.w
-    if (Number.isFinite(zoom) && zoom > 0) {
-      const innerOld = Math.max(1, card.value.w - 30)
-      const innerNew = Math.max(1, width - 30)
-      let delta = 0
-      for (const image of loadedImages) {
-        const oldHeight = image.getBoundingClientRect().height / zoom
-        const oldWidth = Math.min(image.naturalWidth, innerOld)
-        if (oldWidth <= 0 || oldHeight <= 0) continue
-        delta += oldHeight * (Math.min(image.naturalWidth, innerNew) / oldWidth) - oldHeight
-      }
-      target = Math.max(BLOCK_MIN_H, Math.round(target + delta))
-    }
-  }
-
-  if (width !== undefined || Math.abs(target - card.value.h) > 8 || force) {
-    emit('fit-height', { cardId: card.value.cardId, h: target, w: width, fitImage: fitPastedImage.value, force })
-  }
-  if (!props.editing && loadedImages.length) fitPastedImage.value = false
-}
-
-/** 「自动调整」：解除手动高度锁定，并立即按当前内容贴合。 */
-function autoFit() {
-  autoFitImageWidth.value = true
-  fitPastedImage.value = true
-  fitHeight(true)
-}
-
-/** ⤢ 排固定选项：自动贴合，或把卡片宽度设为可视宽度的一定比例（比例由页面侧折算提交）。 */
-function chooseFitWidth(ratio: number | null) {
-  if (ratio === null) {
-    autoFit()
-    return
-  }
-  emit('fit-width', { cardId: card.value.cardId, ratio })
-}
-
-/** 自定义尺寸（px）：宽度与高度都按输入值固定。 */
-const customSizeOpen = ref(false)
-const customWidthDraft = ref('')
-const customHeightDraft = ref('')
-
-function chooseCustomSize() {
-  // 纯图片卡默认填图片原始宽度；其它卡片退回当前卡片宽度
-  const imageWidth = isImageOnly.value && imageFitWidth.value ? imageFitWidth.value - 30 : 0
-  customWidthDraft.value = String(Math.round(imageWidth > 0 ? imageWidth : card.value.w))
-  // 高度默认取当前渲染高度（图片卡是自动高度，card.h 可能是旧值）
-  const root = rootEl.value
-  const zoom = root && card.value.w > 0 ? root.getBoundingClientRect().width / card.value.w : 1
-  const rendered = root && zoom > 0 ? root.getBoundingClientRect().height / zoom : card.value.h
-  customHeightDraft.value = String(Math.round(rendered))
-  customSizeOpen.value = true
-}
-
-function applyCustomSize() {
-  const width = Number(customWidthDraft.value.trim())
-  const height = Number(customHeightDraft.value.trim())
-  if (!Number.isFinite(width) || width < 88 || !Number.isFinite(height) || height < 88) return
-  customSizeOpen.value = false
-  // 图片卡的输入是图片宽度，卡片宽 = 图片宽 + 内容区左右内边距
-  emit('fit-custom', { cardId: card.value.cardId, width: isImageOnly.value ? width + 30 : width, height })
-}
-
-/** 当前要量的内容节点：编辑态是屏外 twin，预览态是渲染出来的内容根节点。 */
-function contentEl(): HTMLElement | null {
-  return props.editing
-    ? measure.value
-    : ((readBody.value?.firstElementChild as HTMLElement | null) ?? null)
-}
-
-/**
- * 观察器**只在出现真正的贴合信号之后**才挂上。
- *
- * <p>ResizeObserver 一挂上就会先回调一次；若在挂载时就挂，等于「每打开/切回一次笔记都强制
- * 贴合一次」—— 那会把用户自己调好的高度覆盖成按视口封顶的值（切走再切回，高度弹回浏览器长度）。
- * 只在内容、编辑模式或卡片宽度变化时触发首次贴合；观察器挂上后，图片加载、markdown 重排等尺寸
- * 变化才会继续触发贴合。
- */
-let fitObserver: ResizeObserver | null = null
-let observedEl: HTMLElement | null = null
-function armFitObserver() {
-  const el = contentEl()
-  if (!el || el === observedEl) return
-  observedEl = el
-  if (!fitObserver) fitObserver = new ResizeObserver(() => fitHeight())
-  fitObserver.disconnect()
-  fitObserver.observe(el)
-}
-watch([() => props.editing, () => card.value.w], () => {
-  void nextTick(() => fitHeight())
-})
-watch(() => content.value, () => void nextTick(() => fitHeight()))
 onBeforeUnmount(() => {
   cancelPendingPreview()
   for (const markdown of pendingImageAttachments) {
     void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
   }
   pendingImageAttachments.clear()
-  fitObserver?.disconnect()
-  observedEl = null
 })
 </script>
 

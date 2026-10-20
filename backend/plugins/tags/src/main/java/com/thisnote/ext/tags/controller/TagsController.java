@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -57,9 +58,13 @@ public class TagsController {
     }
 
     @PostMapping("/tags/auto")
-    public NoteTagsResponse auto(@RequestBody NoteRequest request) {
-        List<String> tags = autoTagService.extract(request.noteId());
-        return new NoteTagsResponse(request.noteId().trim(), tags);
+    public AutoTagService.ExtractResult auto(@RequestBody NoteRequest request) {
+        return autoTagService.extract(request.noteId());
+    }
+
+    @GetMapping("/tags/auto/status")
+    public AutoTagService.ExtractStatus autoStatus(@RequestParam String noteId) {
+        return autoTagService.status(noteId);
     }
 
     public record NoteRequest(String noteId) {

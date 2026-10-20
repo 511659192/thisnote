@@ -4,7 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.plugin.api.event.AiCompletionFutureEvent;
-import com.thisnote.plugin.api.event.AiRuntimeFututeEvent;
+import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -26,14 +26,14 @@ public class AiProviderClient {
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(60)).build();
 
-    public void test(AiRuntimeFututeEvent.Runtime runtime) {
+    public void test(AiRuntimeFutureEvent.Runtime runtime) {
         String response = complete(runtime, "Reply with exactly OK.", "Connection test", List.of(), 32);
         if (response == null || response.isBlank()) {
             throw new IllegalStateException("模型没有返回内容");
         }
     }
 
-    public String complete(AiRuntimeFututeEvent.Runtime runtime,
+    public String complete(AiRuntimeFutureEvent.Runtime runtime,
                            String system,
                            String userText,
                            List<AiCompletionFutureEvent.ImageInput> images,
@@ -56,7 +56,7 @@ public class AiProviderClient {
         return chatText(body);
     }
 
-    private HttpRequest chatRequest(AiRuntimeFututeEvent.Runtime runtime,
+    private HttpRequest chatRequest(AiRuntimeFutureEvent.Runtime runtime,
                                     String system,
                                     String userText,
                                     List<AiCompletionFutureEvent.ImageInput> images,

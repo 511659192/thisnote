@@ -1,8 +1,5 @@
 package com.thisnote.ext.graphify.service;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.GraphifyPlugin;
 import com.thisnote.ext.graphify.client.GraphifyProcessRunner;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
@@ -27,9 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,33 +36,20 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 public class GraphifyIndexService {
 
-    private static final long IMAGE_INLINE_LIMIT = 5L * 1024 * 1024;
-    private static final Pattern MARKDOWN_IMAGE = Pattern.compile("!\\[[^\\]]*\\]\\((<[^>]+>|(?:\\\\.|[^)])*)\\)");
-    private static final Pattern ATTACHMENT_TARGET = Pattern.compile("(?i)(?:\\.\\./)?attachments/(.+?\\.(?:png|jpg|webp))(?:[?#].*)?$");
     private static final Pattern SAFE_IMAGE_NAME = Pattern.compile("(?i)[^/\\\\]+\\.(?:png|jpg|webp)");
-    private static final Pattern PASTE_ASSET_REFERENCE = Pattern.compile("paste-[0-9a-f]{8,}", Pattern.CASE_INSENSITIVE);
-    private static final Pattern IMAGE_PLACEHOLDER = Pattern.compile(
-            "^(?:pasted image(?: note| attachment)?|referenced image attachment\\b.*|image attachment\\s*:.*|paste note\\s*:.*)$",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern HASH_ONLY = Pattern.compile(
-            "^(?:[0-9a-f]{16,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$",
-            Pattern.CASE_INSENSITIVE);
-    private static final String GRAPHIFY_POST_MESSAGE_MARKER = "thisnote-graphify-open-note";
-    private static final int RELATED_NOTES_LIMIT = 5;
     private static final long QUERY_TIMEOUT_SECONDS = 30;
 
     private final FileHelper fileHelper;
     private final GraphifySettingsService settingsService;
     private final GraphifyStateRepository stateRepository;
     private final GraphifyProcessRunner processRunner;
+    private final GraphifyCorpusProjector corpusProjector;
     private final Path pluginDir;
     private final Path corpusDir;
     private final Path graphifyOutDir;
@@ -105,6 +87,7 @@ public class GraphifyIndexService {
         this.graphifyOutDir = corpusDir.resolve("graphify-out");
         this.graphJsonFile = graphifyOutDir.resolve("graph.json");
         this.graphHtmlFile = graphifyOutDir.resolve("graph.html");
+        this.corpusProjector = new GraphifyCorpusProjector(fileHelper, corpusDir, graphifyOutDir);
         this.worker = Executors.newSingleThreadScheduledExecutor(task -> {
             Thread thread = new Thread(task, "thisnote-graphify-index");
             thread.setDaemon(true);
@@ -175,226 +158,6 @@ public class GraphifyIndexService {
         Status current = currentStatus;
         return statusFor(current.stage(), current.running(), current.progress(),
                 current.completedNotes(), current.totalNotes(), current.warnings(), current.error());
-    }
-
-    public JSONObject graph() {
-        if (!Files.isRegularFile(graphJsonFile)) {
-            return null;
-        }
-        try {
-            return JSON.parseObject(Files.readString(graphJsonFile, StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new IllegalStateException("Graphify graph.json 无法读取", e);
-        }
-    }
-
-    public String graphHtml() {
-        if (!Files.isRegularFile(graphHtmlFile)) {
-            return null;
-        }
-        try {
-            String html = Files.readString(graphHtmlFile, StandardCharsets.UTF_8);
-            String anchor = "network.once('stabilizationIterationsDone', () => {";
-            if (!html.contains(anchor)) {
-                return html;
-            }
-            String hook = """
-                    network.on('doubleClick', params => {
-                      if (!params.nodes || !params.nodes.length) return;
-                      const node = nodesDS.get(params.nodes[0]);
-                      if (!node || !node.source_file) return;
-                      window.parent.postMessage({
-                        source: '%s',
-                        type: 'open-note',
-                        source_file: node.source_file
-                      }, '*');
-                    });
-                    """.formatted(GRAPHIFY_POST_MESSAGE_MARKER);
-            return html.replace(anchor, hook + "\n" + anchor);
-        } catch (Exception e) {
-            throw new IllegalStateException("Graphify graph.html 无法读取", e);
-        }
-    }
-
-    public Map<String, NoteTags> tags() {
-        Map<String, Set<String>> concepts = new LinkedHashMap<>();
-        Map<String, Set<String>> communities = new LinkedHashMap<>();
-        JSONObject graph = graph();
-        if (graph != null) {
-            JSONArray nodes = graph.getJSONArray("nodes");
-            if (nodes != null) {
-                for (Object value : nodes) {
-                    if (!(value instanceof JSONObject node)) {
-                        continue;
-                    }
-                    String noteId = noteIdFromSource(node.getString("source_file"));
-                    if (noteId == null) {
-                        continue;
-                    }
-                    String conceptName = node.getString("label");
-                    if (isMeaningfulTag(conceptName)) {
-                        concepts.computeIfAbsent(noteId, ignored -> new LinkedHashSet<>()).add(conceptName.trim());
-                    }
-                    String communityName = node.getString("community_name");
-                    if (!isMeaningfulTag(communityName)) {
-                        continue;
-                    }
-                    communities.computeIfAbsent(noteId, ignored -> new LinkedHashSet<>()).add(communityName.trim());
-                }
-            }
-        }
-
-        Set<String> noteIds = new LinkedHashSet<>(indexState.noteIds());
-        noteIds.addAll(concepts.keySet());
-        noteIds.addAll(communities.keySet());
-        Map<String, NoteTags> result = new LinkedHashMap<>();
-        for (String noteId : noteIds) {
-            List<String> conceptTags = concepts.getOrDefault(noteId, Set.of()).stream().sorted().toList();
-            List<String> communityTags = communities.getOrDefault(noteId, Set.of()).stream().sorted().toList();
-            result.put(noteId, new NoteTags(conceptTags, communityTags));
-        }
-        return result;
-    }
-
-    public RelatedNotes relatedNotes(String noteId) {
-        if (noteId == null || noteId.isBlank()) {
-            throw new IllegalArgumentException("noteId 不能为空");
-        }
-        JSONObject graph = graph();
-        if (graph == null) {
-            return new RelatedNotes(false, List.of());
-        }
-
-        Map<String, NoteDTO> notesById = new LinkedHashMap<>();
-        for (NoteDTO note : allNotes()) {
-            if (note != null && note.noteId() != null) {
-                notesById.put(note.noteId(), note);
-            }
-        }
-        if (!notesById.containsKey(noteId)) {
-            return new RelatedNotes(true, List.of());
-        }
-
-        Map<String, Map<String, String>> conceptsByNote = new LinkedHashMap<>();
-        Map<String, Set<String>> communitiesByNote = new LinkedHashMap<>();
-        Map<String, String> nodeNotes = new HashMap<>();
-        JSONArray nodes = graph.getJSONArray("nodes");
-        if (nodes != null) {
-            for (Object value : nodes) {
-                if (!(value instanceof JSONObject node)) {
-                    continue;
-                }
-                String ownerNoteId = noteIdFromSource(node.getString("source_file"));
-                String nodeId = node.getString("id");
-                if (ownerNoteId == null || nodeId == null) {
-                    continue;
-                }
-                nodeNotes.put(nodeId, ownerNoteId);
-
-                String label = node.getString("label");
-                if (isMeaningfulTag(label)) {
-                    conceptsByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashMap<>())
-                            .putIfAbsent(normalizeLabel(label), label.trim());
-                }
-                String community = node.getString("community_name");
-                if (isMeaningfulTag(community)) {
-                    communitiesByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashSet<>())
-                            .add(community.trim());
-                }
-            }
-        }
-
-        for (Map.Entry<String, NoteDTO> entry : notesById.entrySet()) {
-            Map<String, String> concepts = conceptsByNote.get(entry.getKey());
-            if (concepts != null) {
-                concepts.remove(normalizeLabel(entry.getValue().title()));
-            }
-        }
-
-        Map<String, Integer> conceptFrequency = new HashMap<>();
-        for (Map<String, String> concepts : conceptsByNote.values()) {
-            for (String concept : concepts.keySet()) {
-                conceptFrequency.merge(concept, 1, Integer::sum);
-            }
-        }
-
-        Map<String, RelatedCandidate> candidates = new LinkedHashMap<>();
-        Map<String, String> currentConcepts = conceptsByNote.getOrDefault(noteId, Map.of());
-        for (Map.Entry<String, Map<String, String>> entry : conceptsByNote.entrySet()) {
-            String otherNoteId = entry.getKey();
-            if (otherNoteId.equals(noteId)) {
-                continue;
-            }
-            for (Map.Entry<String, String> concept : currentConcepts.entrySet()) {
-                if (!entry.getValue().containsKey(concept.getKey())) {
-                    continue;
-                }
-                RelatedCandidate candidate = candidates.computeIfAbsent(otherNoteId, RelatedCandidate::new);
-                candidate.score += 6.0 / conceptFrequency.getOrDefault(concept.getKey(), 1);
-                candidate.sharedConcepts.add(new ConceptMatch(concept.getKey(), concept.getValue()));
-            }
-        }
-
-        JSONArray links = graph.getJSONArray("links");
-        if (links != null) {
-            for (Object value : links) {
-                if (!(value instanceof JSONObject link)) {
-                    continue;
-                }
-                String sourceNoteId = nodeNotes.get(endpointId(link.get("source")));
-                String targetNoteId = nodeNotes.get(endpointId(link.get("target")));
-                String otherNoteId;
-                if (noteId.equals(sourceNoteId) && targetNoteId != null && !noteId.equals(targetNoteId)) {
-                    otherNoteId = targetNoteId;
-                } else if (noteId.equals(targetNoteId) && sourceNoteId != null && !noteId.equals(sourceNoteId)) {
-                    otherNoteId = sourceNoteId;
-                } else {
-                    continue;
-                }
-                if (!notesById.containsKey(otherNoteId)) {
-                    continue;
-                }
-
-                String relation = link.getString("relation");
-                RelatedCandidate candidate = candidates.computeIfAbsent(otherNoteId, RelatedCandidate::new);
-                if (candidate.relationLabels.add(relationLabel(relation))) {
-                    double confidence = link.getDoubleValue("confidence_score");
-                    if (confidence <= 0) {
-                        confidence = 1.0;
-                    }
-                    candidate.score += relationWeight(relation) * (0.5 + 0.5 * Math.min(1.0, confidence));
-                }
-            }
-        }
-
-        Set<String> currentCommunities = communitiesByNote.getOrDefault(noteId, Set.of());
-        for (RelatedCandidate candidate : candidates.values()) {
-            Set<String> otherCommunities = communitiesByNote.get(candidate.noteId);
-            if (otherCommunities == null) {
-                continue;
-            }
-            for (String community : currentCommunities) {
-                if (otherCommunities.contains(community)) {
-                    candidate.sharedCommunities.add(community);
-                }
-            }
-            if (!candidate.sharedCommunities.isEmpty()) {
-                candidate.score += 1.0;
-            }
-        }
-
-        List<RelatedNote> related = candidates.values().stream()
-                .filter(candidate -> notesById.containsKey(candidate.noteId))
-                .sorted(Comparator.comparingDouble((RelatedCandidate candidate) -> candidate.score).reversed()
-                        .thenComparing(candidate -> noteTitle(notesById.get(candidate.noteId)),
-                                String.CASE_INSENSITIVE_ORDER))
-                .limit(RELATED_NOTES_LIMIT)
-                .map(candidate -> new RelatedNote(
-                        candidate.noteId,
-                        noteTitle(notesById.get(candidate.noteId)),
-                        relatedReasons(candidate, conceptFrequency)))
-                .toList();
-        return new RelatedNotes(true, related);
     }
 
     public void requestIndex(boolean force) {
@@ -540,7 +303,7 @@ public class GraphifyIndexService {
                     continue;
                 }
                 noteIds.add(note.noteId());
-                ProjectionMetadata metadata = projectNote(note, warnings);
+                GraphifyCorpusProjector.ProjectionMetadata metadata = corpusProjector.project(note, cards(note.noteId()), warnings, this::attachment);
                 metadata.cardIds().forEach(cardId -> cardToNote.put(cardId, note.noteId()));
                 metadata.attachmentNames().forEach(fileName ->
                         attachmentToNotes.computeIfAbsent(fileName, ignored -> new LinkedHashSet<>()).add(note.noteId()));
@@ -554,7 +317,7 @@ public class GraphifyIndexService {
 
             for (String staleNoteId : previous.noteIds()) {
                 if (!noteIds.contains(staleNoteId)) {
-                    removeProjection(staleNoteId);
+                    corpusProjector.remove(staleNoteId);
                 }
             }
             Map<String, List<String>> attachmentMap = new LinkedHashMap<>();
@@ -632,7 +395,7 @@ public class GraphifyIndexService {
             }
 
             for (String deletedNoteId : snapshot.deletedNoteIds()) {
-                removeProjection(deletedNoteId);
+                corpusProjector.remove(deletedNoteId);
                 noteIds.remove(deletedNoteId);
                 removeNoteMappings(deletedNoteId, cardToNote, attachmentToNotes);
             }
@@ -656,12 +419,12 @@ public class GraphifyIndexService {
             for (String noteId : changed) {
                 NoteDTO note = note(noteId);
                 if (note == null) {
-                    removeProjection(noteId);
+                    corpusProjector.remove(noteId);
                     noteIds.remove(noteId);
                     removeNoteMappings(noteId, cardToNote, attachmentToNotes);
                     projectionChanged = true;
                 } else {
-                    ProjectionMetadata metadata = projectNote(note, warnings);
+                    GraphifyCorpusProjector.ProjectionMetadata metadata = corpusProjector.project(note, cards(note.noteId()), warnings, this::attachment);
                     projectionChanged |= metadata.changed();
                     noteIds.add(noteId);
                     removeNoteMappings(noteId, cardToNote, attachmentToNotes);
@@ -795,180 +558,6 @@ public class GraphifyIndexService {
             throw new IllegalStateException("Graphify " + stage + "失败（exit " + result.exitCode() + "）"
                     + diagnostic(result.output()));
         }
-    }
-
-    private ProjectionMetadata projectNote(NoteDTO note, List<String> warnings) {
-        List<CardDTO> cards = cards(note.noteId());
-        Map<String, CardDTO> cardsById = cards == null ? new HashMap<>() : cards.stream()
-                .filter(card -> card != null && card.meta() != null && card.meta().cardId() != null)
-                .collect(Collectors.toMap(card -> card.meta().cardId(), card -> card, (first, second) -> second));
-
-        List<String> cardIds = new ArrayList<>();
-        List<String> bodies = new ArrayList<>();
-        List<String> order = note.cardIds() == null ? List.of() : note.cardIds();
-        for (String cardId : order) {
-            CardDTO card = cardsById.get(cardId);
-            if (card == null) {
-                continue;
-            }
-            cardIds.add(cardId);
-            bodies.add(card.content() == null ? "" : card.content());
-        }
-
-        StringBuilder markdown = new StringBuilder("# ")
-                .append(note.title() == null ? "" : note.title().replace('\n', ' ').replace('\r', ' '))
-                .append("\n\n");
-        for (int i = 0; i < bodies.size(); i++) {
-            if (i > 0) {
-                markdown.append("\n\n---\n\n");
-            }
-            markdown.append(bodies.get(i));
-        }
-
-        List<ImageReference> references = findImageReferences(markdown.toString());
-        Set<String> attachmentNames = new LinkedHashSet<>();
-        for (ImageReference reference : references) {
-            attachmentNames.add(reference.fileName());
-            String replacement = reference.originalTarget().startsWith("<")
-                    || reference.fileName().contains(" ")
-                    ? "<attachments/" + reference.fileName() + ">"
-                    : "attachments/" + reference.fileName();
-            markdown = new StringBuilder(markdown.toString().replace(reference.originalTarget(), replacement));
-        }
-
-        Path noteDir = noteDirectory(note.noteId());
-        Set<String> copiedAttachments = new LinkedHashSet<>();
-        boolean changed = false;
-        for (String fileName : attachmentNames) {
-            byte[] bytes = attachment(fileName);
-            if (bytes == null) {
-                warnings.add("图片附件不存在或无法读取：" + fileName);
-                continue;
-            }
-            Path destination = noteDir.resolve("attachments").resolve(fileName);
-            if (!sameBytes(destination, bytes)) {
-                fileHelper.fileWritten(destination, new ByteArrayInputStream(bytes), 0);
-                changed = true;
-            }
-            copiedAttachments.add(fileName);
-            if (bytes.length > IMAGE_INLINE_LIMIT) {
-                warnings.add("图片超过 Graphify 视觉输入上限 5 MiB，仍会作为图片引用索引：" + fileName);
-            }
-        }
-        changed |= removeStaleAttachments(noteDir, copiedAttachments);
-        Path noteFile = noteDir.resolve("note.md");
-        if (!sameText(noteFile, markdown.toString())) {
-            fileHelper.fileWritten(noteFile, markdown.toString());
-            changed = true;
-        }
-        return new ProjectionMetadata(cardIds, attachmentNames, changed);
-    }
-
-    private List<ImageReference> findImageReferences(String markdown) {
-        List<ImageReference> references = new ArrayList<>();
-        Matcher matcher = MARKDOWN_IMAGE.matcher(markdown);
-        while (matcher.find()) {
-            String rawTarget = matcher.group(1).trim();
-            boolean angleBracket = rawTarget.startsWith("<") && rawTarget.endsWith(">");
-            String target = angleBracket ? rawTarget.substring(1, rawTarget.length() - 1) : rawTarget;
-            Matcher attachment = ATTACHMENT_TARGET.matcher(target);
-            if (!attachment.matches()) {
-                continue;
-            }
-            String fileName = attachment.group(1).replace("%20", " ");
-            if (!SAFE_IMAGE_NAME.matcher(fileName).matches()) {
-                continue;
-            }
-            references.add(new ImageReference(rawTarget, fileName));
-        }
-        return references;
-    }
-
-    private boolean removeStaleAttachments(Path noteDir, Set<String> retained) {
-        Path attachmentDir = noteDir.resolve("attachments");
-        if (!Files.isDirectory(attachmentDir)) {
-            return false;
-        }
-        try {
-            List<Path> files;
-            try (var listed = Files.list(attachmentDir)) {
-                files = listed.toList();
-            }
-            boolean changed = false;
-            for (Path file : files) {
-                if (Files.isRegularFile(file) && !retained.contains(file.getFileName().toString())) {
-                    if (!fileHelper.fileDeleted(file) && Files.exists(file)) {
-                        log.error("删除 Graphify 文件失败：{}", file);
-                    }
-                    changed = true;
-                }
-            }
-            boolean empty;
-            try (var remaining = Files.list(attachmentDir)) {
-                empty = remaining.findAny().isEmpty();
-            }
-            if (empty) {
-                Files.deleteIfExists(attachmentDir);
-            }
-            return changed;
-        } catch (Exception e) {
-            throw new IllegalStateException("清理笔记投影图片失败", e);
-        }
-    }
-
-    private static boolean sameText(Path path, String content) {
-        try {
-            return Files.isRegularFile(path) && Files.readString(path, StandardCharsets.UTF_8).equals(content);
-        } catch (Exception e) {
-            log.error("读取 Graphify 文本投影失败：{}", path, e);
-            return false;
-        }
-    }
-
-    private static boolean sameBytes(Path path, byte[] content) {
-        try {
-            return Files.isRegularFile(path)
-                    && Files.size(path) == content.length
-                    && Arrays.equals(Files.readAllBytes(path), content);
-        } catch (Exception e) {
-            log.error("读取 Graphify 二进制投影失败：{}", path, e);
-            return false;
-        }
-    }
-
-    private void removeProjection(String noteId) {
-        Path noteDir = noteDirectory(noteId);
-        if (!Files.exists(noteDir)) {
-            return;
-        }
-        try {
-            List<Path> reverse;
-            try (var paths = Files.walk(noteDir)) {
-                reverse = paths.sorted(Comparator.reverseOrder()).toList();
-            }
-            for (Path path : reverse) {
-                if (Files.isRegularFile(path) || Files.isSymbolicLink(path)) {
-                    if (!fileHelper.fileDeleted(path) && Files.exists(path)) {
-                        log.error("删除 Graphify 文件失败：{}", path);
-                    }
-                } else {
-                    Files.deleteIfExists(path);
-                }
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("删除笔记投影失败", e);
-        }
-    }
-
-    private Path noteDirectory(String noteId) {
-        if (noteId == null || noteId.isBlank()) {
-            throw new IllegalArgumentException("noteId 不能为空");
-        }
-        Path target = corpusDir.resolve(noteId).normalize();
-        if (!target.startsWith(corpusDir) || target.equals(corpusDir) || target.equals(graphifyOutDir)) {
-            throw new IllegalArgumentException("noteId 不是有效的目录名称");
-        }
-        return target;
     }
 
     private Map<String, String> rebuildCardToNoteMapping() {
@@ -1219,111 +808,6 @@ public class GraphifyIndexService {
         );
     }
 
-    private static String noteIdFromSource(String sourceFile) {
-        if (sourceFile == null || sourceFile.isBlank()) {
-            return null;
-        }
-        String source = sourceFile.replace('\\', '/');
-        while (source.startsWith("./")) {
-            source = source.substring(2);
-        }
-        int slash = source.indexOf('/');
-        return slash < 0 ? null : source.substring(0, slash);
-    }
-
-    private static String endpointId(Object value) {
-        if (value instanceof JSONObject object) {
-            return object.getString("id");
-        }
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private static String noteTitle(NoteDTO note) {
-        if (note == null || note.title() == null || note.title().isBlank()) {
-            return "未命名笔记";
-        }
-        return note.title();
-    }
-
-    private static String normalizeLabel(String label) {
-        if (label == null) {
-            return "";
-        }
-        return label.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
-    }
-
-    private static double relationWeight(String relation) {
-        if (relation == null) {
-            return 3.0;
-        }
-        return switch (relation) {
-            case "semantically_similar_to" -> 8.0;
-            case "conceptually_related_to" -> 7.0;
-            case "references", "cites" -> 4.0;
-            case "shares_data_with" -> 4.0;
-            default -> 3.0;
-        };
-    }
-
-    private static String relationLabel(String relation) {
-        if (relation == null || relation.isBlank()) {
-            return "关联";
-        }
-        return switch (relation) {
-            case "semantically_similar_to" -> "语义相似";
-            case "conceptually_related_to" -> "概念相关";
-            case "references" -> "引用";
-            case "cites" -> "引用";
-            case "shares_data_with" -> "共享数据";
-            case "calls" -> "调用";
-            case "implements" -> "实现";
-            default -> relation;
-        };
-    }
-
-    private static List<String> relatedReasons(RelatedCandidate candidate,
-                                               Map<String, Integer> conceptFrequency) {
-        List<String> reasons = new ArrayList<>();
-        if (!candidate.relationLabels.isEmpty()) {
-            reasons.add("图谱关系：" + String.join("、", candidate.relationLabels));
-        }
-        if (!candidate.sharedConcepts.isEmpty()) {
-            candidate.sharedConcepts.sort(
-                    Comparator.comparingInt((ConceptMatch match) -> conceptFrequency.getOrDefault(match.key(), 1))
-                            .thenComparing(ConceptMatch::label, String.CASE_INSENSITIVE_ORDER));
-            List<String> labels = candidate.sharedConcepts.stream()
-                    .limit(3)
-                    .map(ConceptMatch::label)
-                    .toList();
-            String detail = String.join("、", labels);
-            if (candidate.sharedConcepts.size() > labels.size()) {
-                detail += " 等 " + candidate.sharedConcepts.size() + " 个";
-            }
-            reasons.add("共同概念：" + detail);
-        }
-        if (!candidate.sharedCommunities.isEmpty() && reasons.size() < 3) {
-            reasons.add("同属社区：" + candidate.sharedCommunities.iterator().next());
-        }
-        if (reasons.size() > 3) {
-            reasons = new ArrayList<>(reasons.subList(0, 3));
-        }
-        return List.copyOf(reasons);
-    }
-
-    private static boolean isMeaningfulTag(String label) {
-        if (label == null || label.isBlank()) {
-            return false;
-        }
-        String value = label.trim();
-        if (PASTE_ASSET_REFERENCE.matcher(value).find()) {
-            return false;
-        }
-        if (IMAGE_PLACEHOLDER.matcher(value).matches()) {
-            return false;
-        }
-        return !HASH_ONLY.matcher(value).matches();
-    }
-
     private Status statusFor(String stage,
                              boolean running,
                              int progress,
@@ -1395,21 +879,6 @@ public class GraphifyIndexService {
                          String error) {
     }
 
-    public record NoteTags(List<String> concept, List<String> community) {
-    }
-
-    public record RelatedNotes(boolean available, List<RelatedNote> notes) {
-    }
-
-    public record RelatedNote(String noteId, String title, List<String> reasons) {
-    }
-
-    private record ProjectionMetadata(List<String> cardIds, Set<String> attachmentNames, boolean changed) {
-    }
-
-    private record ImageReference(String originalTarget, String fileName) {
-    }
-
     private record FileBackup(byte[] bytes, long modifiedAt) {
     }
 
@@ -1422,18 +891,4 @@ public class GraphifyIndexService {
         }
     }
 
-    private static final class RelatedCandidate {
-        private final String noteId;
-        private double score;
-        private final Set<String> relationLabels = new LinkedHashSet<>();
-        private final List<ConceptMatch> sharedConcepts = new ArrayList<>();
-        private final Set<String> sharedCommunities = new LinkedHashSet<>();
-
-        private RelatedCandidate(String noteId) {
-            this.noteId = noteId;
-        }
-    }
-
-    private record ConceptMatch(String key, String label) {
-    }
 }

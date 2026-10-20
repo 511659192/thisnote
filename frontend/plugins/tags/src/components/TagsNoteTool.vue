@@ -17,6 +17,7 @@ const tags = computed(() => noteTags[props.noteId] ?? [])
 const hasTags = computed(() => tags.value.length > 0)
 const tagSummary = computed(() => tags.value.join('；'))
 const autoAttempted = new Set<string>()
+let autoPollVersion = 0
 const availableTags = computed(() => {
   const query = draft.value.trim().toLocaleLowerCase('zh-CN')
   const selected = new Set(tags.value)
@@ -55,6 +56,7 @@ onMounted(() => {
   void ensureTagState()
 })
 onBeforeUnmount(() => {
+  autoPollVersion++
   document.removeEventListener('pointerdown', closeOnOutsidePointerDown, true)
 })
 watch(() => props.noteId, () => {
@@ -106,6 +108,27 @@ async function applyAutoTags(): Promise<void> {
   draft.value = ''
   refreshActiveTagFilter()
   emitPluginStateChange({ pluginId: TAGS_PLUGIN_ID, noteIds: [props.noteId] })
+  if (result.pending) {
+    void pollAutoTags(props.noteId)
+  }
+}
+
+async function pollAutoTags(noteId: string): Promise<void> {
+  const version = ++autoPollVersion
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+    if (version !== autoPollVersion || props.noteId !== noteId) return
+    try {
+      const status = await tagsApi.autoStatus(noteId)
+      if (version !== autoPollVersion || props.noteId !== noteId) return
+      updateNoteTags(noteId, status.tags)
+      refreshActiveTagFilter()
+      emitPluginStateChange({ pluginId: TAGS_PLUGIN_ID, noteIds: [noteId] })
+      if (!status.pending) return
+    } catch {
+      return
+    }
+  }
 }
 
 async function autoExtractTags(): Promise<void> {

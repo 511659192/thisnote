@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { BLOCK_MIN_H, BLOCK_MIN_W, GRID, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
+import { BLOCK_MIN_H, BLOCK_MIN_W, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
 import { activeCardPlugins, createPreviewImageInteractions, host, onPluginStateChange, toast } from '@thisnote/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
 import type { CardView } from '@/api/types'
 import type { CardUpdate } from '@/api/page'
+import { usePageInteractions } from './usePageInteractions'
 
 /**
  * A note's page: a single column of cards that grows downwards.
@@ -32,26 +33,18 @@ const emit = defineEmits<{
 const root = ref<HTMLElement | null>(null)
 const sentinel = ref<HTMLElement | null>(null)
 const size = reactive({ width: 1100, height: 700 })
-const lastPointer = ref({ x: 240, y: 160 })
-
-type DragMode = 'none' | 'pan' | 'marquee' | 'move' | 'resize'
-const drag = reactive({
-  mode: 'none' as DragMode,
-  startScreen: { x: 0, y: 0 },
-  startWorld: { x: 0, y: 0 },
-  startViewport: { x: 0, y: 0 },
-  origin: {} as Record<string, { x: number; y: number; w: number; h: number }>,
-  handle: 'se',
-  moved: false,
-  pending: new Map<string, { x: number; y: number; w: number; h: number }>(),
-})
-
-const marquee = reactive({ active: false, x: 0, y: 0, w: 0, h: 0 })
-
-const worldStyle = computed(() => ({
-  transform: `scale(${page.viewport.zoom}) translate3d(${-page.viewport.x}px, ${-page.viewport.y}px, 0)`,
-  transformOrigin: '0 0',
-}))
+const {
+  worldStyle,
+  lastPointer,
+  marquee,
+  localPoint,
+  onWheel,
+  onSurfacePointerDown,
+  onSurfacePointerMove,
+  onBlockPointerDown,
+  onPointerMove,
+  onPointerUp,
+} = usePageInteractions(root, page, finishEditing)
 
 // ---------------------------------------------------------------- lifecycle
 
@@ -142,71 +135,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('paste', onPaste)
 })
 
-function localPoint(e: PointerEvent | MouseEvent | WheelEvent) {
-  const rect = root.value!.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
-}
-
-/** Cards snap to the page grid only for resizing; placement comes from the flow. */
-function snap(v: number) {
-  return page.snapToGrid ? Math.round(v / GRID) * GRID : Math.round(v)
-}
-
-// ---------------------------------------------------------------- zoom / pan
-
-function onWheel(e: WheelEvent) {
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault()
-    page.zoomAt(localPoint(e), e.deltaY < 0 ? 1.1 : 1 / 1.1)
-    return
-  }
-  // 长文卡片超出视口的部分靠卡片内滚动阅读：滚轮落在能滚的卡片体上就交给浏览器。
-  const scroller = (e.target as HTMLElement | null)?.closest?.('.body') as HTMLElement | null
-  if (scroller && scroller.scrollHeight > scroller.clientHeight + 1) {
-    return
-  }
-  e.preventDefault()
-  const vp = page.viewport
-  const dx = e.shiftKey ? e.deltaY : e.deltaX
-  const dy = e.shiftKey ? 0 : e.deltaY
-  page.viewport = { ...vp, x: vp.x + dx / vp.zoom, y: vp.y + dy / vp.zoom }
-}
-
-function onSurfacePointerDown(e: PointerEvent) {
-  if ((e.target as HTMLElement).closest('.card')) return
-  if (e.button === 0 && e.altKey) {
-    startPan(e)
-    return
-  }
-  if (e.button !== 0) return
-  if (e.shiftKey) {
-    startMarquee(e)
-    return
-  }
-  // Clicking the surface blurs the open card, whose blur handler saves and prunes it.
-  page.clearSelection()
-  startPan(e)
-}
-
-function startPan(e: PointerEvent) {
-  drag.mode = 'pan'
-  drag.startScreen = localPoint(e)
-  drag.startViewport = { x: page.viewport.x, y: page.viewport.y }
-  drag.moved = false
-}
-
-function startMarquee(e: PointerEvent) {
-  const p = localPoint(e)
-  drag.mode = 'marquee'
-  drag.startScreen = p
-  marquee.active = true
-  Object.assign(marquee, { x: p.x, y: p.y, w: 0, h: 0 })
-}
-
-function onSurfacePointerMove(e: PointerEvent) {
-  lastPointer.value = localPoint(e)
-}
-
 /**
  * Any pointer press outside the card being edited ends that edit. Attached at the window level
  * (capture phase) rather than on the surface, because the press may land on a card further
@@ -219,145 +147,6 @@ function onWindowPointerDown(e: PointerEvent) {
   const target = e.target as HTMLElement | null
   if (target && target.closest('.card.editing')) return
   void finishEditing(id)
-}
-
-// ---------------------------------------------------------------- card drag
-
-function onBlockPointerDown(p: {
-  event: PointerEvent
-  view: CardView
-  mode: 'move' | 'resize'
-  handle?: string
-}) {
-  const { event, view, mode } = p
-  if (event.button !== 0) return
-  event.preventDefault()
-  event.stopPropagation()
-  if (page.editingCardId && page.editingCardId !== view.card.cardId) {
-    void finishEditing()
-  }
-
-  const id = view.card.cardId
-  const additive = event.shiftKey || event.metaKey || event.ctrlKey
-  if (!page.selection.includes(id)) {
-    page.select([id], additive)
-  } else if (additive) {
-    page.select([id], true)
-  } else {
-    page.select([id])
-  }
-  if (!page.selection.includes(id)) return
-
-  drag.mode = mode
-  drag.handle = p.handle ?? 'se'
-  drag.startScreen = localPoint(event)
-  drag.startWorld = page.screenToWorld(drag.startScreen)
-  drag.origin = {}
-  for (const selId of page.selection) {
-    const v = page.cards.find((b) => b.card.cardId === selId)
-    if (v) drag.origin[selId] = { x: v.card.x, y: v.card.y, w: v.card.w, h: v.card.h }
-  }
-  drag.moved = false
-  drag.pending.clear()
-}
-
-function onPointerMove(e: PointerEvent) {
-  if (drag.mode === 'none') return
-  const p = localPoint(e)
-  const world = page.screenToWorld(p)
-  const dxScreen = p.x - drag.startScreen.x
-  const dyScreen = p.y - drag.startScreen.y
-  if (Math.abs(dxScreen) + Math.abs(dyScreen) > 3) drag.moved = true
-
-  if (drag.mode === 'pan') {
-    page.viewport = {
-      ...page.viewport,
-      x: drag.startViewport.x - dxScreen / page.viewport.zoom,
-      y: drag.startViewport.y - dyScreen / page.viewport.zoom,
-    }
-    return
-  }
-
-  if (drag.mode === 'marquee') {
-    marquee.x = Math.min(drag.startScreen.x, p.x)
-    marquee.y = Math.min(drag.startScreen.y, p.y)
-    marquee.w = Math.abs(dxScreen)
-    marquee.h = Math.abs(dyScreen)
-    const a = page.screenToWorld({ x: marquee.x, y: marquee.y })
-    const b = page.screenToWorld({ x: marquee.x + marquee.w, y: marquee.y + marquee.h })
-    page.select(
-      page.cards
-        .filter(
-          (v) =>
-            v.card.x + v.card.w >= a.x &&
-            v.card.y + v.card.h >= a.y &&
-            v.card.x <= b.x &&
-            v.card.y <= b.y,
-        )
-        .map((v) => v.card.cardId),
-    )
-    return
-  }
-
-  if (drag.mode === 'move') {
-    // Free positioning: dragging the grip moves the card anywhere on the page, x and y alike.
-    // Cards may overlap — nothing re-packs them afterwards.
-    const world = page.screenToWorld(p)
-    const id = page.selection[0]
-    const o = drag.origin[id]
-    const view = page.cards.find((b) => b.card.cardId === id)
-    if (!o || !view) return
-    const x = snap(o.x + (world.x - drag.startWorld.x))
-    const y = snap(o.y + (world.y - drag.startWorld.y))
-    page.localMove([{ cardId: view.card.cardId, x, y, w: o.w, h: o.h }])
-    drag.pending.set(id, { x, y, w: o.w, h: o.h })
-    return
-  }
-
-  if (drag.mode === 'resize') {
-    const id = Object.keys(drag.origin)[0]
-    const o = drag.origin[id]
-    const view = page.cards.find((b) => b.card.cardId === id)
-    if (!o || !view) return
-    const dx = world.x - drag.startWorld.x
-    const dy = world.y - drag.startWorld.y
-    const h = drag.handle
-    let x = o.x
-    let y = o.y
-    let w = o.w
-    let hh = o.h
-    if (h.includes('e')) w = Math.max(BLOCK_MIN_W, o.w + dx)
-    if (h.includes('s')) hh = Math.max(BLOCK_MIN_H, o.h + dy)
-    if (h.includes('w')) {
-      w = Math.max(BLOCK_MIN_W, o.w - dx)
-      x = o.x + (o.w - w)
-    }
-    if (h.includes('n')) {
-      hh = Math.max(BLOCK_MIN_H, o.h - dy)
-      y = o.y + (o.h - hh)
-    }
-    page.localMove([{ cardId: view.card.cardId, x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) }])
-    drag.pending.set(id, { x: snap(x), y: snap(y), w: Math.round(w), h: Math.round(hh) })
-  }
-}
-
-async function onPointerUp() {
-  const mode = drag.mode
-  const moved = drag.moved
-  drag.mode = 'none'
-  marquee.active = false
-  if ((mode === 'move' || mode === 'resize') && moved && drag.pending.size) {
-    const updates: CardUpdate[] = [...drag.pending.entries()].flatMap(([id, g]) => {
-      const view = page.cards.find((b) => b.card.cardId === id)
-      return view ? [{ cardId: view.card.cardId, x: g.x, y: g.y, w: g.w, h: g.h }] : []
-    })
-    // 拖过下边框/边角改高度的卡片 → 长度由用户做主，自动贴合不再覆盖（否则会"弹回"）。
-    if (mode === 'resize' && drag.handle && /[ns]/.test(drag.handle)) {
-      for (const id of drag.pending.keys()) page.markManualHeight(id)
-    }
-    drag.pending.clear()
-    await page.commit(updates)
-  }
 }
 
 // ---------------------------------------------------------------- editing

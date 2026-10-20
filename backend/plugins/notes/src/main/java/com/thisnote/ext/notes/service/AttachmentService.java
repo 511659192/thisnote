@@ -28,11 +28,11 @@ import java.util.stream.StreamSupport;
 @Service
 public class AttachmentService {
 
-    private static final String IMAGE_FILE_NAME = "[^/\n]+\\.(?:png|jpg|webp)";
+    private static final String IMAGE_FILE_NAME = "[^/\n]+\\.(?:png|jpg|jpeg|webp)";
     private static final Pattern IMAGE_FILE_NAME_PATTERN = Pattern.compile(IMAGE_FILE_NAME, Pattern.CASE_INSENSITIVE);
     private static final Pattern IMAGE_REFERENCE_PATTERN = Pattern.compile("\\.\\./attachments/(" + IMAGE_FILE_NAME + ")", Pattern.CASE_INSENSITIVE);
     private static final Map<String, String> EXTENSIONS_BY_MEDIA_TYPE = Map.of("image/png", "png", "image/jpeg", "jpg", "image/webp", "webp");
-    private static final Map<String, String> MEDIA_TYPES_BY_EXTENSION = Map.of("png", "image/png", "jpg", "image/jpeg", "webp", "image/webp");
+    private static final Map<String, String> MEDIA_TYPES_BY_EXTENSION = Map.of("png", "image/png", "jpg", "image/jpeg", "jpeg", "image/jpeg", "webp", "image/webp");
 
     private final NotesConfig notesConfig;
     private final CardRepository cardRepository;

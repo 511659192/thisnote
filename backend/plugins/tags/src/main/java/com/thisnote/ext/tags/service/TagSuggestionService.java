@@ -7,6 +7,7 @@ import com.thisnote.plugin.api.event.AiCompletionFutureEvent;
 import com.thisnote.plugin.api.event.AttachmentBytesFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
+import com.thisnote.plugin.api.util.MarkdownImages;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -21,8 +22,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -31,6 +30,7 @@ public class TagSuggestionService {
     private static final int MAX_IMAGES = 6;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
     private static final long QUERY_TIMEOUT_SECONDS = 30;
+    private static final long COMPLETION_TIMEOUT_SECONDS = 130;
     private static final int MAX_TOKENS = 1200;
     private static final String TAG_PROMPT = """
             Extract 10 to 20 high-level, reusable business tags from the note text and images.
@@ -39,14 +39,6 @@ public class TagSuggestionService {
             Prefer concepts that help find the note later. Deduplicate and keep every tag under 24 characters.
             Use the note's dominant language for the tag labels.
             """;
-    private static final Pattern MARKDOWN_IMAGE = Pattern.compile("!\\[[^\\]]*\\]\\((<[^>]+>|(?:\\\\.|[^)])*)\\)");
-    private static final Pattern ATTACHMENT_TARGET = Pattern.compile(
-            "(?i)(?:\\.\\./)?attachments/(.+?\\.(?:png|jpg|jpeg|webp))(?:[?#].*)?$");
-    private static final Pattern FILE_EXTENSION = Pattern.compile(".*\\.(?:java|md|json|yml|yaml|xml|ts|tsx|js|jsx|css|html|properties)$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CAMEL_CASE = Pattern.compile("[a-z][A-Z]");
-    private static final Pattern PATH_OR_CODE = Pattern.compile("[/\\\\`()\\[\\]{}<>=|$]");
-    private static final Pattern SENTENCE_PUNCTUATION = Pattern.compile("[，,、;；:：。.!?！？]");
-
     private ApplicationEventPublisher eventPublisher;
 
     public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
@@ -72,7 +64,7 @@ public class TagSuggestionService {
                             List<AiCompletionFutureEvent.ImageInput> images) {
         AiCompletionFutureEvent request = AiCompletionFutureEvent.request(TAG_PROMPT, text, images, MAX_TOKENS);
         publisher().publishEvent(request);
-        return request.completion().isDone() ? request.completion().getNow("") : "";
+        return request.completion().orTimeout(COMPLETION_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
     private List<AiCompletionFutureEvent.ImageInput> images(List<CardDTO> cards) {
@@ -85,17 +77,11 @@ public class TagSuggestionService {
             if (card == null || card.content() == null) {
                 continue;
             }
-            Matcher matcher = MARKDOWN_IMAGE.matcher(card.content());
-            while (matcher.find() && images.size() < MAX_IMAGES) {
-                String rawTarget = matcher.group(1).trim();
-                String target = rawTarget.startsWith("<") && rawTarget.endsWith(">")
-                        ? rawTarget.substring(1, rawTarget.length() - 1)
-                        : rawTarget;
-                Matcher attachment = ATTACHMENT_TARGET.matcher(target);
-                if (!attachment.matches()) {
-                    continue;
+            for (MarkdownImages.Reference reference : MarkdownImages.attachmentReferences(card.content())) {
+                if (images.size() >= MAX_IMAGES) {
+                    break;
                 }
-                String fileName = attachment.group(1).replace("%20", " ");
+                String fileName = reference.fileName();
                 if (!seen.add(fileName.toLowerCase(Locale.ROOT))) {
                     continue;
                 }
@@ -151,8 +137,8 @@ public class TagSuggestionService {
 
     private List<String> parseTagsFromListFallback(String response) {
         return response.lines()
-                .map(line -> line.replaceFirst("^\\s*[-*\\d.、]+\\s*", "").trim())
-                .filter(this::isMeaningfulTag)
+                .map(TagRules::clean)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
     }
@@ -161,18 +147,7 @@ public class TagSuggestionService {
         if (array == null) {
             return List.of();
         }
-        return array.stream().filter(value -> value instanceof String).map(String::valueOf).map(this::cleanTag).filter(Objects::nonNull).distinct().limit(20).toList();
-    }
-
-    private String cleanTag(String raw) {
-        String value = raw == null ? "" : raw.trim().replaceFirst("^#+\\s*", "").replaceAll("^[\"'“”]+|[\"'“”]+$", "").trim();
-        return isMeaningfulTag(value) ? value : null;
-    }
-
-    private boolean isMeaningfulTag(String value) {
-        return value.length() >= 2 && value.length() <= 24 && !FILE_EXTENSION.matcher(value).matches() && !CAMEL_CASE.matcher(value).find()
-                && !PATH_OR_CODE.matcher(value).find() && !SENTENCE_PUNCTUATION.matcher(value).find()
-                && !value.matches("^(?:\\d+|[0-9a-fA-F]{8,})$");
+        return array.stream().filter(value -> value instanceof String).map(String::valueOf).map(TagRules::clean).filter(Objects::nonNull).distinct().limit(20).toList();
     }
 
     private ApplicationEventPublisher publisher() {
