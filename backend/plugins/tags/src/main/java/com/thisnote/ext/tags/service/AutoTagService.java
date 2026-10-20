@@ -1,5 +1,8 @@
 package com.thisnote.ext.tags.service;
 
+import com.thisnote.ext.tags.client.TagAiClient;
+import com.thisnote.ext.tags.support.HighLevelTagExtractor;
+import com.thisnote.ext.tags.support.TagTextCounter;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
@@ -29,21 +32,21 @@ public class AutoTagService {
     private static final long DEADLINE_GRACE_MILLIS = 5_000;
 
     private final TagsService tagsService;
-    private final TagSuggestionService tagSuggestionService;
+    private final TagAiClient tagAiClient;
     private final ExecutorService aiWorker;
     private final Map<String, PendingTask> pending = new ConcurrentHashMap<>();
 
     @Autowired
     public AutoTagService(TagsService tagsService,
-                          TagSuggestionService tagSuggestionService) {
-        this(tagsService, tagSuggestionService, defaultExecutor());
+                          TagAiClient tagAiClient) {
+        this(tagsService, tagAiClient, defaultExecutor());
     }
 
     AutoTagService(TagsService tagsService,
-                   TagSuggestionService tagSuggestionService,
+                   TagAiClient tagAiClient,
                    ExecutorService aiWorker) {
         this.tagsService = tagsService;
-        this.tagSuggestionService = tagSuggestionService;
+        this.tagAiClient = tagAiClient;
         this.aiWorker = aiWorker;
     }
 
@@ -91,7 +94,7 @@ public class AutoTagService {
             return existing.deadlineEpochMs();
         }
         long deadlineEpochMs = System.currentTimeMillis()
-                + TagSuggestionService.RESULT_TIMEOUT_SECONDS * 1_000
+                + TagAiClient.RESULT_TIMEOUT_SECONDS * 1_000
                 + DEADLINE_GRACE_MILLIS;
         PendingTask task = new PendingTask(new CompletableFuture<>(), deadlineEpochMs);
         if (pending.putIfAbsent(noteId, task) != null) {
@@ -103,7 +106,7 @@ public class AutoTagService {
         try {
             aiWorker.execute(() -> {
                 try {
-                    List<String> suggestions = tagSuggestionService.suggest(note, cards, MAX_AUTO_TAGS);
+                    List<String> suggestions = tagAiClient.suggest(note, cards, MAX_AUTO_TAGS);
                     List<String> merged = suggestions.isEmpty()
                             ? List.of()
                             : tagsService.mergeUpTo(noteId, suggestions, MAX_AUTO_TAGS,

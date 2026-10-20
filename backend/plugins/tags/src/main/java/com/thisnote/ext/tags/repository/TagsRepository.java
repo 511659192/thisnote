@@ -28,8 +28,7 @@ public class TagsRepository {
     public TagsRepository(FileHelper fileHelper,
                           @Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
         this.fileHelper = fileHelper;
-        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize()
-                .resolve("notes").resolve("plugins").resolve("tags");
+        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("tags");
         this.tagsFile = pluginDir.resolve("tags.json");
     }
 
@@ -88,13 +87,13 @@ public class TagsRepository {
         }
     }
 
-    public synchronized void invalidateOccurrences() {
+    public synchronized void updateAllCountsInitialized(boolean initialized) {
         Map<String, NoteUsage> stored = read();
         boolean changed = false;
         for (Map.Entry<String, NoteUsage> entry : stored.entrySet()) {
             NoteUsage current = entry.getValue();
-            if (current.countsInitialized()) {
-                entry.setValue(new NoteUsage(current.tags(), current.occurrences(), false));
+            if (current.countsInitialized() != initialized) {
+                entry.setValue(new NoteUsage(current.tags(), current.occurrences(), initialized));
                 changed = true;
             }
         }
@@ -103,13 +102,13 @@ public class TagsRepository {
         }
     }
 
-    public synchronized void invalidateOccurrences(String noteId) {
+    public synchronized void updateCountsInitialized(String noteId, boolean initialized) {
         Map<String, NoteUsage> stored = read();
         NoteUsage current = stored.get(noteId);
-        if (current == null || !current.countsInitialized()) {
+        if (current == null || current.countsInitialized() == initialized) {
             return;
         }
-        stored.put(noteId, new NoteUsage(current.tags(), current.occurrences(), false));
+        stored.put(noteId, new NoteUsage(current.tags(), current.occurrences(), initialized));
         write(stored);
     }
 
@@ -190,11 +189,7 @@ public class TagsRepository {
             if (storedCounts != null) {
                 storedCounts.forEach((tag, count) -> occurrences.put(String.valueOf(tag), ((Number) count).intValue()));
             }
-            result.put(noteId.trim(), new NoteUsage(
-                    tags,
-                    occurrences,
-                    Boolean.TRUE.equals(note.getBoolean("countsInitialized"))
-            ));
+            result.put(noteId.trim(), new NoteUsage(tags, occurrences, Boolean.TRUE.equals(note.getBoolean("countsInitialized"))));
         });
         return result;
     }
@@ -215,12 +210,7 @@ public class TagsRepository {
         if (tags == null || tags.isEmpty()) {
             return List.of();
         }
-        return new ArrayList<>(new LinkedHashSet<>(
-                tags.stream()
-                        .filter(tag -> tag != null && !tag.isBlank())
-                        .map(String::trim)
-                        .toList()
-        ));
+        return new ArrayList<>(new LinkedHashSet<>(tags.stream().filter(tag -> tag != null && !tag.isBlank()).map(String::trim).toList()));
     }
 
     private static Map<String, Integer> normalizeOccurrences(List<String> tags,
@@ -238,9 +228,7 @@ public class TagsRepository {
         return result;
     }
 
-    public record NoteUsage(List<String> tags,
-                            Map<String, Integer> occurrences,
-                            boolean countsInitialized) {
+    public record NoteUsage(List<String> tags, Map<String, Integer> occurrences, boolean countsInitialized) {
 
         public NoteUsage {
             tags = normalizeTags(tags);

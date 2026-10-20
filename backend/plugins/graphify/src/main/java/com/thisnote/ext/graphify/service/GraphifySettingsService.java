@@ -49,6 +49,23 @@ public class GraphifySettingsService {
     }
 
     public SettingsResponse response() {
+        SettingsResolution resolution = resolveForResponse();
+        KeyStatus key = keyStatus(resolution.settings(), resolution.aiError());
+        ProfilesResult profiles = loadProfiles();
+        Settings settings = resolution.settings();
+        return new SettingsResponse(
+                settings.aiProfileId(),
+                settings.provider(),
+                settings.model(),
+                settings.executablePath(),
+                key.configured(),
+                profiles.profiles(),
+                key.error(),
+                profiles.error()
+        );
+    }
+
+    private SettingsResolution resolveForResponse() {
         Settings settings;
         String aiError = "";
         try {
@@ -59,6 +76,10 @@ public class GraphifySettingsService {
             aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
             log.warn("读取 Graphify AI 运行时配置失败：{}", aiError);
         }
+        return new SettingsResolution(settings, aiError);
+    }
+
+    private KeyStatus keyStatus(Settings settings, String aiError) {
         boolean keyConfigured = false;
         try {
             keyConfigured = !apiKey(settings.aiProfileId()).isBlank();
@@ -67,6 +88,10 @@ public class GraphifySettingsService {
                 aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
             }
         }
+        return new KeyStatus(keyConfigured, aiError);
+    }
+
+    private ProfilesResult loadProfiles() {
         List<AiProfileSummary> profiles;
         String profilesError = "";
         try {
@@ -76,16 +101,7 @@ public class GraphifySettingsService {
             profilesError = e.getMessage() == null ? "AI profile 列表不可用" : e.getMessage();
             log.warn("读取 Graphify AI profile 列表失败：{}", profilesError);
         }
-        return new SettingsResponse(
-                settings.aiProfileId(),
-                settings.provider(),
-                settings.model(),
-                settings.executablePath(),
-                keyConfigured,
-                profiles,
-                aiError,
-                profilesError
-        );
+        return new ProfilesResult(profiles, profilesError);
     }
 
     public synchronized SettingsResponse save(SettingsUpdate update) {
@@ -164,6 +180,15 @@ public class GraphifySettingsService {
         private Provider(List<String> keyNames) {
             this("", keyNames);
         }
+    }
+
+    private record SettingsResolution(Settings settings, String aiError) {
+    }
+
+    private record KeyStatus(boolean configured, String error) {
+    }
+
+    private record ProfilesResult(List<AiProfileSummary> profiles, String error) {
     }
 
     public record Settings(String aiProfileId,

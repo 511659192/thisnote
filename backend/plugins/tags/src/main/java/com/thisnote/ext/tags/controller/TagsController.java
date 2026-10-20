@@ -1,16 +1,11 @@
 package com.thisnote.ext.tags.controller;
 
 import com.thisnote.ext.tags.service.AutoTagService;
-import com.thisnote.ext.tags.service.TagUsageService;
-import com.thisnote.ext.tags.service.TagsSettingsService;
 import com.thisnote.ext.tags.service.TagsService;
+import com.thisnote.ext.tags.service.TagsSettingsService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
@@ -18,22 +13,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/plugins/tags")
 @Slf4j
+@RequiredArgsConstructor
 public class TagsController {
 
     private final TagsService tagsService;
     private final AutoTagService autoTagService;
-    private final TagUsageService tagUsageService;
     private final TagsSettingsService settingsService;
 
-    public TagsController(TagsService tagsService,
-                          AutoTagService autoTagService,
-                          TagUsageService tagUsageService,
-                          TagsSettingsService settingsService) {
-        this.tagsService = tagsService;
-        this.autoTagService = autoTagService;
-        this.tagUsageService = tagUsageService;
-        this.settingsService = settingsService;
-    }
 
     @GetMapping("/settings")
     public TagsSettingsService.SettingsResponse settings() {
@@ -41,8 +27,7 @@ public class TagsController {
     }
 
     @PostMapping("/settings")
-    public TagsSettingsService.SettingsResponse saveSettings(
-            @RequestBody TagsSettingsService.SettingsUpdate update) {
+    public TagsSettingsService.SettingsResponse saveSettings(@RequestBody TagsSettingsService.SettingsUpdate update) {
         TagsSettingsService.SettingsResponse response = settingsService.save(update);
         log.info("标签设置已保存：aiProfileId={}", response.aiProfileId());
         return response;
@@ -55,22 +40,20 @@ public class TagsController {
 
     @GetMapping("/tags/usage")
     public Map<String, Integer> usage() {
-        return tagUsageService.occurrences();
+        return tagsService.occurrences();
     }
 
     @PostMapping("/tags/add")
     public NoteTagsResponse add(@RequestBody TagRequest request) {
         List<String> tags = tagsService.add(request.noteId(), request.tag());
-        log.info("标签添加完成：noteId={}, tag={}, total={}",
-                request.noteId(), request.tag(), tags.size());
+        log.info("标签添加完成：noteId={}, tag={}, total={}", request.noteId(), request.tag(), tags.size());
         return new NoteTagsResponse(request.noteId().trim(), tags);
     }
 
     @PostMapping("/tags/remove")
     public NoteTagsResponse remove(@RequestBody TagRequest request) {
         List<String> tags = tagsService.remove(request.noteId(), request.tag());
-        log.info("标签移除完成：noteId={}, tag={}, total={}",
-                request.noteId(), request.tag(), tags.size());
+        log.info("标签移除完成：noteId={}, tag={}, total={}", request.noteId(), request.tag(), tags.size());
         return new NoteTagsResponse(request.noteId().trim(), tags);
     }
 

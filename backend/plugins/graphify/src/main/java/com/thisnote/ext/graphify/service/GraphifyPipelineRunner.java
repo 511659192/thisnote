@@ -44,32 +44,53 @@ final class GraphifyPipelineRunner {
         Map<Path, FileBackup> backups = backupOutputs();
         log.info("Graphify 图谱构建开始：force={}, firstRun={}", force, labelFirstRun);
         try {
-            log.info("Graphify extract 开始：corpus={}, backend={}, model={}, force={}", corpusDir, GraphifySettingsService.graphifyBackend(settings.provider()), settings.model(), force);
-            List<String> extract = new ArrayList<>(
-                    List.of("extract", corpusDir.toAbsolutePath().toString(), "--backend", GraphifySettingsService.graphifyBackend(settings.provider()), "--model", settings.model()));
-            if (force) {
-                extract.add("--force");
-            }
-            runCommand(settings, apiKey, extract, "抽取");
-            log.info("Graphify extract 完成");
-
-            log.info("Graphify cluster 开始：firstRun={}", labelFirstRun);
-            List<String> cluster = new ArrayList<>(List.of("cluster-only", corpusDir.toAbsolutePath().toString()));
-            if (labelFirstRun) {
-                cluster.addAll(List.of("--backend", GraphifySettingsService.graphifyBackend(settings.provider()), "--model", settings.model()));
-            }
-            runCommand(settings, apiKey, cluster, "社区聚类");
-            log.info("Graphify cluster 完成");
-            if (!Files.isRegularFile(graphJsonFile)) {
-                throw new IllegalStateException("Graphify 未生成 graph.json");
-            }
-            log.info("Graphify graph.json 已生成：file={}, size={}", graphJsonFile, Files.size(graphJsonFile));
-            publishOutputs();
+            runExtract(settings, apiKey, force);
+            runCluster(settings, apiKey, labelFirstRun);
+            publishGraphOutputs();
             log.info("Graphify 图谱构建完成：elapsedMs={}", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
         } catch (Exception e) {
             restoreOutputs(backups);
             throw e;
         }
+    }
+
+    private void runExtract(GraphifySettingsService.Settings settings,
+                            String apiKey,
+                            boolean force) throws Exception {
+        String backend = GraphifySettingsService.graphifyBackend(settings.provider());
+        log.info("Graphify extract 开始：corpus={}, backend={}, model={}, force={}",
+                corpusDir, backend, settings.model(), force);
+        List<String> extract = new ArrayList<>(List.of(
+                "extract", corpusDir.toAbsolutePath().toString(),
+                "--backend", backend, "--model", settings.model()));
+        if (force) {
+            extract.add("--force");
+        }
+        runCommand(settings, apiKey, extract, "抽取");
+        log.info("Graphify extract 完成");
+    }
+
+    private void runCluster(GraphifySettingsService.Settings settings,
+                            String apiKey,
+                            boolean labelFirstRun) throws Exception {
+        log.info("Graphify cluster 开始：firstRun={}", labelFirstRun);
+        List<String> cluster = new ArrayList<>(List.of(
+                "cluster-only", corpusDir.toAbsolutePath().toString()));
+        if (labelFirstRun) {
+            cluster.addAll(List.of("--backend",
+                    GraphifySettingsService.graphifyBackend(settings.provider()),
+                    "--model", settings.model()));
+        }
+        runCommand(settings, apiKey, cluster, "社区聚类");
+        log.info("Graphify cluster 完成");
+    }
+
+    private void publishGraphOutputs() throws IOException {
+        if (!Files.isRegularFile(graphJsonFile)) {
+            throw new IllegalStateException("Graphify 未生成 graph.json");
+        }
+        log.info("Graphify graph.json 已生成：file={}, size={}", graphJsonFile, Files.size(graphJsonFile));
+        publishOutputs();
     }
 
     void relabel(GraphifySettingsService.Settings settings,

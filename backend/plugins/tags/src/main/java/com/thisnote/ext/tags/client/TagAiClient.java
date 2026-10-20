@@ -1,4 +1,4 @@
-package com.thisnote.ext.tags.service;
+package com.thisnote.ext.tags.client;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -8,9 +8,12 @@ import com.thisnote.plugin.api.event.AttachmentBytesFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import com.thisnote.plugin.api.util.MarkdownImages;
+import com.thisnote.ext.tags.service.TagsSettingsService;
+import com.thisnote.ext.tags.support.TagRules;
+import com.thisnote.ext.tags.support.TagTextCounter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -24,8 +27,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-@Service
-public class TagSuggestionService {
+@Component
+public class TagAiClient {
 
     private static final int MAX_IMAGES = 6;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
@@ -42,7 +45,7 @@ public class TagSuggestionService {
     private final TagsSettingsService settingsService;
     private ApplicationEventPublisher eventPublisher;
 
-    public TagSuggestionService(TagsSettingsService settingsService) {
+    public TagAiClient(TagsSettingsService settingsService) {
         this.settingsService = settingsService;
     }
 

@@ -1,10 +1,9 @@
 package com.thisnote.ext.tags;
 
-import com.thisnote.ext.tags.service.AutoTagService;
+import com.thisnote.ext.tags.client.TagAiClient;
 import com.thisnote.ext.tags.listener.NoteChangedEventListener;
 import com.thisnote.ext.tags.listener.PluginStateResetListener;
 import com.thisnote.ext.tags.repository.TagsRepository;
-import com.thisnote.ext.tags.service.TagSuggestionService;
 import com.thisnote.ext.tags.service.TagUsageRefreshService;
 import com.thisnote.ext.tags.service.TagsService;
 import com.thisnote.ext.tags.service.TagsSettingsService;
@@ -44,7 +43,7 @@ public class TagsPlugin extends SpringBootPlugin {
         TagUsageRefreshService tagUsageRefreshService = ctx.getBean(TagUsageRefreshService.class);
         tagsService.setMainEventPublisher(getMainApplicationContext());
         tagsService.invalidateUsage();
-        ctx.getBean(TagSuggestionService.class).setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(TagAiClient.class).setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(TagsSettingsService.class).setMainEventPublisher(getMainApplicationContext());
         noteChangedEventListener = new NoteChangedEventListener(tagsRepository, tagUsageRefreshService);
         stateResetListener = new PluginStateResetListener(tagsRepository);

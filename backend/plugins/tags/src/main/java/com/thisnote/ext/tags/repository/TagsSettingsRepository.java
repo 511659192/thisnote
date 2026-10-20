@@ -17,8 +17,7 @@ public class TagsSettingsRepository {
     public TagsSettingsRepository(FileHelper fileHelper,
                                   @Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
         this.fileHelper = fileHelper;
-        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize()
-                .resolve("notes").resolve("plugins").resolve("tags");
+        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("tags");
         this.settingsFile = pluginDir.resolve("settings.json");
     }
 
@@ -28,9 +27,7 @@ public class TagsSettingsRepository {
         }
         try {
             var raw = JSON.parseObject(Files.readString(settingsFile));
-            return raw == null || raw.getString("aiProfileId") == null
-                    ? ""
-                    : raw.getString("aiProfileId");
+            return raw == null || raw.getString("aiProfileId") == null ? "" : raw.getString("aiProfileId");
         } catch (Exception e) {
             throw new IllegalStateException("标签设置文件无法读取", e);
         }

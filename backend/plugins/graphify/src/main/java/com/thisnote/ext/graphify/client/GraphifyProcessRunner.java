@@ -38,79 +38,11 @@ public class GraphifyProcessRunner {
         String operation = arguments.isEmpty() ? "unknown" : arguments.get(0);
         long startedAt = System.nanoTime();
         log.info("Graphify 命令开始：operation={}, provider={}", operation, provider);
-        OpenCodeGoProxy proxy = null;
+        OpenCodeGoProxy proxy = startProxy(provider, apiKey);
         try {
-            if (GraphifySettingsService.OPENCODE_GO_PROVIDER.equals(provider)) {
-                proxy = OpenCodeGoProxy.start(apiKey);
-            }
-
-            List<String> command = new ArrayList<>();
-            command.add(executable);
-            command.addAll(arguments);
-            log.info("Graphify 进程启动：operation={}, executable={}, workingDirectory={}", operation, executable, workingDirectory);
-            ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory.toFile()).redirectErrorStream(true);
-            Map<String, String> environment = builder.environment();
-            environment.put("GRAPHIFY_NO_AUTO_REFRESH", "1");
-            GraphifySettingsService.environmentKeyNamesToClear().forEach(environment::remove);
-            String processApiKey = apiKey;
-            if (proxy != null) {
-                environment.put("OPENAI_BASE_URL", proxy.baseUrl());
-                environment.put("NO_PROXY", noProxyWithLoopback(environment.get("NO_PROXY")));
-                processApiKey = proxy.localApiKey();
-            }
-            log.debug("Graphify 运行环境：proxy={}, keyConfigured={}",
-                    proxy != null, processApiKey != null && !processApiKey.isBlank());
-            if (processApiKey != null && !processApiKey.isBlank()) {
-                for (String name : GraphifySettingsService.environmentKeyNames(provider)) {
-                    environment.put(name, processApiKey);
-                }
-            }
-
-            Process process;
-            synchronized (processLock) {
-                if (stopped) {
-                    throw new IOException("Graphify 插件正在停用");
-                }
-                process = builder.start();
-                activeProcess = process;
-            }
-            log.info("Graphify 子进程已启动：operation={}, pid={}", operation, process.pid());
-            ArrayDeque<String> output = new ArrayDeque<>();
-            int outputLines = 0;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (output.size() == OUTPUT_LINE_LIMIT) {
-                        output.removeFirst();
-                    }
-                    String safeLine = redact(line, apiKey, processApiKey);
-                    output.addLast(safeLine);
-                    outputLines++;
-                    if (isImportantOutput(safeLine)) {
-                        log.info("Graphify 输出[{}]：{}", operation, safeLine);
-                    } else {
-                        log.debug("Graphify 输出[{}]：{}", operation, safeLine);
-                    }
-                }
-                int exitCode = process.waitFor();
-                long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
-                if (exitCode == 0) {
-                    log.info("Graphify 命令完成：operation={}, provider={}, exitCode={}, outputLines={}, elapsedMs={}", operation, provider, exitCode, outputLines, elapsedMillis);
-                } else {
-                    log.warn("Graphify 命令失败：operation={}, provider={}, exitCode={}, outputLines={}, elapsedMs={}", operation, provider, exitCode, outputLines, elapsedMillis);
-                }
-                return new Result(exitCode, String.join("\n", output));
-            } catch (InterruptedException e) {
-                process.destroyForcibly();
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Graphify 子进程被中断", e);
-            } finally {
-                synchronized (processLock) {
-                    if (activeProcess == process) {
-                        activeProcess = null;
-                    }
-                }
-            }
+            ProcessBuilder builder = processBuilder(executable, arguments, workingDirectory, operation);
+            String processApiKey = configureEnvironment(builder, provider, apiKey, proxy);
+            return execute(builder, operation, provider, startedAt, apiKey, processApiKey);
         } catch (IOException | RuntimeException e) {
             log.error("Graphify 命令执行异常：operation={}, provider={}", operation, provider, e);
             throw e;
@@ -118,6 +50,132 @@ public class GraphifyProcessRunner {
             if (proxy != null) {
                 proxy.close();
                 log.debug("OpenCode Go 本机代理已关闭：operation={}", operation);
+            }
+        }
+    }
+
+    private static OpenCodeGoProxy startProxy(String provider, String apiKey) throws IOException {
+        if (!GraphifySettingsService.OPENCODE_GO_PROVIDER.equals(provider)) {
+            return null;
+        }
+        return OpenCodeGoProxy.start(apiKey);
+    }
+
+    private static ProcessBuilder processBuilder(String executable,
+                                                 List<String> arguments,
+                                                 Path workingDirectory,
+                                                 String operation) {
+        List<String> command = new ArrayList<>();
+        command.add(executable);
+        command.addAll(arguments);
+        log.info("Graphify 进程启动：operation={}, executable={}, workingDirectory={}",
+                operation, executable, workingDirectory);
+        return new ProcessBuilder(command)
+                .directory(workingDirectory.toFile())
+                .redirectErrorStream(true);
+    }
+
+    private static String configureEnvironment(ProcessBuilder builder,
+                                               String provider,
+                                               String apiKey,
+                                               OpenCodeGoProxy proxy) {
+        Map<String, String> environment = builder.environment();
+        environment.put("GRAPHIFY_NO_AUTO_REFRESH", "1");
+        GraphifySettingsService.environmentKeyNamesToClear().forEach(environment::remove);
+        String processApiKey = apiKey;
+        if (proxy != null) {
+            environment.put("OPENAI_BASE_URL", proxy.baseUrl());
+            environment.put("NO_PROXY", noProxyWithLoopback(environment.get("NO_PROXY")));
+            processApiKey = proxy.localApiKey();
+        }
+        log.debug("Graphify 运行环境：proxy={}, keyConfigured={}",
+                proxy != null, processApiKey != null && !processApiKey.isBlank());
+        if (processApiKey != null && !processApiKey.isBlank()) {
+            for (String name : GraphifySettingsService.environmentKeyNames(provider)) {
+                environment.put(name, processApiKey);
+            }
+        }
+        return processApiKey;
+    }
+
+    private Result execute(ProcessBuilder builder,
+                           String operation,
+                           String provider,
+                           long startedAt,
+                           String apiKey,
+                           String processApiKey) throws IOException {
+        Process process = startProcess(builder, operation);
+        try {
+            ArrayDeque<String> output = new ArrayDeque<>();
+            int outputLines = readOutput(process, operation, apiKey, processApiKey, output);
+            int exitCode = waitFor(process);
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+            if (exitCode == 0) {
+                log.info("Graphify 命令完成：operation={}, provider={}, exitCode={}, outputLines={}, elapsedMs={}",
+                        operation, provider, exitCode, outputLines, elapsedMillis);
+            } else {
+                log.warn("Graphify 命令失败：operation={}, provider={}, exitCode={}, outputLines={}, elapsedMs={}",
+                        operation, provider, exitCode, outputLines, elapsedMillis);
+            }
+            return new Result(exitCode, String.join("\n", output));
+        } finally {
+            clearProcess(process);
+        }
+    }
+
+    private Process startProcess(ProcessBuilder builder, String operation) throws IOException {
+        Process process;
+        synchronized (processLock) {
+            if (stopped) {
+                throw new IOException("Graphify 插件正在停用");
+            }
+            process = builder.start();
+            activeProcess = process;
+        }
+        log.info("Graphify 子进程已启动：operation={}, pid={}", operation, process.pid());
+        return process;
+    }
+
+    private int readOutput(Process process,
+                           String operation,
+                           String apiKey,
+                           String processApiKey,
+                           ArrayDeque<String> output) throws IOException {
+        int outputLines = 0;
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (output.size() == OUTPUT_LINE_LIMIT) {
+                    output.removeFirst();
+                }
+                String safeLine = redact(line, apiKey, processApiKey);
+                output.addLast(safeLine);
+                outputLines++;
+                if (isImportantOutput(safeLine)) {
+                    log.info("Graphify 输出[{}]：{}", operation, safeLine);
+                } else {
+                    log.debug("Graphify 输出[{}]：{}", operation, safeLine);
+                }
+            }
+        }
+        return outputLines;
+    }
+
+    private static int waitFor(Process process) {
+        try {
+            return process.waitFor();
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Graphify 子进程被中断", e);
+        }
+    }
+
+    private void clearProcess(Process process) {
+        synchronized (processLock) {
+            if (activeProcess == process) {
+                activeProcess = null;
             }
         }
     }

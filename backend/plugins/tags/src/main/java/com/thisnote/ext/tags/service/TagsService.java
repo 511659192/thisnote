@@ -2,6 +2,7 @@ package com.thisnote.ext.tags.service;
 
 import com.thisnote.ext.tags.repository.TagsRepository;
 import com.thisnote.ext.tags.repository.TagsRepository.NoteUsage;
+import com.thisnote.ext.tags.support.TagTextCounter;
 import com.thisnote.plugin.api.event.NoteContentFutureEvent;
 import com.thisnote.plugin.api.event.NoteListFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -125,17 +127,29 @@ public class TagsService {
         return counts;
     }
 
+    public Map<String, Integer> occurrences() {
+        try {
+            if (hasUninitializedUsage()) {
+                refreshUninitializedUsage();
+            }
+            return usageCounts();
+        } catch (Exception e) {
+            log.error("标签计数缓存补算失败，回退实时统计", e);
+            return calculateRealtime(usageCounts());
+        }
+    }
+
     public boolean hasUninitializedUsage() {
         return tagsRepository.getAllEntries().values().stream()
                 .anyMatch(entry -> !entry.tags().isEmpty() && !entry.countsInitialized());
     }
 
     public void invalidateUsage() {
-        tagsRepository.invalidateOccurrences();
+        tagsRepository.updateAllCountsInitialized(false);
     }
 
     public void invalidateUsage(String noteId) {
-        tagsRepository.invalidateOccurrences(requireNoteId(noteId));
+        tagsRepository.updateCountsInitialized(requireNoteId(noteId), false);
     }
 
     public void refreshUninitializedUsage() {
@@ -156,7 +170,8 @@ public class TagsService {
                 notesToRemove.add(noteId);
                 return;
             }
-            List<CardDTO> cards = cards(noteId);
+            NoteCardDTO content = noteContent(noteId);
+            List<CardDTO> cards = content == null ? List.of() : content.cards();
             refreshed.put(noteId, TagTextCounter.counts(
                     TagTextCounter.noteText(note, cards),
                     entry.tags()
@@ -171,15 +186,14 @@ public class TagsService {
         if (current == null || current.tags().isEmpty()) {
             return;
         }
-        NoteDTO note = note(normalizedNoteId);
-        if (note == null) {
+        NoteCardDTO content = noteContent(normalizedNoteId);
+        if (content == null || content.note() == null) {
             tagsRepository.deleteNote(normalizedNoteId);
             return;
         }
-        List<CardDTO> cards = cards(normalizedNoteId);
         tagsRepository.updateOccurrences(
                 normalizedNoteId,
-                TagTextCounter.counts(TagTextCounter.noteText(note, cards), current.tags())
+                TagTextCounter.counts(TagTextCounter.noteText(content.note(), content.cards()), current.tags())
         );
     }
 
@@ -203,23 +217,29 @@ public class TagsService {
         }
     }
 
+    private Map<String, Integer> calculateRealtime(Map<String, Integer> knownTags) {
+        Set<String> tags = new LinkedHashSet<>(knownTags.keySet());
+        if (tags.isEmpty()) {
+            return knownTags;
+        }
+        String corpus = allNotes().stream()
+                .filter(note -> note != null && note.noteId() != null && !note.noteId().isBlank())
+                .map(note -> {
+                    NoteCardDTO content = noteContent(note.noteId());
+                    return TagTextCounter.noteText(note, content == null ? List.of() : content.cards()) + "\n";
+                })
+                .collect(Collectors.joining());
+        Map<String, Integer> result = new LinkedHashMap<>(knownTags);
+        result.putAll(TagTextCounter.counts(corpus, tags));
+        return result;
+    }
+
     private String noteText(String noteId) {
-        NoteDTO note = note(noteId);
-        if (note == null) {
+        NoteCardDTO content = noteContent(noteId);
+        if (content == null || content.note() == null) {
             throw new IllegalArgumentException("笔记不存在：" + noteId);
         }
-        List<CardDTO> cards = cards(noteId);
-        return TagTextCounter.noteText(note, cards);
-    }
-
-    public NoteDTO note(String noteId) {
-        NoteCardDTO content = noteContent(noteId);
-        return content == null ? null : content.note();
-    }
-
-    public List<CardDTO> cards(String noteId) {
-        NoteCardDTO content = noteContent(noteId);
-        return content == null ? List.of() : content.cards();
+        return TagTextCounter.noteText(content.note(), content.cards());
     }
 
     public List<NoteDTO> allNotes() {

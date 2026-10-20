@@ -1,11 +1,11 @@
-package com.thisnote.ext.tags.service;
+package com.thisnote.ext.tags.support;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-final class TagRules {
+public final class TagRules {
 
     private static final Pattern LINK = Pattern.compile("\\[([^]]+)]\\([^)]*\\)");
     private static final Pattern LEADING_ORDER = Pattern.compile("^\\s*(?:\\d+[.)、]|[一二三四五六七八九十]+[、.)]|[-*+])\\s*");
@@ -35,7 +35,7 @@ final class TagRules {
     private TagRules() {
     }
 
-    static String clean(String raw) {
+    public static String clean(String raw) {
         if (raw == null) {
             return null;
         }

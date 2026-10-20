@@ -7,6 +7,7 @@ import com.thisnote.plugin.api.util.MarkdownImages;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,70 +42,114 @@ public class GraphifyCorpusProjector {
                                       List<CardDTO> cards,
                                       List<String> warnings,
                                       Function<String, byte[]> attachmentLoader) {
-        log.debug("Graphify 投影开始：noteId={}, titleLength={}, cards={}", note.noteId(), note.title() == null ? 0 : note.title().length(), cards == null ? 0 : cards.size());
-        Map<String, CardDTO> cardsById = cards == null ? new HashMap<>() : cards.stream()
-                                                                           .filter(card -> card != null && card.meta() != null && card.meta().cardId() != null)
-                                                                           .collect(Collectors.toMap(card -> card.meta().cardId(), card -> card, (first, second) -> second));
+        log.debug("Graphify 投影开始：noteId={}, titleLength={}, cards={}",
+                note.noteId(), note.title() == null ? 0 : note.title().length(),
+                cards == null ? 0 : cards.size());
+        PreparedMarkdown prepared = prepareMarkdown(note, cards);
+        Path noteDir = noteDirectory(note.noteId());
+        AttachmentProjection attachments = copyAttachments(
+                note.noteId(), noteDir, prepared.attachmentNames(), warnings, attachmentLoader);
+        Path noteFile = noteDir.resolve("note.md");
+        boolean noteChanged = false;
+        if (!sameText(noteFile, prepared.markdown())) {
+            fileHelper.fileWritten(noteFile, prepared.markdown());
+            noteChanged = true;
+            log.debug("Graphify 投影正文已写入：noteId={}, file={}", note.noteId(), noteFile);
+        }
+        boolean changed = attachments.changed() || noteChanged;
+        ProjectionMetadata result = new ProjectionMetadata(
+                prepared.cardIds(), prepared.attachmentNames(), changed);
+        log.debug("Graphify 投影完成：noteId={}, cards={}, attachments={}, changed={}",
+                note.noteId(), result.cardIds().size(), result.attachmentNames().size(), result.changed());
+        return result;
+    }
 
+    private PreparedMarkdown prepareMarkdown(NoteDTO note, List<CardDTO> cards) {
+        Map<String, CardDTO> cardsById = indexCards(cards);
         List<String> cardIds = new ArrayList<>();
         List<String> bodies = new ArrayList<>();
+        collectBodies(note, cardsById, cardIds, bodies);
+        RewrittenMarkdown rewritten = rewriteAttachmentTargets(composeMarkdown(note.title(), bodies));
+        log.debug("Graphify 图片引用处理完成：noteId={}, attachments={}",
+                note.noteId(), rewritten.attachmentNames().size());
+        return new PreparedMarkdown(rewritten.markdown(), cardIds, rewritten.attachmentNames());
+    }
+
+    private static Map<String, CardDTO> indexCards(List<CardDTO> cards) {
+        return cards == null ? new HashMap<>() : cards.stream()
+                .filter(card -> card != null && card.meta() != null && card.meta().cardId() != null)
+                .collect(Collectors.toMap(card -> card.meta().cardId(), card -> card, (first, second) -> second));
+    }
+
+    private static void collectBodies(NoteDTO note,
+                                      Map<String, CardDTO> cardsById,
+                                      List<String> cardIds,
+                                      List<String> bodies) {
         List<String> order = note.cardIds() == null ? List.of() : note.cardIds();
         for (String cardId : order) {
             CardDTO card = cardsById.get(cardId);
-            if (card == null) {
-                continue;
+            if (card != null) {
+                cardIds.add(cardId);
+                bodies.add(card.content() == null ? "" : card.content());
             }
-            cardIds.add(cardId);
-            bodies.add(card.content() == null ? "" : card.content());
         }
+    }
 
+    private static String composeMarkdown(String title, List<String> bodies) {
         // Graphify 只识别文档，因此按笔记顺序拼接卡片正文，并保留标题作为文档标题。
-        StringBuilder markdown = new StringBuilder("# ").append(note.title() == null ? "" : note.title().replace('\n', ' ').replace('\r', ' ')).append("\n\n");
+        StringBuilder markdown = new StringBuilder("# ")
+                .append(title == null ? "" : title.replace('\n', ' ').replace('\r', ' '))
+                .append("\n\n");
         for (int i = 0; i < bodies.size(); i++) {
             if (i > 0) {
                 markdown.append("\n\n---\n\n");
             }
             markdown.append(bodies.get(i));
         }
+        return markdown.toString();
+    }
 
-        RewrittenMarkdown rewritten = rewriteAttachmentTargets(markdown.toString());
-        markdown = new StringBuilder(rewritten.markdown());
-        Set<String> attachmentNames = rewritten.attachmentNames();
-        log.debug("Graphify 图片引用处理完成：noteId={}, attachments={}", note.noteId(), attachmentNames.size());
-
-        Path noteDir = noteDirectory(note.noteId());
+    private AttachmentProjection copyAttachments(String noteId,
+                                                 Path noteDir,
+                                                 Set<String> attachmentNames,
+                                                 List<String> warnings,
+                                                 Function<String, byte[]> attachmentLoader) {
         Set<String> copiedAttachments = new LinkedHashSet<>();
         boolean changed = false;
         // CLI 以 note.md 为基准解析相对图片路径，因此被引用的图片必须存在于该笔记投影目录。
         for (String fileName : attachmentNames) {
-            log.debug("Graphify 读取投影附件：noteId={}, fileName={}", note.noteId(), fileName);
-            byte[] bytes = attachmentLoader.apply(fileName);
-            if (bytes == null) {
-                warnings.add("图片附件不存在或无法读取：" + fileName);
-                log.warn("Graphify 投影附件不存在：noteId={}, fileName={}", note.noteId(), fileName);
-                continue;
-            }
-            Path destination = noteDir.resolve("attachments").resolve(fileName);
-            if (!sameBytes(destination, bytes)) {
-                fileHelper.fileWritten(destination, new ByteArrayInputStream(bytes), 0);
-                changed = true;
-                log.debug("Graphify 投影附件已写入：noteId={}, fileName={}, bytes={}", note.noteId(), fileName, bytes.length);
-            }
-            copiedAttachments.add(fileName);
-            if (bytes.length > IMAGE_INLINE_LIMIT) {
-                warnings.add("图片超过 Graphify 视觉输入上限 5 MiB，仍会作为图片引用索引：" + fileName);
-            }
+            changed |= copyAttachment(noteId, noteDir, fileName, copiedAttachments, warnings, attachmentLoader);
         }
         changed |= removeStaleAttachments(noteDir, copiedAttachments);
-        Path noteFile = noteDir.resolve("note.md");
-        if (!sameText(noteFile, markdown.toString())) {
-            fileHelper.fileWritten(noteFile, markdown.toString());
-            changed = true;
-            log.debug("Graphify 投影正文已写入：noteId={}, file={}", note.noteId(), noteFile);
+        return new AttachmentProjection(copiedAttachments, changed);
+    }
+
+    private boolean copyAttachment(String noteId,
+                                   Path noteDir,
+                                   String fileName,
+                                   Set<String> copiedAttachments,
+                                   List<String> warnings,
+                                   Function<String, byte[]> attachmentLoader) {
+        log.debug("Graphify 读取投影附件：noteId={}, fileName={}", noteId, fileName);
+        byte[] bytes = attachmentLoader.apply(fileName);
+        if (bytes == null) {
+            warnings.add("图片附件不存在或无法读取：" + fileName);
+            log.warn("Graphify 投影附件不存在：noteId={}, fileName={}", noteId, fileName);
+            return false;
         }
-        ProjectionMetadata result = new ProjectionMetadata(cardIds, attachmentNames, changed);
-        log.debug("Graphify 投影完成：noteId={}, cards={}, attachments={}, changed={}", note.noteId(), result.cardIds().size(), result.attachmentNames().size(), result.changed());
-        return result;
+        Path destination = noteDir.resolve("attachments").resolve(fileName);
+        boolean changed = false;
+        if (!sameBytes(destination, bytes)) {
+            fileHelper.fileWritten(destination, new ByteArrayInputStream(bytes), 0);
+            changed = true;
+            log.debug("Graphify 投影附件已写入：noteId={}, fileName={}, bytes={}",
+                    noteId, fileName, bytes.length);
+        }
+        copiedAttachments.add(fileName);
+        if (bytes.length > IMAGE_INLINE_LIMIT) {
+            warnings.add("图片超过 Graphify 视觉输入上限 5 MiB，仍会作为图片引用索引：" + fileName);
+        }
+        return changed;
     }
 
     static RewrittenMarkdown rewriteAttachmentTargets(String source) {
@@ -157,29 +202,38 @@ public class GraphifyCorpusProjector {
             return false;
         }
         try {
-            List<Path> files;
-            try (var listed = Files.list(attachmentDir)) {
-                files = listed.toList();
-            }
-            boolean changed = false;
-            for (Path file : files) {
-                if (Files.isRegularFile(file) && !retained.contains(file.getFileName().toString())) {
-                    if (!fileHelper.fileDeleted(file) && Files.exists(file)) {
-                        log.error("删除 Graphify 文件失败：{}", file);
-                    }
-                    changed = true;
-                }
-            }
-            boolean empty;
-            try (var remaining = Files.list(attachmentDir)) {
-                empty = remaining.findAny().isEmpty();
-            }
-            if (empty) {
-                Files.deleteIfExists(attachmentDir);
-            }
+            boolean changed = deleteStaleFiles(attachmentDir, retained);
+            deleteDirectoryIfEmpty(attachmentDir);
             return changed;
         } catch (Exception e) {
             throw new IllegalStateException("清理笔记投影图片失败", e);
+        }
+    }
+
+    private boolean deleteStaleFiles(Path attachmentDir, Set<String> retained) throws IOException {
+        List<Path> files;
+        try (var listed = Files.list(attachmentDir)) {
+            files = listed.toList();
+        }
+        boolean changed = false;
+        for (Path file : files) {
+            if (Files.isRegularFile(file) && !retained.contains(file.getFileName().toString())) {
+                if (!fileHelper.fileDeleted(file) && Files.exists(file)) {
+                    log.error("删除 Graphify 文件失败：{}", file);
+                }
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static void deleteDirectoryIfEmpty(Path directory) throws IOException {
+        boolean empty;
+        try (var remaining = Files.list(directory)) {
+            empty = remaining.findAny().isEmpty();
+        }
+        if (empty) {
+            Files.deleteIfExists(directory);
         }
     }
 
@@ -215,6 +269,14 @@ public class GraphifyCorpusProjector {
     }
 
     public record ProjectionMetadata(List<String> cardIds, Set<String> attachmentNames, boolean changed) {
+    }
+
+    private record PreparedMarkdown(String markdown,
+                                    List<String> cardIds,
+                                    Set<String> attachmentNames) {
+    }
+
+    private record AttachmentProjection(Set<String> names, boolean changed) {
     }
 
     record RewrittenMarkdown(String markdown, Set<String> attachmentNames) {

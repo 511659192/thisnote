@@ -481,7 +481,8 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   `/tags/usage` 直接聚合持久化计数，不再每次读取全部笔记正文。
 - Notes 发布 `NoteChangedEvent(TITLE_CHANGED/TEXT_CHANGED)` 后，tags 将对应笔记标记为待刷新，并由单线程防抖任务重算该笔记，
   不阻塞卡片保存请求。
-- tags 硬依赖 `ai,notes`；在设置中选择 completion profile 并保存到 `notes/plugins/tags/settings.json`。标签 prompt、笔记内容组装、图片筛选和模型结果解析都由 tags 负责，标签落盘仍由 tags 自己完成。
+- tags 硬依赖 `ai,notes`；在设置中选择 completion profile 并保存到 `notes/plugins/tags/settings.json`。标签 prompt、笔记内容组装、图片筛选和模型结果解析由 `client/TagAiClient` 负责，标签落盘仍由 tags 自己完成。
+- `TagsService` 统一承担标签状态与计数查询；自动抽取编排、设置和异步计数刷新各自保留独立服务，标签规则与文本工具放在 `support` 包。
 - 自动抽取通过主容器消息管道读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
 - AI 候选通过带 `profileId` 的 `AiCompletionFutureEvent` 在后台获取，再与本地文本候选合并；标签优先级固定为
   「用户已有标签 > 本地抽取 > AI」。接口先返回本地结果、`pending` 与服务端 `deadlineEpochMs`，前端按该截止时间轮询。

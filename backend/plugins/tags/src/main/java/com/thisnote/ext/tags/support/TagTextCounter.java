@@ -1,4 +1,4 @@
-package com.thisnote.ext.tags.service;
+package com.thisnote.ext.tags.support;
 
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-final class TagTextCounter {
+public final class TagTextCounter {
 
     private TagTextCounter() {
     }
 
-    static String noteText(NoteDTO note,
-                           List<CardDTO> cards) {
+    public static String noteText(NoteDTO note,
+                                  List<CardDTO> cards) {
         StringBuilder text = new StringBuilder(note.title() == null ? "" : note.title());
         if (cards != null) {
             for (CardDTO card : cards) {
@@ -26,8 +26,8 @@ final class TagTextCounter {
         return text.toString();
     }
 
-    static Map<String, Integer> counts(String text,
-                                       Iterable<String> tags) {
+    public static Map<String, Integer> counts(String text,
+                                              Iterable<String> tags) {
         String haystack = text.toLowerCase(Locale.ROOT);
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String tag : tags) {

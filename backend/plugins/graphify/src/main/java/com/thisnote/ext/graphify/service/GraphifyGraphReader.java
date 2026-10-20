@@ -115,35 +115,43 @@ public class GraphifyGraphReader {
     }
 
     public Map<String, NoteTags> tags() {
-        Map<String, Set<String>> concepts = new LinkedHashMap<>();
-        Map<String, Set<String>> communities = new LinkedHashMap<>();
         JSONObject graph = graph();
         if (graph == null) {
             log.debug("Graphify 标签查询：graph.json 不存在，仅使用索引状态");
         }
-        if (graph != null) {
-            JSONArray nodes = graph.getJSONArray("nodes");
-            if (nodes != null) {
-                for (Object value : nodes) {
-                    if (!(value instanceof JSONObject node)) {
-                        continue;
-                    }
-                    String noteId = noteIdFromSource(node.getString("source_file"));
-                    if (noteId == null) {
-                        continue;
-                    }
-                    String conceptName = node.getString("label");
-                    if (isMeaningfulTag(conceptName)) {
-                        concepts.computeIfAbsent(noteId, ignored -> new LinkedHashSet<>()).add(conceptName.trim());
-                    }
-                    String communityName = node.getString("community_name");
-                    if (isMeaningfulTag(communityName)) {
-                        communities.computeIfAbsent(noteId, ignored -> new LinkedHashSet<>()).add(communityName.trim());
-                    }
-                }
+        TagSignals signals = graph == null ? new TagSignals(Map.of(), Map.of()) : collectTagSignals(graph);
+        return buildTagResult(signals.concepts(), signals.communities());
+    }
+
+    private static TagSignals collectTagSignals(JSONObject graph) {
+        Map<String, Set<String>> concepts = new LinkedHashMap<>();
+        Map<String, Set<String>> communities = new LinkedHashMap<>();
+        JSONArray nodes = graph.getJSONArray("nodes");
+        if (nodes == null) {
+            return new TagSignals(concepts, communities);
+        }
+        for (Object value : nodes) {
+            if (!(value instanceof JSONObject node)) {
+                continue;
+            }
+            String noteId = noteIdFromSource(node.getString("source_file"));
+            if (noteId == null) {
+                continue;
+            }
+            String conceptName = node.getString("label");
+            if (isMeaningfulTag(conceptName)) {
+                concepts.computeIfAbsent(noteId, ignored -> new LinkedHashSet<>()).add(conceptName.trim());
+            }
+            String communityName = node.getString("community_name");
+            if (isMeaningfulTag(communityName)) {
+                communities.computeIfAbsent(noteId, ignored -> new LinkedHashSet<>()).add(communityName.trim());
             }
         }
+        return new TagSignals(concepts, communities);
+    }
 
+    private Map<String, NoteTags> buildTagResult(Map<String, Set<String>> concepts,
+                                                 Map<String, Set<String>> communities) {
         Set<String> noteIds = new LinkedHashSet<>(stateRepository.getIndexState().noteIds());
         noteIds.addAll(concepts.keySet());
         noteIds.addAll(communities.keySet());
@@ -203,25 +211,32 @@ public class GraphifyGraphReader {
                 if (!(value instanceof JSONObject node)) {
                     continue;
                 }
-                String ownerNoteId = noteIdFromSource(node.getString("source_file"));
-                String nodeId = node.getString("id");
-                if (ownerNoteId == null || nodeId == null) {
-                    continue;
-                }
-                nodeNotes.put(nodeId, ownerNoteId);
-                String label = node.getString("label");
-                if (isMeaningfulTag(label)) {
-                    conceptsByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashMap<>())
-                            .putIfAbsent(normalizeLabel(label), label.trim());
-                }
-                String community = node.getString("community_name");
-                if (isMeaningfulTag(community)) {
-                    communitiesByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashSet<>())
-                            .add(community.trim());
-                }
+                addNodeSignals(node, conceptsByNote, communitiesByNote, nodeNotes);
             }
         }
         return new GraphSignals(conceptsByNote, communitiesByNote, nodeNotes);
+    }
+
+    private static void addNodeSignals(JSONObject node,
+                                       Map<String, Map<String, String>> conceptsByNote,
+                                       Map<String, Set<String>> communitiesByNote,
+                                       Map<String, String> nodeNotes) {
+        String ownerNoteId = noteIdFromSource(node.getString("source_file"));
+        String nodeId = node.getString("id");
+        if (ownerNoteId == null || nodeId == null) {
+            return;
+        }
+        nodeNotes.put(nodeId, ownerNoteId);
+        String label = node.getString("label");
+        if (isMeaningfulTag(label)) {
+            conceptsByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashMap<>())
+                    .putIfAbsent(normalizeLabel(label), label.trim());
+        }
+        String community = node.getString("community_name");
+        if (isMeaningfulTag(community)) {
+            communitiesByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashSet<>())
+                    .add(community.trim());
+        }
     }
 
     private static void removeTitleConcepts(Map<String, Map<String, String>> conceptsByNote,
@@ -472,6 +487,10 @@ public class GraphifyGraphReader {
     }
 
     private record ConceptMatch(String key, String label) {
+    }
+
+    private record TagSignals(Map<String, Set<String>> concepts,
+                              Map<String, Set<String>> communities) {
     }
 
     private record GraphSignals(Map<String, Map<String, String>> conceptsByNote,

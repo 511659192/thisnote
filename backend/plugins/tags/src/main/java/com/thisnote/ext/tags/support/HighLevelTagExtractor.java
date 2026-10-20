@@ -1,4 +1,4 @@
-package com.thisnote.ext.tags.service;
+package com.thisnote.ext.tags.support;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,14 +7,14 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-final class HighLevelTagExtractor {
+public final class HighLevelTagExtractor {
 
     private static final Pattern HEADING = Pattern.compile("^\\s{0,3}(#{1,6})\\s+(.+?)\\s*#*\\s*$");
     private static final Pattern BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*|__(.+?)__");
     private HighLevelTagExtractor() {
     }
 
-    static List<String> extract(List<String> documents, int limit) {
+    public static List<String> extract(List<String> documents, int limit) {
         Map<String, Candidate> candidates = new LinkedHashMap<>();
         int order = 0;
         for (String document : documents) {
