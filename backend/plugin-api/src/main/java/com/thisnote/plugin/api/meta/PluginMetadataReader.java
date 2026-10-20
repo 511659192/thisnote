@@ -3,9 +3,9 @@ package com.thisnote.plugin.api.meta;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import lombok.extern.slf4j.Slf4j;
 import org.pf4j.PluginWrapper;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,6 +16,7 @@ import java.util.zip.ZipFile;
 /**
  * Reads {@code META-INF/thisnote/plugin.json} from a plugin jar or development directory.
  */
+@Slf4j
 public final class PluginMetadataReader {
 
     public static final String RESOURCE_PATH = "META-INF/thisnote/plugin.json";
@@ -30,8 +31,9 @@ public final class PluginMetadataReader {
                 if (input != null) {
                     return parse(input.readAllBytes());
                 }
-            } catch (IOException | RuntimeException ignored) {
+            } catch (Exception e) {
                 // Fall through to the development class directory.
+                log.error("读取插件 {} 的类加载器清单失败，尝试开发目录", wrapper.getPluginId(), e);
             }
         }
 
@@ -43,7 +45,7 @@ public final class PluginMetadataReader {
             Path resource = path.resolve("classes").resolve(RESOURCE_PATH);
             try {
                 return parse(Files.readAllBytes(resource));
-            } catch (IOException | RuntimeException e) {
+            } catch (Exception e) {
                 throw new IllegalStateException("插件 " + wrapper.getPluginId() + " 的清单无法读取", e);
             }
         }
@@ -55,7 +57,7 @@ public final class PluginMetadataReader {
             try (InputStream input = zip.getInputStream(entry)) {
                 return parse(input.readAllBytes());
             }
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("插件 " + wrapper.getPluginId() + " 的清单无法读取", e);
         }
     }
@@ -64,7 +66,7 @@ public final class PluginMetadataReader {
         JSONObject raw;
         try {
             raw = JSON.parseObject(new String(bytes, StandardCharsets.UTF_8));
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalArgumentException("插件清单不是有效 JSON", e);
         }
         if (raw == null) {

@@ -99,9 +99,6 @@ public class GraphifyProcessRunner {
                 }
             }
         } catch (IOException | RuntimeException e) {
-            log.warn("Graphify 命令异常：operation={}, provider={}, errorType={}, elapsedMs={}",
-                    operation, provider, e.getClass().getSimpleName(),
-                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
             throw e;
         } finally {
             if (proxy != null) {
@@ -128,6 +125,7 @@ public class GraphifyProcessRunner {
         } catch (InterruptedException e) {
             process.destroyForcibly();
             Thread.currentThread().interrupt();
+            log.error("等待 Graphify 子进程退出被中断", e);
         }
         log.info("Graphify 子进程已停止");
     }

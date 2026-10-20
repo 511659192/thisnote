@@ -58,8 +58,8 @@ public class AttachmentImporterService {
     public void scan() {
         try {
             importNewAttachments();
-        } catch (RuntimeException e) {
-            log.warn("查询未被管理的附件失败", e);
+        } catch (Exception e) {
+            log.error("查询未被管理的附件失败", e);
         }
     }
 
@@ -68,12 +68,12 @@ public class AttachmentImporterService {
         mainEventPublisher.publishEvent(new AttachmentQueryEvent(result));
         List<CardDTO.AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
 
-        for (CardDTO.AttachmentDTO attachment : attachments) {
+        attachments.forEach(attachment -> {
             CardDTO.AttachmentDTO adopted = adopt(attachment.fileName());
             if (adopted != null) {
                 importAttachment(attachment.fileName(), adopted);
             }
-        }
+        });
     }
 
     /**
@@ -84,8 +84,8 @@ public class AttachmentImporterService {
         mainEventPublisher.publishEvent(new AttachmentAdoptEvent(result, fileName));
         try {
             return result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
-        } catch (RuntimeException e) {
-            log.warn("附件 {} 接管失败，下一轮重试", fileName, e);
+        } catch (Exception e) {
+            log.error("附件 {} 接管失败，下一轮重试", fileName, e);
             return null;
         }
     }
@@ -103,8 +103,8 @@ public class AttachmentImporterService {
         CardDTO.CardMetaDTO meta = imageCardMeta(adopted.width(), adopted.height());
         try {
             mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(new CardDTO(meta, cardContent(title, fileName), null), title, DEFAULT_BOOK_ID));
-        } catch (RuntimeException e) {
-            log.warn("附件 {} 生成笔记/卡片失败，下一轮重试", originalName, e);
+        } catch (Exception e) {
+            log.error("附件 {} 生成笔记/卡片失败，下一轮重试", originalName, e);
             return;
         }
 

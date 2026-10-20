@@ -6,11 +6,11 @@ import com.thisnote.plugin.api.util.FileHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Repository
 public class AiSettingsRepository {
@@ -22,8 +22,7 @@ public class AiSettingsRepository {
     public AiSettingsRepository(FileHelper fileHelper,
                                 @Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
         this.fileHelper = fileHelper;
-        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize()
-                .resolve("notes").resolve("plugins").resolve("ai");
+        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("ai");
         this.settingsFile = pluginDir.resolve("settings.json");
         this.credentialsFile = pluginDir.resolve(".credentials.json");
     }
@@ -38,7 +37,7 @@ public class AiSettingsRepository {
                 throw new IllegalStateException("AI 设置文件内容为空");
             }
             return stored;
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("AI 设置文件无法读取", e);
         }
     }
@@ -58,17 +57,14 @@ public class AiSettingsRepository {
         try {
             JSONObject credentials = JSON.parseObject(Files.readString(credentialsFile));
             JSONObject stored = credentials == null ? null : credentials.getJSONObject("apiKeys");
-            Map<String, String> result = new LinkedHashMap<>();
-            if (stored != null) {
-                for (String provider : stored.keySet()) {
-                    String value = stored.getString(provider);
-                    if (value != null && !value.isBlank()) {
-                        result.put(provider, value);
-                    }
-                }
+            if (stored == null) {
+                return new LinkedHashMap<>();
             }
-            return result;
-        } catch (IOException | RuntimeException e) {
+            return stored.keySet().stream().filter(provider -> {
+                String value = stored.getString(provider);
+                return value != null && !value.isBlank();
+            }).collect(Collectors.toMap(provider -> provider, stored::getString, (first, second) -> first, LinkedHashMap::new));
+        } catch (Exception e) {
             throw new IllegalStateException("AI 凭据文件无法读取", e);
         }
     }
@@ -89,8 +85,6 @@ public class AiSettingsRepository {
         }
     }
 
-    public record StoredSettings(String provider,
-                                 String model,
-                                 Integer maxTextChars) {
+    public record StoredSettings(String provider, String model, Integer maxTextChars) {
     }
 }

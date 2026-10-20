@@ -3,6 +3,7 @@ package com.thisnote.plugin.api.util;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import lombok.extern.slf4j.Slf4j;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -19,6 +20,7 @@ import java.util.Iterator;
  * <p>优先用 {@link ImageIO}（png/jpg 等标准格式）；WebP 没有内置解码器，
  * 退回到解析 RIFF 头（VP8 / VP8L / VP8X 三种块）。
  */
+@Slf4j
 public final class ImageSize {
 
     private ImageSize() {
@@ -45,10 +47,14 @@ public final class ImageSize {
                     }
                 }
             }
-        } catch (IOException | RuntimeException ignored) {
+        } catch (Exception e) {
             // 交给 WebP 头解析兜底
         }
-        return webp(file);
+        int[] fallback = webp(file);
+        if (fallback == null) {
+            log.error("无法读取图片尺寸：{}", file);
+        }
+        return fallback;
     }
 
     /**
@@ -99,7 +105,7 @@ public final class ImageSize {
             }
         } catch (EOFException e) {
             return null;
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             return null;
         }
     }

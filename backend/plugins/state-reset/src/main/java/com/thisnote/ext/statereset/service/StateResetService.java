@@ -83,7 +83,10 @@ public class StateResetService {
         participants.forEach((pluginId, future) ->
                 settled.put(pluginId, future
                         .orTimeout(ACTIVE_RESET_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                        .exceptionally(error -> PluginResetResult.failed(pluginId, timeoutMessage(error)))));
+                        .exceptionally(error -> {
+                            log.error("插件 {} 状态重置未完成", pluginId, error);
+                            return PluginResetResult.failed(pluginId, timeoutMessage(error));
+                        })));
         settled.values().forEach(future -> future.join());
 
         List<PluginResetResult> results = new ArrayList<>();
@@ -103,7 +106,8 @@ public class StateResetService {
         PluginMetadata metadata;
         try {
             metadata = PluginMetadataReader.read(wrapper);
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
+            log.error("插件 {} 静态清单不可用", pluginId, e);
             return PluginResetResult.failed(pluginId, "静态清单不可用：" + safeMessage(e));
         }
         if (metadata.resetTargets().isEmpty()) {
@@ -119,7 +123,8 @@ public class StateResetService {
                 deleteTarget(pluginDirectory, target);
             }
             return PluginResetResult.reset(pluginId, "停用插件状态文件已清理");
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
+            log.error("停用插件 {} 状态清理失败", pluginId, e);
             return PluginResetResult.failed(pluginId, "停用插件状态清理失败：" + safeMessage(e));
         }
     }

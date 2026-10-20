@@ -1,7 +1,7 @@
 package com.thisnote.ext.statereset;
 
 import com.thisnote.ext.statereset.service.StateResetService;
-import com.thisnote.ext.statereset.service.PluginStateResetListener;
+import com.thisnote.ext.statereset.listener.PluginStateResetListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;

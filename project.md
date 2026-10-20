@@ -725,7 +725,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
 4. Java：`XxxPlugin extends SpringBootPlugin`、`XxxStarter`（`@SpringBootApplication`，需要定时任务再加
    `@EnableScheduling`）。
 5. 在两个 `onPluginBootstrap` / `afterPluginBootstrap` 里：`ctx.registerBean(FileHelper.class, …)`；
-   需要跨插件监听就按事件类型各写一个 `ApplicationListener<PayloadApplicationEvent<T>>`，在
+   需要跨插件监听就按事件类型各写一个 `ApplicationListener<PayloadApplicationEvent<T>>`，放在
+   `<插件根包>/listener`（与 `service` 并列），在
    `afterPluginBootstrap` 里逐个 `getMainApplicationContext().addApplicationListener(...)`，
    并在 `stop()` 里逐个摘掉。
 6. 端点放 `/api/plugins/<pluginId>/…`；业务异常用 `plugin-api` 的契约异常。

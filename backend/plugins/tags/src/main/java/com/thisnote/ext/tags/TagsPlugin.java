@@ -1,8 +1,8 @@
 package com.thisnote.ext.tags;
 
 import com.thisnote.ext.tags.service.AutoTagService;
-import com.thisnote.ext.tags.service.NoteChangedEventListener;
-import com.thisnote.ext.tags.service.PluginStateResetListener;
+import com.thisnote.ext.tags.listener.NoteChangedEventListener;
+import com.thisnote.ext.tags.listener.PluginStateResetListener;
 import com.thisnote.ext.tags.service.TagUsageRefreshService;
 import com.thisnote.ext.tags.service.TagsService;
 import com.thisnote.plugin.api.util.FileHelper;

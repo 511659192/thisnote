@@ -1,8 +1,8 @@
 package com.thisnote.ext.favorite;
 
 import com.thisnote.ext.favorite.service.FavoriteService;
-import com.thisnote.ext.favorite.service.NoteChangedEventListener;
-import com.thisnote.ext.favorite.service.PluginStateResetListener;
+import com.thisnote.ext.favorite.listener.NoteChangedEventListener;
+import com.thisnote.ext.favorite.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;

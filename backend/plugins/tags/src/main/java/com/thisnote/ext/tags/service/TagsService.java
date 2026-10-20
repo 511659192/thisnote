@@ -182,9 +182,8 @@ public class TagsService {
         try {
             Map<String, Integer> occurrences = TagTextCounter.counts(noteText(noteId), noteTags);
             tagsRepository.replaceNoteTags(noteId, noteTags, occurrences, true);
-        } catch (RuntimeException e) {
-            log.warn("标签计数刷新失败，保留待补算状态：noteId={}, errorType={}",
-                    noteId, e.getClass().getSimpleName());
+        } catch (Exception e) {
+            log.error("标签计数刷新失败，保留待补算状态：noteId={}", noteId, e);
             Map<String, Integer> occurrences = current == null
                     ? Map.of()
                     : current.occurrences();

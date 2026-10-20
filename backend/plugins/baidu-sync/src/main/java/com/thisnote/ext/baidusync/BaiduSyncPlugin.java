@@ -1,8 +1,8 @@
 package com.thisnote.ext.baidusync;
 
-import com.thisnote.ext.baidusync.service.FileChangeEventListener;
+import com.thisnote.ext.baidusync.listener.FileChangeEventListener;
 import com.thisnote.ext.baidusync.service.BaiduSyncService;
-import com.thisnote.ext.baidusync.service.PluginStateResetListener;
+import com.thisnote.ext.baidusync.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;

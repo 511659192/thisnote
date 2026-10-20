@@ -69,9 +69,8 @@ public class BaiduSyncService {
         for (PluginWrapper wrapper : pluginManager.getPlugins()) {
             try {
                 installedPlugins.put(wrapper.getPluginId(), PluginMetadataReader.read(wrapper));
-            } catch (RuntimeException e) {
-                log.warn("插件 {} 的备份清单不可用，已排除其数据目录：{}",
-                        wrapper.getPluginId(), e.getMessage());
+            } catch (Exception e) {
+                log.error("插件 {} 的备份清单不可用，已排除其数据目录", wrapper.getPluginId(), e);
             }
         }
         this.backupScope = new BackupScope(notesRoot, installedPlugins);
@@ -89,7 +88,7 @@ public class BaiduSyncService {
     public void initializeRemoteDirectories() throws IOException {
         BaiduSyncSettings settings = settingsRepository.get();
         if (settings.appName().isBlank() || (settings.accessToken().isBlank() && settings.refreshToken().isBlank())) {
-            log.error("param is null appName:{} accessToken:{} refreshToken:{}", settings.appName(), settings.accessToken(), settings.refreshToken());
+            log.error("百度网盘同步配置不完整：appName 或授权令牌为空");
             return;
         }
 
@@ -277,7 +276,6 @@ public class BaiduSyncService {
             status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
             log.warn("百度网盘文件变更同步完成：上传 {} 删除 {}（路径{}）", counters.uploaded, counters.deleted, JSON.toJSONString(changedPaths));
         } catch (Exception e) {
-            log.info("百度网盘文件变更同步异常", e);
             failSync(counters, e);
         }
     }
@@ -446,6 +444,8 @@ public class BaiduSyncService {
             log.debug("删除本地 {}", change.relative());
             if (fileHelper.fileDeleted(change.local().file())) {
                 counters.deleted++;
+            } else if (Files.exists(change.local().file())) {
+                log.error("删除本地文件失败：{}", change.local().file());
             }
         }
     }
@@ -680,6 +680,7 @@ public class BaiduSyncService {
                 long modifiedAtSeconds = Long.parseLong(value.substring(separator + 1));
                 return size < 0 ? null : new FileFingerprint(size, modifiedAtSeconds);
             } catch (NumberFormatException e) {
+                log.error("百度网盘同步基线无法解析：{}", value, e);
                 return null;
             }
         }

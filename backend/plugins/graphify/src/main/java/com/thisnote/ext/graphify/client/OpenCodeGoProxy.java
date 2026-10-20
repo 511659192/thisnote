@@ -2,6 +2,7 @@ package com.thisnote.ext.graphify.client;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -15,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@Slf4j
 final class OpenCodeGoProxy implements AutoCloseable {
 
     private static final String UPSTREAM_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
@@ -86,9 +88,11 @@ final class OpenCodeGoProxy implements AutoCloseable {
                     response.headers().firstValue("content-type").orElse("application/json"));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.error("OpenCode Go request interrupted", e);
             writeResponse(exchange, 502, "{\"error\":{\"message\":\"OpenCode Go request interrupted\"}}",
                     "application/json");
         } catch (IOException e) {
+            log.error("OpenCode Go request failed", e);
             writeResponse(exchange, 502, "{\"error\":{\"message\":\"OpenCode Go request failed\"}}",
                     "application/json");
         } finally {

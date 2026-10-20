@@ -3,12 +3,13 @@ package com.thisnote.ext.ai.service;
 import com.thisnote.ext.ai.client.AiProviderClient;
 import com.thisnote.ext.ai.repository.AiSettingsRepository;
 import com.thisnote.plugin.api.event.AiRuntimeEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
+@Slf4j
 @Service
 public class AiSettingsService {
 
@@ -17,10 +18,7 @@ public class AiSettingsService {
     public static final int MIN_MAX_TEXT_CHARS = 1_000;
     public static final int MAX_MAX_TEXT_CHARS = 1_000_000;
 
-    private static final Set<String> REMOVED_PROVIDERS = Set.of("claude", "openai");
-    private static final Map<String, Provider> PROVIDERS = Map.of(
-            OPENCODE_GO_PROVIDER, new Provider("glm-5.3-flash")
-    );
+    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider("deepseek-v4.1-flash"));
 
     private final AiSettingsRepository settingsRepository;
     private final AiProviderClient providerClient;
@@ -39,31 +37,19 @@ public class AiSettingsService {
         if (stored.provider() == null || stored.provider().isBlank()) {
             throw new IllegalStateException("AI 设置缺少模型供应商");
         }
-        String storedProvider = stored.provider().trim().toLowerCase();
-        if (REMOVED_PROVIDERS.contains(storedProvider)) {
-            return new Settings(OPENCODE_GO_PROVIDER,
-                    PROVIDERS.get(OPENCODE_GO_PROVIDER).defaultModel(),
-                    normalizeMaxTextChars(stored.maxTextChars()));
-        }
         Provider provider = supportedProvider(stored.provider());
-        String model = stored.model() == null || stored.model().isBlank()
-                ? provider.defaultModel()
-                : stored.model().trim();
+        String model = stored.model() == null || stored.model().isBlank() ? provider.defaultModel() : stored.model().trim();
         return new Settings(provider.name(), model, normalizeMaxTextChars(stored.maxTextChars()));
     }
 
     public AiRuntimeEvent.Runtime runtime() {
         Settings settings = settings();
-        return new AiRuntimeEvent.Runtime(
-                settings.provider(),
-                settings.model(),
-                settingsRepository.apiKey(settings.provider()));
+        return new AiRuntimeEvent.Runtime(settings.provider(), settings.model(), settingsRepository.apiKey(settings.provider()));
     }
 
     public SettingsResponse response() {
         Settings settings = settings();
-        return new SettingsResponse(settings.provider(), settings.model(), settings.maxTextChars(),
-                !settingsRepository.apiKey(settings.provider()).isBlank());
+        return new SettingsResponse(settings.provider(), settings.model(), settings.maxTextChars(), !settingsRepository.apiKey(settings.provider()).isBlank());
     }
 
     public synchronized SettingsResponse save(SettingsUpdate update) {
@@ -75,9 +61,7 @@ public class AiSettingsService {
         if (model.isBlank()) {
             throw new IllegalArgumentException("模型名称不能为空");
         }
-        int maxTextChars = update.maxTextChars() == null
-                ? settings().maxTextChars()
-                : requireMaxTextChars(update.maxTextChars());
+        int maxTextChars = update.maxTextChars() == null ? settings().maxTextChars() : requireMaxTextChars(update.maxTextChars());
         Settings next = new Settings(provider.name(), model, maxTextChars);
 
         Map<String, String> apiKeys = new LinkedHashMap<>(settingsRepository.readApiKeys());
@@ -87,11 +71,9 @@ public class AiSettingsService {
             apiKeys.put(provider.name(), update.apiKey().trim());
         }
 
-        settingsRepository.saveSettings(new AiSettingsRepository.StoredSettings(
-                next.provider(), next.model(), next.maxTextChars()));
+        settingsRepository.saveSettings(new AiSettingsRepository.StoredSettings(next.provider(), next.model(), next.maxTextChars()));
         settingsRepository.saveApiKeys(apiKeys);
-        return new SettingsResponse(next.provider(), next.model(), next.maxTextChars(),
-                !apiKeys.getOrDefault(next.provider(), "").isBlank());
+        return new SettingsResponse(next.provider(), next.model(), next.maxTextChars(), !apiKeys.getOrDefault(next.provider(), "").isBlank());
     }
 
     public TestResponse test() {
@@ -102,15 +84,14 @@ public class AiSettingsService {
         try {
             providerClient.test(runtime);
             return new TestResponse(true, "AI 连接测试成功");
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
+            log.error("AI 连接测试失败", e);
             return new TestResponse(false, "AI 连接测试失败：" + e.getMessage());
         }
     }
 
     private static Settings defaults() {
-        return new Settings(OPENCODE_GO_PROVIDER,
-                PROVIDERS.get(OPENCODE_GO_PROVIDER).defaultModel(),
-                DEFAULT_MAX_TEXT_CHARS);
+        return new Settings(OPENCODE_GO_PROVIDER, PROVIDERS.get(OPENCODE_GO_PROVIDER).defaultModel(), DEFAULT_MAX_TEXT_CHARS);
     }
 
     private static int normalizeMaxTextChars(Integer value) {
@@ -135,32 +116,21 @@ public class AiSettingsService {
         return new Provider(value.trim().toLowerCase(), provider.defaultModel());
     }
 
-    private record Provider(String name,
-                            String defaultModel) {
+    private record Provider(String name, String defaultModel) {
         private Provider(String defaultModel) {
             this("", defaultModel);
         }
     }
 
-    public record Settings(String provider,
-                           String model,
-                           int maxTextChars) {
+    public record Settings(String provider, String model, int maxTextChars) {
     }
 
-    public record SettingsResponse(String provider,
-                                   String model,
-                                   int maxTextChars,
-                                   boolean keyConfigured) {
+    public record SettingsResponse(String provider, String model, int maxTextChars, boolean keyConfigured) {
     }
 
-    public record SettingsUpdate(String provider,
-                                 String model,
-                                 String apiKey,
-                                 Boolean clearApiKey,
-                                 Integer maxTextChars) {
+    public record SettingsUpdate(String provider, String model, String apiKey, Boolean clearApiKey, Integer maxTextChars) {
     }
 
-    public record TestResponse(boolean success,
-                               String message) {
+    public record TestResponse(boolean success, String message) {
     }
 }

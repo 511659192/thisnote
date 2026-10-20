@@ -67,8 +67,8 @@ public class AiTagSuggestionService {
             List<AiProviderClient.ImageInput> images = images(cards);
             List<String> tags = providerClient.suggestTags(runtime, text, images);
             event.suggestions().complete(tags.stream().limit(event.limit()).toList());
-        } catch (RuntimeException e) {
-            log.warn("AI 标签建议失败：noteId={}, errorType={}", event.noteId(), e.getClass().getSimpleName(), e);
+        } catch (Exception e) {
+            log.error("AI 标签建议失败：noteId={}", event.noteId(), e);
             event.suggestions().complete(List.of());
         }
     }

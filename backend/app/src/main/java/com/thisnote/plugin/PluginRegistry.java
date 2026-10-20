@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 插件注册表：**PF4J 是唯一来源**。
@@ -37,16 +38,15 @@ public class PluginRegistry {
      * 当前装载的插件，按 id 索引；每次调用都实时查询。
      */
     private Map<String, PluginWrapper> loaded() {
-        Map<String, PluginWrapper> out = new LinkedHashMap<>();
         PluginManager manager = pluginManager.getIfAvailable();
         if (manager == null) {
-            return out;
+            return new LinkedHashMap<>();
         }
-        for (PluginWrapper wrapper : manager.getPlugins()) {
-            String id = wrapper.getDescriptor().getPluginId();
-            out.putIfAbsent(id, wrapper);
-        }
-        return out;
+        return manager.getPlugins().stream().collect(Collectors.toMap(
+                wrapper -> wrapper.getDescriptor().getPluginId(),
+                wrapper -> wrapper,
+                (first, second) -> first,
+                LinkedHashMap::new));
     }
 
     /**

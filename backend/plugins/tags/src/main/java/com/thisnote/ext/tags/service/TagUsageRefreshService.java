@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -43,9 +42,9 @@ public class TagUsageRefreshService {
         }
         try {
             worker.schedule(() -> refresh(normalized), DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException e) {
+        } catch (Exception e) {
             pending.remove(normalized);
-            log.debug("标签计数刷新线程已停止，忽略待处理笔记：{}", normalized);
+            log.error("标签计数刷新线程已停止，忽略待处理笔记：{}", normalized, e);
         }
     }
 
@@ -53,9 +52,8 @@ public class TagUsageRefreshService {
         pending.remove(noteId);
         try {
             tagsService.refreshOccurrences(noteId);
-        } catch (RuntimeException e) {
-            log.warn("标签计数异步刷新失败：noteId={}, errorType={}",
-                    noteId, e.getClass().getSimpleName());
+        } catch (Exception e) {
+            log.error("标签计数异步刷新失败：noteId={}", noteId, e);
         }
     }
 

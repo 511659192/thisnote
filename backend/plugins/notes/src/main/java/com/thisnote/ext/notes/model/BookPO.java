@@ -93,8 +93,8 @@ public class BookPO {
             return new ArrayList<>(loaded);
         } catch (NoSuchFileException e) {
             return new ArrayList<>();
-        } catch (IOException | RuntimeException e) {
-            log.warn("分组清单无法读取，按空清单处理：{}", e.toString());
+        } catch (Exception e) {
+            log.error("分组清单无法读取，按空清单处理", e);
             return new ArrayList<>();
         }
     }

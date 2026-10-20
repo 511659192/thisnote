@@ -125,7 +125,8 @@ public class PluginStateService {
         try {
             org.pf4j.PluginDescriptor descriptor = sbp.getPluginDescriptorFinder().find(wrapper.getPluginPath());
             return descriptor == null ? null : descriptor.getVersion();
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
+            log.error("读取插件磁盘版本失败：{}", pluginId, e);
             return null;
         }
     }

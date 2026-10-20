@@ -1,10 +1,10 @@
 package com.thisnote.ext.ai;
 
 import com.thisnote.ext.ai.service.AiTagSuggestionService;
-import com.thisnote.ext.ai.service.AiRuntimeEventListener;
+import com.thisnote.ext.ai.listener.AiRuntimeEventListener;
 import com.thisnote.ext.ai.service.AiSettingsService;
-import com.thisnote.ext.ai.service.NoteTagSuggestionEventListener;
-import com.thisnote.ext.ai.service.PluginStateResetListener;
+import com.thisnote.ext.ai.listener.NoteTagSuggestionEventListener;
+import com.thisnote.ext.ai.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;

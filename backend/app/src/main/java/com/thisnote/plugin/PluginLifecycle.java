@@ -5,7 +5,6 @@ import org.pf4j.PluginWrapper;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,25 +64,24 @@ public class PluginLifecycle implements SmartInitializingSingleton {
         }
 
         // 2) 激活：汇总当前启停状态
-        List<Map<String, Object>> described = new ArrayList<>();
-        int activeCount = 0;
-        for (PluginWrapper wrapper : plugins) {
-            String id = wrapper.getDescriptor().getPluginId();
-            boolean active = states.isActive(id);
-            if (active) {
-                activeCount++;
-            }
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", id);
-            row.put("undeactivatable", registry.undeactivatable(id));
-            row.put("version", wrapper.getDescriptor().getVersion());
-            var dependencies = wrapper.getDescriptor().getDependencies();
-            row.put("dependencies", dependencies == null ? List.of() : dependencies.stream()
-                    .map(dependency -> dependency.getPluginId())
-                    .toList());
-            row.put("active", active);
-            described.add(row);
-        }
+        List<Map<String, Object>> described = plugins.stream()
+                .map(wrapper -> {
+                    String id = wrapper.getDescriptor().getPluginId();
+                    var dependencies = wrapper.getDescriptor().getDependencies();
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", id);
+                    row.put("undeactivatable", registry.undeactivatable(id));
+                    row.put("version", wrapper.getDescriptor().getVersion());
+                    row.put("dependencies", dependencies == null ? List.of() : dependencies.stream()
+                            .map(dependency -> dependency.getPluginId())
+                            .toList());
+                    row.put("active", states.isActive(id));
+                    return row;
+                })
+                .toList();
+        long activeCount = described.stream()
+                .filter(row -> Boolean.TRUE.equals(row.get("active")))
+                .count();
         log.info("[插件启动 2/2 激活] 启用 {}/{}（停用的插件其端点会被闸门拦下）", activeCount, plugins.size());
 
         Map<String, Object> result = new LinkedHashMap<>();

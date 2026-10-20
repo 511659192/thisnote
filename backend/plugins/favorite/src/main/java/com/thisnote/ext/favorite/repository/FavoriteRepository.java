@@ -10,10 +10,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
-import java.io.IOException;
 import java.io.Reader;
 import java.io.StringWriter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -45,14 +43,10 @@ public class FavoriteRepository {
     public List<String> favoriteNoteIds() {
         synchronized (lock) {
             Properties properties = readProperties();
-            List<String> ids = new ArrayList<>();
-            for (String noteId : properties.stringPropertyNames()) {
-                if (Boolean.parseBoolean(properties.getProperty(noteId))) {
-                    ids.add(noteId);
-                }
-            }
-            ids.sort(String::compareTo);
-            return ids;
+            return properties.stringPropertyNames().stream()
+                    .filter(noteId -> Boolean.parseBoolean(properties.getProperty(noteId)))
+                    .sorted()
+                    .toList();
         }
     }
 
@@ -100,20 +94,20 @@ public class FavoriteRepository {
         if (Files.notExists(file)) return properties;
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             properties.load(reader);
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("读取收藏文件失败 file:{}", file, e);
         }
         return properties;
     }
 
     private void writeProperties(Properties properties) {
+        StringWriter writer = new StringWriter();
         try {
-            StringWriter writer = new StringWriter();
             properties.store(writer, "favorite note ids");
-            fileHelper.fileWritten(file, writer.toString());
-        } catch (IOException e) {
-            log.error("写入收藏文件失败 file:{}", file, e);
+        } catch (Exception e) {
+            throw new IllegalStateException("序列化收藏文件失败", e);
         }
+        fileHelper.fileWritten(file, writer.toString());
     }
 
     private static void requireNoteId(String noteId) {

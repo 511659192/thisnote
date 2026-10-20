@@ -30,11 +30,13 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Map<String, Object>> notFound(NotFoundException e) {
+        log.error("API not found", e);
         return body(HttpStatus.NOT_FOUND, e.getMessage());
     }
 
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<Map<String, Object>> conflict(ConflictException e) {
+        log.error("API conflict", e);
         return body(HttpStatus.CONFLICT, e.getMessage());
     }
 
@@ -44,6 +46,7 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(CardLimitException.class)
     public ResponseEntity<Map<String, Object>> cardLimit(CardLimitException e) {
+        log.error("API block limit", e);
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("status", HttpStatus.CONFLICT.value());
         m.put("error", "BLOCK_LIMIT");
@@ -54,34 +57,39 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> badRequest(IllegalArgumentException e) {
+        log.error("API bad request", e);
         return body(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
-    /** 请求参数缺失/类型不符（如插件端点缺 ids 参数）：客户端可纠正的 400，不值得一条 error 日志。 */
+    /** 请求参数缺失/类型不符（如插件端点缺 ids 参数）：客户端可纠正的 400，仍按统一异常日志记录。 */
     @ExceptionHandler(org.springframework.web.bind.ServletRequestBindingException.class)
     public ResponseEntity<Map<String, Object>> badBinding(org.springframework.web.bind.ServletRequestBindingException e) {
+        log.error("API request binding error", e);
         return body(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
     /** "资源在，但状态不对"（如给未开启记忆周期的卡片评分）：客户端可自行纠正。 */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, Object>> conflict(IllegalStateException e) {
+        log.error("API state conflict", e);
         return body(HttpStatus.CONFLICT, e.getMessage());
     }
 
     @ExceptionHandler(SecurityException.class)
     public ResponseEntity<Map<String, Object>> forbidden(SecurityException e) {
+        log.error("API forbidden", e);
         return body(HttpStatus.FORBIDDEN, e.getMessage());
     }
 
     /**
      * 路径没有对应处理器（写错了，或者端点已被移除）就该是 404。
      *
-     * <p>放过它的话会被下面的 {@code Exception} 兜底成 500 —— 状态码撒谎，还每次都打一条
-     * error 日志。单体交付之后这一点更要紧：静态资源兜底与错误派发都挂在同一套 MVC 上。
+     * <p>放过它的话会被下面的 {@code Exception} 兜底成 500 —— 状态码撒谎。单体交付之后这一点
+     * 更要紧：静态资源兜底与错误派发都挂在同一套 MVC 上。
      */
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     public ResponseEntity<Map<String, Object>> notFound(Exception e) {
+        log.error("API route not found", e);
         return body(HttpStatus.NOT_FOUND, "接口不存在");
     }
 
@@ -89,10 +97,11 @@ public class ApiExceptionHandler {
      * 路径在、方法不对（例如对一个只有 PATCH 的端点发 PUT）该是 405，不是 500。
      *
      * <p>它和上一条是同一类问题：{@code RequestMappingInfoHandlerMapping} 找不到匹配的方法时
-     * 抛这个异常，落到 {@code Exception} 兜底就变成 500 —— 状态码撒谎、日志里还多一条 error。
+     * 抛这个异常，落到 {@code Exception} 兜底就变成 500 —— 状态码撒谎。
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<Map<String, Object>> methodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        log.error("API method not allowed", e);
         return body(HttpStatus.METHOD_NOT_ALLOWED, e.getMessage());
     }
 

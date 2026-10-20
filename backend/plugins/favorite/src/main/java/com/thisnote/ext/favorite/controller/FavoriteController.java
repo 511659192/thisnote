@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -35,11 +34,9 @@ public class FavoriteController {
      */
     @GetMapping("/get-favorites")
     public List<Map<String, Object>> favoriteNoteIds() {
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (String id : favoriteService.favoriteNoteIds()) {
-            out.add(Map.of("id", id));
-        }
-        return out;
+        return favoriteService.favoriteNoteIds().stream()
+                .map(id -> Map.<String, Object>of("id", id))
+                .toList();
     }
 
     @GetMapping("/get-state")

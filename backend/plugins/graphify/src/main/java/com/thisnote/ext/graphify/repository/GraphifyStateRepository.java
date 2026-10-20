@@ -5,7 +5,6 @@ import com.thisnote.plugin.api.util.FileHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -42,7 +41,7 @@ public class GraphifyStateRepository {
             IndexState stored = JSON.parseObject(Files.readString(indexStateFile), IndexState.class);
             cachedIndexState = stored == null ? IndexState.empty() : stored;
             return cachedIndexState;
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("Graphify 索引状态文件无法读取", e);
         }
     }

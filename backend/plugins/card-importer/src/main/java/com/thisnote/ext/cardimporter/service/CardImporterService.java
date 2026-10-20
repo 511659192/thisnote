@@ -30,8 +30,8 @@ public class CardImporterService {
     public void scan() {
         try {
             requestCardImports();
-        } catch (RuntimeException e) {
-            log.warn("扫描 notes/cards 提交导入申请失败", e);
+        } catch (Exception e) {
+            log.error("扫描 notes/cards 提交导入申请失败", e);
         }
     }
 
@@ -44,10 +44,8 @@ public class CardImporterService {
         List<CardDTO> cards = result.join();
         if (cards.isEmpty()) return;
 
-        for (CardDTO card : cards) {
-            String noteTitle = title(card.sourceFileName());
-            mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(card, noteTitle, DEFAULT_BOOK_ID));
-        }
+        cards.forEach(card -> mainEventPublisher.publishEvent(
+                CardChangedEvent.requestCardCreate(card, title(card.sourceFileName()), DEFAULT_BOOK_ID)));
     }
 
 

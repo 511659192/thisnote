@@ -1,7 +1,7 @@
 package com.thisnote.ext.attachmentimporter;
 
 import com.thisnote.ext.attachmentimporter.service.AttachmentImporterService;
-import com.thisnote.ext.attachmentimporter.service.PluginStateResetListener;
+import com.thisnote.ext.attachmentimporter.listener.PluginStateResetListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;

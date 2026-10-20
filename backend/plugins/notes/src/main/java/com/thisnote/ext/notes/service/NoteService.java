@@ -153,19 +153,12 @@ public class NoteService {
     }
 
     public List<NoteDTO> list(NoteListRequest query) {
-        List<NotePO> matched = new ArrayList<>();
-        for (NotePO note : noteRepository.getAll()) {
-            if (matches(note, query)) {
-                matched.add(note);
-            }
-        }
-        int limit = query.limit();
-        int offset = query.offset();
-        List<NotePO> page = new ArrayList<>();
-        for (int i = offset; i < matched.size() && page.size() < limit; i++) {
-            page.add(matched.get(i));
-        }
-        return page.stream().map(notesMapper::toNoteDTO).toList();
+        return noteRepository.getAll().stream()
+                .filter(note -> matches(note, query))
+                .skip(query.offset())
+                .limit(query.limit())
+                .map(notesMapper::toNoteDTO)
+                .toList();
     }
 
     private boolean matches(NotePO meta,

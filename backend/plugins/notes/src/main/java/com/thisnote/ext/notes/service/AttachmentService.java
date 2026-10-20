@@ -7,6 +7,7 @@ import com.thisnote.ext.notes.repository.CardRepository;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.ImageSize;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,7 +22,9 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.StreamSupport;
 
+@Slf4j
 @Service
 public class AttachmentService {
 
@@ -119,14 +122,13 @@ public class AttachmentService {
         if (!Files.isDirectory(dir)) return List.of();
 
         // 先看目录里有没有候选图片：没有就不必付「全库卡片扫描」的代价（引用关系只存在于卡片正文中）。
-        List<String> candidates = new ArrayList<>();
+        List<String> candidates;
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
-            for (Path path : stream) {
-                String fileName = path.getFileName().toString();
-                if (!fileName.startsWith(".") && isImageFile(fileName)) {
-                    candidates.add(fileName);
-                }
-            }
+            candidates = StreamSupport.stream(stream.spliterator(), false)
+                    .map(path -> path.getFileName().toString())
+                    .filter(fileName -> !fileName.startsWith("."))
+                    .filter(AttachmentService::isImageFile)
+                    .toList();
         } catch (IOException e) {
             throw new UncheckedIOException("无法读取附件目录 " + dir, e);
         }
@@ -140,17 +142,13 @@ public class AttachmentService {
             BasicFileAttributes attributes;
             try {
                 attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-            } catch (IOException e) {
+            } catch (Exception e) {
+                log.error("读取附件属性失败，已跳过：{}", path, e);
                 continue;
             }
             if (attributes.isRegularFile() && attributes.size() > 0) {
                 int[] pixels = ImageSize.of(path);
-                attachments.add(new CardDTO.AttachmentDTO(
-                        fileName,
-                        attributes.size(),
-                        pixels == null ? 0 : pixels[0],
-                        pixels == null ? 0 : pixels[1]
-                ));
+                attachments.add(new CardDTO.AttachmentDTO(fileName, attributes.size(), pixels == null ? 0 : pixels[0], pixels == null ? 0 : pixels[1]));
             }
         }
         return attachments;
@@ -166,6 +164,8 @@ public class AttachmentService {
             if (path == null) continue;
             if (fileHelper.fileDeleted(path)) {
                 removeMetadata(fileName);
+            } else if (Files.exists(path)) {
+                log.error("删除未引用附件失败：{}", path);
             }
         }
     }
@@ -210,7 +210,8 @@ public class AttachmentService {
     }
 
     private Map<String, CardPO.AttachmentMeta> readMetadata() {
-        return FileHelper.readMapIndex(attachmentMetadataFile, new TypeReference<LinkedHashMap<String, CardPO.AttachmentMeta>>() { }, "附件");
+        return FileHelper.readMapIndex(attachmentMetadataFile, new TypeReference<LinkedHashMap<String, CardPO.AttachmentMeta>>() {
+        }, "附件");
     }
 
     /**

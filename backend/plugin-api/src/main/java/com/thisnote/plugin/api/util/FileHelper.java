@@ -53,7 +53,6 @@ public final class FileHelper {
             createParentDirectories(file);
             Files.writeString(file, content, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            log.warn("无法写入文件 {}", file, e);
             throw new UncheckedIOException("写入文件失败 " + file, e);
         }
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
@@ -68,7 +67,6 @@ public final class FileHelper {
                 Files.copy(input, destination, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            log.warn("无法写入文件 {}", destination, e);
             throw new UncheckedIOException("保存图片附件失败", e);
         }
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, destination, null);
@@ -89,7 +87,6 @@ public final class FileHelper {
                 Files.setLastModifiedTime(file, FileTime.fromMillis(modifiedAtMillis));
             }
         } catch (IOException e) {
-            log.warn("无法写入文件 {}", file, e);
             throw new UncheckedIOException("写入文件失败 " + file, e);
         }
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
@@ -103,7 +100,6 @@ public final class FileHelper {
             }
             return deleted;
         } catch (IOException e) {
-            log.warn("无法删除文件 {}", file, e);
             return false;
         }
     }
@@ -115,7 +111,6 @@ public final class FileHelper {
         try {
             moved = Files.move(previousFile, file, options);
         } catch (IOException e) {
-            log.warn("无法移动文件 {} -> {}", previousFile, file, e);
             throw new UncheckedIOException("移动文件失败 " + previousFile + " -> " + file, e);
         }
         publishFileChange(FileChangeEvent.Operation.RENAME, moved, previousFile);
@@ -151,7 +146,7 @@ public final class FileHelper {
 
     /**
      * 读取整份 JSON map 索引（如 noteId → PO 的单文件全量索引）。
-     * 文件缺失/空白/解析为 null 一律按「索引损坏」处理：记 error 后抛出，保留现场等人工介入，不静默重建。
+     * 文件缺失/空白/解析为 null 一律按「索引损坏」处理：抛出并保留现场等人工介入，不静默重建。
      */
     public static <T> Map<String, T> readMapIndex(Path file,
                                                   TypeReference<LinkedHashMap<String, T>> type,
@@ -160,14 +155,13 @@ public final class FileHelper {
             Map<String, T> map = JSON.parseObject(Files.readString(file, StandardCharsets.UTF_8), type);
             return map == null ? new LinkedHashMap<>() : map;
         } catch (Exception e) {
-            log.error(label + "索引无法解析：{}", file, e);
             throw new IllegalStateException(label + "索引无法解析 " + file, e);
         }
     }
 
     /**
      * 读取整份 JSON map；文件缺失视为「还没有数据」返回空 map，
-     * 其余读取/解析失败按 label 记 warn 后抛出（保留原文件，不静默重建）。
+     * 其余读取/解析失败抛出（保留原文件，不静默重建）。
      */
     public static <T> Map<String, T> readMapOrEmpty(Path file,
                                                     TypeReference<LinkedHashMap<String, T>> type,
@@ -178,14 +172,12 @@ public final class FileHelper {
         } catch (NoSuchFileException e) {
             return new LinkedHashMap<>();
         } catch (IOException e) {
-            log.warn(label + "文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
             throw new IllegalStateException(label + "文件无法读取 " + file, e);
         }
         try {
             Map<String, T> map = json.isBlank() ? null : JSON.parseObject(json, type);
             return map == null ? new LinkedHashMap<>() : map;
-        } catch (RuntimeException e) {
-            log.warn(label + "文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
+        } catch (Exception e) {
             throw new IllegalStateException(label + "文件无法读取 " + file, e);
         }
     }

@@ -5,7 +5,6 @@ import com.thisnote.plugin.api.util.FileHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -30,7 +29,7 @@ public class GraphifySettingsRepository {
         try {
             StoredCliSettings stored = JSON.parseObject(Files.readString(settingsFile), StoredCliSettings.class);
             return stored == null || stored.executablePath() == null ? "" : stored.executablePath();
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("Graphify 设置文件无法读取", e);
         }
     }

@@ -4,10 +4,10 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.plugin.api.util.FileHelper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Repository
 public class TagsRepository {
 
@@ -151,7 +152,9 @@ public class TagsRepository {
 
     public synchronized void clear() {
         if (Files.exists(tagsFile)) {
-            fileHelper.fileDeleted(tagsFile);
+            if (!fileHelper.fileDeleted(tagsFile) && Files.exists(tagsFile)) {
+                log.error("删除标签文件失败：{}", tagsFile);
+            }
         }
     }
 
@@ -167,7 +170,7 @@ public class TagsRepository {
             Map<String, NoteUsage> result = readCurrent(raw);
             result.entrySet().removeIf(entry -> entry.getValue().tags().isEmpty());
             return result;
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("标签文件无法读取", e);
         }
     }
@@ -197,7 +200,9 @@ public class TagsRepository {
     private void write(Map<String, NoteUsage> tags) {
         if (tags.isEmpty()) {
             if (Files.exists(tagsFile)) {
-                fileHelper.fileDeleted(tagsFile);
+                if (!fileHelper.fileDeleted(tagsFile) && Files.exists(tagsFile)) {
+                    log.error("删除标签文件失败：{}", tagsFile);
+                }
             }
             return;
         }

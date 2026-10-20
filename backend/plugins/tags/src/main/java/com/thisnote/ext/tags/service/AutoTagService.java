@@ -7,10 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -35,14 +32,11 @@ public class AutoTagService {
             throw new IllegalArgumentException("笔记不存在");
         }
         List<CardDTO> cards = tagsService.cards(noteId);
-        List<String> documents = new ArrayList<>();
-        if (cards != null) {
-            for (CardDTO card : cards) {
-                if (card != null && card.content() != null) {
-                    documents.add(card.content());
-                }
-            }
-        }
+        List<String> documents = cards == null ? List.of() : cards.stream()
+                                                             .filter(Objects::nonNull)
+                                                             .map(CardDTO::content)
+                                                             .filter(Objects::nonNull)
+                                                             .toList();
         Set<String> suggestions = new LinkedHashSet<>();
         NoteTagSuggestionEvent request = NoteTagSuggestionEvent.request(noteId, MAX_AUTO_TAGS);
         if (eventPublisher != null) {
@@ -51,8 +45,8 @@ public class AutoTagService {
                 if (request.suggestions().isDone()) {
                     suggestions.addAll(request.suggestions().getNow(List.of()));
                 }
-            } catch (RuntimeException e) {
-                log.debug("AI 标签建议跳过：noteId={}, errorType={}", noteId, e.getClass().getSimpleName());
+            } catch (Exception e) {
+                log.error("AI 标签建议跳过：noteId={}", noteId, e);
             }
         }
         suggestions.addAll(HighLevelTagExtractor.extract(documents, MAX_AUTO_TAGS));

@@ -38,11 +38,9 @@ public class BookRepository {
         if (id == null) {
             return null;
         }
-        for (BookPO book : books) {
-            if (id.equals(book.getId())) {
-                return book;
-            }
-        }
-        return null;
+        return books.stream()
+                .filter(book -> id.equals(book.getId()))
+                .findFirst()
+                .orElse(null);
     }
 }

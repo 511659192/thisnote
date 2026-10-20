@@ -4,14 +4,11 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.plugin.api.util.FileHelper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
-import java.io.FilterInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -26,15 +23,10 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+import java.util.stream.IntStream;
 
+@Slf4j
 @Service
 public class BaiduPanClient {
 
@@ -103,11 +95,7 @@ public class BaiduPanClient {
                 }
                 String listedMd5 = Objects.toString(row.getString("md5"), "").trim();
                 String normalizedMd5 = normalizeMd5(listedMd5);
-                items.add(new BaiduPanEntry(path,
-                                            row.getIntValue("isdir") == 1,
-                                            row.getLongValue("size"),
-                                            normalizedMd5.isBlank() ? listedMd5 : normalizedMd5,
-                                            modifiedAt(row),
+                items.add(new BaiduPanEntry(path, row.getIntValue("isdir") == 1, row.getLongValue("size"), normalizedMd5.isBlank() ? listedMd5 : normalizedMd5, modifiedAt(row),
                                             row.getLongValue("fs_id")));
             }
             if (list.size() < PAGE_SIZE) {
@@ -148,16 +136,11 @@ public class BaiduPanClient {
     private List<FileManagerFailure> fileManagerFailures(JSONObject result) {
         int apiErrno = result.getIntValue("errno");
         JSONArray info = result.getJSONArray("info");
-        List<FileManagerFailure> failures = new ArrayList<>();
-        if (info != null) {
-            for (int i = 0; i < info.size(); i++) {
-                JSONObject item = info.getJSONObject(i);
-                int itemErrno = item.getIntValue("errno");
-                if (itemErrno != 0) {
-                    failures.add(new FileManagerFailure(item.getString("path"), apiErrno, itemErrno));
-                }
-            }
-        }
+        List<FileManagerFailure> failures = info == null ? List.of() : IntStream.range(0, info.size())
+                                                                       .mapToObj(info::getJSONObject)
+                                                                       .filter(item -> item.getIntValue("errno") != 0)
+                                                                       .map(item -> new FileManagerFailure(item.getString("path"), apiErrno, item.getIntValue("errno")))
+                                                                       .toList();
         if (apiErrno != 0 && failures.isEmpty()) {
             throw new BaiduPanException(apiErrno);
         }
@@ -178,8 +161,7 @@ public class BaiduPanClient {
             List<Long> fsIds = batch.stream().map(BaiduPanEntry::fsId).toList();
             JSONObject metadata;
             try {
-                metadata = getJson(META_API,
-                                   Map.of("method", "filemetas", "access_token", accessToken, "fsids", JSON.toJSONString(fsIds), "dlink", "1"));
+                metadata = getJson(META_API, Map.of("method", "filemetas", "access_token", accessToken, "fsids", JSON.toJSONString(fsIds), "dlink", "1"));
             } catch (BaiduPanException e) {
                 throw new IllegalStateException("获取百度网盘批量下载地址失败：" + e.getMessage(), e);
             }
@@ -216,11 +198,7 @@ public class BaiduPanClient {
         downloadUrl += downloadUrl.contains("?") ? "&access_token=" + encodedAccessToken : "?access_token=" + encodedAccessToken;
         try {
             MessageDigest digest = newMd5Digest();
-            HttpRequest request = HttpRequest.newBuilder(URI.create(downloadUrl))
-                    .timeout(Duration.ofMinutes(30))
-                    .header("User-Agent", "pan.baidu.com")
-                    .GET()
-                    .build();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(downloadUrl)).timeout(Duration.ofMinutes(30)).header("User-Agent", "pan.baidu.com").GET().build();
             HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
             InputStream body = response.body();
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -228,9 +206,7 @@ public class BaiduPanClient {
                 throw new IllegalStateException("百度网盘下载失败，HTTP " + response.statusCode());
             }
             String expectedMd5 = response.headers().firstValue("Content-MD5").map(this::normalizeMd5).filter(value -> !value.isBlank()).orElse("");
-            fileHelper.fileWritten(destination,
-                                   new DownloadValidationInputStream(body, item.size(), expectedMd5, item.path(), digest),
-                                   item.modifiedAt());
+            fileHelper.fileWritten(destination, new DownloadValidationInputStream(body, item.size(), expectedMd5, item.path(), digest), item.modifiedAt());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("百度网盘下载被中断：" + item.path(), e);
@@ -324,11 +300,7 @@ public class BaiduPanClient {
 
     private JSONObject getJson(String baseUrl,
                                Map<String, String> query) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "?" + query(query)))
-                .timeout(Duration.ofMinutes(2))
-                .header("User-Agent", "thisnote-baidu-sync")
-                .GET()
-                .build();
+        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "?" + query(query))).timeout(Duration.ofMinutes(2)).header("User-Agent", "thisnote-baidu-sync").GET().build();
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             return checkJson(response.statusCode(), response.body(), "百度网盘查询失败");
@@ -352,7 +324,7 @@ public class BaiduPanClient {
         JSONObject body;
         try {
             body = JSON.parseObject(response.body());
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("百度网盘文件管理失败，HTTP " + response.statusCode());
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300 || body == null) {
@@ -385,7 +357,7 @@ public class BaiduPanClient {
         JSONObject body;
         try {
             body = JSON.parseObject(responseBody);
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException(action + "，HTTP " + statusCode);
         }
         if (statusCode < 200 || statusCode >= 300 || body == null) {
@@ -428,12 +400,14 @@ public class BaiduPanClient {
         try {
             byte[] digest = Base64.getDecoder().decode(normalized);
             return digest.length == 16 ? HexFormat.of().formatHex(digest) : "";
-        } catch (IllegalArgumentException ignored) {
+        } catch (Exception e) {
+            log.error("百度网盘响应 Content-MD5 无法解析：{}", value, e);
             return "";
         }
     }
 
-    private static final class DownloadValidationInputStream extends FilterInputStream {
+    private static final class DownloadValidationInputStream
+            extends FilterInputStream {
         private final long expectedSize;
         private final String expectedMd5;
         private final String remotePath;
@@ -526,12 +500,13 @@ public class BaiduPanClient {
         }
     }
 
-    /** URL 编码 form/query 串；OAuth 与文件 API 的编码规则相同，两处共用。 */
+    /**
+     * URL 编码 form/query 串；OAuth 与文件 API 的编码规则相同，两处共用。
+     */
     static String query(Map<String, String> values) {
         return values.entrySet()
                 .stream()
-                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
-                              + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
                 .reduce((left, right) -> left + "&" + right)
                 .orElse("");
     }

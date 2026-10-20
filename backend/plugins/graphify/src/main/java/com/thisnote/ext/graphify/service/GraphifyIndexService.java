@@ -41,10 +41,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -167,10 +167,10 @@ public class GraphifyIndexService {
                     0, 0, List.of(), null);
             log.info("Graphify 索引服务已初始化：indexed={}, notes={}, graphAvailable={}",
                     indexState.initialized(), indexState.noteIds().size(), Files.isRegularFile(graphJsonFile));
-        } catch (RuntimeException | IOException e) {
+        } catch (Exception e) {
             stateLoadError = "索引状态无法读取：" + e.getMessage();
             currentStatus = statusFor("状态错误", false, 0, 0, 0, List.of(), stateLoadError);
-            log.warn("Graphify 插件状态初始化失败：{}", e.getMessage());
+            log.error("Graphify 插件状态初始化失败", e);
         }
     }
 
@@ -186,7 +186,7 @@ public class GraphifyIndexService {
         }
         try {
             return JSON.parseObject(Files.readString(graphJsonFile, StandardCharsets.UTF_8));
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("Graphify graph.json 无法读取", e);
         }
     }
@@ -214,7 +214,7 @@ public class GraphifyIndexService {
                     });
                     """.formatted(GRAPHIFY_POST_MESSAGE_MARKER);
             return html.replace(anchor, hook + "\n" + anchor);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("Graphify graph.html 无法读取", e);
         }
     }
@@ -542,19 +542,18 @@ public class GraphifyIndexService {
         CompletableFuture<Void> result = new CompletableFuture<>();
         try {
             worker.execute(() -> {
-                RuntimeException failure = null;
+                Exception failure = null;
                 try {
                     clearGeneratedContent();
                     stateRepository.clear();
                     indexState = GraphifyStateRepository.IndexState.empty();
                     currentStatus = statusFor("等待首次索引", false, 0, 0, 0, List.of(), null);
                     log.info("Graphify 状态已重置");
-                } catch (RuntimeException e) {
+                } catch (Exception e) {
                     failure = e;
                     currentStatus = statusFor("重置失败", false, currentStatus.progress(),
                             currentStatus.completedNotes(), currentStatus.totalNotes(),
                             currentStatus.warnings(), safeMessage(e));
-                    log.warn("Graphify 状态重置失败：errorType={}", e.getClass().getSimpleName());
                 } finally {
                     resetting = false;
                 }
@@ -564,9 +563,8 @@ public class GraphifyIndexService {
                     result.completeExceptionally(failure);
                 }
             });
-        } catch (RejectedExecutionException e) {
+        } catch (Exception e) {
             resetting = false;
-            log.warn("Graphify 状态重置未执行：索引线程已停止");
             result.completeExceptionally(e);
         }
         return result;
@@ -644,13 +642,12 @@ public class GraphifyIndexService {
             log.info("Graphify 全量索引完成：notes={}, cards={}, attachments={}, warnings={}, elapsedMs={}",
                     completed, cardToNote.size(), attachmentMap.size(), warnings.size(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
-        } catch (RuntimeException | IOException e) {
+        } catch (Exception e) {
             String failedStage = currentStatus.stage();
             currentStatus = statusFor("索引失败", false, currentStatus.progress(),
                     currentStatus.completedNotes(), currentStatus.totalNotes(), warnings, safeMessage(e));
-            log.warn("Graphify 全量索引失败：stage={}, errorType={}, elapsedMs={}",
-                    failedStage, e.getClass().getSimpleName(),
-                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+            log.error("Graphify 全量索引失败：stage={}, elapsedMs={}", failedStage,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), e);
         }
     }
 
@@ -764,13 +761,13 @@ public class GraphifyIndexService {
             log.info("Graphify 增量同步完成：updated={}, deleted={}, cards={}, attachments={}, warnings={}, elapsedMs={}",
                     changed.size(), snapshot.deletedNoteIds().size(), cardToNote.size(), attachmentToNotes.size(),
                     warnings.size(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
-        } catch (RuntimeException | IOException e) {
+        } catch (Exception e) {
             restoreQueue(snapshot);
             String failedStage = currentStatus.stage();
             currentStatus = statusFor("增量同步失败", false, currentStatus.progress(),
                     currentStatus.completedNotes(), currentStatus.totalNotes(), warnings, safeMessage(e));
-            log.warn("Graphify 增量同步失败：stage={}, errorType={}, elapsedMs={}", failedStage,
-                    e.getClass().getSimpleName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+            log.error("Graphify 增量同步失败：stage={}, elapsedMs={}", failedStage,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), e);
         }
     }
 
@@ -794,12 +791,12 @@ public class GraphifyIndexService {
             currentStatus = statusFor("就绪", false, 100, 0, 0, warnings, null);
             log.info("Graphify 社区命名完成：elapsedMs={}",
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
-        } catch (RuntimeException | IOException e) {
+        } catch (Exception e) {
             String failedStage = currentStatus.stage();
             currentStatus = statusFor("社区命名失败", false, currentStatus.progress(),
                     currentStatus.completedNotes(), currentStatus.totalNotes(), warnings, safeMessage(e));
-            log.warn("Graphify 社区命名失败：stage={}, errorType={}, elapsedMs={}", failedStage,
-                    e.getClass().getSimpleName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+            log.error("Graphify 社区命名失败：stage={}, elapsedMs={}", failedStage,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), e);
         }
     }
 
@@ -835,8 +832,6 @@ public class GraphifyIndexService {
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
         } catch (RuntimeException | IOException e) {
             restoreGraphOutputs(backups);
-            log.warn("Graphify 图谱构建失败，已恢复上次图谱输出：errorType={}, elapsedMs={}",
-                    e.getClass().getSimpleName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
             throw e;
         }
     }
@@ -863,14 +858,9 @@ public class GraphifyIndexService {
 
     private ProjectionMetadata projectNote(NoteDTO note, List<String> warnings) {
         List<CardDTO> cards = cards(note.noteId());
-        Map<String, CardDTO> cardsById = new HashMap<>();
-        if (cards != null) {
-            for (CardDTO card : cards) {
-                if (card != null && card.meta() != null && card.meta().cardId() != null) {
-                    cardsById.put(card.meta().cardId(), card);
-                }
-            }
-        }
+        Map<String, CardDTO> cardsById = cards == null ? new HashMap<>() : cards.stream()
+                .filter(card -> card != null && card.meta() != null && card.meta().cardId() != null)
+                .collect(Collectors.toMap(card -> card.meta().cardId(), card -> card, (first, second) -> second));
 
         List<String> cardIds = new ArrayList<>();
         List<String> bodies = new ArrayList<>();
@@ -966,7 +956,9 @@ public class GraphifyIndexService {
             boolean changed = false;
             for (Path file : files) {
                 if (Files.isRegularFile(file) && !retained.contains(file.getFileName().toString())) {
-                    fileHelper.fileDeleted(file);
+                    if (!fileHelper.fileDeleted(file) && Files.exists(file)) {
+                        log.error("删除 Graphify 文件失败：{}", file);
+                    }
                     changed = true;
                 }
             }
@@ -978,7 +970,7 @@ public class GraphifyIndexService {
                 Files.deleteIfExists(attachmentDir);
             }
             return changed;
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("清理笔记投影图片失败", e);
         }
     }
@@ -986,7 +978,8 @@ public class GraphifyIndexService {
     private static boolean sameText(Path path, String content) {
         try {
             return Files.isRegularFile(path) && Files.readString(path, StandardCharsets.UTF_8).equals(content);
-        } catch (IOException e) {
+        } catch (Exception e) {
+            log.error("读取 Graphify 文本投影失败：{}", path, e);
             return false;
         }
     }
@@ -996,7 +989,8 @@ public class GraphifyIndexService {
             return Files.isRegularFile(path)
                     && Files.size(path) == content.length
                     && Arrays.equals(Files.readAllBytes(path), content);
-        } catch (IOException e) {
+        } catch (Exception e) {
+            log.error("读取 Graphify 二进制投影失败：{}", path, e);
             return false;
         }
     }
@@ -1013,12 +1007,14 @@ public class GraphifyIndexService {
             }
             for (Path path : reverse) {
                 if (Files.isRegularFile(path) || Files.isSymbolicLink(path)) {
-                    fileHelper.fileDeleted(path);
+                    if (!fileHelper.fileDeleted(path) && Files.exists(path)) {
+                        log.error("删除 Graphify 文件失败：{}", path);
+                    }
                 } else {
                     Files.deleteIfExists(path);
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("删除笔记投影失败", e);
         }
     }
@@ -1176,7 +1172,7 @@ public class GraphifyIndexService {
             List<Path> paths;
             try (var stream = Files.walk(corpusDir)) {
                 paths = stream.sorted(Comparator.reverseOrder()).toList();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 throw new IllegalStateException("读取 Graphify 生成目录失败", e);
             }
             for (Path path : paths) {
@@ -1184,12 +1180,14 @@ public class GraphifyIndexService {
                     continue;
                 }
                 if (Files.isRegularFile(path) || Files.isSymbolicLink(path)) {
-                    fileHelper.fileDeleted(path);
+                    if (!fileHelper.fileDeleted(path) && Files.exists(path)) {
+                        log.error("删除 Graphify 文件失败：{}", path);
+                    }
                     cleared++;
                 } else {
                     try {
                         Files.deleteIfExists(path);
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         throw new IllegalStateException("删除 Graphify 生成目录失败：" + path, e);
                     }
                 }
@@ -1197,7 +1195,7 @@ public class GraphifyIndexService {
         }
         try {
             Files.createDirectories(graphifyOutDir);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("重建 Graphify 输出目录失败", e);
         }
         return cleared;
@@ -1221,7 +1219,9 @@ public class GraphifyIndexService {
             Path path = entry.getKey();
             FileBackup backup = entry.getValue();
             if (backup == null) {
-                fileHelper.fileDeleted(path);
+                if (!fileHelper.fileDeleted(path) && Files.exists(path)) {
+                    log.error("删除 Graphify 文件失败：{}", path);
+                }
             } else {
                 fileHelper.fileWritten(path, new ByteArrayInputStream(backup.bytes()), backup.modifiedAt());
             }

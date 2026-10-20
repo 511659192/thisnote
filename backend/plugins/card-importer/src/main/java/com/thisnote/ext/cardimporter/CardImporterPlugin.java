@@ -1,7 +1,7 @@
 package com.thisnote.ext.cardimporter;
 
 import com.thisnote.ext.cardimporter.service.CardImporterService;
-import com.thisnote.ext.cardimporter.service.PluginStateResetListener;
+import com.thisnote.ext.cardimporter.listener.PluginStateResetListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;

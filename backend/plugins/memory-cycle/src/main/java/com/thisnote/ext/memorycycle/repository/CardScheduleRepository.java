@@ -4,11 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 import com.thisnote.ext.memorycycle.model.CardSchedule;
 import com.thisnote.plugin.api.util.FileHelper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -20,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 
 @Repository
-@Slf4j
 public class CardScheduleRepository {
 
     private final Path file;
@@ -80,8 +77,7 @@ public class CardScheduleRepository {
                 }
             }
             return schedules;
-        } catch (IOException | RuntimeException e) {
-            log.warn("排期文件无法读取，保留原文件并终止加载：{}（{}）", file, e.toString());
+        } catch (Exception e) {
             throw new IllegalStateException("排期文件无法读取 " + file, e);
         }
     }

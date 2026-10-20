@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.plugin.api.event.AiRuntimeEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -13,9 +14,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 public class AiProviderClient {
 
@@ -32,7 +37,7 @@ public class AiProviderClient {
     private static final Pattern PATH_OR_CODE = Pattern.compile("[/\\\\`()\\[\\]{}<>=|$]");
     private static final Pattern SENTENCE_PUNCTUATION = Pattern.compile("[，,、;；:：。.!?！？]");
 
-    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(60)).build();
 
     public void test(AiRuntimeEvent.Runtime runtime) {
         String response = complete(runtime, "Reply with exactly OK.", "Connection test", List.of(), 32);
@@ -102,9 +107,7 @@ public class AiProviderClient {
         }
         JSONArray content = new JSONArray();
         content.add(object("type", "text", "text", text));
-        for (ImageInput image : images) {
-            content.add(object("type", "image_url", "image_url", object("url", "data:" + image.mediaType() + ";base64," + image.base64())));
-        }
+        images.forEach(image -> content.add(object("type", "image_url", "image_url", object("url", "data:" + image.mediaType() + ";base64," + image.base64()))));
         return content;
     }
 
@@ -119,13 +122,7 @@ public class AiProviderClient {
             return text;
         }
         if (content instanceof JSONArray parts) {
-            StringBuilder result = new StringBuilder();
-            for (Object part : parts) {
-                if (part instanceof JSONObject item && item.getString("text") != null) {
-                    result.append(item.getString("text"));
-                }
-            }
-            return result.toString();
+            return parts.stream().filter(JSONObject.class::isInstance).map(JSONObject.class::cast).map(item -> item.getString("text")).filter(Objects::nonNull).collect(Collectors.joining());
         }
         return "";
     }
@@ -140,8 +137,9 @@ public class AiProviderClient {
             try {
                 JSONObject object = JSON.parseObject(response.substring(start, end + 1).getBytes(StandardCharsets.UTF_8));
                 return cleanTags(object.getJSONArray("tags"));
-            } catch (RuntimeException ignored) {
+            } catch (Exception e) {
                 // Try an array-only response next.
+                log.error("AI 标签响应无法解析为 JSON 对象", e);
             }
         }
         int arrayStart = response.indexOf('[');
@@ -149,8 +147,9 @@ public class AiProviderClient {
         if (arrayStart >= 0 && arrayEnd > arrayStart) {
             try {
                 return cleanTags(JSON.parseArray(response.substring(arrayStart, arrayEnd + 1).getBytes(StandardCharsets.UTF_8)));
-            } catch (RuntimeException ignored) {
+            } catch (Exception e) {
                 // Fall through to an empty result.
+                log.error("AI 标签响应无法解析为 JSON 数组", e);
             }
         }
         return List.of();
@@ -160,30 +159,14 @@ public class AiProviderClient {
         if (response == null || response.isBlank()) {
             return List.of();
         }
-        List<String> result = new ArrayList<>();
-        for (String line : response.lines().toList()) {
-            String value = line.replaceFirst("^\\s*[-*\\d.、]+\\s*", "").trim();
-            if (isMeaningfulTag(value)) {
-                result.add(value);
-            }
-        }
-        return dedupe(result);
+        return dedupe(response.lines().map(line -> line.replaceFirst("^\\s*[-*\\d.、]+\\s*", "").trim()).filter(this::isMeaningfulTag).toList());
     }
 
     private List<String> cleanTags(JSONArray array) {
         if (array == null) {
             return List.of();
         }
-        List<String> result = new ArrayList<>();
-        for (Object value : array) {
-            if (value instanceof String text) {
-                String tag = cleanTag(text);
-                if (tag != null) {
-                    result.add(tag);
-                }
-            }
-        }
-        return dedupe(result).stream().limit(20).toList();
+        return array.stream().filter(value -> value instanceof String).map(String::valueOf).map(this::cleanTag).filter(Objects::nonNull).distinct().limit(20).toList();
     }
 
     private String cleanTag(String raw) {
@@ -200,11 +183,7 @@ public class AiProviderClient {
     }
 
     private List<String> dedupe(List<String> tags) {
-        Set<String> seen = new LinkedHashSet<>();
-        for (String tag : tags) {
-            seen.add(tag);
-        }
-        return new ArrayList<>(seen);
+        return tags.stream().distinct().toList();
     }
 
     private static JSONObject object(Object... pairs) {

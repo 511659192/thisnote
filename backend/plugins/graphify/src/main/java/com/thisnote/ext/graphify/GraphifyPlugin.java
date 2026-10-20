@@ -1,10 +1,10 @@
 package com.thisnote.ext.graphify;
 
 import com.thisnote.ext.graphify.service.GraphifyIndexService;
-import com.thisnote.ext.graphify.service.listener.AttachmentChangedEventListener;
-import com.thisnote.ext.graphify.service.listener.CardChangedEventListener;
-import com.thisnote.ext.graphify.service.listener.NoteChangedEventListener;
-import com.thisnote.ext.graphify.service.listener.PluginStateResetListener;
+import com.thisnote.ext.graphify.listener.AttachmentChangedEventListener;
+import com.thisnote.ext.graphify.listener.CardChangedEventListener;
+import com.thisnote.ext.graphify.listener.NoteChangedEventListener;
+import com.thisnote.ext.graphify.listener.PluginStateResetListener;
 import com.thisnote.ext.graphify.client.GraphifyAiClient;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;

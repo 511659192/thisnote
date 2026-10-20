@@ -7,21 +7,18 @@ import com.thisnote.ext.notes.model.CardPO.CardMeta;
 import com.thisnote.ext.notes.util.FileNameUtil;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * 卡片存储：正文在 {@code cards/*.md}，元数据在 {@code plugins/notes/.card-metadata.json}
  * （{@code cardId → CardMeta}，文件名就是 {@code meta.sourceFileName}）。
  */
+@Slf4j
 @Repository
 public class CardRepository {
 
@@ -52,13 +49,10 @@ public class CardRepository {
     public List<CardPO> getAll(List<String> cardIds) {
         if (cardIds == null || cardIds.isEmpty()) return List.of();
 
-        List<CardPO> cards = new ArrayList<>(cardIds.size());
-        for (String cardId : cardIds) {
-            CardPO card = getOne(cardId);
-            if (card != null) cards.add(card);
-        }
-
-        return cards;
+        return cardIds.stream()
+                .map(this::getOne)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     /**
@@ -228,7 +222,10 @@ public class CardRepository {
             if (meta == null) continue;
             deleteIndexMeta(cardId);
             if (meta.getFileName() != null) {
-                fileHelper.fileDeleted(notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName()));
+                Path cardFile = notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName());
+                if (!fileHelper.fileDeleted(cardFile) && Files.exists(cardFile)) {
+                    log.error("删除卡片文件失败：{}", cardFile);
+                }
             }
         }
     }

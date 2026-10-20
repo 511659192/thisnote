@@ -1,9 +1,9 @@
 package com.thisnote.ext.memorycycle;
 
-import com.thisnote.ext.memorycycle.service.CardChangedEventListener;
+import com.thisnote.ext.memorycycle.listener.CardChangedEventListener;
 import com.thisnote.ext.memorycycle.service.MemoryCycleService;
-import com.thisnote.ext.memorycycle.service.NoteChangedEventListener;
-import com.thisnote.ext.memorycycle.service.PluginStateResetListener;
+import com.thisnote.ext.memorycycle.listener.NoteChangedEventListener;
+import com.thisnote.ext.memorycycle.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 
 import org.laxture.sbp.SpringBootPlugin;
