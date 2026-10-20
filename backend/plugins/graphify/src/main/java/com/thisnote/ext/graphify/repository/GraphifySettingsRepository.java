@@ -53,9 +53,7 @@ public class GraphifySettingsRepository {
 
     private StoredCliSettings read() throws IOException {
         var raw = JSON.parseObject(Files.readString(settingsFile));
-        return raw == null
-                ? new StoredCliSettings("", "")
-                : new StoredCliSettings(raw.getString("executablePath"), raw.getString("aiProfileId"));
+        return raw == null ? new StoredCliSettings("", "") : new StoredCliSettings(raw.getString("executablePath"), raw.getString("aiProfileId"));
     }
 
     private record StoredCliSettings(String executablePath, String aiProfileId) {

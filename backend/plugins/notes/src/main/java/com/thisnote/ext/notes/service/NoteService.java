@@ -100,7 +100,7 @@ public class NoteService {
         if (meta == null) {
             return;
         }
-        List<String> deletedCardIds = List.copyOf(meta.getCardIds());
+        List<String> deletedCardIds = new ArrayList<>(meta.getCardIds());
         Set<String> removedAttachments = new HashSet<>();
         for (CardPO card : cardRepository.getAll(deletedCardIds)) {
             removedAttachments.addAll(AttachmentService.referencedFileNames(card.getContent()));

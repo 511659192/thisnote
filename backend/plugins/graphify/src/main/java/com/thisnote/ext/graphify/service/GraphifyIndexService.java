@@ -174,6 +174,7 @@ public class GraphifyIndexService {
                         currentStatus.warnings(), currentStatus.error());
             }
             worker.execute(() -> {
+                log.debug("Graphify 全量索引任务已提交到索引线程：force={}", force);
                 try {
                     indexAll(force);
                 } finally {
@@ -265,6 +266,7 @@ public class GraphifyIndexService {
                 warnings.add(stateLoadError);
             }
             currentStatus = statusFor("读取笔记", true, 2, 0, 0, warnings, null);
+            log.info("Graphify 读取笔记开始");
             List<NoteDTO> notes = allNotes();
             log.info("Graphify 笔记读取完成：notes={}", notes.size());
             if (notes.isEmpty()) {
@@ -279,13 +281,17 @@ public class GraphifyIndexService {
             Map<String, Set<String>> attachmentToNotes = new LinkedHashMap<>();
             Set<String> noteIds = new LinkedHashSet<>();
             currentStatus = statusFor("生成笔记投影", true, 5, 0, notes.size(), warnings, null);
+            log.info("Graphify 笔记投影开始：notes={}", notes.size());
             int completed = 0;
             for (NoteDTO note : notes) {
                 if (note == null || note.noteId() == null || note.noteId().isBlank()) {
                     continue;
                 }
                 noteIds.add(note.noteId());
-                GraphifyCorpusProjector.ProjectionMetadata metadata = corpusProjector.project(note, cards(note.noteId()), warnings, this::attachment);
+                List<CardDTO> noteCards = cards(note.noteId());
+                log.debug("Graphify 投影笔记：noteId={}, cards={}", note.noteId(), noteCards.size());
+                GraphifyCorpusProjector.ProjectionMetadata metadata =
+                        corpusProjector.project(note, noteCards, warnings, this::attachment);
                 metadata.cardIds().forEach(cardId -> cardToNote.put(cardId, note.noteId()));
                 metadata.attachmentNames().forEach(fileName ->
                         attachmentToNotes.computeIfAbsent(fileName, ignored -> new LinkedHashSet<>()).add(note.noteId()));
@@ -297,13 +303,21 @@ public class GraphifyIndexService {
                     completed, cardToNote.size(), attachmentToNotes.size(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
 
+            int removedStale = 0;
             for (String staleNoteId : previous.noteIds()) {
                 if (!noteIds.contains(staleNoteId)) {
                     corpusProjector.remove(staleNoteId);
+                    removedStale++;
+                    log.debug("Graphify 已移除过期投影：noteId={}", staleNoteId);
                 }
             }
+            if (removedStale > 0) {
+                log.info("Graphify 过期投影清理完成：removed={}", removedStale);
+            }
             Map<String, List<String>> attachmentMap = new LinkedHashMap<>();
-            attachmentToNotes.forEach((fileName, ids) -> attachmentMap.put(fileName, List.copyOf(ids)));
+            attachmentToNotes.forEach((fileName, ids) -> attachmentMap.put(fileName, new ArrayList<>(ids)));
+            log.debug("Graphify 索引映射已生成：notes={}, cards={}, attachments={}",
+                    noteIds.size(), cardToNote.size(), attachmentMap.size());
             GraphifyStateRepository.IndexState projected = new GraphifyStateRepository.IndexState(
                     previous.initialized(), previous.lastCompletedAt(), noteIds, cardToNote, attachmentMap);
             stateRepository.updateIndexState(projected);
@@ -313,8 +327,12 @@ public class GraphifyIndexService {
             }
             GraphifySettingsService.Settings settings = settingsService.settings();
             String apiKey = pipelineRunner.requireApiKey(settings);
+            log.info("Graphify 抽取配置：profileId={}, provider={}, model={}, executablePath={}, force={}",
+                    settings.aiProfileId(), settings.provider(), settings.model(), settings.executablePath(), force);
             currentStatus = statusFor("Graphify 抽取", true, 80, completed, notes.size(), warnings, null);
+            log.info("Graphify 抽取流水线开始：notes={}, force={}", notes.size(), force);
             pipelineRunner.run(settings, apiKey, force, !previous.initialized());
+            log.info("Graphify 抽取流水线完成：notes={}", notes.size());
 
             String completedAt = Instant.now().toString();
             GraphifyStateRepository.IndexState successful = new GraphifyStateRepository.IndexState(
@@ -325,6 +343,8 @@ public class GraphifyIndexService {
                 warnings.add("Graphify 未生成 graph.html；图数据仍可从 graph.json 读取");
             }
             currentStatus = statusFor("就绪", false, 100, completed, notes.size(), warnings, null);
+            log.info("Graphify 索引状态已更新：completedAt={}, graphAvailable={}, graphHtmlAvailable={}",
+                    completedAt, Files.isRegularFile(graphJsonFile), Files.isRegularFile(graphHtmlFile));
             log.info("Graphify 全量索引完成：notes={}, cards={}, attachments={}, warnings={}, elapsedMs={}",
                     completed, cardToNote.size(), attachmentMap.size(), warnings.size(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
@@ -370,6 +390,7 @@ public class GraphifyIndexService {
                 corpusProjector.remove(deletedNoteId);
                 noteIds.remove(deletedNoteId);
                 removeNoteMappings(deletedNoteId, cardToNote, attachmentToNotes);
+                log.debug("Graphify 增量删除投影：noteId={}", deletedNoteId);
             }
 
             List<String> changed = snapshot.noteIds().stream()
@@ -390,13 +411,17 @@ public class GraphifyIndexService {
             boolean projectionChanged = false;
             for (String noteId : changed) {
                 NoteDTO note = note(noteId);
+                List<CardDTO> noteCards = note == null ? List.of() : cards(noteId);
+                log.debug("Graphify 增量投影：noteId={}, exists={}, cards={}",
+                        noteId, note != null, noteCards.size());
                 if (note == null) {
                     corpusProjector.remove(noteId);
                     noteIds.remove(noteId);
                     removeNoteMappings(noteId, cardToNote, attachmentToNotes);
                     projectionChanged = true;
                 } else {
-                    GraphifyCorpusProjector.ProjectionMetadata metadata = corpusProjector.project(note, cards(note.noteId()), warnings, this::attachment);
+                    GraphifyCorpusProjector.ProjectionMetadata metadata =
+                            corpusProjector.project(note, noteCards, warnings, this::attachment);
                     projectionChanged |= metadata.changed();
                     noteIds.add(noteId);
                     removeNoteMappings(noteId, cardToNote, attachmentToNotes);
@@ -414,6 +439,8 @@ public class GraphifyIndexService {
                     toAttachmentListMap(attachmentToNotes));
             stateRepository.updateIndexState(projected);
             indexState = projected;
+            log.debug("Graphify 增量索引映射已更新：notes={}, cards={}, attachments={}",
+                    noteIds.size(), cardToNote.size(), attachmentToNotes.size());
             if (!projectionChanged && snapshot.deletedNoteIds().isEmpty()) {
                 currentStatus = statusFor("就绪", false, 100, completed, changed.size(), warnings, null);
                 log.info("Graphify 增量批次未改变投影，跳过图谱更新：notes={}, elapsedMs={}",
@@ -429,7 +456,10 @@ public class GraphifyIndexService {
             GraphifySettingsService.Settings settings = settingsService.settings();
             String apiKey = pipelineRunner.requireApiKey(settings);
             currentStatus = statusFor("Graphify 更新", true, 80, completed, changed.size(), warnings, null);
+            log.info("Graphify 增量抽取开始：changed={}, deleted={}, model={}",
+                    changed.size(), snapshot.deletedNoteIds().size(), settings.model());
             pipelineRunner.run(settings, apiKey, false, false);
+            log.info("Graphify 增量抽取完成：changed={}", changed.size());
             indexState = new GraphifyStateRepository.IndexState(true, Instant.now().toString(),
                     noteIds, cardToNote, toAttachmentListMap(attachmentToNotes));
             stateRepository.updateIndexState(indexState);
@@ -548,7 +578,7 @@ public class GraphifyIndexService {
 
     private static Map<String, List<String>> toAttachmentListMap(Map<String, Set<String>> source) {
         Map<String, List<String>> result = new LinkedHashMap<>();
-        source.forEach((fileName, noteIds) -> result.put(fileName, List.copyOf(noteIds)));
+        source.forEach((fileName, noteIds) -> result.put(fileName, new ArrayList<>(noteIds)));
         return result;
     }
 
@@ -607,7 +637,7 @@ public class GraphifyIndexService {
         return new Status(running, stage, progress, completedNotes, totalNotes, queued,
                 indexState.initialized(), Files.isRegularFile(graphJsonFile),
                 Files.isRegularFile(graphHtmlFile), indexState.lastCompletedAt(),
-                List.copyOf(warnings), error);
+                new ArrayList<>(warnings), error);
     }
 
     private void ensureRunning() {

@@ -19,6 +19,7 @@ public class NoteChangedEventListener
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<NoteChangedEvent> event) {
         NoteChangedEvent change = event.getPayload();
+        log.debug("标签插件收到笔记变更：noteId={}, kind={}", change.noteId(), change.kind());
         if (change.kind() == NoteChangedEvent.Kind.DELETED) {
             if (tagsRepository.deleteNote(change.noteId())) {
                 log.info("笔记已删除，标签一并清除：{}", change.noteId());

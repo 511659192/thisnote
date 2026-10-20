@@ -61,7 +61,7 @@ public class GraphifyStateRepository {
                 attachmentToNotes = Map.of();
             } else {
                 Map<String, List<String>> copy = new LinkedHashMap<>();
-                attachmentToNotes.forEach((name, ids) -> copy.put(name, ids == null ? List.of() : List.copyOf(ids)));
+                attachmentToNotes.forEach((name, ids) -> copy.put(name, ids == null ? List.of() : new ArrayList<>(ids)));
                 attachmentToNotes = Collections.unmodifiableMap(copy);
             }
         }

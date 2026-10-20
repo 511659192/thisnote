@@ -23,9 +23,7 @@ public class AiSettingsService {
     public static final int MIN_MAX_TEXT_CHARS = 1_000;
     public static final int MAX_MAX_TEXT_CHARS = 1_000_000;
 
-    private static final Map<String, Provider> PROVIDERS = Map.of(
-            OPENCODE_GO_PROVIDER, new Provider(AiSettingsRepository.DEFAULT_MODEL, AiSettingsRepository.DEFAULT_ENDPOINT)
-    );
+    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider(AiSettingsRepository.DEFAULT_MODEL, AiSettingsRepository.DEFAULT_ENDPOINT));
     private static final Map<String, String> PROVIDER_LABELS = Map.of(OPENCODE_GO_PROVIDER, "OpenCode Go");
 
     private final AiSettingsRepository settingsRepository;
@@ -39,21 +37,14 @@ public class AiSettingsService {
 
     public synchronized List<Profile> profiles() {
         Map<String, String> apiKeys = settingsRepository.getAllApiKeys();
-        return settingsRepository.getProfiles().stream()
-                .map(profile -> toProfile(profile, apiKeys))
-                .toList();
+        return settingsRepository.getProfiles().stream().map(profile -> toProfile(profile, apiKeys)).toList();
     }
 
     public synchronized List<AiProfileSummary> summaries() {
         Map<String, String> apiKeys = settingsRepository.getAllApiKeys();
-        return settingsRepository.getProfiles().stream()
-                .map(profile -> new AiProfileSummary(
-                        profile.id(),
-                        profile.label(),
-                        profile.provider(),
-                        profile.model(),
-                        !apiKeys.getOrDefault(profile.id(), "").isBlank()
-                ))
+        return settingsRepository.getProfiles()
+                .stream()
+                .map(profile -> new AiProfileSummary(profile.id(), profile.label(), profile.provider(), profile.model(), !apiKeys.getOrDefault(profile.id(), "").isBlank()))
                 .toList();
     }
 
@@ -84,28 +75,17 @@ public class AiSettingsService {
             }
         }
         AiSettingsRepository.StoredProfile existing = index < 0 ? null : stored.get(index);
-        String providerName = blank(update.provider())
-                ? (existing == null ? OPENCODE_GO_PROVIDER : existing.provider())
-                : update.provider().trim().toLowerCase();
+        String providerName = blank(update.provider()) ? (existing == null ? OPENCODE_GO_PROVIDER : existing.provider()) : update.provider().trim().toLowerCase();
         Provider provider = supportedProvider(providerName);
-        String model = blank(update.model())
-                ? (existing == null || existing.model().isBlank() ? provider.defaultModel() : existing.model())
-                : update.model().trim();
+        String model = blank(update.model()) ? (existing == null || existing.model().isBlank() ? provider.defaultModel() : existing.model()) : update.model().trim();
         if (model.isBlank()) {
             throw new IllegalArgumentException("模型名称不能为空");
         }
-        String endpoint = requireEndpoint(blank(update.endpoint())
-                ? (existing == null || existing.endpoint().isBlank() ? provider.defaultEndpoint() : existing.endpoint())
-                : update.endpoint().trim());
-        Integer maxTextChars = update.maxTextChars() != null
-                ? requireMaxTextChars(update.maxTextChars())
-                : (existing == null || existing.maxTextChars() == null
-                ? DEFAULT_MAX_TEXT_CHARS
-                : normalizeMaxTextChars(existing.maxTextChars()));
+        String endpoint = requireEndpoint(blank(update.endpoint()) ? (existing == null || existing.endpoint().isBlank() ? provider.defaultEndpoint() : existing.endpoint()) : update.endpoint().trim());
+        Integer maxTextChars = update.maxTextChars() != null ? requireMaxTextChars(
+                update.maxTextChars()) : (existing == null || existing.maxTextChars() == null ? DEFAULT_MAX_TEXT_CHARS : normalizeMaxTextChars(existing.maxTextChars()));
         String label = blank(update.label()) ? id : update.label().trim();
-        AiSettingsRepository.StoredProfile next = new AiSettingsRepository.StoredProfile(
-                id, label, providerName, model, endpoint, maxTextChars
-        );
+        AiSettingsRepository.StoredProfile next = new AiSettingsRepository.StoredProfile(id, label, providerName, model, endpoint, maxTextChars);
         if (index < 0) {
             stored.add(next);
         } else {
@@ -121,6 +101,7 @@ public class AiSettingsService {
 
         settingsRepository.updateProfiles(stored);
         settingsRepository.updateApiKeys(apiKeys);
+        log.info("AI profile 已保存：id={}, provider={}, model={}, keyConfigured={}", id, providerName, model, !apiKeys.getOrDefault(id, "").isBlank());
         return toProfile(next, apiKeys);
     }
 
@@ -132,6 +113,7 @@ public class AiSettingsService {
         apiKeys.remove(profile.id());
         settingsRepository.updateProfiles(stored);
         settingsRepository.updateApiKeys(apiKeys);
+        log.info("AI profile 已删除：profileId={}, remaining={}", profile.id(), stored.size());
     }
 
     public TestResponse test(String profileId) {
@@ -142,6 +124,7 @@ public class AiSettingsService {
         }
         try {
             providerClient.test(runtime);
+            log.info("AI 连接测试成功：profileId={}", profileId);
             return new TestResponse(true, "AI 连接测试成功");
         } catch (Exception e) {
             log.error("AI 连接测试失败", e);
@@ -151,27 +134,13 @@ public class AiSettingsService {
 
     private AiRuntimeFutureEvent.Runtime runtime(AiSettingsRepository.StoredProfile profile) {
         Provider provider = supportedProvider(profile.provider());
-        return new AiRuntimeFutureEvent.Runtime(
-                profile.id(),
-                profile.provider(),
-                profile.model(),
-                profile.endpoint().isBlank() ? provider.defaultEndpoint() : profile.endpoint(),
-                settingsRepository.getApiKey(profile.id()),
-                normalizeMaxTextChars(profile.maxTextChars())
-        );
+        return new AiRuntimeFutureEvent.Runtime(profile.id(), profile.provider(), profile.model(), profile.endpoint().isBlank() ? provider.defaultEndpoint() : profile.endpoint(),
+                                                settingsRepository.getApiKey(profile.id()), normalizeMaxTextChars(profile.maxTextChars()));
     }
 
     private static Profile toProfile(AiSettingsRepository.StoredProfile profile,
                                      Map<String, String> apiKeys) {
-        return new Profile(
-                profile.id(),
-                profile.label(),
-                profile.provider(),
-                profile.model(),
-                profile.endpoint(),
-                profile.maxTextChars(),
-                !apiKeys.getOrDefault(profile.id(), "").isBlank()
-        );
+        return new Profile(profile.id(), profile.label(), profile.provider(), profile.model(), profile.endpoint(), profile.maxTextChars(), !apiKeys.getOrDefault(profile.id(), "").isBlank());
     }
 
     private AiSettingsRepository.StoredProfile requireProfile(String profileId) {
@@ -179,10 +148,7 @@ public class AiSettingsService {
         if (id.isEmpty()) {
             throw new IllegalArgumentException("profileId 不能为空");
         }
-        return settingsRepository.getProfiles().stream()
-                .filter(profile -> id.equals(profile.id()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("AI profile 不存在：" + id));
+        return settingsRepository.getProfiles().stream().filter(profile -> id.equals(profile.id())).findFirst().orElseThrow(() -> new IllegalArgumentException("AI profile 不存在：" + id));
     }
 
     private static int normalizeMaxTextChars(Integer value) {
@@ -212,13 +178,9 @@ public class AiSettingsService {
     }
 
     private static List<ProviderDefaults> providerDefaults() {
-        return PROVIDERS.entrySet().stream()
-                .map(entry -> new ProviderDefaults(
-                        entry.getKey(),
-                        PROVIDER_LABELS.getOrDefault(entry.getKey(), entry.getKey()),
-                        entry.getValue().defaultModel(),
-                        entry.getValue().defaultEndpoint()
-                ))
+        return PROVIDERS.entrySet()
+                .stream()
+                .map(entry -> new ProviderDefaults(entry.getKey(), PROVIDER_LABELS.getOrDefault(entry.getKey(), entry.getKey()), entry.getValue().defaultModel(), entry.getValue().defaultEndpoint()))
                 .toList();
     }
 
@@ -226,11 +188,7 @@ public class AiSettingsService {
         try {
             URI uri = new URI(value.trim());
             String scheme = uri.getScheme();
-            if (scheme == null
-                    || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))
-                    || uri.getHost() == null
-                    || uri.getHost().isBlank()
-                    || uri.getUserInfo() != null) {
+            if (scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) || uri.getHost() == null || uri.getHost().isBlank() || uri.getUserInfo() != null) {
                 throw new IllegalArgumentException("endpoint 必须是有效的 http/https URL，且不能包含用户信息");
             }
             return uri.toString();
@@ -242,33 +200,16 @@ public class AiSettingsService {
     private record Provider(String defaultModel, String defaultEndpoint) {
     }
 
-    public record Profile(String id,
-                          String label,
-                          String provider,
-                          String model,
-                          String endpoint,
-                          Integer maxTextChars,
-                          boolean keyConfigured) {
+    public record Profile(String id, String label, String provider, String model, String endpoint, Integer maxTextChars, boolean keyConfigured) {
     }
 
-    public record SettingsResponse(List<Profile> profiles,
-                                   List<ProviderDefaults> providers) {
+    public record SettingsResponse(List<Profile> profiles, List<ProviderDefaults> providers) {
     }
 
-    public record ProviderDefaults(String id,
-                                   String label,
-                                   String defaultModel,
-                                   String defaultEndpoint) {
+    public record ProviderDefaults(String id, String label, String defaultModel, String defaultEndpoint) {
     }
 
-    public record ProfileUpdate(String id,
-                                String label,
-                                String provider,
-                                String model,
-                                String endpoint,
-                                Integer maxTextChars,
-                                String apiKey,
-                                Boolean clearApiKey) {
+    public record ProfileUpdate(String id, String label, String provider, String model, String endpoint, Integer maxTextChars, String apiKey, Boolean clearApiKey) {
     }
 
     public record TestResponse(boolean success, String message) {

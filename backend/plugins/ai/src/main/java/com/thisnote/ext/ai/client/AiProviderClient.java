@@ -48,6 +48,7 @@ public class AiProviderClient {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("AI provider 请求被中断", e);
         }
+
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String body = response.body() == null ? "" : response.body();
             throw new IllegalStateException("AI provider 返回 HTTP " + response.statusCode() + (body.isBlank() ? "" : "：" + body.substring(0, Math.min(400, body.length()))));

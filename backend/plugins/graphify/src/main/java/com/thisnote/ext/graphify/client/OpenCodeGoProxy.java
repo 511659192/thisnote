@@ -39,6 +39,7 @@ final class OpenCodeGoProxy
         server.setExecutor(executor);
         server.createContext("/v1/chat/completions", this::forward);
         server.start();
+        log.info("OpenCode Go 本机代理已启动：port={}", server.getAddress().getPort());
     }
 
     static OpenCodeGoProxy start(String apiKey) throws IOException {
@@ -54,12 +55,16 @@ final class OpenCodeGoProxy
     }
 
     private void forward(HttpExchange exchange) throws IOException {
+        long startedAt = System.nanoTime();
         try {
             if (!"POST".equals(exchange.getRequestMethod()) || !"/v1/chat/completions".equals(exchange.getRequestURI().getRawPath())) {
+                log.warn("OpenCode Go 代理拒绝不支持的请求：method={}, path={}",
+                        exchange.getRequestMethod(), exchange.getRequestURI().getRawPath());
                 writeResponse(exchange, 404, "{\"error\":{\"message\":\"Unsupported OpenCode Go request\"}}", "application/json");
                 return;
             }
             if (!("Bearer " + localApiKey).equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+                log.warn("OpenCode Go 代理拒绝未授权请求");
                 writeResponse(exchange, 401, "{\"error\":{\"message\":\"Unauthorized local request\"}}", "application/json");
                 return;
             }
@@ -68,6 +73,9 @@ final class OpenCodeGoProxy
             URI target = URI.create(UPSTREAM_BASE_URL + "/chat/completions" + (query == null ? "" : "?" + query));
             String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
             byte[] requestBody = exchange.getRequestBody().readAllBytes();
+            log.debug("OpenCode Go 代理转发开始：method={}, path={}, bodyBytes={}, contentType={}, query={}",
+                    exchange.getRequestMethod(), exchange.getRequestURI().getRawPath(),
+                    requestBody.length, contentType, query);
             HttpRequest request = HttpRequest.newBuilder(target)
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", contentType == null ? "application/json" : contentType)
@@ -77,6 +85,14 @@ final class OpenCodeGoProxy
                     .build();
 
             HttpResponse<byte[]> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+            if (response.statusCode() >= 400) {
+                log.warn("OpenCode Go 代理转发返回错误：status={}, responseBytes={}, elapsedMs={}",
+                        response.statusCode(), response.body() == null ? 0 : response.body().length, elapsedMillis);
+            } else {
+                log.info("OpenCode Go 代理转发完成：status={}, responseBytes={}, elapsedMs={}",
+                        response.statusCode(), response.body() == null ? 0 : response.body().length, elapsedMillis);
+            }
             response.headers().firstValue("retry-after").ifPresent(value -> exchange.getResponseHeaders().set("Retry-After", value));
             writeResponse(exchange, response.statusCode(), response.body(), response.headers().firstValue("content-type").orElse("application/json"));
         } catch (InterruptedException e) {
@@ -115,5 +131,6 @@ final class OpenCodeGoProxy
     public void close() {
         server.stop(0);
         executor.shutdownNow();
+        log.info("OpenCode Go 本机代理已关闭");
     }
 }

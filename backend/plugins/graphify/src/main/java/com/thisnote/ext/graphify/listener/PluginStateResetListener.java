@@ -21,6 +21,8 @@ public class PluginStateResetListener
             indexService.resetState().whenComplete((ignored, error) -> {
                 if (error != null) {
                     fail(error);
+                } else {
+                    log.info("插件 {} 状态重置完成", GraphifyPlugin.PLUGIN_ID);
                 }
             });
         } catch (Exception e) {

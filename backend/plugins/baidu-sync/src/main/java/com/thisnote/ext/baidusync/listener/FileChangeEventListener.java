@@ -26,8 +26,10 @@ public class FileChangeEventListener
         try {
             // 忽略本插件触发的变更，避免同步写入反复唤起自身。
             if (!BaiduSyncPlugin.PLUGIN_ID.equals(change.sourcePluginId())) {
-                log.info("监听到文件变更时间 同步开始 {}", JSON.toJSONString(change));
+                log.info("监听到文件变更事件，同步开始：{}", JSON.toJSONString(change));
                 syncService.requestSyncAfterChange(change);
+            } else {
+                log.debug("忽略百度同步自身产生的文件变更：{}", change.url());
             }
         } catch (Exception e) {
             log.error("处理文件变更事件失败：{}", change.url(), e);

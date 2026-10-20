@@ -57,8 +57,14 @@ public class TagSuggestionService {
             return List.of();
         }
         try {
-            String response = complete(TagTextCounter.noteText(note, cards), images(cards));
-            return parseTags(response).stream().limit(limit).toList();
+            String text = TagTextCounter.noteText(note, cards);
+            List<AiCompletionFutureEvent.ImageInput> images = images(cards);
+            log.debug("请求 AI 标签建议：noteId={}, textLength={}, images={}",
+                    note.noteId(), text.length(), images.size());
+            String response = complete(text, images);
+            List<String> tags = parseTags(response).stream().limit(limit).toList();
+            log.debug("AI 标签建议完成：noteId={}, tags={}", note.noteId(), tags.size());
+            return tags;
         } catch (Exception e) {
             log.error("AI 标签建议失败：noteId={}", note.noteId(), e);
             return List.of();

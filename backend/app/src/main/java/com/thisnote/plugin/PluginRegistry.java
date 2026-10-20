@@ -53,7 +53,7 @@ public class PluginRegistry {
      * 全部插件（PF4J 的 wrapper）；管理面与启动报告从这里取。
      */
     public List<PluginWrapper> all() {
-        return List.copyOf(loaded().values());
+        return new ArrayList<>(loaded().values());
     }
 
     /**

@@ -2,6 +2,7 @@ package com.thisnote.plugin.api.event;
 
 import com.thisnote.plugin.api.event.ifaces.PluginFutureEvent;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -24,7 +25,7 @@ public record AiCompletionFutureEvent(String profileId,
         }
         systemPrompt = systemPrompt == null ? "" : systemPrompt;
         userText = Objects.requireNonNull(userText, "userText");
-        images = images == null ? List.of() : List.copyOf(images);
+        images = images == null ? List.of() : new ArrayList<>(images);
         if (maxTokens <= 0) {
             throw new IllegalArgumentException("maxTokens 必须大于 0");
         }

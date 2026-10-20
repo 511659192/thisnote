@@ -12,8 +12,6 @@ import java.util.concurrent.CompletableFuture;
 public record AiProfilesFutureEvent(CompletableFuture<List<AiProfileSummary>> profiles)
         implements PluginFutureEvent<List<AiProfileSummary>> {
 
-    public static final String DEFAULT_PROFILE_ID = "default-chat";
-
     public AiProfilesFutureEvent {
         profiles = Objects.requireNonNull(profiles, "profiles");
     }

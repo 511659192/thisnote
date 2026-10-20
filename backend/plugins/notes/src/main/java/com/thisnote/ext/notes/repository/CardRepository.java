@@ -95,7 +95,7 @@ public class CardRepository {
         for (Path path : paths) {
             cards.add(readCard(path, null));
         }
-        return List.copyOf(cards);
+        return cards;
     }
 
     /**

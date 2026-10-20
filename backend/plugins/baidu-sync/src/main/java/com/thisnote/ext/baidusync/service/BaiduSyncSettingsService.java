@@ -6,6 +6,7 @@ import com.thisnote.ext.baidusync.model.request.ExchangeCodeRequest;
 import com.thisnote.ext.baidusync.model.request.UpdateSettingsRequest;
 import com.thisnote.ext.baidusync.model.view.SettingsView;
 import com.thisnote.ext.baidusync.repository.BaiduSyncSettingsRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @Service
+@Slf4j
 public class BaiduSyncSettingsService {
 
     private final BaiduSyncSettingsRepository settingsRepository;
@@ -38,6 +40,7 @@ public class BaiduSyncSettingsService {
                 Objects.toString(request.appKey(), ""),
                 Objects.toString(request.secretKey(), ""),
                 Objects.toString(request.signKey(), ""));
+        log.info("百度网盘凭据设置已更新：appName={}", settings.appName());
         return settingsView(settings);
     }
 
@@ -47,11 +50,13 @@ public class BaiduSyncSettingsService {
 
     public SettingsView exchangeCode(ExchangeCodeRequest request) {
         oauthClient.exchangeCode(Objects.toString(request.code(), "").trim());
+        log.info("百度网盘授权码交换成功");
         return settingsView(settingsRepository.getSettings());
     }
 
     public SettingsView updateAutoSync(boolean value) {
         settingsRepository.updateAutoSync(value);
+        log.info("百度网盘自动同步设置已更新：value={}", value);
         return settingsView(settingsRepository.getSettings());
     }
 

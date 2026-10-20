@@ -66,6 +66,7 @@ public class AutoTagService {
                 MAX_AUTO_TAGS,
                 TagTextCounter.noteText(note, cards)
         );
+        log.debug("自动标签本地候选完成：noteId={}, tags={}", noteId, tags.size());
         long deadlineEpochMs = scheduleAi(note, cards);
         return new ExtractResult(noteId.trim(), tags, deadlineEpochMs > 0, deadlineEpochMs);
     }
@@ -86,6 +87,7 @@ public class AutoTagService {
         String noteId = note.noteId();
         PendingTask existing = pending.get(noteId);
         if (existing != null) {
+            log.debug("AI 标签任务已存在：noteId={}", noteId);
             return existing.deadlineEpochMs();
         }
         long deadlineEpochMs = System.currentTimeMillis()
@@ -94,15 +96,20 @@ public class AutoTagService {
         PendingTask task = new PendingTask(new CompletableFuture<>(), deadlineEpochMs);
         if (pending.putIfAbsent(noteId, task) != null) {
             PendingTask concurrent = pending.get(noteId);
+            log.debug("AI 标签任务并发已存在：noteId={}", noteId);
             return concurrent == null ? 0 : concurrent.deadlineEpochMs();
         }
+        log.debug("AI 标签任务已排队：noteId={}, deadlineEpochMs={}", noteId, deadlineEpochMs);
         try {
             aiWorker.execute(() -> {
                 try {
                     List<String> suggestions = tagSuggestionService.suggest(note, cards, MAX_AUTO_TAGS);
-                    if (!suggestions.isEmpty()) {
-                        tagsService.mergeUpTo(noteId, suggestions, MAX_AUTO_TAGS, TagTextCounter.noteText(note, cards));
-                    }
+                    List<String> merged = suggestions.isEmpty()
+                            ? List.of()
+                            : tagsService.mergeUpTo(noteId, suggestions, MAX_AUTO_TAGS,
+                            TagTextCounter.noteText(note, cards));
+                    log.debug("AI 标签任务完成：noteId={}, suggestions={}, mergedTags={}",
+                            noteId, suggestions.size(), merged.size());
                 } catch (Exception e) {
                     log.error("AI 标签后台任务失败：noteId={}", noteId, e);
                 } finally {

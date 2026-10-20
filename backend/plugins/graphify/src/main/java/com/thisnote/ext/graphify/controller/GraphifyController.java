@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.service.GraphifyGraphReader;
 import com.thisnote.ext.graphify.service.GraphifyIndexService;
 import com.thisnote.ext.graphify.service.GraphifySettingsService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/plugins/graphify")
+@Slf4j
 public class GraphifyController {
 
     private final GraphifyIndexService graphifyService;
@@ -35,7 +37,9 @@ public class GraphifyController {
     @PostMapping("/settings")
     public GraphifySettingsService.SettingsResponse saveSettings(
             @RequestBody GraphifySettingsService.SettingsUpdate update) {
-        return settingsService.save(update);
+        GraphifySettingsService.SettingsResponse response = settingsService.save(update);
+        log.info("Graphify 设置已保存：aiProfileId={}", response.aiProfileId());
+        return response;
     }
 
     @GetMapping("/status")
@@ -46,6 +50,7 @@ public class GraphifyController {
     @PostMapping("/index")
     public ResponseEntity<IndexResponse> index(@RequestBody(required = false) IndexRequest request) {
         boolean force = request != null && request.force();
+        log.info("收到 Graphify 索引请求：force={}", force);
         graphifyService.requestIndex(force);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new IndexResponse(true, force));
     }
@@ -71,11 +76,13 @@ public class GraphifyController {
 
     @GetMapping("/related")
     public GraphifyGraphReader.RelatedNotes related(@RequestParam String noteId) {
+        log.debug("查询 Graphify 相关笔记：noteId={}", noteId);
         return graphReader.relatedNotes(noteId);
     }
 
     @PostMapping("/communities/relabel")
     public ResponseEntity<Map<String, Boolean>> relabelCommunities() {
+        log.info("收到 Graphify 社区命名请求");
         graphifyService.requestRelabel();
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("accepted", true));
     }

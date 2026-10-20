@@ -40,6 +40,7 @@ const tagOverview = computed(() => buildTagStats(graph.value))
 
 let pollTimer: number | null = null
 let lastLoadedAt: string | null | undefined
+let statusRequestVersion = 0
 
 async function loadGraph(): Promise<void> {
   if (!status.value?.graphAvailable) {
@@ -56,9 +57,11 @@ async function loadGraph(): Promise<void> {
 }
 
 async function refreshStatus(): Promise<void> {
+  const version = ++statusRequestVersion
   const previous = status.value
   try {
     const latest = await graphifyApi.status()
+    if (version !== statusRequestVersion) return
     status.value = latest
     error.value = ''
     const finished = previous?.running === true && !latest.running
@@ -69,7 +72,9 @@ async function refreshStatus(): Promise<void> {
       graph.value = null
     }
   } catch (e) {
-    error.value = '读取索引状态失败：' + (e as Error).message
+    if (version === statusRequestVersion) {
+      error.value = '读取索引状态失败：' + (e as Error).message
+    }
   } finally {
     loading.value = false
   }
@@ -84,7 +89,6 @@ async function startIndex(force: boolean): Promise<void> {
   message.value = ''
   try {
     await graphifyApi.index(force)
-    message.value = force ? '强制重建已进入队列。' : '索引任务已进入队列。'
     await refreshStatus()
   } catch (e) {
     error.value = '提交索引任务失败：' + (e as Error).message
@@ -106,7 +110,6 @@ async function relabelCommunities(): Promise<void> {
   message.value = ''
   try {
     await graphifyApi.relabelCommunities()
-    message.value = '社区命名任务已进入队列。'
     await refreshStatus()
   } catch (e) {
     error.value = '提交社区命名任务失败：' + (e as Error).message

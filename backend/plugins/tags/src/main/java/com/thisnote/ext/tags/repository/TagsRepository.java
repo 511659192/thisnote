@@ -208,15 +208,7 @@ public class TagsRepository {
             }
             return;
         }
-        JSONObject tagsJson = new JSONObject();
-        tags.forEach((noteId, usage) -> {
-            JSONObject note = new JSONObject();
-            note.put("tags", usage.tags());
-            note.put("occurrences", usage.occurrences());
-            note.put("countsInitialized", usage.countsInitialized());
-            tagsJson.put(noteId, note);
-        });
-        fileHelper.fileWritten(tagsFile, tagsJson);
+        fileHelper.fileWritten(tagsFile, tags);
     }
 
     private static List<String> normalizeTags(List<String> tags) {

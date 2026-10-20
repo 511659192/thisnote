@@ -41,6 +41,7 @@ public class GraphifyProcessRunner {
             List<String> command = new ArrayList<>();
             command.add(executable);
             command.addAll(arguments);
+            log.info("Graphify 进程启动：operation={}, executable={}, workingDirectory={}", operation, executable, workingDirectory);
             ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory.toFile()).redirectErrorStream(true);
             Map<String, String> environment = builder.environment();
             environment.put("GRAPHIFY_NO_AUTO_REFRESH", "1");
@@ -65,21 +66,30 @@ public class GraphifyProcessRunner {
                 process = builder.start();
                 activeProcess = process;
             }
+            log.info("Graphify 子进程已启动：operation={}, pid={}", operation, process.pid());
             ArrayDeque<String> output = new ArrayDeque<>();
+            int outputLines = 0;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (output.size() == OUTPUT_LINE_LIMIT) {
                         output.removeFirst();
                     }
-                    output.addLast(redact(line, apiKey, processApiKey));
+                    String safeLine = redact(line, apiKey, processApiKey);
+                    output.addLast(safeLine);
+                    outputLines++;
+                    if (isImportantOutput(safeLine)) {
+                        log.info("Graphify 输出[{}]：{}", operation, safeLine);
+                    } else {
+                        log.debug("Graphify 输出[{}]：{}", operation, safeLine);
+                    }
                 }
                 int exitCode = process.waitFor();
                 long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
                 if (exitCode == 0) {
-                    log.info("Graphify 命令完成：operation={}, provider={}, exitCode={}, elapsedMs={}", operation, provider, exitCode, elapsedMillis);
+                    log.info("Graphify 命令完成：operation={}, provider={}, exitCode={}, outputLines={}, elapsedMs={}", operation, provider, exitCode, outputLines, elapsedMillis);
                 } else {
-                    log.warn("Graphify 命令失败：operation={}, provider={}, exitCode={}, elapsedMs={}", operation, provider, exitCode, elapsedMillis);
+                    log.warn("Graphify 命令失败：operation={}, provider={}, exitCode={}, outputLines={}, elapsedMs={}", operation, provider, exitCode, outputLines, elapsedMillis);
                 }
                 return new Result(exitCode, String.join("\n", output));
             } catch (InterruptedException e) {
@@ -94,10 +104,12 @@ public class GraphifyProcessRunner {
                 }
             }
         } catch (IOException | RuntimeException e) {
+            log.error("Graphify 命令执行异常：operation={}, provider={}", operation, provider, e);
             throw e;
         } finally {
             if (proxy != null) {
                 proxy.close();
+                log.debug("OpenCode Go 本机代理已关闭：operation={}", operation);
             }
         }
     }
@@ -147,6 +159,12 @@ public class GraphifyProcessRunner {
             value = value.isBlank() ? "localhost" : value + ",localhost";
         }
         return value;
+    }
+
+    private static boolean isImportantOutput(String line) {
+        String lower = line.toLowerCase();
+        return lower.contains("error") || lower.contains("failed") || lower.contains("exception") || lower.contains("warn") || lower.contains("incomplete") || lower.contains(
+                "timeout") || lower.contains("retry") || lower.contains("rate limit");
     }
 
     public record Result(int exitCode, String output) {

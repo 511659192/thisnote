@@ -25,14 +25,11 @@ public class AiCompletionEventListener
             if (!runtime.configured()) {
                 throw new IllegalStateException("AI profile「" + request.profileId() + "」尚未配置完整");
             }
+
             String text = truncate(request.userText(), runtime.maxTextChars());
-            request.completion().complete(providerClient.complete(
-                    runtime,
-                    request.systemPrompt(),
-                    text,
-                    request.images(),
-                    request.maxTokens()
-            ));
+            String response = providerClient.complete(runtime, request.systemPrompt(), text, request.images(), request.maxTokens());
+            request.completion().complete(response);
+            log.debug("AI completion 完成：profileId={}, responseLength={}", request.profileId(), response == null ? 0 : response.length());
         } catch (Exception e) {
             log.error("AI completion 失败：profileId={}", request.profileId(), e);
             request.completion().completeExceptionally(e);

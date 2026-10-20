@@ -19,6 +19,7 @@ public class PluginStateResetListener
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
         try {
             syncService.clearSyncState();
+            log.info("插件 {} 状态重置完成", BaiduSyncPlugin.PLUGIN_ID);
         } catch (Exception e) {
             log.error("插件 {} 状态重置失败", BaiduSyncPlugin.PLUGIN_ID, e);
         }

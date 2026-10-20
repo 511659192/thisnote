@@ -211,7 +211,7 @@ onMounted(load)
         <div class="two-columns">
           <label>
             <span>配置 ID</span>
-            <input v-model="draft.id" :disabled="!isNew" autocomplete="off" placeholder="例如 default-chat" />
+            <input v-model="draft.id" :disabled="!isNew" autocomplete="off" placeholder="例如 main" />
           </label>
           <label>
             <span>显示名称</span>

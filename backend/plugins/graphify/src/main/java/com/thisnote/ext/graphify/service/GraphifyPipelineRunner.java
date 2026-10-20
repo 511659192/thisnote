@@ -51,6 +51,8 @@ final class GraphifyPipelineRunner {
         Map<Path, FileBackup> backups = backupOutputs();
         log.info("Graphify 图谱构建开始：force={}, firstRun={}", force, labelFirstRun);
         try {
+            log.info("Graphify extract 开始：corpus={}, backend={}, model={}, force={}",
+                    corpusDir, GraphifySettingsService.graphifyBackend(settings.provider()), settings.model(), force);
             List<String> extract = new ArrayList<>(List.of(
                     "extract", corpusDir.toAbsolutePath().toString(),
                     "--backend", GraphifySettingsService.graphifyBackend(settings.provider()),
@@ -59,7 +61,9 @@ final class GraphifyPipelineRunner {
                 extract.add("--force");
             }
             runCommand(settings, apiKey, extract, "抽取");
+            log.info("Graphify extract 完成");
 
+            log.info("Graphify cluster 开始：firstRun={}", labelFirstRun);
             List<String> cluster = new ArrayList<>(List.of(
                     "cluster-only", corpusDir.toAbsolutePath().toString()));
             if (labelFirstRun) {
@@ -67,9 +71,11 @@ final class GraphifyPipelineRunner {
                         "--model", settings.model()));
             }
             runCommand(settings, apiKey, cluster, "社区聚类");
+            log.info("Graphify cluster 完成");
             if (!Files.isRegularFile(graphJsonFile)) {
                 throw new IllegalStateException("Graphify 未生成 graph.json");
             }
+            log.info("Graphify graph.json 已生成：file={}, size={}", graphJsonFile, Files.size(graphJsonFile));
             publishOutputs();
             log.info("Graphify 图谱构建完成：elapsedMs={}",
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
@@ -85,12 +91,14 @@ final class GraphifyPipelineRunner {
             throw new IllegalStateException("尚无图谱；请先完成首次索引");
         }
         Map<Path, FileBackup> backups = backupOutputs();
+        log.info("Graphify 社区命名开始：corpus={}, model={}", corpusDir, settings.model());
         try {
             runCommand(settings, apiKey, List.of(
                     "label", corpusDir.toAbsolutePath().toString(),
                     "--backend", GraphifySettingsService.graphifyBackend(settings.provider()),
                     "--model", settings.model()), "社区命名");
             publishOutputs();
+            log.info("Graphify 社区命名完成");
         } catch (Exception e) {
             restoreOutputs(backups);
             throw e;
@@ -102,6 +110,7 @@ final class GraphifyPipelineRunner {
         if (apiKey.isBlank()) {
             throw new IllegalStateException("请先在 AI 能力插件中为所选 profile 配置 API key");
         }
+        log.debug("Graphify API key 已就绪：profileId={}, keyConfigured=true", settings.aiProfileId());
         return apiKey;
     }
 
@@ -110,6 +119,8 @@ final class GraphifyPipelineRunner {
                             List<String> arguments,
                             String stage) throws IOException {
         GraphifyProcessRunner.Result result;
+        log.info("Graphify 命令调用：stage={}, executable={}, arguments={}",
+                stage, executable(settings), arguments);
         try {
             result = processRunner.run(executable(settings), arguments, corpusDir, settings.provider(), apiKey);
         } catch (IOException e) {
@@ -135,6 +146,8 @@ final class GraphifyPipelineRunner {
                 backups.put(path, null);
             }
         }
+        log.debug("Graphify 输出备份完成：existing={}, total={}",
+                backups.values().stream().filter(java.util.Objects::nonNull).count(), backups.size());
         return backups;
     }
 
@@ -160,6 +173,7 @@ final class GraphifyPipelineRunner {
                 FileTime modifiedAt = Files.getLastModifiedTime(path);
                 fileHelper.fileWritten(path, new ByteArrayInputStream(bytes), modifiedAt.toMillis());
                 published++;
+                log.debug("Graphify 输出已发布：file={}, bytes={}", path, bytes.length);
             }
         }
         log.info("Graphify 图谱输出已发布：files={}", published);

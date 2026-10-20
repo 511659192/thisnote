@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
 import com.thisnote.plugin.api.event.NoteListFutureEvent;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 @Service
+@Slf4j
 public class GraphifyGraphReader {
 
     private static final Pattern PASTE_ASSET_REFERENCE = Pattern.compile("paste-[0-9a-f]{8,}", Pattern.CASE_INSENSITIVE);
@@ -73,6 +75,7 @@ public class GraphifyGraphReader {
             }
             JSONObject graph = JSON.parseObject(Files.readString(graphJsonFile, StandardCharsets.UTF_8));
             cachedGraph = new CachedGraph(modifiedAt, size, graph);
+            log.debug("Graphify graph.json 已重新解析：file={}", graphJsonFile);
             return graph;
         } catch (Exception e) {
             throw new IllegalStateException("Graphify graph.json 无法读取", e);
@@ -143,6 +146,7 @@ public class GraphifyGraphReader {
             List<String> communityTags = communities.getOrDefault(noteId, Set.of()).stream().sorted().toList();
             result.put(noteId, new NoteTags(conceptTags, communityTags));
         }
+        log.debug("Graphify 标签查询完成：notes={}", result.size());
         return result;
     }
 
@@ -284,6 +288,7 @@ public class GraphifyGraphReader {
                         noteTitle(notesById.get(candidate.noteId)),
                         relatedReasons(candidate, conceptFrequency)))
                 .toList();
+        log.debug("Graphify 相关笔记查询完成：noteId={}, related={}", noteId, related.size());
         return new RelatedNotes(true, related);
     }
 
@@ -384,7 +389,7 @@ public class GraphifyGraphReader {
         if (reasons.size() > 3) {
             reasons = new ArrayList<>(reasons.subList(0, 3));
         }
-        return List.copyOf(reasons);
+        return reasons;
     }
 
     private static boolean isMeaningfulTag(String label) {

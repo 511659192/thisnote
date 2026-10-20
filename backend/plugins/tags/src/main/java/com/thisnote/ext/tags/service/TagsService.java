@@ -44,7 +44,7 @@ public class TagsService {
 
     public List<String> noteTags(String noteId) {
         NoteUsage current = tagsRepository.getAllEntries().get(requireNoteId(noteId));
-        return current == null ? List.of() : List.copyOf(current.tags());
+        return current == null ? List.of() : current.tags();
     }
 
     public synchronized List<String> add(String noteId,
@@ -53,11 +53,15 @@ public class TagsService {
         String normalizedTag = requireTag(tag);
         NoteUsage current = tagsRepository.getAllEntries().get(normalizedNoteId);
         List<String> noteTags = new ArrayList<>(current == null ? List.of() : current.tags());
-        if (!noteTags.contains(normalizedTag)) {
+        boolean added = !noteTags.contains(normalizedTag);
+        if (added) {
             noteTags.add(normalizedTag);
         }
         saveWithFreshCounts(normalizedNoteId, noteTags, current);
-        return List.copyOf(noteTags);
+        if (added) {
+            log.info("标签已添加：noteId={}, tag={}", normalizedNoteId, normalizedTag);
+        }
+        return noteTags;
     }
 
     public synchronized List<String> remove(String noteId,
@@ -77,8 +81,9 @@ public class TagsService {
                     occurrences,
                     current != null && current.countsInitialized()
             );
+            log.info("标签已移除：noteId={}, tag={}", normalizedNoteId, normalizedTag);
         }
-        return List.copyOf(noteTags);
+        return noteTags;
     }
 
     public synchronized List<String> mergeUpTo(String noteId,
@@ -99,11 +104,16 @@ public class TagsService {
         }
         Map<String, Integer> occurrences = TagTextCounter.counts(noteText, noteTags);
         tagsRepository.updateNoteTags(normalizedNoteId, noteTags, occurrences, true);
-        return List.copyOf(noteTags);
+        log.debug("标签合并完成：noteId={}, candidates={}, total={}",
+                normalizedNoteId, candidates.size(), noteTags.size());
+        return noteTags;
     }
 
     public int removeEverywhere(String tag) {
-        return tagsRepository.deleteTagEverywhere(requireTag(tag));
+        String normalizedTag = requireTag(tag);
+        int removedNotes = tagsRepository.deleteTagEverywhere(normalizedTag);
+        log.info("标签全局删除：tag={}, removedNotes={}", normalizedTag, removedNotes);
+        return removedNotes;
     }
 
     public Map<String, Integer> usageCounts() {

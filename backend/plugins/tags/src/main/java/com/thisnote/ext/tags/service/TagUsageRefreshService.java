@@ -40,6 +40,7 @@ public class TagUsageRefreshService {
         if (!pending.add(normalized)) {
             return;
         }
+        log.debug("排队刷新标签计数：noteId={}", normalized);
         try {
             worker.schedule(() -> refresh(normalized), DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
@@ -52,6 +53,7 @@ public class TagUsageRefreshService {
         pending.remove(noteId);
         try {
             tagsService.refreshOccurrences(noteId);
+            log.debug("标签计数刷新完成：noteId={}", noteId);
         } catch (Exception e) {
             log.error("标签计数异步刷新失败：noteId={}", noteId, e);
         }

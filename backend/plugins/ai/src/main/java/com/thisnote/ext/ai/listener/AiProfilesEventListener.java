@@ -18,7 +18,9 @@ public class AiProfilesEventListener
     public void onApplicationEvent(PayloadApplicationEvent<AiProfilesFutureEvent> event) {
         AiProfilesFutureEvent request = event.getPayload();
         try {
-            request.profiles().complete(settingsService.summaries());
+            var profiles = settingsService.summaries();
+            request.profiles().complete(profiles);
+            log.debug("AI profile 列表已返回：count={}", profiles.size());
         } catch (Exception e) {
             log.error("读取 AI profile 列表失败", e);
             request.profiles().completeExceptionally(e);

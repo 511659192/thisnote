@@ -3,14 +3,15 @@ package com.thisnote.ext.graphify.service;
 import com.thisnote.ext.graphify.client.GraphifyAiClient;
 import com.thisnote.ext.graphify.repository.GraphifySettingsRepository;
 import com.thisnote.plugin.api.event.AiProfileSummary;
-import com.thisnote.plugin.api.event.AiProfilesFutureEvent;
 import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class GraphifySettingsService {
 
     public static final String OPENCODE_GO_PROVIDER = "opencode-go";
@@ -34,6 +35,7 @@ public class GraphifySettingsService {
         try {
             return resolveSettings();
         } catch (Exception e) {
+            log.warn("Graphify 运行时配置不可用：{}", e.getMessage());
             return new Settings(profileId, "", "", executablePath);
         }
     }
@@ -51,6 +53,7 @@ public class GraphifySettingsService {
             String profileId = selectedProfileId();
             settings = new Settings(profileId, "", "", settingsRepository.getExecutablePath());
             aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
+            log.warn("读取 Graphify AI 运行时配置失败：{}", aiError);
         }
         boolean keyConfigured = false;
         try {
@@ -67,6 +70,7 @@ public class GraphifySettingsService {
         } catch (Exception e) {
             profiles = List.of();
             profilesError = e.getMessage() == null ? "AI profile 列表不可用" : e.getMessage();
+            log.warn("读取 Graphify AI profile 列表失败：{}", profilesError);
         }
         return new SettingsResponse(
                 settings.aiProfileId(),
@@ -85,9 +89,10 @@ public class GraphifySettingsService {
             throw new IllegalArgumentException("设置不能为空");
         }
         String executablePath = update.executablePath() == null ? "" : update.executablePath().trim();
-        String profileId = update.aiProfileId() == null || update.aiProfileId().isBlank()
-                ? AiProfilesFutureEvent.DEFAULT_PROFILE_ID
-                : update.aiProfileId().trim();
+        if (update.aiProfileId() == null || update.aiProfileId().isBlank()) {
+            throw new IllegalArgumentException("请选择 AI profile");
+        }
+        String profileId = update.aiProfileId().trim();
         List<AiProfileSummary> available = profiles();
         if (available.isEmpty()) {
             throw new IllegalStateException("AI 核心插件未返回可用的 completion 配置");
@@ -96,13 +101,17 @@ public class GraphifySettingsService {
             throw new IllegalArgumentException("AI profile 不存在：" + profileId);
         }
         settingsRepository.update(executablePath, profileId);
+        log.info("Graphify 设置保存成功：aiProfileId={}, executablePath={}", profileId, executablePath);
         return response();
     }
 
     public List<AiProfileSummary> profiles() {
         try {
-            return aiClient.profiles();
+            List<AiProfileSummary> profiles = aiClient.profiles();
+            log.debug("Graphify AI profile 列表读取成功：count={}", profiles.size());
+            return profiles;
         } catch (Exception e) {
+            log.warn("Graphify AI profile 列表读取失败：{}", e.getMessage());
             return List.of();
         }
     }
@@ -122,11 +131,14 @@ public class GraphifySettingsService {
 
     private String selectedProfileId() {
         String stored = settingsRepository.getAiProfileId();
-        return stored == null || stored.isBlank() ? AiProfilesFutureEvent.DEFAULT_PROFILE_ID : stored;
+        return stored == null ? "" : stored;
     }
 
     private Settings resolveSettings() {
         String profileId = selectedProfileId();
+        if (profileId.isBlank()) {
+            throw new IllegalStateException("请先选择 AI profile");
+        }
         AiRuntimeFutureEvent.Runtime runtime = aiClient.runtime(profileId);
         return new Settings(
                 profileId,

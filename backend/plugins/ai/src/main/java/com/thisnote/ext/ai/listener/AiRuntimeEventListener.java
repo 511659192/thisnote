@@ -19,6 +19,7 @@ public class AiRuntimeEventListener
         AiRuntimeFutureEvent runtimeEvent = event.getPayload();
         try {
             runtimeEvent.runtime().complete(settingsService.runtime(runtimeEvent.profileId()));
+            log.debug("AI 运行时配置已返回：profileId={}", runtimeEvent.profileId());
         } catch (Exception e) {
             log.error("读取 AI 运行时配置失败：profileId={}", runtimeEvent.profileId(), e);
             runtimeEvent.runtime().completeExceptionally(e);
