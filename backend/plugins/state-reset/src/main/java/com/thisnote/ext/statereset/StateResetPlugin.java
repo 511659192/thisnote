@@ -1,11 +1,9 @@
 package com.thisnote.ext.statereset;
 
 import com.thisnote.ext.statereset.service.StateResetService;
-import com.thisnote.ext.statereset.listener.PluginStateResetListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
-import org.pf4j.PluginManager;
 import org.pf4j.PluginWrapper;
 import org.springframework.context.support.GenericApplicationContext;
 
@@ -15,8 +13,6 @@ import org.springframework.context.support.GenericApplicationContext;
 public class StateResetPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "state-reset";
-
-    private PluginStateResetListener stateResetListener;
 
     public StateResetPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -31,17 +27,5 @@ public class StateResetPlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         StateResetService stateResetService = ctx.getBean(StateResetService.class);
         stateResetService.setMainEventPublisher(getMainApplicationContext());
-        stateResetService.setPluginManager(getMainApplicationContext().getBean(PluginManager.class));
-        stateResetListener = new PluginStateResetListener();
-        getMainApplicationContext().addApplicationListener(stateResetListener);
-    }
-
-    @Override
-    public void stop() {
-        if (stateResetListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateResetListener);
-            stateResetListener = null;
-        }
-        super.stop();
     }
 }

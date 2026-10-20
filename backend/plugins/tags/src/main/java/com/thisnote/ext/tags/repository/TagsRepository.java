@@ -33,20 +33,20 @@ public class TagsRepository {
         this.tagsFile = pluginDir.resolve("tags.json");
     }
 
-    public synchronized Map<String, List<String>> all() {
+    public synchronized Map<String, List<String>> getAll() {
         Map<String, List<String>> result = new LinkedHashMap<>();
         read().forEach((noteId, entry) -> result.put(noteId, entry.tags()));
         return result;
     }
 
-    public synchronized Map<String, NoteUsage> entries() {
+    public synchronized Map<String, NoteUsage> getAllEntries() {
         return Collections.unmodifiableMap(new LinkedHashMap<>(read()));
     }
 
-    public synchronized void replaceNoteTags(String noteId,
-                                             List<String> tags,
-                                             Map<String, Integer> occurrences,
-                                             boolean countsInitialized) {
+    public synchronized void updateNoteTags(String noteId,
+                                            List<String> tags,
+                                            Map<String, Integer> occurrences,
+                                            boolean countsInitialized) {
         Map<String, NoteUsage> stored = read();
         List<String> normalizedTags = normalizeTags(tags);
         if (normalizedTags.isEmpty()) {
@@ -57,8 +57,8 @@ public class TagsRepository {
         write(stored);
     }
 
-    public synchronized void replaceOccurrences(String noteId,
-                                                Map<String, Integer> occurrences) {
+    public synchronized void updateOccurrences(String noteId,
+                                               Map<String, Integer> occurrences) {
         Map<String, NoteUsage> stored = read();
         NoteUsage current = stored.get(noteId);
         if (current == null) {
@@ -68,8 +68,8 @@ public class TagsRepository {
         write(stored);
     }
 
-    public synchronized void replaceOccurrencesBatch(Map<String, Map<String, Integer>> refreshed,
-                                                     Set<String> notesToRemove) {
+    public synchronized void updateOccurrencesBatch(Map<String, Map<String, Integer>> refreshed,
+                                                    Set<String> notesToRemove) {
         Map<String, NoteUsage> stored = read();
         boolean changed = false;
         for (Map.Entry<String, Map<String, Integer>> item : refreshed.entrySet()) {
@@ -113,7 +113,7 @@ public class TagsRepository {
         write(stored);
     }
 
-    public synchronized int removeEverywhere(String tag) {
+    public synchronized int deleteTagEverywhere(String tag) {
         Map<String, NoteUsage> stored = read();
         int removed = 0;
         for (var iterator = stored.entrySet().iterator(); iterator.hasNext(); ) {
@@ -138,7 +138,7 @@ public class TagsRepository {
         return removed;
     }
 
-    public synchronized boolean removeNote(String noteId) {
+    public synchronized boolean deleteNote(String noteId) {
         if (noteId == null || noteId.isBlank()) {
             return false;
         }
@@ -150,7 +150,7 @@ public class TagsRepository {
         return true;
     }
 
-    public synchronized void clear() {
+    public synchronized void deleteAll() {
         if (Files.exists(tagsFile)) {
             if (!fileHelper.fileDeleted(tagsFile) && Files.exists(tagsFile)) {
                 log.error("删除标签文件失败：{}", tagsFile);

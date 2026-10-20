@@ -1,7 +1,6 @@
 package com.thisnote.ext.attachmentimporter;
 
 import com.thisnote.ext.attachmentimporter.service.AttachmentImporterService;
-import com.thisnote.ext.attachmentimporter.listener.PluginStateResetListener;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -20,8 +19,6 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "attachment-importer";
 
-    private PluginStateResetListener stateResetListener;
-
     public AttachmentImporterPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
     }
@@ -35,16 +32,5 @@ public class AttachmentImporterPlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
         AttachmentImporterService service = ctx.getBean(AttachmentImporterService.class);
         service.setMainEventPublisher(getMainApplicationContext());
-        stateResetListener = new PluginStateResetListener();
-        getMainApplicationContext().addApplicationListener(stateResetListener);
-    }
-
-    @Override
-    public void stop() {
-        if (stateResetListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateResetListener);
-            stateResetListener = null;
-        }
-        super.stop();
     }
 }

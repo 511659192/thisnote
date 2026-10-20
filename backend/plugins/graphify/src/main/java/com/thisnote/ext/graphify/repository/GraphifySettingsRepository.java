@@ -22,7 +22,7 @@ public class GraphifySettingsRepository {
         this.settingsFile = pluginDir.resolve("settings.json");
     }
 
-    public synchronized String executablePath() {
+    public synchronized String getExecutablePath() {
         if (!Files.exists(settingsFile)) {
             return "";
         }
@@ -34,7 +34,7 @@ public class GraphifySettingsRepository {
         }
     }
 
-    public synchronized void saveExecutablePath(String executablePath) {
+    public synchronized void updateExecutablePath(String executablePath) {
         fileHelper.fileWritten(settingsFile, new StoredCliSettings(executablePath));
     }
 

@@ -25,8 +25,8 @@ public class BaiduSyncStateRepository {
         this.file = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("baidu-sync").resolve(".sync-state.json");
     }
 
-    public synchronized BaiduSyncState get(String root,
-                                           String remoteRoot) {
+    public synchronized BaiduSyncState getState(String root,
+                                                String remoteRoot) {
         try {
             BaiduSyncState state = read();
             if (state == null || state.notesRoot() == null || !Path.of(state.notesRoot()).equals(Path.of(root)) || !remoteRoot.equals(state.remoteRoot())) {
@@ -38,7 +38,7 @@ public class BaiduSyncStateRepository {
         }
     }
 
-    public synchronized void save(BaiduSyncState state) {
+    public synchronized void update(BaiduSyncState state) {
         fileHelper.fileWritten(file, state);
     }
 

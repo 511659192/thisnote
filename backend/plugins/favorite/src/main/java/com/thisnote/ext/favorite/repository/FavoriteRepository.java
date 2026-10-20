@@ -40,7 +40,7 @@ public class FavoriteRepository {
         }
     }
 
-    public List<String> favoriteNoteIds() {
+    public List<String> getAllFavoriteNoteIds() {
         synchronized (lock) {
             Properties properties = readProperties();
             return properties.stringPropertyNames().stream()
@@ -50,8 +50,8 @@ public class FavoriteRepository {
         }
     }
 
-    public void setFavorite(String noteId,
-                            boolean favorite) {
+    public void updateFavorite(String noteId,
+                               boolean favorite) {
         requireNoteId(noteId);
         synchronized (lock) {
             Properties properties = readProperties();
@@ -68,7 +68,7 @@ public class FavoriteRepository {
         }
     }
 
-    public boolean removeFavorite(String noteId) {
+    public boolean deleteFavorite(String noteId) {
         requireNoteId(noteId);
 
         synchronized (lock) {
@@ -83,7 +83,7 @@ public class FavoriteRepository {
     }
 
     /** 状态重置：把收藏文件重置为空。 */
-    public void clear() {
+    public void deleteAll() {
         synchronized (lock) {
             writeProperties(new Properties());
         }

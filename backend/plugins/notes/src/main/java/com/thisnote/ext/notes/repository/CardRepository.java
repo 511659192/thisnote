@@ -113,10 +113,10 @@ public class CardRepository {
      * fileName 非空 = 显式命名：必须是 cards 目录下的 Markdown 文件名。
      * 最终文件名回填到 meta.sourceFileName 并随元数据写进卡片索引。
      */
-    public synchronized String save(CardMeta meta,
-                                    String content,
-                                    String fileName,
-                                    String title) {
+    public synchronized String insert(CardMeta meta,
+                                      String content,
+                                      String fileName,
+                                      String title) {
         if (meta.getCardId() == null || meta.getCardId().isBlank()) {
             meta.setCardId(UUID.randomUUID().toString());
         }

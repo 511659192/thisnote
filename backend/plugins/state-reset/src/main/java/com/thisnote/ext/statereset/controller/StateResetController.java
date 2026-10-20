@@ -2,7 +2,6 @@ package com.thisnote.ext.statereset.controller;
 
 import com.thisnote.ext.statereset.StateResetPlugin;
 import com.thisnote.ext.statereset.service.StateResetService;
-import com.thisnote.plugin.api.event.PluginStateResetReport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,7 +20,7 @@ public class StateResetController {
     private final StateResetService stateResetService;
 
     @PostMapping("/reset")
-    public PluginStateResetReport reset() {
-        return stateResetService.resetAll();
+    public void reset() {
+        stateResetService.resetActivePlugins();
     }
 }

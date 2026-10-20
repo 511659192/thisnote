@@ -24,7 +24,7 @@ public class BookRepository {
         return BookPO.parse(file);
     }
 
-    public void save(List<BookPO> books) {
+    public void updateAll(List<BookPO> books) {
         Path file = notesConfig.getRootDir().resolve("book").resolve(".books.json");
         fileHelper.fileWritten(file, books);
     }

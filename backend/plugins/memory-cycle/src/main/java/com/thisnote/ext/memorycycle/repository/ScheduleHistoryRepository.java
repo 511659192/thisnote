@@ -34,12 +34,12 @@ public class ScheduleHistoryRepository {
                 .resolve(".schedule-history.json");
     }
 
-    public synchronized List<ScheduleHistoryEntry> get(String cardId) {
-        return loadAll().getOrDefault(cardId, List.of());
+    public synchronized List<ScheduleHistoryEntry> getOne(String cardId) {
+        return getAllById().getOrDefault(cardId, List.of());
     }
 
-    public synchronized Map<String, List<ScheduleHistoryEntry>> getFor(List<String> cardIds) {
-        Map<String, List<ScheduleHistoryEntry>> all = loadAll();
+    public synchronized Map<String, List<ScheduleHistoryEntry>> getAllFor(List<String> cardIds) {
+        Map<String, List<ScheduleHistoryEntry>> all = getAllById();
         Map<String, List<ScheduleHistoryEntry>> out = new LinkedHashMap<>();
         for (String cardId : cardIds) {
             out.put(cardId, all.getOrDefault(cardId, List.of()));
@@ -47,8 +47,8 @@ public class ScheduleHistoryRepository {
         return out;
     }
 
-    public synchronized void append(ScheduleHistoryEntry entry) {
-        Map<String, List<ScheduleHistoryEntry>> all = loadAll();
+    public synchronized void insert(ScheduleHistoryEntry entry) {
+        Map<String, List<ScheduleHistoryEntry>> all = getAllById();
         List<ScheduleHistoryEntry> entries = new ArrayList<>(all.getOrDefault(entry.getCardId(), List.of()));
         entries.add(entry);
         if (entries.size() > MAX_ENTRIES_PER_CARD) {
@@ -59,7 +59,7 @@ public class ScheduleHistoryRepository {
     }
 
     public synchronized boolean delete(String cardId) {
-        Map<String, List<ScheduleHistoryEntry>> all = loadAll();
+        Map<String, List<ScheduleHistoryEntry>> all = getAllById();
         if (all.remove(cardId) == null) {
             return false;
         }
@@ -68,11 +68,11 @@ public class ScheduleHistoryRepository {
     }
 
     /** 状态重置：清空全部历史。 */
-    public synchronized void clear() {
+    public synchronized void deleteAll() {
         writeJson(new LinkedHashMap<>());
     }
 
-    public synchronized Map<String, List<ScheduleHistoryEntry>> loadAll() {
+    public synchronized Map<String, List<ScheduleHistoryEntry>> getAllById() {
         return FileHelper.readMapOrEmpty(file, new TypeReference<>() { }, "复习历史");
     }
 

@@ -34,7 +34,7 @@ public class NoteRepository {
         this.nodeMetadataFile = notesConfig.getRootDir().resolve("plugins").resolve("notes").resolve(".note-metadata.json");
     }
 
-    public synchronized String save(NotePO note) {
+    public synchronized String insert(NotePO note) {
         String noteId = IdUtil.randomUUID();
         note.setNoteId(noteId).setUpdatedAt(System.currentTimeMillis());
 

@@ -27,7 +27,7 @@ public class AiSettingsRepository {
         this.credentialsFile = pluginDir.resolve(".credentials.json");
     }
 
-    public synchronized StoredSettings loadSettings() {
+    public synchronized StoredSettings getSettings() {
         if (!Files.exists(settingsFile)) {
             return null;
         }
@@ -42,15 +42,15 @@ public class AiSettingsRepository {
         }
     }
 
-    public synchronized void saveSettings(StoredSettings settings) {
+    public synchronized void updateSettings(StoredSettings settings) {
         fileHelper.fileWritten(settingsFile, settings);
     }
 
-    public synchronized String apiKey(String provider) {
-        return readApiKeys().getOrDefault(provider, "");
+    public synchronized String getApiKey(String provider) {
+        return getAllApiKeys().getOrDefault(provider, "");
     }
 
-    public synchronized Map<String, String> readApiKeys() {
+    public synchronized Map<String, String> getAllApiKeys() {
         if (!Files.exists(credentialsFile)) {
             return new LinkedHashMap<>();
         }
@@ -69,7 +69,7 @@ public class AiSettingsRepository {
         }
     }
 
-    public synchronized void saveApiKeys(Map<String, String> apiKeys) {
+    public synchronized void updateApiKeys(Map<String, String> apiKeys) {
         if (apiKeys.isEmpty()) {
             if (!fileHelper.fileDeleted(credentialsFile) && Files.exists(credentialsFile)) {
                 throw new IllegalStateException("AI 凭据文件无法删除");

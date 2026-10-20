@@ -42,7 +42,7 @@ public class MemoryCycleService {
      * Enabled + schedule for many cards, so a page costs one request.
      */
     public synchronized List<CardSchedule> cardStates(List<String> cardIds) {
-        Map<String, CardSchedule> schedules = scheduleRepository.loadAll();
+        Map<String, CardSchedule> schedules = scheduleRepository.getAllById();
         long now = System.currentTimeMillis();
         List<CardSchedule> out = new ArrayList<>(cardIds.size());
         for (String cardId : cardIds) {
@@ -105,7 +105,7 @@ public class MemoryCycleService {
         s.setDueAt(new Date(now));
         s.setReps(0);
         s.setLapses(0);
-        scheduleRepository.save(s);
+        scheduleRepository.update(s);
         appendHistory(cardId, 0, s, now);
     }
 
@@ -125,7 +125,7 @@ public class MemoryCycleService {
         apply(s, grade, now);
         s.setReps(s.getReps() + 1);
         s.setLastReviewedAt(new Date(now));
-        scheduleRepository.save(s);
+        scheduleRepository.update(s);
         appendHistory(cardId, grade, s, now);
         log.info("卡片 {} 评分 {} → 状态 {}，下次复习 {}（level={}）",
                 cardId, grade, s.getState(), s.getDueAt(), s.getLevel());
@@ -145,17 +145,17 @@ public class MemoryCycleService {
         entry.setState(schedule.getState());
         entry.setLevel(schedule.getLevel());
         entry.setDueAt(schedule.getDueAt().getTime());
-        historyRepository.append(entry);
+        historyRepository.insert(entry);
     }
 
     /** 某张卡片的复习历史（从旧到新）。 */
     public synchronized List<ScheduleHistoryEntry> history(String cardId) {
-        return historyRepository.get(cardId);
+        return historyRepository.getOne(cardId);
     }
 
     /** 批量取复习历史，给列表页一次请求用。 */
     public synchronized Map<String, List<ScheduleHistoryEntry>> histories(List<String> cardIds) {
-        return historyRepository.getFor(cardIds);
+        return historyRepository.getAllFor(cardIds);
     }
 
     private void apply(CardSchedule s,
@@ -252,8 +252,8 @@ public class MemoryCycleService {
 
     /** 状态重置：清空全部排期与复习历史（「已开启」即存在排期）。 */
     public synchronized void clearAll() {
-        scheduleRepository.clear();
-        historyRepository.clear();
+        scheduleRepository.deleteAll();
+        historyRepository.deleteAll();
         log.info("记忆周期排期与复习历史已清空");
     }
 

@@ -4,7 +4,6 @@ import com.thisnote.ext.ai.service.AiTagSuggestionService;
 import com.thisnote.ext.ai.listener.AiRuntimeEventListener;
 import com.thisnote.ext.ai.service.AiSettingsService;
 import com.thisnote.ext.ai.listener.NoteTagSuggestionEventListener;
-import com.thisnote.ext.ai.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -18,7 +17,6 @@ public class AiPlugin extends SpringBootPlugin {
 
     private AiRuntimeEventListener aiRuntimeEventListener;
     private NoteTagSuggestionEventListener noteTagSuggestionEventListener;
-    private PluginStateResetListener stateResetListener;
 
     public AiPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -41,10 +39,8 @@ public class AiPlugin extends SpringBootPlugin {
         tagSuggestionService.setMainEventPublisher(getMainApplicationContext());
         aiRuntimeEventListener = new AiRuntimeEventListener(ctx.getBean(AiSettingsService.class));
         noteTagSuggestionEventListener = new NoteTagSuggestionEventListener(tagSuggestionService);
-        stateResetListener = new PluginStateResetListener();
         getMainApplicationContext().addApplicationListener(aiRuntimeEventListener);
         getMainApplicationContext().addApplicationListener(noteTagSuggestionEventListener);
-        getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
     @Override
@@ -56,10 +52,6 @@ public class AiPlugin extends SpringBootPlugin {
         if (noteTagSuggestionEventListener != null) {
             getMainApplicationContext().removeApplicationListener(noteTagSuggestionEventListener);
             noteTagSuggestionEventListener = null;
-        }
-        if (stateResetListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateResetListener);
-            stateResetListener = null;
         }
         super.stop();
     }

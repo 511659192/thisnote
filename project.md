@@ -170,8 +170,7 @@ host（qiankun 主应用，:5173）
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
 | `event/AttachmentAdoptEvent` | `CompletableFuture<AttachmentDTO>` + `fileName`：接管一个未被管理的附件（改名为 `<uuid>.<ext>`、原名记入元数据），notes 侧监听填充 |
 | `event/AttachmentChangedEvent` | Notes 发布附件创建、更新、删除、重命名；Graphify 只消费此事件，不解析附件目录 |
-| `event/PluginStateResetEvent` | 状态重置（`sourcePluginId` + 活动插件 future 表）：各活动插件完成清理并回报 `PluginResetResult` |
-| `event/PluginStateResetReport` | 全部已安装插件的重置汇总；状态为 `RESET / SKIPPED / FAILED` |
+| `event/PluginStateResetEvent` | 状态重置控制事件：活动插件执行自身清理，不回报结果 |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
 | `notes/dto/*` | `NoteDTO`、`CardDTO`、`CardMetaDTO`、`NoteCardDTO(note,cards)`、`BookDTO`、`AttachmentDTO(fileName,size,width,height)` |
@@ -366,8 +365,7 @@ host（qiankun 主应用，:5173）
 
 **attachment-importer**：无端点（只有 `@Scheduled` 任务；设置页是静态说明，不读后端）。
 
-**state-reset**：`POST /api/plugins/state-reset/reset`，返回 `PluginStateResetReport`
-（`ok` + 每个插件的 `pluginId/status/message`，见 §5.9）。
+**state-reset**：`POST /api/plugins/state-reset/reset`，发布一次重置事件，不返回结果体。
 
 **ai**：`GET/POST /api/plugins/ai/settings`、`POST /api/plugins/ai/test`。设置响应包含 `maxTextChars`
 与 `keyConfigured`，但不返回 API key。
@@ -433,13 +431,13 @@ host（qiankun 主应用，:5173）
 - 未被管理的附件由 notes 回答（`AttachmentQueryEvent` → `AttachmentService.unmanagedAttachments()`），本插件不扫描附件目录、不解析卡片内容。
 
 **state-reset**
-- `POST /api/plugins/state-reset/reset` 覆盖**全部已安装插件**。活动插件通过 `PluginStateResetEvent`
-  执行自身清理并返回 future；state-reset 汇总结果，Graphify 异步清理完成后请求才结束。
-- 停用插件不启动容器，也不执行状态清理；结果标记为 `SKIPPED`。
+- `POST /api/plugins/state-reset/reset` 向活动插件发布 `PluginStateResetEvent`，事件派发完成后立即返回；
+  Graphify 等异步清理不会被等待，也不会返回逐插件结果。
+- 停用插件不启动容器，也不执行状态清理。
 - 有状态文件的活动插件重写为初始内容：favorite、memory-cycle、tags、baidu-sync、notes 与 Graphify
-  分别走自己的 reset；baidu 同步进行中时该插件返回 `FAILED`，不伪报成功。
+  分别走自己的 reset；失败只记录 error 日志。
 - AI 的 Provider、模型、API key，Graphify 的 `settings.json`，百度授权凭据和 Notes 卡片/附件文件均保留。
-- attachment-importer / card-importer / state-reset 无状态文件，返回 `SKIPPED`。
+- attachment-importer / card-importer / state-reset 无状态文件，不注册重置 listener。
 
 **graphify**
 - 首次索引由用户在界面手动启动；后续笔记、卡片与引用图片变更进入 2 秒防抖的单线程队列。Graphify CLI 从 thisnote 的 `PATH` 查找，也可在设置中指定路径。

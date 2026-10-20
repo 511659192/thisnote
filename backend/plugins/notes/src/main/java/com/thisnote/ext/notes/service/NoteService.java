@@ -59,7 +59,7 @@ public class NoteService {
                                        String bookId,
                                        List<String> cardIds) {
         NotePO note = new NotePO().setTitle(title).setBookId(bookId).setCardIds(cardIds);
-        String noteId = noteRepository.save(note);
+        String noteId = noteRepository.insert(note);
         mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.CREATED, note.getTitle(), cardIds));
         log.info("创建笔记 {}（notebook={}）", noteId, bookId);
         return notesMapper.toNoteDTO(note);

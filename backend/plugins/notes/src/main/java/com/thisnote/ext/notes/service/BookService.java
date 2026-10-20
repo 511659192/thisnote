@@ -56,7 +56,7 @@ public class BookService {
                     "📥",
                     0,
                     System.currentTimeMillis()));
-            bookRepository.save(books);
+            bookRepository.updateAll(books);
         }
     }
 
@@ -72,7 +72,7 @@ public class BookService {
         String savedType = type == null || type.isBlank() ? BookPO.TYPE_BOOK : type;
         BookPO created = BookPO.newBook(id, savedType, title, icon, sortOrder, System.currentTimeMillis());
         books.add(created);
-        bookRepository.save(books);
+        bookRepository.updateAll(books);
         String savedTitle = title == null ? "" : title;
         mainEventPublisher.publishEvent(new BookChangedEvent(
                 id, BookChangedEvent.Kind.CREATED, savedTitle, savedType, List.of()));
@@ -103,7 +103,7 @@ public class BookService {
                 break;
             }
         }
-        bookRepository.save(books);
+        bookRepository.updateAll(books);
         mainEventPublisher.publishEvent(new BookChangedEvent(
                 id, BookChangedEvent.Kind.UPDATED, updated.getTitle(), updated.getType(), List.of()));
         log.info("更新分组 {}（title={}，icon={}，sortOrder={}）", id, title, icon, sortOrder);
@@ -125,7 +125,7 @@ public class BookService {
         noteRepository.updateAll(moved);
         List<BookPO> books = bookRepository.getAll();
         books.removeIf(book -> id.equals(book.getId()));
-        bookRepository.save(books);
+        bookRepository.updateAll(books);
         List<String> movedNoteIds = moved.stream().map(NotePO::getNoteId).toList();
         if (deleted != null) {
             mainEventPublisher.publishEvent(new BookChangedEvent(

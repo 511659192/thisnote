@@ -30,7 +30,7 @@ public class AiSettingsService {
     }
 
     public synchronized Settings settings() {
-        AiSettingsRepository.StoredSettings stored = settingsRepository.loadSettings();
+        AiSettingsRepository.StoredSettings stored = settingsRepository.getSettings();
         if (stored == null) {
             return defaults();
         }
@@ -44,12 +44,12 @@ public class AiSettingsService {
 
     public AiRuntimeEvent.Runtime runtime() {
         Settings settings = settings();
-        return new AiRuntimeEvent.Runtime(settings.provider(), settings.model(), settingsRepository.apiKey(settings.provider()));
+        return new AiRuntimeEvent.Runtime(settings.provider(), settings.model(), settingsRepository.getApiKey(settings.provider()));
     }
 
     public SettingsResponse response() {
         Settings settings = settings();
-        return new SettingsResponse(settings.provider(), settings.model(), settings.maxTextChars(), !settingsRepository.apiKey(settings.provider()).isBlank());
+        return new SettingsResponse(settings.provider(), settings.model(), settings.maxTextChars(), !settingsRepository.getApiKey(settings.provider()).isBlank());
     }
 
     public synchronized SettingsResponse save(SettingsUpdate update) {
@@ -64,15 +64,15 @@ public class AiSettingsService {
         int maxTextChars = update.maxTextChars() == null ? settings().maxTextChars() : requireMaxTextChars(update.maxTextChars());
         Settings next = new Settings(provider.name(), model, maxTextChars);
 
-        Map<String, String> apiKeys = new LinkedHashMap<>(settingsRepository.readApiKeys());
+        Map<String, String> apiKeys = new LinkedHashMap<>(settingsRepository.getAllApiKeys());
         if (Boolean.TRUE.equals(update.clearApiKey())) {
             apiKeys.remove(provider.name());
         } else if (update.apiKey() != null && !update.apiKey().isBlank()) {
             apiKeys.put(provider.name(), update.apiKey().trim());
         }
 
-        settingsRepository.saveSettings(new AiSettingsRepository.StoredSettings(next.provider(), next.model(), next.maxTextChars()));
-        settingsRepository.saveApiKeys(apiKeys);
+        settingsRepository.updateSettings(new AiSettingsRepository.StoredSettings(next.provider(), next.model(), next.maxTextChars()));
+        settingsRepository.updateApiKeys(apiKeys);
         return new SettingsResponse(next.provider(), next.model(), next.maxTextChars(), !apiKeys.getOrDefault(next.provider(), "").isBlank());
     }
 

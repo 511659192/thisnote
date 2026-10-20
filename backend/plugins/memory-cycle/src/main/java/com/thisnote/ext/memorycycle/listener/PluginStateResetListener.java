@@ -2,7 +2,6 @@ package com.thisnote.ext.memorycycle.listener;
 
 import com.thisnote.ext.memorycycle.MemoryCyclePlugin;
 import com.thisnote.ext.memorycycle.service.MemoryCycleService;
-import com.thisnote.plugin.api.event.PluginResetResult;
 import com.thisnote.plugin.api.event.PluginStateResetEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,18 +17,9 @@ public class PluginStateResetListener
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
-        PluginStateResetEvent reset = event.getPayload();
         try {
             memoryCycleService.clearAll();
-            if (reset.expects(MemoryCyclePlugin.PLUGIN_ID)) {
-                reset.complete(MemoryCyclePlugin.PLUGIN_ID,
-                        PluginResetResult.reset(MemoryCyclePlugin.PLUGIN_ID, "记忆周期排期与复习历史已清空"));
-            }
         } catch (Exception e) {
-            if (reset.expects(MemoryCyclePlugin.PLUGIN_ID)) {
-                reset.complete(MemoryCyclePlugin.PLUGIN_ID,
-                        PluginResetResult.failed(MemoryCyclePlugin.PLUGIN_ID, e));
-            }
             log.error("插件 {} 状态重置失败", MemoryCyclePlugin.PLUGIN_ID, e);
         }
     }

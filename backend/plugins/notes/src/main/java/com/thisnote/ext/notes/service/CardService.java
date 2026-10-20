@@ -70,7 +70,7 @@ public class CardService {
         double h = Math.max(CardRepository.MIN_H, req.h());
 
         CardMeta card = new CardMeta().setX(x).setY(y).setW(w).setH(h).setColor(req.color()).setNoteId(note.getNoteId());
-        cardRepository.save(card, content, fixedFileName, note.getTitle());
+        cardRepository.insert(card, content, fixedFileName, note.getTitle());
 
         List<String> cardIds = new ArrayList<>(note.getCardIds());
         cardIds.add(card.getCardId());

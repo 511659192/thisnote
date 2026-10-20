@@ -26,7 +26,7 @@ public class BaiduSyncSettingsRepository {
         this.file = pluginDirectory.resolve(".credentials.json");
     }
 
-    public synchronized BaiduSyncSettings get() {
+    public synchronized BaiduSyncSettings getSettings() {
         try {
             BaiduSyncSettings settings = read();
             return settings == null ? BaiduSyncSettings.empty() : settings;
@@ -39,7 +39,7 @@ public class BaiduSyncSettingsRepository {
                                                             String appKey,
                                                             String secretKey,
                                                             String signKey) {
-        BaiduSyncSettings current = get();
+        BaiduSyncSettings current = getSettings();
         BaiduSyncSettings updated = current.withCredentials(appName.isBlank() ? current.appName() : appName.trim(),
                                                             appKey.isBlank() ? current.appKey() : appKey.trim(),
                                                             secretKey.isBlank() ? current.secretKey() : secretKey,
@@ -49,13 +49,13 @@ public class BaiduSyncSettingsRepository {
     }
 
     public synchronized void updateAutoSync(boolean autoSync) {
-        fileHelper.fileWritten(file, get().withAutoSync(autoSync));
+        fileHelper.fileWritten(file, getSettings().withAutoSync(autoSync));
     }
 
     public synchronized void updateTokens(String accessToken,
                                           String refreshToken,
                                           long expiresAt) {
-        fileHelper.fileWritten(file, get().withTokens(accessToken, refreshToken, expiresAt));
+        fileHelper.fileWritten(file, getSettings().withTokens(accessToken, refreshToken, expiresAt));
     }
 
     private BaiduSyncSettings read() throws IOException {

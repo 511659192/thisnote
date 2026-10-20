@@ -39,14 +39,14 @@ public class TagsService {
     }
 
     public Map<String, List<String>> all() {
-        return tagsRepository.all();
+        return tagsRepository.getAll();
     }
 
     public synchronized List<String> add(String noteId,
                                          String tag) {
         String normalizedNoteId = requireNoteId(noteId);
         String normalizedTag = requireTag(tag);
-        NoteUsage current = tagsRepository.entries().get(normalizedNoteId);
+        NoteUsage current = tagsRepository.getAllEntries().get(normalizedNoteId);
         List<String> noteTags = new ArrayList<>(current == null ? List.of() : current.tags());
         if (!noteTags.contains(normalizedTag)) {
             noteTags.add(normalizedTag);
@@ -59,14 +59,14 @@ public class TagsService {
                                             String tag) {
         String normalizedNoteId = requireNoteId(noteId);
         String normalizedTag = requireTag(tag);
-        NoteUsage current = tagsRepository.entries().get(normalizedNoteId);
+        NoteUsage current = tagsRepository.getAllEntries().get(normalizedNoteId);
         List<String> noteTags = new ArrayList<>(current == null ? List.of() : current.tags());
         if (noteTags.remove(normalizedTag)) {
             Map<String, Integer> occurrences = current == null
                     ? new LinkedHashMap<>()
                     : new LinkedHashMap<>(current.occurrences());
             occurrences.remove(normalizedTag);
-            tagsRepository.replaceNoteTags(
+            tagsRepository.updateNoteTags(
                     normalizedNoteId,
                     noteTags,
                     occurrences,
@@ -81,7 +81,7 @@ public class TagsService {
                                                int maxTotal,
                                                String noteText) {
         String normalizedNoteId = requireNoteId(noteId);
-        NoteUsage current = tagsRepository.entries().get(normalizedNoteId);
+        NoteUsage current = tagsRepository.getAllEntries().get(normalizedNoteId);
         List<String> noteTags = new ArrayList<>(current == null ? List.of() : current.tags());
         for (String candidate : candidates) {
             if (noteTags.size() >= maxTotal) {
@@ -93,24 +93,24 @@ public class TagsService {
             }
         }
         Map<String, Integer> occurrences = TagTextCounter.counts(noteText, noteTags);
-        tagsRepository.replaceNoteTags(normalizedNoteId, noteTags, occurrences, true);
+        tagsRepository.updateNoteTags(normalizedNoteId, noteTags, occurrences, true);
         return List.copyOf(noteTags);
     }
 
     public int removeEverywhere(String tag) {
-        return tagsRepository.removeEverywhere(requireTag(tag));
+        return tagsRepository.deleteTagEverywhere(requireTag(tag));
     }
 
     public boolean removeNote(String noteId) {
-        return tagsRepository.removeNote(noteId);
+        return tagsRepository.deleteNote(noteId);
     }
 
     public void clear() {
-        tagsRepository.clear();
+        tagsRepository.deleteAll();
     }
 
     public Map<String, Integer> usageCounts() {
-        Map<String, NoteUsage> entries = tagsRepository.entries();
+        Map<String, NoteUsage> entries = tagsRepository.getAllEntries();
         Map<String, Integer> counts = new LinkedHashMap<>();
         entries.values().forEach(entry -> entry.tags().forEach(tag -> counts.putIfAbsent(tag, 0)));
         entries.values().forEach(entry ->
@@ -119,7 +119,7 @@ public class TagsService {
     }
 
     public boolean hasUninitializedUsage() {
-        return tagsRepository.entries().values().stream()
+        return tagsRepository.getAllEntries().values().stream()
                 .anyMatch(entry -> !entry.tags().isEmpty() && !entry.countsInitialized());
     }
 
@@ -140,7 +140,7 @@ public class TagsService {
                 notesById.put(note.noteId(), note);
             }
         }
-        tagsRepository.entries().forEach((noteId, entry) -> {
+        tagsRepository.getAllEntries().forEach((noteId, entry) -> {
             if (entry.tags().isEmpty() || entry.countsInitialized()) {
                 return;
             }
@@ -155,22 +155,22 @@ public class TagsService {
                     entry.tags()
             ));
         });
-        tagsRepository.replaceOccurrencesBatch(refreshed, notesToRemove);
+        tagsRepository.updateOccurrencesBatch(refreshed, notesToRemove);
     }
 
     public void refreshOccurrences(String noteId) {
         String normalizedNoteId = requireNoteId(noteId);
-        NoteUsage current = tagsRepository.entries().get(normalizedNoteId);
+        NoteUsage current = tagsRepository.getAllEntries().get(normalizedNoteId);
         if (current == null || current.tags().isEmpty()) {
             return;
         }
         NoteDTO note = note(normalizedNoteId);
         if (note == null) {
-            tagsRepository.removeNote(normalizedNoteId);
+            tagsRepository.deleteNote(normalizedNoteId);
             return;
         }
         List<CardDTO> cards = cards(normalizedNoteId);
-        tagsRepository.replaceOccurrences(
+        tagsRepository.updateOccurrences(
                 normalizedNoteId,
                 TagTextCounter.counts(TagTextCounter.noteText(note, cards), current.tags())
         );
@@ -181,13 +181,13 @@ public class TagsService {
                                      NoteUsage current) {
         try {
             Map<String, Integer> occurrences = TagTextCounter.counts(noteText(noteId), noteTags);
-            tagsRepository.replaceNoteTags(noteId, noteTags, occurrences, true);
+            tagsRepository.updateNoteTags(noteId, noteTags, occurrences, true);
         } catch (Exception e) {
             log.error("标签计数刷新失败，保留待补算状态：noteId={}", noteId, e);
             Map<String, Integer> occurrences = current == null
                     ? Map.of()
                     : current.occurrences();
-            tagsRepository.replaceNoteTags(
+            tagsRepository.updateNoteTags(
                     noteId,
                     noteTags,
                     occurrences,

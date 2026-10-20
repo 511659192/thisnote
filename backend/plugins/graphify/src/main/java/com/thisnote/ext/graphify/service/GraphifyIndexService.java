@@ -158,7 +158,7 @@ public class GraphifyIndexService {
     public void initialize() {
         try {
             Files.createDirectories(corpusDir);
-            indexState = stateRepository.indexState();
+            indexState = stateRepository.getIndexState();
             if (indexState.initialized()
                     && indexState.noteIds().isEmpty()) {
                 resetEmptyGraph("启动时发现空语料，历史图谱已清空");
@@ -545,7 +545,7 @@ public class GraphifyIndexService {
                 Exception failure = null;
                 try {
                     clearGeneratedContent();
-                    stateRepository.clear();
+                    stateRepository.deleteState();
                     indexState = GraphifyStateRepository.IndexState.empty();
                     currentStatus = statusFor("等待首次索引", false, 0, 0, 0, List.of(), null);
                     log.info("Graphify 状态已重置");
@@ -620,7 +620,7 @@ public class GraphifyIndexService {
             attachmentToNotes.forEach((fileName, ids) -> attachmentMap.put(fileName, List.copyOf(ids)));
             GraphifyStateRepository.IndexState projected = new GraphifyStateRepository.IndexState(
                     previous.initialized(), previous.lastCompletedAt(), noteIds, cardToNote, attachmentMap);
-            stateRepository.saveIndexState(projected);
+            stateRepository.updateIndexState(projected);
             indexState = projected;
             if (force) {
                 warnings.add("强制重新抽取会绕过 Graphify 语义缓存，可能重新调用模型并产生费用");
@@ -633,7 +633,7 @@ public class GraphifyIndexService {
             String completedAt = Instant.now().toString();
             GraphifyStateRepository.IndexState successful = new GraphifyStateRepository.IndexState(
                     true, completedAt, noteIds, cardToNote, attachmentMap);
-            stateRepository.saveIndexState(successful);
+            stateRepository.updateIndexState(successful);
             indexState = successful;
             if (!Files.isRegularFile(graphHtmlFile)) {
                 warnings.add("Graphify 未生成 graph.html；图数据仍可从 graph.json 读取");
@@ -702,7 +702,7 @@ public class GraphifyIndexService {
             if (changed.isEmpty() && snapshot.deletedNoteIds().isEmpty()) {
                 indexState = new GraphifyStateRepository.IndexState(true, Instant.now().toString(),
                         noteIds, cardToNote, toAttachmentListMap(attachmentToNotes));
-                stateRepository.saveIndexState(indexState);
+                stateRepository.updateIndexState(indexState);
                 currentStatus = statusFor("就绪", false, 100, 0, 0, warnings, null);
                 log.info("Graphify 增量批次无需更新图谱：elapsedMs={}",
                         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
@@ -736,7 +736,7 @@ public class GraphifyIndexService {
             GraphifyStateRepository.IndexState projected = new GraphifyStateRepository.IndexState(
                     true, indexState.lastCompletedAt(), noteIds, cardToNote,
                     toAttachmentListMap(attachmentToNotes));
-            stateRepository.saveIndexState(projected);
+            stateRepository.updateIndexState(projected);
             indexState = projected;
             if (!projectionChanged && snapshot.deletedNoteIds().isEmpty()) {
                 currentStatus = statusFor("就绪", false, 100, completed, changed.size(), warnings, null);
@@ -756,7 +756,7 @@ public class GraphifyIndexService {
             runGraphifyPipeline(settings, apiKey, false, false);
             indexState = new GraphifyStateRepository.IndexState(true, Instant.now().toString(),
                     noteIds, cardToNote, toAttachmentListMap(attachmentToNotes));
-            stateRepository.saveIndexState(indexState);
+            stateRepository.updateIndexState(indexState);
             currentStatus = statusFor("就绪", false, 100, completed, changed.size(), warnings, null);
             log.info("Graphify 增量同步完成：updated={}, deleted={}, cards={}, attachments={}, warnings={}, elapsedMs={}",
                     changed.size(), snapshot.deletedNoteIds().size(), cardToNote.size(), attachmentToNotes.size(),
@@ -786,7 +786,7 @@ public class GraphifyIndexService {
             GraphifyStateRepository.IndexState updated = new GraphifyStateRepository.IndexState(current.initialized(),
                     Instant.now().toString(),
                     current.noteIds(), current.cardToNote(), current.attachmentToNotes());
-            stateRepository.saveIndexState(updated);
+            stateRepository.updateIndexState(updated);
             indexState = updated;
             currentStatus = statusFor("就绪", false, 100, 0, 0, warnings, null);
             log.info("Graphify 社区命名完成：elapsedMs={}",
@@ -1161,7 +1161,7 @@ public class GraphifyIndexService {
         int cleared = clearGeneratedContent();
         indexState = new GraphifyStateRepository.IndexState(
                 true, Instant.now().toString(), Set.of(), Map.of(), Map.of());
-        stateRepository.saveIndexState(indexState);
+        stateRepository.updateIndexState(indexState);
         currentStatus = statusFor("就绪", false, 100, 0, 0, List.of(), null);
         log.info("{}：clearedFiles={}", reason, cleared);
     }

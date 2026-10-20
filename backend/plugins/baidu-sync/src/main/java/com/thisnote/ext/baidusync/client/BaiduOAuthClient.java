@@ -60,11 +60,11 @@ public class BaiduOAuthClient {
         params.put("client_secret", settings.secretKey());
         JSONObject token = postToken(params);
         saveTokens(token, settings.refreshToken());
-        return settingsRepository.get().accessToken();
+        return settingsRepository.getSettings().accessToken();
     }
 
     private BaiduSyncSettings requireClientSettings() {
-        BaiduSyncSettings settings = settingsRepository.get();
+        BaiduSyncSettings settings = settingsRepository.getSettings();
         if (settings.appKey().isBlank() || settings.secretKey().isBlank()) {
             throw new IllegalStateException("请先填写百度 AppKey 和 SecretKey 并保存");
         }

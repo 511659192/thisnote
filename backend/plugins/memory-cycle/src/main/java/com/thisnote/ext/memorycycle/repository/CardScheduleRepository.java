@@ -31,21 +31,21 @@ public class CardScheduleRepository {
     }
 
     public synchronized CardSchedule getOne(String cardId) {
-        return loadAll().get(cardId);
+        return getAllById().get(cardId);
     }
 
     public synchronized List<CardSchedule> getAll() {
-        return new ArrayList<>(loadAll().values());
+        return new ArrayList<>(getAllById().values());
     }
 
-    public synchronized void save(CardSchedule schedule) {
-        Map<String, CardSchedule> schedules = loadAll();
+    public synchronized void update(CardSchedule schedule) {
+        Map<String, CardSchedule> schedules = getAllById();
         schedules.put(schedule.getCardId(), schedule);
         writeJson(schedules);
     }
 
     public synchronized boolean delete(String cardId) {
-        Map<String, CardSchedule> schedules = loadAll();
+        Map<String, CardSchedule> schedules = getAllById();
         if (schedules.remove(cardId) == null) {
             return false;
         }
@@ -54,11 +54,11 @@ public class CardScheduleRepository {
     }
 
     /** 状态重置：把排期文件重置为空 map。 */
-    public synchronized void clear() {
+    public synchronized void deleteAll() {
         writeJson(new LinkedHashMap<>());
     }
 
-    public synchronized Map<String, CardSchedule> loadAll() {
+    public synchronized Map<String, CardSchedule> getAllById() {
         try {
             String json;
             try {

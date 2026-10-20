@@ -17,7 +17,7 @@ public class FavoriteService {
     }
 
     public List<String> favoriteNoteIds() {
-        return favoriteRepository.favoriteNoteIds();
+        return favoriteRepository.getAllFavoriteNoteIds();
     }
 
     public boolean isFavorite(String noteId) {
@@ -25,19 +25,19 @@ public class FavoriteService {
     }
 
     public void setFavorite(String noteId, boolean favorite) {
-        favoriteRepository.setFavorite(noteId, favorite);
+        favoriteRepository.updateFavorite(noteId, favorite);
         log.info("笔记 {} 收藏 → {}", noteId, favorite);
     }
 
     public boolean removeFavorite(String noteId) {
-        boolean removed = favoriteRepository.removeFavorite(noteId);
+        boolean removed = favoriteRepository.deleteFavorite(noteId);
         log.info("笔记 {} 取消收藏（原收藏={}）", noteId, removed);
         return removed;
     }
 
     /** 状态重置：清空全部收藏。 */
     public void clear() {
-        favoriteRepository.clear();
+        favoriteRepository.deleteAll();
         log.info("收藏状态已清空");
     }
 }

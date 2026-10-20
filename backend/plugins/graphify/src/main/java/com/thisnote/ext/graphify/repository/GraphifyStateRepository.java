@@ -29,7 +29,7 @@ public class GraphifyStateRepository {
         this.indexStateFile = pluginDir.resolve("index-state.json");
     }
 
-    public synchronized IndexState indexState() {
+    public synchronized IndexState getIndexState() {
         if (cachedIndexState != null) {
             return cachedIndexState;
         }
@@ -46,12 +46,12 @@ public class GraphifyStateRepository {
         }
     }
 
-    public synchronized void saveIndexState(IndexState state) {
+    public synchronized void updateIndexState(IndexState state) {
         cachedIndexState = state;
         fileHelper.fileWritten(indexStateFile, state);
     }
 
-    public synchronized void clear() {
+    public synchronized void deleteState() {
         if (!fileHelper.fileDeleted(indexStateFile) && Files.exists(indexStateFile)) {
             throw new IllegalStateException("Graphify 索引状态文件无法删除");
         }

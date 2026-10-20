@@ -75,7 +75,7 @@ public class BaiduSyncService {
         }
         this.backupScope = new BackupScope(notesRoot, installedPluginIds);
 
-        BaiduSyncSettings settings = settingsRepository.get();
+        BaiduSyncSettings settings = settingsRepository.getSettings();
         validateSettings(settings);
         this.settings = settings;
 
@@ -86,7 +86,7 @@ public class BaiduSyncService {
     }
 
     public void initializeRemoteDirectories() throws IOException {
-        BaiduSyncSettings settings = settingsRepository.get();
+        BaiduSyncSettings settings = settingsRepository.getSettings();
         if (settings.appName().isBlank() || (settings.accessToken().isBlank() && settings.refreshToken().isBlank())) {
             log.error("百度网盘同步配置不完整：appName 或授权令牌为空");
             return;
@@ -138,7 +138,7 @@ public class BaiduSyncService {
         if (status.running()) {
             throw new IllegalStateException("同步进行中，无法重置同步基线");
         }
-        stateRepository.save(BaiduSyncState.empty(notesRoot.toString(), remoteRoot));
+        stateRepository.update(BaiduSyncState.empty(notesRoot.toString(), remoteRoot));
         status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
         log.info("百度网盘同步基线已重置（授权凭据保留）");
     }
@@ -151,7 +151,7 @@ public class BaiduSyncService {
         String accessToken = oauthClient.accessToken();
         RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
 
-        BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
+        BaiduSyncState baseline = stateRepository.getState(notesRoot.toString(), remoteRoot);
         List<FileChange> changes = planFileChanges(local, remote, baseline);
         int consistent = countConsistentFiles(local, remote.files());
         return createPreview(consistent, changes);
@@ -200,7 +200,7 @@ public class BaiduSyncService {
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 300_000)
     public void scheduledSync() {
-        if (settingsRepository.get().autoSync()) {
+        if (settingsRepository.getSettings().autoSync()) {
             startSync();
         }
     }
@@ -213,7 +213,7 @@ public class BaiduSyncService {
             LocalSnapshot localSnapshot = scanLocalSnapshot();
             Map<String, LocalItem> local = localSnapshot.files();
             RemoteSnapshot remote = scanRemote(accessToken, remoteRoot);
-            BaiduSyncState baseline = stateRepository.get(notesRoot.toString(), remoteRoot);
+            BaiduSyncState baseline = stateRepository.getState(notesRoot.toString(), remoteRoot);
 
             List<FileChange> changes = planFileChanges(local, remote, baseline);
             if (CollectionUtil.isEmpty(changes)) {
@@ -377,7 +377,7 @@ public class BaiduSyncService {
         Map<String, BaiduPanEntry> remoteFiles = listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths);
         // 重新读取传输后的两端状态；只有仍匹配的路径才写入基线。
         // 例如上传期间本地文件又被编辑、两端指纹不一致时，移除旧基线，下一轮再按无基线差异决策。
-        BaiduSyncState current = stateRepository.get(notesRoot.toString(), remoteRoot);
+        BaiduSyncState current = stateRepository.getState(notesRoot.toString(), remoteRoot);
         Map<String, String> files = new LinkedHashMap<>();
         current.files().forEach((relative, fingerprint) -> {
             if (backupScope.includes(relative)) {
@@ -399,7 +399,7 @@ public class BaiduSyncService {
             }
         }
 
-        stateRepository.save(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), files, directories));
+        stateRepository.update(new BaiduSyncState(notesRoot.toString(), remoteRoot, System.currentTimeMillis(), files, directories));
     }
 
     private void addParentDirectories(String parent,

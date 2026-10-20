@@ -29,7 +29,7 @@ public class BaiduSyncSettingsService {
     }
 
     public SettingsView getSettings() {
-        return settingsView(settingsRepository.get());
+        return settingsView(settingsRepository.getSettings());
     }
 
     public SettingsView updateSettings(UpdateSettingsRequest request) {
@@ -47,12 +47,12 @@ public class BaiduSyncSettingsService {
 
     public SettingsView exchangeCode(ExchangeCodeRequest request) {
         oauthClient.exchangeCode(Objects.toString(request.code(), "").trim());
-        return settingsView(settingsRepository.get());
+        return settingsView(settingsRepository.getSettings());
     }
 
     public SettingsView updateAutoSync(boolean value) {
         settingsRepository.updateAutoSync(value);
-        return settingsView(settingsRepository.get());
+        return settingsView(settingsRepository.getSettings());
     }
 
     private SettingsView settingsView(BaiduSyncSettings settings) {

@@ -32,7 +32,7 @@ public class GraphifySettingsService {
 
     public Settings settings() {
         AiRuntimeEvent.Runtime runtime = aiClient.runtime();
-        return new Settings(runtime.provider(), runtime.model(), settingsRepository.executablePath());
+        return new Settings(runtime.provider(), runtime.model(), settingsRepository.getExecutablePath());
     }
 
     public String apiKey(String provider) {
@@ -51,7 +51,7 @@ public class GraphifySettingsService {
             throw new IllegalArgumentException("设置不能为空");
         }
         String executablePath = update.executablePath() == null ? "" : update.executablePath().trim();
-        settingsRepository.saveExecutablePath(executablePath);
+        settingsRepository.updateExecutablePath(executablePath);
         return response();
     }
 

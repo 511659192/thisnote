@@ -1,30 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { host } from '@thisnote/plugin-api'
-import { stateResetApi, type PluginStateResetReport, type PluginResetStatus } from '../api/stateResetApi'
+import { stateResetApi } from '../api/stateResetApi'
 
 const busy = ref(false)
 const confirming = ref(false)
-const report = ref<PluginStateResetReport | null>(null)
 const error = ref('')
-
-const statusLabels: Record<PluginResetStatus, string> = {
-  RESET: '已重置',
-  SKIPPED: '无需重置',
-  FAILED: '失败',
-}
 
 async function reset() {
   if (busy.value) return
   busy.value = true
-  report.value = null
   error.value = ''
   try {
-    const resetReport = await stateResetApi.reset()
-    report.value = resetReport
+    await stateResetApi.reset()
     confirming.value = false
-    host().notify(resetReport.ok ? '插件状态已重置' : '插件状态重置部分失败',
-      resetReport.ok ? 'success' : 'error')
+    host().notify('插件状态重置已提交', 'success')
   } catch (e) {
     error.value = (e as Error).message
     host().notify(`重置失败：${(e as Error).message}`, 'error')
@@ -37,7 +27,7 @@ async function reset() {
 <template>
   <section class="state-reset-settings">
     <h3>插件状态重置</h3>
-    <p>重置全部已安装插件；活动插件执行自身清理，停用插件按插件清单清理状态文件：</p>
+    <p>重置活动插件状态；停用插件不启动、不清理：</p>
     <ul>
       <li>收藏：重置收藏文件</li>
       <li>记忆周期：重置排期文件</li>
@@ -57,13 +47,6 @@ async function reset() {
       </template>
     </div>
     <p v-if="error" class="small error">{{ error }}</p>
-    <ul v-if="report" class="reset-results">
-      <li v-for="item in report.results" :key="item.pluginId">
-        <code>{{ item.pluginId }}</code>
-        <span :class="['status', item.status.toLowerCase()]">{{ statusLabels[item.status] }}</span>
-        <span class="small muted">{{ item.message }}</span>
-      </li>
-    </ul>
   </section>
 </template>
 
@@ -97,34 +80,6 @@ li + li {
 }
 
 .error {
-  color: var(--danger);
-}
-
-.reset-results {
-  list-style: none;
-  padding: 0;
-}
-
-.reset-results li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.status {
-  font-size: 12px;
-}
-
-.status.reset {
-  color: var(--success);
-}
-
-.status.skipped {
-  color: var(--c-text-3);
-}
-
-.status.failed {
   color: var(--danger);
 }
 
