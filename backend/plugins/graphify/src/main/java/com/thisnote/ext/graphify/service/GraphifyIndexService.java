@@ -450,6 +450,9 @@ public class GraphifyIndexService {
     }
 
     public void onNoteChanged(NoteChangedEvent change) {
+        if (change.kind() == NoteChangedEvent.Kind.TEXT_CHANGED) {
+            return;
+        }
         if (change.kind() == NoteChangedEvent.Kind.DELETED) {
             queueNoteDeletion(change.noteId());
         } else {

@@ -2,7 +2,6 @@ package com.thisnote.ext.memorycycle;
 
 import com.thisnote.ext.memorycycle.service.CardChangedEventListener;
 import com.thisnote.ext.memorycycle.service.MemoryCycleService;
-import com.thisnote.ext.memorycycle.service.MemoryCycleStateChangedEventListener;
 import com.thisnote.ext.memorycycle.service.NoteChangedEventListener;
 import com.thisnote.ext.memorycycle.service.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
@@ -29,7 +28,6 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
 
     private CardChangedEventListener cardChangedEventListener;
     private NoteChangedEventListener noteChangedEventListener;
-    private MemoryCycleStateChangedEventListener stateChangedEventListener;
     private PluginStateResetListener stateResetListener;
 
     public MemoryCyclePlugin(PluginWrapper wrapper) {
@@ -65,14 +63,11 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
         MemoryCycleService memoryCycleService = ctx.getBean(MemoryCycleService.class);
-        memoryCycleService.setMainEventPublisher(getMainApplicationContext());
         cardChangedEventListener = new CardChangedEventListener(memoryCycleService);
         noteChangedEventListener = new NoteChangedEventListener(memoryCycleService);
-        stateChangedEventListener = new MemoryCycleStateChangedEventListener(memoryCycleService);
         stateResetListener = new PluginStateResetListener(memoryCycleService);
         getMainApplicationContext().addApplicationListener(cardChangedEventListener);
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
-        getMainApplicationContext().addApplicationListener(stateChangedEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
@@ -89,10 +84,6 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
         if (noteChangedEventListener != null) {
             getMainApplicationContext().removeApplicationListener(noteChangedEventListener);
             noteChangedEventListener = null;
-        }
-        if (stateChangedEventListener != null) {
-            getMainApplicationContext().removeApplicationListener(stateChangedEventListener);
-            stateChangedEventListener = null;
         }
         if (stateResetListener != null) {
             getMainApplicationContext().removeApplicationListener(stateResetListener);

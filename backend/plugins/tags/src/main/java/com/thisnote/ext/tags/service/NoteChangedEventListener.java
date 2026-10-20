@@ -12,12 +12,17 @@ public class NoteChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteChangedEvent>> {
 
     private final TagsService tagsService;
+    private final TagUsageRefreshService tagUsageRefreshService;
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<NoteChangedEvent> event) {
         NoteChangedEvent change = event.getPayload();
-        if (change.kind() == NoteChangedEvent.Kind.DELETED && tagsService.removeNote(change.noteId())) {
-            log.info("笔记已删除，标签一并清除：{}", change.noteId());
+        if (change.kind() == NoteChangedEvent.Kind.DELETED) {
+            if (tagsService.removeNote(change.noteId())) {
+                log.info("笔记已删除，标签一并清除：{}", change.noteId());
+            }
+        } else if (change.kind() == NoteChangedEvent.Kind.TITLE_CHANGED || change.kind() == NoteChangedEvent.Kind.TEXT_CHANGED) {
+            tagUsageRefreshService.request(change.noteId());
         }
     }
 }

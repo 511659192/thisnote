@@ -15,6 +15,6 @@ public record NoteChangedEvent(String noteId, Kind kind, String title, List<Stri
     }
 
     public enum Kind {
-        CREATED, TITLE_CHANGED, DELETED
+        CREATED, TITLE_CHANGED, TEXT_CHANGED, DELETED
     }
 }

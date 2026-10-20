@@ -4,9 +4,7 @@ import com.thisnote.ext.memorycycle.model.CardSchedule;
 import com.thisnote.ext.memorycycle.model.ScheduleHistoryEntry;
 import com.thisnote.ext.memorycycle.repository.CardScheduleRepository;
 import com.thisnote.ext.memorycycle.repository.ScheduleHistoryRepository;
-import com.thisnote.plugin.api.event.MemoryCycleStateChangedEvent;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -21,12 +19,9 @@ public class MemoryCycleService {
 
     private final CardScheduleRepository scheduleRepository;
     private final ScheduleHistoryRepository historyRepository;
-    private ApplicationEventPublisher mainEventPublisher;
 
-    public MemoryCycleService(ApplicationEventPublisher mainEventPublisher,
-                              CardScheduleRepository scheduleRepository,
+    public MemoryCycleService(CardScheduleRepository scheduleRepository,
                               ScheduleHistoryRepository historyRepository) {
-        this.mainEventPublisher = mainEventPublisher;
         this.scheduleRepository = scheduleRepository;
         this.historyRepository = historyRepository;
     }
@@ -78,12 +73,8 @@ public class MemoryCycleService {
         return schedule;
     }
 
-    public void setMainEventPublisher(ApplicationEventPublisher publisher) {
-        this.mainEventPublisher = publisher;
-    }
-
     /**
-     * Enable a card with a fresh schedule, or publish the state change for listeners to handle.
+     * Enable a card with a fresh schedule, or delete its schedule and history when disabled.
      */
     public synchronized void setEnabled(String cardId,
                                         boolean enabled) {
@@ -92,10 +83,9 @@ public class MemoryCycleService {
         if (enabled) {
             createIfAbsent(cardId);
         } else if (changed) {
-            scheduleRepository.delete(cardId);
+            delete(cardId);
         }
         if (changed) {
-            mainEventPublisher.publishEvent(new MemoryCycleStateChangedEvent(cardId, enabled));
             log.info("卡片 {} 记忆周期 → {}", cardId, enabled ? "开启" : "关闭");
         }
     }

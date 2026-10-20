@@ -2,7 +2,6 @@ package com.thisnote.ext.tags;
 
 import com.thisnote.ext.tags.service.AutoTagService;
 import com.thisnote.ext.tags.service.NoteChangedEventListener;
-import com.thisnote.ext.tags.service.NoteTextChangedEventListener;
 import com.thisnote.ext.tags.service.PluginStateResetListener;
 import com.thisnote.ext.tags.service.TagUsageRefreshService;
 import com.thisnote.ext.tags.service.TagsService;
@@ -18,7 +17,6 @@ public class TagsPlugin extends SpringBootPlugin {
     public static final String PLUGIN_ID = "tags";
 
     private NoteChangedEventListener noteChangedEventListener;
-    private NoteTextChangedEventListener noteTextChangedEventListener;
     private PluginStateResetListener stateResetListener;
 
     public TagsPlugin(PluginWrapper wrapper) {
@@ -43,11 +41,9 @@ public class TagsPlugin extends SpringBootPlugin {
         tagsService.setMainEventPublisher(getMainApplicationContext());
         tagsService.invalidateUsage();
         ctx.getBean(AutoTagService.class).setMainEventPublisher(getMainApplicationContext());
-        noteChangedEventListener = new NoteChangedEventListener(tagsService);
-        noteTextChangedEventListener = new NoteTextChangedEventListener(tagUsageRefreshService);
+        noteChangedEventListener = new NoteChangedEventListener(tagsService, tagUsageRefreshService);
         stateResetListener = new PluginStateResetListener(tagsService);
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
-        getMainApplicationContext().addApplicationListener(noteTextChangedEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
     }
 
@@ -56,10 +52,6 @@ public class TagsPlugin extends SpringBootPlugin {
         if (noteChangedEventListener != null) {
             getMainApplicationContext().removeApplicationListener(noteChangedEventListener);
             noteChangedEventListener = null;
-        }
-        if (noteTextChangedEventListener != null) {
-            getMainApplicationContext().removeApplicationListener(noteTextChangedEventListener);
-            noteTextChangedEventListener = null;
         }
         if (stateResetListener != null) {
             getMainApplicationContext().removeApplicationListener(stateResetListener);

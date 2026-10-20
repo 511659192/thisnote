@@ -11,7 +11,7 @@ import com.thisnote.ext.notes.model.request.UpdateCardRequest;
 import com.thisnote.ext.notes.repository.CardRepository;
 import com.thisnote.ext.notes.repository.NoteRepository;
 import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.NoteTextChangedEvent;
+import com.thisnote.plugin.api.event.NoteChangedEvent;
 import com.thisnote.plugin.api.exception.ConflictException;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import lombok.RequiredArgsConstructor;
@@ -77,7 +77,7 @@ public class CardService {
         note.setCardIds(cardIds);
         noteRepository.update(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(card.getCardId(), CardChangedEvent.Kind.CREATED));
-        mainEventPublisher.publishEvent(new NoteTextChangedEvent(noteId));
+        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TEXT_CHANGED, note.getTitle(), List.of()));
         log.info("笔记 {} 新建卡片 {}", noteId, card.getCardId());
         return notesMapper.toCardDTO(new CardPO(card, content));
     }
@@ -107,7 +107,7 @@ public class CardService {
         noteRepository.update(note);
         attachmentService.deleteIfUnreferenced(removedAttachments);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.UPDATED));
-        mainEventPublisher.publishEvent(new NoteTextChangedEvent(noteId));
+        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TEXT_CHANGED, note.getTitle(), List.of()));
         log.debug("卡片 {} 内容已保存（{} 字符）", cardId, body.length());
         CardPO saved = cardRepository.getOne(cardId);
         return notesMapper.toCardDTO(saved == null ? new CardPO(cardMeta, body) : saved);
@@ -172,7 +172,7 @@ public class CardService {
         note.setCardIds(note.getCardIds().stream().filter(id -> !id.equals(cardId)).toList());
         noteRepository.update(note);
         mainEventPublisher.publishEvent(new CardChangedEvent(cardId, CardChangedEvent.Kind.DELETED, removedAttachments));
-        mainEventPublisher.publishEvent(new NoteTextChangedEvent(noteId));
+        mainEventPublisher.publishEvent(new NoteChangedEvent(noteId, NoteChangedEvent.Kind.TEXT_CHANGED, note.getTitle(), List.of()));
         log.info("笔记 {} 删除卡片 {}", noteId, cardId);
     }
 

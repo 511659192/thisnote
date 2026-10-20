@@ -159,11 +159,10 @@ host（qiankun 主应用，:5173）
 | `event/PluginNotification` / `PluginCommand` / `PluginControl` | 单向通知、无返回值命令、平台控制信号的类型分类 |
 | `event/PluginQuery<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
-| `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/DELETED`（2026-10-18 删除无引用的 `REQUEST` 分支与 `NoteCreateRequest` 载荷） |
-| `event/NoteTextChangedEvent` | 标题或卡片正文变化，Tags 据此只刷新受影响笔记的标签出现次数 |
+| `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/TEXT_CHANGED/DELETED`；`TITLE_CHANGED/TEXT_CHANGED` 触发 Tags 只刷新受影响笔记的标签出现次数 |
 | `event/AiRuntimeEvent` | Graphify 向 AI 核心插件查询当前 Provider、模型与 API key；运行时通过事件传递，不读取配置文件 |
 | `event/NoteTagSuggestionEvent` | 可选标签建议契约：请求方发起 `noteId + limit`，语义提供者完成 `CompletableFuture<List<String>>`；双方不共享存储 |
-| `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds` |
+| `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds`；业务层分组变更通知，与底层文件变更不同 |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
 | `event/NoteContentQueryEvent` | `noteId` + `CompletableFuture<NoteCardDTO>`：notes 侧返回笔记元数据与卡片正文 |
 | `event/NoteListQueryEvent` | `CompletableFuture<List<NoteDTO>>`：notes 侧返回全部笔记元数据 |
@@ -174,7 +173,6 @@ host（qiankun 主应用，:5173）
 | `event/PluginStateResetEvent` | 状态重置（`sourcePluginId` + 活动插件 future 表）：各插件完成清理并回报 `PluginResetResult` |
 | `event/PluginStateResetReport` | 全部已安装插件的重置汇总；状态为 `RESET / SKIPPED / FAILED` |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
-| `event/MemoryCycleStateChangedEvent` | `cardId + enabled` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
 | `notes/dto/*` | `NoteDTO`、`CardDTO`、`CardMetaDTO`、`NoteCardDTO(note,cards)`、`BookDTO`、`AttachmentDTO(fileName,size,width,height)` |
 
@@ -471,7 +469,7 @@ host（qiankun 主应用，:5173）
 - 标签是独立插件的业务状态，存储在 `notes/plugins/tags/tags.json`；插件不读取 Graphify、notes 或其他插件的数据目录。
 - `tags.json` 保存每篇笔记的 `tags` 与该笔记内各标签的 `occurrences`。
   `/tags/usage` 直接聚合持久化计数，不再每次读取全部笔记正文。
-- Notes 发布 `NoteTextChangedEvent` 后，tags 将对应笔记标记为待刷新，并由单线程防抖任务重算该笔记，
+- Notes 发布 `NoteChangedEvent(TITLE_CHANGED/TEXT_CHANGED)` 后，tags 将对应笔记标记为待刷新，并由单线程防抖任务重算该笔记，
   不阻塞卡片保存请求。
 - tags 硬依赖 `ai,notes`；AI 自动标签通过 `NoteTagSuggestionEvent` 请求文本与视觉概念，标签落盘仍由 tags 自己完成。
 - 自动抽取通过主容器消息管道读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
@@ -696,8 +694,9 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
      块内同名规则保留）。
 12. ~~`registry.ts:9` 注释说「目前有五个插槽」，实际注册表有 9 个~~（已修复：注释改为指向 §6.4 的完整清单，
      注册表现有 11 个）。
-13. ~~`MemoryCycleStateChangedEventListener` 有两份实例~~（已修复：2026-10-18 删除插件容器内的 `@Component` 死注册——
+13. ~~memory-cycle 的旧状态事件监听器有两份实例~~（已修复：2026-10-18 删除插件容器内的 `@Component` 死注册——
     跨插件事件只经主容器广播，插件容器内那份从未收到过事件；notes 的 `CardAttachmentCleanupListener` 同形态同批修复。
+    该内部状态事件后来改为 service 内直接处理，事件与监听器均已删除。
     各插件按事件类型各写一个 `ApplicationListener<PayloadApplicationEvent<T>>`，在
     `afterPluginBootstrap` 中直接注册到主容器，`stop()` 中逐个摘除；
     `FileChangeEventListener` 保留独立类形态——
