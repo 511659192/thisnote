@@ -156,7 +156,6 @@ host（qiankun 主应用，:5173）
 |---|---|
 | `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`）；另含 `readMapIndex`/`readMapOrEmpty` 两个 JSON 索引读取原语（缺失/损坏语义不同） |
 | `event/PluginEvent` | 所有跨插件事件的强类型标记，不使用 `String + Map` 的通用事件替代具体载荷 |
-| `event/PluginNotification` / `PluginCommand` / `PluginControl` | 单向通知、无返回值命令、平台控制信号的类型分类 |
 | `event/PluginQuery<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
 | `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/TEXT_CHANGED/DELETED`；`TITLE_CHANGED/TEXT_CHANGED` 触发 Tags 只刷新受影响笔记的标签出现次数 |

@@ -1,12 +1,12 @@
 package com.thisnote.plugin.api.event;
 
-import com.thisnote.plugin.api.event.ifaces.PluginNotification;
+import com.thisnote.plugin.api.event.ifaces.PluginEvent;
 
 /**
  * Notes-owned attachment lifecycle notification.
  */
 public record AttachmentChangedEvent(Operation operation, String fileName, String previousFileName)
-        implements PluginNotification {
+        implements PluginEvent {
 
     public AttachmentChangedEvent {
         if (operation == null) {
@@ -33,7 +33,7 @@ public record AttachmentChangedEvent(Operation operation, String fileName, Strin
     }
 
     public static AttachmentChangedEvent renamed(String previousFileName,
-                                                 String fileName) {
+                                                  String fileName) {
         return new AttachmentChangedEvent(Operation.RENAME, fileName, previousFileName);
     }
 

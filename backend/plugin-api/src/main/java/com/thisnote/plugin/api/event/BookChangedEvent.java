@@ -1,6 +1,6 @@
 package com.thisnote.plugin.api.event;
 
-import com.thisnote.plugin.api.event.ifaces.PluginNotification;
+import com.thisnote.plugin.api.event.ifaces.PluginEvent;
 
 import java.util.List;
 
@@ -10,7 +10,7 @@ import java.util.List;
  * @param movedNoteIds note IDs reassigned to the default notebook when deleted; empty otherwise
  */
 public record BookChangedEvent(String bookId, Kind kind, String title, String type, List<String> movedNoteIds)
-        implements PluginNotification {
+        implements PluginEvent {
 
     public BookChangedEvent {
         movedNoteIds = movedNoteIds == null ? List.of() : movedNoteIds;

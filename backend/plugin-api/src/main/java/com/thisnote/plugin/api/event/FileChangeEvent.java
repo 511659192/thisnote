@@ -1,6 +1,6 @@
 package com.thisnote.plugin.api.event;
 
-import com.thisnote.plugin.api.event.ifaces.PluginNotification;
+import com.thisnote.plugin.api.event.ifaces.PluginEvent;
 
 import java.nio.file.Path;
 import java.util.Objects;
@@ -11,7 +11,7 @@ import java.util.Objects;
  * a rename is represented as {@link Operation#RENAME} with both locations.
  */
 public record FileChangeEvent(String sourcePluginId, Operation operation, Path url, Path previousUrl)
-        implements PluginNotification {
+        implements PluginEvent {
 
     public FileChangeEvent {
         if (sourcePluginId == null || sourcePluginId.isBlank()) {
