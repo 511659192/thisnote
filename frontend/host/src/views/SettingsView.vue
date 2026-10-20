@@ -265,7 +265,11 @@ onMounted(async () => {
               >
                 重载
               </button>
-              <button class="btn sm ghost" @click="togglePluginPanel(plugin)">
+              <button
+                v-if="pluginSettings(plugin.id)"
+                class="btn sm ghost"
+                @click="togglePluginPanel(plugin)"
+              >
                 {{ isPluginOpen(plugin.id) ? '收起' : '设置' }}
               </button>
               <button
@@ -284,11 +288,9 @@ onMounted(async () => {
               依赖：<span class="mono">{{ plugin.dependencies.join(', ') }}</span>
             </p>
 
-            <div v-if="isPluginOpen(plugin.id)" class="plugin-body">
+            <div v-if="isPluginOpen(plugin.id) && pluginSettings(plugin.id)" class="plugin-body">
               <!-- 插件自带的设置面板（由插件自己注册，平台不掺和它的内容） -->
-              <component :is="pluginSettings(plugin.id)" v-if="pluginSettings(plugin.id)" />
-              <p v-else class="small muted">这个插件没有自己的设置面板。</p>
-
+              <component :is="pluginSettings(plugin.id)" />
             </div>
           </div>
         </div>
@@ -496,6 +498,8 @@ onMounted(async () => {
 }
 .plugin-desc {
   margin: var(--space-1) 0 0;
+  white-space: pre-line;
+  line-height: 1.55;
 }
 .plugin-body {
   margin-top: var(--space-2);

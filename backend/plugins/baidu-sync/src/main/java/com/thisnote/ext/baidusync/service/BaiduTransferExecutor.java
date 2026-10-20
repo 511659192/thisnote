@@ -31,8 +31,17 @@ final class BaiduTransferExecutor {
                        SyncCounters counters) {
         for (FileChange change : changes) {
             log.debug("上传 {}", change.relative());
-            panClient.upload(accessToken, change.local().file(), remoteRoot + "/" + change.relative());
-            counters.uploaded++;
+            counters.markRunning(change);
+            try {
+                panClient.upload(accessToken, change.local().file(), remoteRoot + "/" + change.relative());
+                counters.uploaded++;
+                counters.markCompleted(change);
+                log.debug("上传完成 {}", change.relative());
+            } catch (RuntimeException e) {
+                log.error("上传失败：{}", change.relative(), e);
+                counters.markFailed(change, e);
+                throw e;
+            }
         }
     }
 
@@ -41,12 +50,28 @@ final class BaiduTransferExecutor {
                          List<FileChange> changes,
                          SyncCounters counters) {
         List<BaiduPanEntry> entries = changes.stream().map(FileChange::remote).toList();
-        Map<Long, String> downloadUrls = panClient.downloadUrls(accessToken, entries);
+        changes.forEach(counters::markRunning);
+        Map<Long, String> downloadUrls;
+        try {
+            downloadUrls = panClient.downloadUrls(accessToken, entries);
+        } catch (RuntimeException e) {
+            log.error("获取下载地址失败：files={}", changes.size(), e);
+            changes.forEach(change -> counters.markFailed(change, e));
+            throw e;
+        }
         for (FileChange change : changes) {
             log.debug("下载 {}", change.relative());
-            panClient.downloadWithUrl(accessToken, change.remote(),
-                    resolveLocal(notesRoot, change.relative()), downloadUrls.get(change.remote().fsId()));
-            counters.downloaded++;
+            try {
+                panClient.downloadWithUrl(accessToken, change.remote(),
+                        resolveLocal(notesRoot, change.relative()), downloadUrls.get(change.remote().fsId()));
+                counters.downloaded++;
+                counters.markCompleted(change);
+                log.debug("下载完成 {}", change.relative());
+            } catch (RuntimeException e) {
+                log.error("下载失败：{}", change.relative(), e);
+                counters.markFailed(change, e);
+                throw e;
+            }
         }
     }
 
@@ -54,10 +79,17 @@ final class BaiduTransferExecutor {
                             SyncCounters counters) {
         for (FileChange change : changes) {
             log.debug("删除本地 {}", change.relative());
+            counters.markRunning(change);
             if (fileHelper.fileDeleted(change.local().file())) {
                 counters.deleted++;
+                counters.markCompleted(change);
+                log.debug("删除本地完成 {}", change.relative());
             } else if (Files.exists(change.local().file())) {
                 log.error("删除本地文件失败：{}", change.local().file());
+                counters.markFailed(change, new IllegalStateException("删除本地文件失败"));
+            } else {
+                counters.markCompleted(change);
+                log.debug("本地文件已不存在，标记删除完成 {}", change.relative());
             }
         }
     }
@@ -69,19 +101,39 @@ final class BaiduTransferExecutor {
             List<FileChange> batch = changes.subList(start,
                     Math.min(start + BaiduPanClient.FILE_MANAGER_BATCH_SIZE, changes.size()));
             List<String> paths = batch.stream().map(change -> change.remote().path()).toList();
-            List<BaiduPanClient.FileManagerFailure> failures = panClient.deleteBatch(accessToken, paths);
+            batch.forEach(counters::markRunning);
+            List<BaiduPanClient.FileManagerFailure> failures;
+            try {
+                failures = panClient.deleteBatch(accessToken, paths);
+            } catch (RuntimeException e) {
+                log.error("删除网盘文件失败：batchSize={}", batch.size(), e);
+                batch.forEach(change -> counters.markFailed(change, e));
+                throw e;
+            }
             Set<String> failedPaths = new LinkedHashSet<>();
             for (BaiduPanClient.FileManagerFailure failure : failures) {
                 String failedPath = failure.path();
                 if (failedPath == null || !paths.contains(failedPath)) {
                     if (paths.size() != 1) {
-                        throw new IllegalStateException("无法对应百度网盘批量删除的失败项：" + failedPath);
+                        IllegalStateException error =
+                                new IllegalStateException("无法对应百度网盘批量删除的失败项：" + failedPath);
+                        batch.forEach(change -> counters.markFailed(change, error));
+                        throw error;
                     }
                     failedPath = paths.get(0);
                 }
                 failedPaths.add(failedPath);
             }
-            counters.deleted += batch.size() - failedPaths.size();
+            for (FileChange change : batch) {
+                if (failedPaths.contains(change.remote().path())) {
+                    counters.markFailed(change,
+                            new IllegalStateException("删除百度网盘文件失败：" + change.remote().path()));
+                } else {
+                    counters.deleted++;
+                    counters.markCompleted(change);
+                    log.debug("删除网盘文件完成 {}", change.relative());
+                }
+            }
             if (!failures.isEmpty()) {
                 BaiduPanClient.FileManagerFailure failure = failures.get(0);
                 throw new IllegalStateException("删除百度网盘文件失败：" + failure.exception().getMessage(),

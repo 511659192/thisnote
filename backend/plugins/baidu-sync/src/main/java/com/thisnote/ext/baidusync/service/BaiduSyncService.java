@@ -171,6 +171,7 @@ public class BaiduSyncService {
 
     private void sync() {
         SyncCounters counters = new SyncCounters();
+        counters.onProgress(() -> status = progressStatus(counters, true, ""));
         try {
             String accessToken = oauthClient.accessToken();
 
@@ -187,6 +188,7 @@ public class BaiduSyncService {
             log.info("change size:{}", CollectionUtil.size(changes));
 
             counters.conflicts = (int) changes.stream().filter(FileChange::conflict).count();
+            counters.initialize(changes);
             transferExecutor.uploadChanges(accessToken, remoteRoot, changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList(), counters);
             transferExecutor.downloadChanges(accessToken, notesRoot, changes.stream().filter(change -> change.action() == FileAction.DOWNLOAD).toList(), counters);
             transferExecutor.deleteLocalChanges(changes.stream().filter(change -> change.action() == FileAction.DELETE_LOCAL).toList(), counters);
@@ -199,7 +201,7 @@ public class BaiduSyncService {
                     .filter(backupScope::includes)
                     .collect(Collectors.toSet());
             saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, allPaths);
-            status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
+            status = progressStatus(counters, false, "");
             log.info("百度网盘同步完成：上传 {} 下载 {} 删除 {} 冲突 {}", counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts);
         } catch (Exception e) {
             failSync(counters, e);
@@ -214,11 +216,12 @@ public class BaiduSyncService {
             failureMessage = "同步失败";
         }
         log.error("百度网盘同步失败：{}", failureMessage, failure);
-        status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, failureMessage);
+        status = progressStatus(counters, false, failureMessage);
     }
 
     private void syncChangedFiles(Set<Path> changedPaths) {
         SyncCounters counters = new SyncCounters();
+        counters.onProgress(() -> status = progressStatus(counters, true, ""));
         try {
             Set<String> relativePaths = planner.changedRelativePaths(notesRoot, changedPaths, backupScope);
             if (relativePaths.isEmpty()) {
@@ -233,15 +236,26 @@ public class BaiduSyncService {
             String accessToken = oauthClient.accessToken();
             Map<String, BaiduPanEntry> remoteFiles = planner.scanRemotePaths(accessToken, remoteRoot, relativePaths);
             List<FileChange> changes = planner.planChanged(relativePaths, localFiles, remoteFiles);
+            counters.initialize(changes);
 
             transferExecutor.uploadChanges(accessToken, remoteRoot, changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList(), counters);
             transferExecutor.deleteRemoteChanges(accessToken, changes.stream().filter(change -> change.action() == FileAction.DELETE_REMOTE).toList(), counters);
             saveChangedFileBaseline(accessToken, notesRoot, remoteRoot, relativePaths);
-            status = new BaiduSyncStatus(false, counters.uploaded, counters.downloaded, counters.deleted, counters.conflicts, "");
+            status = progressStatus(counters, false, "");
             log.warn("百度网盘文件变更同步完成：上传 {} 删除 {}（路径{}）", counters.uploaded, counters.deleted, JSON.toJSONString(changedPaths));
         } catch (Exception e) {
             failSync(counters, e);
         }
+    }
+
+    private BaiduSyncStatus progressStatus(SyncCounters counters,
+                                           boolean running,
+                                           String error) {
+        String statusError = error == null || error.isBlank()
+                ? counters.failureMessage()
+                : error;
+        return new BaiduSyncStatus(running, counters.uploaded, counters.downloaded,
+                counters.deleted, counters.conflicts, statusError, counters.items());
     }
 
     private void saveChangedFileBaseline(String accessToken,

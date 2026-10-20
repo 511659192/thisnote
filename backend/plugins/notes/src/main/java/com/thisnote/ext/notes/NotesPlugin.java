@@ -17,6 +17,7 @@ import com.thisnote.ext.notes.listener.AttachmentStageFutureEventListener;
 import com.thisnote.ext.notes.listener.CardAttachmentCleanupListener;
 import com.thisnote.ext.notes.listener.CardCreateRequestListener;
 import com.thisnote.ext.notes.listener.CardQueryEventListener;
+import com.thisnote.ext.notes.listener.CardStageFutureEventListener;
 import com.thisnote.ext.notes.listener.FileChangeEventListener;
 import com.thisnote.ext.notes.listener.NoteContentFutureEventListener;
 import com.thisnote.ext.notes.listener.NoteListFutureEventListener;
@@ -52,6 +53,7 @@ public class NotesPlugin extends SpringBootPlugin {
     private CardAttachmentCleanupListener cardAttachmentCleanupListener;
     private CardCreateRequestListener cardCreateRequestListener;
     private CardQueryEventListener cardQueryEventListener;
+    private CardStageFutureEventListener cardStageFutureEventListener;
     private AttachmentQueryEventListener attachmentQueryEventListener;
     private AttachmentAdoptEventListener attachmentAdoptEventListener;
     private AttachmentStageFutureEventListener attachmentStageFutureEventListener;
@@ -98,6 +100,8 @@ public class NotesPlugin extends SpringBootPlugin {
         BookRepository bookRepository = ctx.getBean(BookRepository.class);
         NotesMapper notesMapper = ctx.getBean(NotesMapper.class);
         cardQueryEventListener = new CardQueryEventListener(cardRepository, notesMapper);
+        cardStageFutureEventListener = new CardStageFutureEventListener(
+                ctx.getBean(NotesConfig.class), ctx.getBean(FileHelper.class));
         attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
         attachmentAdoptEventListener = new AttachmentAdoptEventListener(attachmentService);
         attachmentStageFutureEventListener = new AttachmentStageFutureEventListener(attachmentService);
@@ -109,6 +113,7 @@ public class NotesPlugin extends SpringBootPlugin {
         getMainApplicationContext().addApplicationListener(cardAttachmentCleanupListener);
         getMainApplicationContext().addApplicationListener(cardCreateRequestListener);
         getMainApplicationContext().addApplicationListener(cardQueryEventListener);
+        getMainApplicationContext().addApplicationListener(cardStageFutureEventListener);
         getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentAdoptEventListener);
         getMainApplicationContext().addApplicationListener(attachmentStageFutureEventListener);
@@ -137,6 +142,10 @@ public class NotesPlugin extends SpringBootPlugin {
         if (cardQueryEventListener != null) {
             getMainApplicationContext().removeApplicationListener(cardQueryEventListener);
             cardQueryEventListener = null;
+        }
+        if (cardStageFutureEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(cardStageFutureEventListener);
+            cardStageFutureEventListener = null;
         }
         if (attachmentQueryEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentQueryEventListener);

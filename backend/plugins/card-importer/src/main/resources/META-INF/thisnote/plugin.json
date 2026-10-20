@@ -1,5 +1,5 @@
 {
   "title": "卡片导入",
-  "description": "每 10 秒扫描 notes/cards 中尚未关联到笔记的 Markdown 卡片并提交导入申请",
+  "description": "每 10 秒扫描 notes/cards 中尚未关联到笔记的 Markdown 卡片，并支持从本地文件夹复制卡片",
   "undeactivatable": false
 }

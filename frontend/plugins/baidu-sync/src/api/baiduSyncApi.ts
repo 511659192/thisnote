@@ -20,12 +20,18 @@ export interface BaiduSyncStatus {
   deleted: number
   conflicts: number
   error: string
+  items: BaiduSyncProgressItem[]
 }
 
 export interface BaiduSyncPreviewItem {
   path: string
   action: 'upload' | 'download' | 'delete-local' | 'delete-remote' | 'overwrite-local' | 'overwrite-remote'
   conflict: boolean
+}
+
+export interface BaiduSyncProgressItem extends BaiduSyncPreviewItem {
+  state: 'pending' | 'running' | 'done' | 'failed'
+  error: string | null
 }
 
 export interface BaiduSyncPreview {

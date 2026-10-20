@@ -183,6 +183,14 @@ function sectionName(section: Section) {
 }
 const canPrevious = computed(() => currentStepIndex.value > 0)
 const canNext = computed(() => currentStepIndex.value < stepTasks.value.length - 1)
+const manualAction = computed(() =>
+  currentTask.value?.action?.kind === 'manual' ? currentTask.value.action : null,
+)
+const footerAction = computed(() =>
+  currentTask.value?.action && currentTask.value.action.kind !== 'manual'
+    ? currentTask.value.action
+    : null,
+)
 
 watch(
   stepTasks,
@@ -348,6 +356,14 @@ onMounted(async () => {
             <span>第 {{ currentStepIndex + 1 }} / {{ stepTasks.length }} 步</span>
             <span v-if="currentTask.done" class="state done">已完成</span>
             <span v-else class="state">待完成</span>
+            <button
+              v-if="manualAction && !currentTask.done"
+              type="button"
+              class="btn sm ghost mark-known"
+              @click="runAction(currentTask)"
+            >
+              标记已了解
+            </button>
           </div>
           <h2>{{ currentTask.title }}</h2>
           <p>{{ currentTask.description }}</p>
@@ -384,12 +400,12 @@ onMounted(async () => {
           <span class="wizard-position">{{ currentStepIndex + 1 }} / {{ stepTasks.length }}</span>
           <div class="wizard-next">
             <button
-              v-if="currentTask.action"
+              v-if="footerAction"
               type="button"
               class="btn ghost"
               @click="runAction(currentTask)"
             >
-              {{ currentTask.action.label }}
+              {{ footerAction.label }}
             </button>
             <button type="button" class="btn primary" @click="nextStep">
               {{ canNext ? '下一步' : '完成并进入笔记' }}

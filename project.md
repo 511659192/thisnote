@@ -166,6 +166,7 @@ host（qiankun 主应用，:5173）
 | `event/AiCompletionFutureEvent` | 通用文本/图片 completion 契约；调用方提供 profileId、system prompt、文本、图片和 token 上限，AI 插件返回模型原始文本 |
 | `event/BookChangedEvent` | `CREATED/UPDATED/DELETED` + `movedNoteIds`；业务层分组变更通知，与底层文件变更不同 |
 | `event/CardQueryEvent` | `CompletableFuture<List<CardDTO>>`：发布方等结果，notes 侧返回无主卡片 |
+| `event/CardStageFutureEvent` | 把用户指定的本地 Markdown 复制到无主卡片目录，后续由定时导入任务解析和建笔记 |
 | `event/NoteContentQueryEvent` | `noteId` + `CompletableFuture<NoteCardDTO>`：notes 侧返回笔记元数据与卡片正文 |
 | `event/NoteListQueryEvent` | `CompletableFuture<List<NoteDTO>>`：notes 侧返回全部笔记元数据 |
 | `event/AttachmentBytesQueryEvent` | `fileName` + `CompletableFuture<byte[]>`：notes 侧返回附件字节，不存在时返回 null |
@@ -368,7 +369,9 @@ host（qiankun 主应用，:5173）
 `POST .../exchange-code`、`POST .../update-auto-sync?value=`、`POST .../sync`、`GET .../get-sync-status`、
 `GET .../get-diff-preview`
 
-**card-importer**：无端点（只有 `@Scheduled` 任务）。
+**card-importer**：`POST /api/plugins/card-importer/import-folder`，请求体 `{path}`；
+`path` 必须是绝对文件夹路径；后端递归复制其中扩展名为 `.md` 的普通文件到 notes 的 `cards/`，
+不立即解析，随后由现有 10 秒定时任务生成笔记与卡片。
 
 **attachment-importer**：`POST /api/plugins/attachment-importer/import-folder`，请求体 `{path}`；
 `path` 必须是绝对文件夹路径；后端递归复制其中的 png/jpg/jpeg/webp 到待管理附件目录，
@@ -432,10 +435,16 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - 文件变更事件驱动增量同步，且**忽略自己插件发出的事件**避免自激（`FileChangeEventListener.java:25-36`）。
 - OAuth：`redirect_uri=oob`（授权码手动粘贴），token 过期前 60 秒自动 refresh（`BaiduOAuthClient.java:32-65`）。
 - 同步进行中请求预览会被拒绝（`ensureSyncIdle`）；路径越界、符号链接一律拒绝（`:617-638`）。
+- 同步状态除上传/下载/删除/冲突计数外，还携带逐项 `items`（`path/action/conflict/state/error`）。
+  每个文件操作开始前标为 `running`，成功后立即标为 `done`，失败标为 `failed`；界面在同步期间轮询状态并逐项显示完成标记。
+- 同步仍在调用线程内逐文件执行，不新增后台执行器；逐项状态只用于观测和界面展示。
 
 **card-importer**
 - 每 10 秒查询无主卡片（cards 目录里、卡片索引中没有的 md）；对每张发
   `CardChangedEvent.requestCardCreate`，标题取文件名去掉 `.md`，落到默认分组（`CardImporterService.java`）。
+- 手动导入由设置页接收绝对文件夹路径；本插件递归筛选 `.md` 普通文件，通过
+  `CardStageFutureEvent` 请求 notes 用 `FileHelper` 按原文件名复制到 `cards/`，不经过浏览器上传。
+  notes 以目标目录中是否已有同名文件判重；重复时跳过。复制完成后完全复用后续定时扫描与建笔记链路。
 - notes 侧 `CardCreateRequestListener` 收到后**新建笔记 + 以固定文件名建卡**，并沿用 `CardDTO.meta` 里的 `w/h` 作为初始尺寸（`CardCreateRequestListener.java:23-35`）。
 - 它通过事件查询卡片，不直接读 notes 目录（`.agent/mem/lessons.md:29`；`CardQueryEventListener.java:20-27`）。
 
@@ -624,7 +633,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | favorite | 笔记工具 ★ + 列表筛选 `favorites`（`hideNoteManagement: true`），**没有自己的页面** | `frontend/plugins/favorite/index.ts:24-42` |
 | memory-cycle | 卡片工具 🧠（`loadState/isEnabled/toggle/cardComponent`）+ 侧栏入口（order 1，徽标=今日到期数）+ `/review` 路由 | `frontend/plugins/memory-cycle/index.ts:16-47` |
 | baidu-sync | 设置面板 + 侧栏入口（order 2）+ `/baidu-sync` 路由 | `frontend/plugins/baidu-sync/index.ts:11-28` |
-| card-importer | 只有设置面板 | `frontend/plugins/card-importer/index.ts:6-8` |
+| card-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/card-importer/index.ts:6-8` |
 | attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 | `frontend/plugins/graphify/index.ts` |
