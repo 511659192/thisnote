@@ -88,7 +88,7 @@ export const useNoteStore = defineStore('notes', () => {
     } catch {
       pluginFilterIds.value = null
     }
-  })
+  }, { immediate: true })
 
   /** 列表真正渲染的内容：没启用插件筛选时就是原样，启用时按 id 过滤。 */
   const notesView = computed(() => {
@@ -161,17 +161,14 @@ export const useNoteStore = defineStore('notes', () => {
   async function select(id: string | null) {
     if (!id) {
       current.value = null
-      return
+      return null
     }
-    if (current.value?.noteId === id) return
+    if (current.value?.noteId === id) return current.value
     const token = ++detailToken
-    try {
-      const detail = await noteApi.get(id)
-      if (token !== detailToken) return
-      current.value = detail
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
+    const detail = await noteApi.get(id)
+    if (token !== detailToken) return null
+    current.value = detail
+    return detail
   }
 
   async function updateCurrent(changes: { title?: string }): Promise<NoteDto | null> {

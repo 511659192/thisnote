@@ -33,11 +33,12 @@ public class TagUsageRefreshService {
 
     public void request(String noteId) {
         if (noteId == null || noteId.isBlank()) {
+            log.debug("忽略空笔记 ID 的标签计数刷新请求");
             return;
         }
         String normalized = noteId.trim();
-        tagsService.invalidateUsage(normalized);
         if (!pending.add(normalized)) {
+            log.debug("标签计数刷新已在队列中：noteId={}", normalized);
             return;
         }
         log.debug("排队刷新标签计数：noteId={}", normalized);
@@ -52,6 +53,7 @@ public class TagUsageRefreshService {
     private void refresh(String noteId) {
         pending.remove(noteId);
         try {
+            tagsService.invalidateUsage(noteId);
             tagsService.refreshOccurrences(noteId);
             log.debug("标签计数刷新完成：noteId={}", noteId);
         } catch (Exception e) {
@@ -61,6 +63,7 @@ public class TagUsageRefreshService {
 
     @PreDestroy
     public void stop() {
+        log.info("标签计数刷新服务正在停止：pending={}", pending.size());
         worker.shutdownNow();
         pending.clear();
     }

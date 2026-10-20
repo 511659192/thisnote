@@ -34,6 +34,7 @@
     <module>plugins/state-reset</module>
     <module>plugins/graphify</module>
     <module>plugins/tags</module>
+    <module>plugins/guide</module>
     <module>app</module>
   </modules>
 
@@ -99,6 +100,11 @@
       <dependency>
         <groupId>com.thisnote</groupId>
         <artifactId>plugin-tags</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.thisnote</groupId>
+        <artifactId>plugin-guide</artifactId>
         <version>${project.version}</version>
       </dependency>
 

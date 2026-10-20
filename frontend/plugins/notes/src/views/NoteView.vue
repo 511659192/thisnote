@@ -1,7 +1,3 @@
-<script lang="ts">
-let initialNoteRouteChecked = !window.location.hash.startsWith('#/notes/')
-</script>
-
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -30,6 +26,10 @@ const page = usePageStore()
 
 const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
 const noteListRef = ref<InstanceType<typeof NoteList> | null>(null)
+const notesForList = computed(() => {
+  const onlyNote = typeof route.query.onlyNote === 'string' ? route.query.onlyNote : ''
+  return onlyNote ? nodes.notesView.filter((note) => note.noteId === onlyNote) : nodes.notesView
+})
 /** 插件贡献的笔记工具（按插件启用状态过滤）。 */
 const noteToolList = computed(() => activeNoteTools())
 const titleNoteTools = computed(() =>
@@ -254,14 +254,7 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
-  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
-  const resetReloadedRoute = !initialNoteRouteChecked && route.params.id && navigation?.type === 'reload'
-  initialNoteRouteChecked = true
-  if (resetReloadedRoute) {
-    void router.replace('/notes')
-  } else {
-    void applyRoute()
-  }
+  void applyRoute()
   // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })
@@ -279,7 +272,7 @@ onBeforeUnmount(() => {
       <div class="list-dock">
         <NoteList
           ref="noteListRef"
-          :nodes="nodes.notesView"
+          :nodes="notesForList"
           :loading="nodes.loadingList"
           :current-id="nodes.currentId"
           :allow-note-management="allowNoteManagement"

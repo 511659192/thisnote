@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { graphifyApi, type GraphifyRelatedNotes } from '../api/graphifyApi'
 
 const props = defineProps<{ noteId: string }>()
@@ -34,7 +34,11 @@ async function load(noteId: string): Promise<void> {
 }
 
 function openNote(noteId: string): void {
-  void router.push('/notes/' + encodeURIComponent(noteId))
+  const target: RouteLocationRaw = router.hasRoute('note')
+    ? { name: 'note', params: { id: noteId } }
+    : { path: '/notes/' + encodeURIComponent(noteId) }
+  const resolved = router.resolve(target)
+  window.open(new URL(resolved.href, window.location.href).href, '_blank', 'noopener,noreferrer')
 }
 
 watch(

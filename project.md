@@ -39,8 +39,8 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 |---|---|---|
 | 后端端口 | `45917`（可用 `THISNOTE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNOTE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
-| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120` | `frontend/host/src/plugins/devPorts.ts` |
-| 后端插件模块数 | 10（notes + ai + 8 个功能插件） | `backend/pom.xml` |
+| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120`、guide `7121` | `frontend/host/src/plugins/devPorts.ts` |
+| 后端插件模块数 | 11（notes + ai + 9 个功能插件） | `backend/pom.xml` |
 | 数据根目录 | `${thisnote.data-root:${user.home}/.thisnote}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnote/ext/notes/config/NotesConfig.java:18-20` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
@@ -62,7 +62,7 @@ thisnote/
 ├── backend/                  Maven 反应堆（从 backend/ 构建，仓库根不放 Maven 文件）
 │   ├── pom.xml               父 POM：模块、版本、plugin.properties 过滤 profile
 │   ├── plugin-api/           插件契约（扩展点 / 事件 / DTO / 异常 / FileHelper）
-│   ├── plugins/              10 个插件模块（各产出一个独立 jar）
+│   ├── plugins/              11 个插件模块（各产出一个独立 jar）
 │   ├── app/                  平台主体（纯 API，无业务、无数据库）
 │   ├── runtime/plugins/      后端交付目录：<pluginId>.jar + disabled.txt（不入库）
 │   ├── plugins-dev/          dev 模式插件目录（目录联接，不入库）
@@ -70,7 +70,7 @@ thisnote/
 ├── frontend/                 pnpm 工作区（界面侧）
 │   ├── host/                 主应用（qiankun 宿主 + 设置页 + 壳）
 │   ├── plugin-api/           界面侧插件契约（**注意：目前未被 git 跟踪，见 §9**）
-│   ├── plugins/              10 个微应用源码
+│   ├── plugins/              11 个微应用源码
 │   ├── runtime/plugins/      界面交付目录（不入库）
 │   └── tools/deliver.mjs     dist → runtime/plugins 的交付脚本
 └── scripts/seed-notes.mjs    压测/造数据脚本（通过 HTTP API 灌 1000 篇笔记）
@@ -160,6 +160,7 @@ host（qiankun 主应用，:5173）
 | `event/PluginFutureEvent<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
 | `event/NoteChangedEvent` | `CREATED/TITLE_CHANGED/TEXT_CHANGED/DELETED`；`TITLE_CHANGED/TEXT_CHANGED` 触发 Tags 只刷新受影响笔记的标签出现次数 |
+| `event/NotesMovedEvent` | 批量分组转移的领域事件：`noteIds + bookId`；底层 `.note-metadata.json` 仍只有一次真实文件更新 |
 | `event/AiProfilesFutureEvent` | 查询可用的 completion profile 摘要；只返回 id、显示名、provider、模型和 key 是否已配置 |
 | `event/AiRuntimeFutureEvent` | 查询指定 completion profile 的 Provider、模型、endpoint 与 API key；Graphify 外部 CLI 使用 |
 | `event/AiCompletionFutureEvent` | 通用文本/图片 completion 契约；调用方提供 profileId、system prompt、文本、图片和 token 上限，AI 插件返回模型原始文本 |
@@ -170,6 +171,7 @@ host（qiankun 主应用，:5173）
 | `event/AttachmentBytesQueryEvent` | `fileName` + `CompletableFuture<byte[]>`：notes 侧返回附件字节，不存在时返回 null |
 | `event/AttachmentQueryEvent` | `CompletableFuture<List<AttachmentDTO>>`：未被管理的附件（attachments 目录里、没有任何卡片引用），notes 侧监听填充 |
 | `event/AttachmentAdoptEvent` | `CompletableFuture<AttachmentDTO>` + `fileName`：接管一个未被管理的附件（改名为 `<uuid>.<ext>`、原名记入元数据），notes 侧监听填充 |
+| `event/AttachmentStageFutureEvent` | 把用户指定的本地图片复制到待管理附件目录，后续由定时导入任务解析和建卡 |
 | `event/AttachmentChangedEvent` | Notes 发布附件创建、更新、删除、重命名；Graphify 只消费此事件，不解析附件目录 |
 | `event/PluginStateResetEvent` | 状态重置控制事件：活动插件执行自身清理，不回报结果 |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
@@ -195,10 +197,11 @@ host（qiankun 主应用，:5173）
 | `memory-cycle` | 间隔重复（Anki 式） | 否 | 无 | `notes/plugins/memory-cycle/.scheduling.json`（排期）、`.schedule-history.json`（复习历史） |
 | `baidu-sync` | 平台级百度网盘备份适配器 | 否 | 无 | `notes/plugins/baidu-sync/{.credentials,.sync-state}.json` |
 | `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `notes` | 无（只通过事件协作） |
-| `attachment-importer` | 定时把未被引用的图片附件导入成笔记 | 否 | `notes` | 无（每轮按引用关系判断） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记；支持绝对路径文件夹复制 | 否 | `notes` | 无（原文件名由 notes 附件状态判重） |
 | `state-reset` | 重置全部已安装插件并汇总结果 | 否 | 无 | 无（平台控制插件） |
 | `graphify` | Graphify 知识图谱与社区自动标签 | 否 | `ai,notes` | `notes/plugins/graphify/`（CLI 设置、索引映射与投影语料） |
 | `tags` | 独立笔记标签、标签页与标签筛选 | 否 | `ai,notes` | `notes/plugins/tags/{tags.json,settings.json}` |
+| `guide` | 用户导航与使用指南 | 否 | 无 | 无（配置入口跳转，进度保存在浏览器本地） |
 
 出处：各模块 `src/main/resources/plugin.properties`。
 
@@ -279,6 +282,8 @@ host（qiankun 主应用，:5173）
   卡片 md 与附件等内容文件保持原命名。
 - **空 notes 索引必须保留为空 JSON**：`.note-metadata.json`、`.card-metadata.json`、
   `.attachment-metadata.json` 缺失会被 `FileHelper.readMapIndex` 判定为损坏，手工清库后应写回 `{}`。
+- **首次启动初始化**：notes 启动时创建 `cards/book/attachments/plugins/notes`，仅在数据目录确实为空时补写
+  三个空 JSON 索引；已有卡片或附件但索引缺失时停止初始化并报错，不覆盖现场。
 - **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
   `notes/plugins/notes/.card-metadata.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
   （`CardPO.java:50-70`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
@@ -365,7 +370,9 @@ host（qiankun 主应用，:5173）
 
 **card-importer**：无端点（只有 `@Scheduled` 任务）。
 
-**attachment-importer**：无端点（只有 `@Scheduled` 任务；设置页是静态说明，不读后端）。
+**attachment-importer**：`POST /api/plugins/attachment-importer/import-folder`，请求体 `{path}`；
+`path` 必须是绝对文件夹路径；后端递归复制其中的 png/jpg/jpeg/webp 到待管理附件目录，
+不立即解析，随后由现有 10 秒定时任务接管、改名并生成笔记与图片卡片。
 
 **state-reset**：`POST /api/plugins/state-reset/reset`，发布一次重置事件，不返回结果体。
 
@@ -383,6 +390,9 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 `POST .../tags/delete`、`POST .../tags/auto`、`GET .../tags/auto/status`。自动标签先同步返回本地候选、
 `pending` 与后端统一预算 `deadlineEpochMs`（130 秒 + 5 秒宽限），AI 在后台完成；前端按该截止时间轮询状态接口刷新结果。
 设置响应以 `profilesError` 报告 AI profile 读取失败。标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
+
+**guide**：`GET /api/plugins/guide/environment` 检查数据目录初始化状态。配置入口跳转到设置页，
+指南不读取其他插件业务状态，也不创建示例数据。
 
 ### 5.9 各插件业务规则（读代码得到的事实）
 
@@ -432,6 +442,10 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 **attachment-importer**
 - 候选 = notes 通过 `AttachmentQueryEvent` 返回的未被管理附件（`AttachmentService.unmanagedAttachments()`）；
   不保存导入状态，是否已导入由「有没有卡片引用它」判断（`AttachmentImporterService.java`）。
+- 手动导入由设置页接收绝对文件夹路径；本插件递归筛选图片，通过
+  `AttachmentStageFutureEvent` 请求 notes 用 `FileHelper` 复制本地文件，不经过浏览器上传。
+  notes 在暂存时检查 attachments 中同名待管理文件与附件元数据里的 `originalName`；
+  重复则返回 duplicate，不复制。导入请求只负责复制，笔记/卡片解析完全复用后续定时任务链路。
 - 每个候选先经 `AttachmentAdoptEvent` 交给 notes：改名为 `<uuid>.<ext>`、原始文件名记入附件元数据；
   `AttachmentDTO` 同时返回宽高，本插件不再读取附件文件，直接按像素尺寸建卡。
 - 通过 `CardChangedEvent.requestCardCreate` 交给 notes 建笔记/卡片，归入 `grp-default`；本插件不写笔记数据。
@@ -447,7 +461,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   分别走自己的 reset；失败只记录 error 日志。
 - AI 的 profile、Provider、模型、API key，Graphify 的 `settings.json`，tags 的 `settings.json` 与百度授权凭据均保留。
 - Notes 的 reset 会删除 `cards/` 下的卡片 md、`attachments/` 下的附件文件，清空笔记/卡片/附件索引，并把 `book/.books.json` 重写为仅含默认分组。
-- attachment-importer / card-importer / state-reset 无状态文件，不注册重置 listener。
+- card-importer / attachment-importer / state-reset 无状态文件。
 
 **graphify**
 - 首次索引由用户在界面手动启动；后续笔记、卡片与引用图片变更进入 2 秒防抖的单线程队列。Graphify CLI 从 thisnote 的 `PATH` 查找，也可在设置中指定路径。
@@ -464,6 +478,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   文件未加密；百度备份当前也会包含该凭据文件，排除需要使用者自行处理。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
 - completion profile 当前支持 OpenCode Go；默认 model/endpoint 只在 `AiSettingsRepository` 定义，并由 AI settings API 返回给界面初始化。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；不创建隐式默认 profile，旧单配置与旧凭据不做迁移。
 - 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
+- 图谱标签、交互图笔记节点和「相关笔记」的跳转都在新浏览器标签页打开；图谱标签打开该标签关联的第一篇笔记，并通过 `graphTag=<kind>:<label>` 恢复笔记列表筛选。
 
 **ai**
 - AI 是不可停用的基础能力插件，硬依赖 `notes`，独占 Provider、模型与 API key 配置；
@@ -489,7 +504,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   AI 任务由 2 线程、32 容量有界队列执行，拒绝时记录 error 并保留本地结果。AI 未配置、profile 缺失或请求失败时同样保留本地结果。
   标签仍只写入 tags 插件自己的 `tags.json`。
 - 打开笔记时若标签少于 10 个，标签工具自动执行一次抽取；标签不足时仍保留可见的自动抽取按钮，供用户手动重试。
-- 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页按标签文本在全部笔记标题与正文中的实际出现次数排行，显示出现次数与覆盖笔记数，并以气泡图展示 Top 60，可从全部笔记中移除某个标签。
+- 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页提供「按出现次数」和「关联笔记」两个页签：前者按正文实际命中次数排行，后者展示全部已分配标签并按覆盖笔记数排行；两者都显示出现次数与覆盖笔记数，列表默认展示前 100 个并可展开查看全部筛选结果，气泡图固定展示前 100 个，可从全部笔记中移除某个标签。点击标签在新浏览器标签页打开该标签关联的第一篇笔记，并带上 `tag=<tag>` 查询参数，新页面由 tags 插件从 URL 恢复标签筛选。
 - 笔记删除或状态重置由主容器事件驱动；插件停用后标签工具、标签页和筛选入口一起下线，数据保留。
 
 ---
@@ -498,7 +513,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 
 ### 6.1 工作区
 
-`frontend/pnpm-workspace.yaml`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes,graphify,tags,ai}`。
+`frontend/pnpm-workspace.yaml`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes,graphify,tags,ai,guide}`。
 
 | 包 | 作用 |
 |---|---|
@@ -519,7 +534,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 
 宿主路由表只有 `/`（Shell）→ `''`(ShellHome) 与 `settings`，加一条 catch-all 兜底；业务路径全部由插件登记
 （`frontend/host/src/router/index.ts:11-27`）。`ShellHome` 在插件路由就绪后自动接管并保留 `fullPath`
-（`ShellHome.vue:13-19`）。
+（`ShellHome.vue:13-19`）。`onboarding: true` 现在用于标识顶栏“使用指南”入口；指南不在主窗口首次进入时自动跳转。
 
 ### 6.3 微应用装载器（`frontend/host/src/plugins/loader.ts`）
 
@@ -554,6 +569,8 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | 顶栏搜索 | `registerTopbarSearch` | `Shell`（全局搜索） |
 | 列表行内动作 | `registerNoteRowAction` | `NoteList`（`activeNoteRowActions()`，如 ☆/🧠） |
 | 列表批量动作 | `registerNoteBatchAction` | `NoteList`（`activeNoteBatchActions()`，如「收藏 +/−」「记忆 +/−」） |
+
+- 插件路由的可选 `onboarding` 标记供宿主识别指南入口；侧栏和顶栏均通过宿主路由把指南打开在右侧主内容区。
 
 - 行内动作 / 批量动作都使用 `NoteRef`（`{noteId,title,cardIds}`）：状态的读写、`loadState`、`isActive`、`toggle` 全在插件里，
   核心只渲染注册表并把所选笔记递进去（favorite、memory-cycle 各在自己的 `src/actions.ts`）。
@@ -608,10 +625,11 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | memory-cycle | 卡片工具 🧠（`loadState/isEnabled/toggle/cardComponent`）+ 侧栏入口（order 1，徽标=今日到期数）+ `/review` 路由 | `frontend/plugins/memory-cycle/index.ts:16-47` |
 | baidu-sync | 设置面板 + 侧栏入口（order 2）+ `/baidu-sync` 路由 | `frontend/plugins/baidu-sync/index.ts:11-28` |
 | card-importer | 只有设置面板 | `frontend/plugins/card-importer/index.ts:6-8` |
-| attachment-importer | 只有设置面板（静态说明，不读后端） | `frontend/plugins/attachment-importer/index.ts:6-8` |
+| attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 | `frontend/plugins/graphify/index.ts` |
 | tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 标题下方标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
+| guide | 从侧栏或顶栏在当前宿主右侧主内容区打开 `/guide`；指南内的笔记、设置和功能入口统一在新浏览器页签打开，支持前进/后退、点击跳步 | `frontend/plugins/guide/index.ts` |
 | ai | 只有设置面板：Provider、模型、API key、连接测试 | `frontend/plugins/ai/index.ts` |
 | notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
@@ -619,7 +637,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 或历史上任意一条排期落在今天；默认 3 列，卡片列表不展示历史）、
 **开启记忆**（所有开启记忆周期的卡片，默认 5 列，可切 3/5 列）；四档按钮标注「下次出现」；
 短周期卡在队列内轮询重现，长周期卡移出视图；键盘 1-4 作用于最上方卡片；预览浮层显示完整复习历史；
-三个页签的卡片都可右键定位到原笔记卡片或删除；定位走 `/notes/:id?cardId=<cardId>`，删除前确认，若卡片是笔记的唯一卡片则删除整篇笔记。
+三个页签的卡片都可右键定位到原笔记卡片或删除；定位在新浏览器标签页打开 `/notes/:id?cardId=<cardId>&onlyNote=<noteId>`，左侧列表只保留卡片所属笔记；删除前确认，若卡片是笔记的唯一卡片则删除整篇笔记。
 查不到正文的排期按孤儿处理并调 `delete-schedule` 清理。复习历史由后端 `.schedule-history.json` 记录（每卡最多 200 条）。
 
 ### 6.8 构建与交付
@@ -667,7 +685,7 @@ pnpm -r build                                   # 各包构建（插件 build �
 
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
-| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 10 个插件 jar 的契约：描述符、依赖、注册类索引、静态插件清单、版本与产物分离；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
+| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 11 个插件 jar 的契约：描述符、依赖、注册类索引、静态插件清单、版本与产物分离；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
 | `backend/app/src/test/.../PluginMetadataReaderTest.java` | 停用场景所需的静态清单可从开发目录读取，管理字段解析正确 | `mvn test`（从 `backend/`） |
 | `backend/plugins/notes/src/test/.../AttachmentServiceTest.java` | 未被管理的附件返回真实像素宽高，附件导入无需读取 Notes 目录 | `mvn test`（从 `backend/`） |
 | `backend/plugins/baidu-sync/src/test/.../BackupScopeTest.java` | 备份范围包含笔记与所有已安装插件目录，拒绝未知/越界路径 | `mvn test`（从 `backend/`） |

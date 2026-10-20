@@ -226,6 +226,7 @@ public class GraphifyIndexService {
             worker.execute(() -> performReset(result));
         } catch (Exception e) {
             resetting = false;
+            log.error("Graphify 重置任务提交失败", e);
             result.completeExceptionally(e);
         }
         return result;
@@ -633,10 +634,6 @@ public class GraphifyIndexService {
 
     public void queueNoteDeletion(String noteId) {
         changeQueue.queueNoteDeletion(noteId);
-    }
-
-    public String noteIdForCard(String cardId) {
-        return indexState.cardToNote().get(cardId);
     }
 
     public void queueUnresolvedCard(String cardId) {

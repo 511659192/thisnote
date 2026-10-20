@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ConfirmDialog,
   pluginApi,
@@ -10,14 +10,14 @@ import {
   type PluginInfo,
 } from '@thisnote/plugin-api'
 import {
-  loadPluginFrontend,
-  unloadPluginFrontend,
   reloadPluginFrontend,
 } from '../plugins/loader'
+import { applyPluginActive } from '../plugins/pluginControl'
 import { useUiStore } from '@/stores/ui'
 
 const ui = useUiStore()
 const router = useRouter()
+const route = useRoute()
 const busy = ref('')
 const confirmation = ref<{
   title: string
@@ -66,17 +66,8 @@ async function refreshNotesRoot() {
 async function applyPluginState(plugin: PluginInfo, next: boolean) {
   busy.value = `${next ? '正在启用' : '正在停用'}「${plugin.title}」`
   try {
-    const updated = await pluginApi.setActive(plugin.id, next)
+    const updated = await applyPluginActive(plugin.id, next, router)
     plugins.value = plugins.value.map((p) => (p.id === updated.id ? updated : p))
-    // 强制刷新可用性快照（跳过新鲜期）：侧栏入口与卡片工具要跟着消失/恢复，否则停用就不闭环
-    await refreshPluginAvailability(true)
-    // qiankun 微应用的真实生命周期：停用即卸载（插槽注销 + 路由拆掉），
-    // 启用即装载 —— 不再依赖整页刷新。
-    if (next) {
-      await loadPluginFrontend(plugin.id, router)
-    } else {
-      await unloadPluginFrontend(plugin.id, router)
-    }
     ui.toast(`「${plugin.title}」已${next ? '启用' : '停用'}`, 'success')
   } catch (e) {
     ui.toast(`操作失败：${(e as Error).message}`, 'error')
@@ -165,8 +156,18 @@ async function refresh() {
   await Promise.all([refreshPlugins(), refreshNotesRoot()])
 }
 
+function applyRouteTarget() {
+  if (route.query.tab === 'plugins') activeTab.value = 'plugins'
+}
+
+watch(
+  () => route.query.tab,
+  applyRouteTarget,
+)
+
 onMounted(async () => {
   await refresh()
+  applyRouteTarget()
 })
 </script>
 

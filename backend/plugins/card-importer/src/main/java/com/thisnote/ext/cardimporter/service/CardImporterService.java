@@ -43,9 +43,20 @@ public class CardImporterService {
         mainEventPublisher.publishEvent(new CardFutureEvent(result));
         List<CardDTO> cards = result.join();
         if (cards.isEmpty()) return;
+        log.info("卡片扫描发现无主卡片：count={}", cards.size());
 
-        cards.forEach(card -> mainEventPublisher.publishEvent(
-                CardChangedEvent.requestCardCreate(card, title(card.sourceFileName()), DEFAULT_BOOK_ID)));
+        for (CardDTO card : cards) {
+            String sourceFileName = card.sourceFileName();
+            try {
+                log.debug("提交无主卡片导入申请：sourceFileName={}", sourceFileName);
+                mainEventPublisher.publishEvent(
+                        CardChangedEvent.requestCardCreate(card, title(sourceFileName), DEFAULT_BOOK_ID));
+            } catch (RuntimeException e) {
+                log.error("提交无主卡片导入申请失败：sourceFileName={}", sourceFileName, e);
+                throw e;
+            }
+        }
+        log.info("已提交无主卡片导入申请：count={}", cards.size());
     }
 
 

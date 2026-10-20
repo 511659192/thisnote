@@ -2,6 +2,7 @@ package com.thisnote.ext.attachmentimporter.service;
 
 import com.thisnote.plugin.api.event.AttachmentAdoptFutureEvent;
 import com.thisnote.plugin.api.event.AttachmentFutureEvent;
+import com.thisnote.plugin.api.event.AttachmentStageFutureEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +10,14 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -22,7 +30,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>候选 = notes 通过 {@link AttachmentFutureEvent} 返回的「未被管理的附件」
  * （attachments 目录里、没有任何卡片引用的 png/jpg/webp）。
- * 不保存导入状态：是否已导入由「有没有卡片引用它」判断。
+ * 自动扫描不保存导入状态：是否已导入由「有没有卡片引用它」判断。
+ * 手动文件夹导入也不保存额外历史，由 notes 按待管理文件与附件原名判重。
  *
  * <p>每个候选先经 {@link AttachmentAdoptFutureEvent} 交给 notes：改名为 {@code <uuid>.<ext>}，
  * 原始文件名记入附件元数据；本插件再按新文件名建卡，标题取原文件名（去掉扩展名）。
@@ -32,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 public class AttachmentImporterService {
 
     private static final long SCAN_INTERVAL_MILLIS = 10_000L;
-    private static final long REFERENCE_QUERY_TIMEOUT_SECONDS = 10L;
+    private static final long REFERENCE_QUERY_TIMEOUT_SECONDS = 30L;
     private static final String DEFAULT_BOOK_ID = "grp-default";
 
     /**
@@ -55,7 +64,7 @@ public class AttachmentImporterService {
     }
 
     @Scheduled(fixedDelay = SCAN_INTERVAL_MILLIS, initialDelay = SCAN_INTERVAL_MILLIS)
-    public void scan() {
+    public synchronized void scan() {
         try {
             importNewAttachments();
         } catch (Exception e) {
@@ -67,13 +76,96 @@ public class AttachmentImporterService {
         CompletableFuture<List<CardDTO.AttachmentDTO>> result = new CompletableFuture<>();
         mainEventPublisher.publishEvent(new AttachmentFutureEvent(result));
         List<CardDTO.AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+        if (!attachments.isEmpty()) {
+            log.info("附件扫描发现候选：{}", attachments.size());
+        }
 
-        attachments.forEach(attachment -> {
+        int imported = 0;
+        int failed = 0;
+        for (CardDTO.AttachmentDTO attachment : attachments) {
             CardDTO.AttachmentDTO adopted = adopt(attachment.fileName());
             if (adopted != null) {
-                importAttachment(attachment.fileName(), adopted);
+                if (importAttachment(attachment.fileName(), adopted)) {
+                    imported++;
+                } else {
+                    failed++;
+                }
+            } else {
+                failed++;
             }
-        });
+        }
+        if (!attachments.isEmpty()) {
+            log.info("附件扫描完成：候选={}, 已提交={}, 失败={}", attachments.size(), imported, failed);
+        }
+    }
+
+    /**
+     * 导入用户输入文件夹中的图片：只把文件复制到待管理附件目录，解析交给定时任务。
+     */
+    public synchronized FolderImportResult importFolder(String folderPath) {
+        if (folderPath == null || folderPath.isBlank()) {
+            log.warn("拒绝文件夹图片导入：路径为空");
+            throw new IllegalArgumentException("文件夹路径不能为空");
+        }
+        Path input = Path.of(folderPath);
+        if (!input.isAbsolute()) {
+            log.warn("拒绝文件夹图片导入：path={}, reason=不是绝对路径", folderPath);
+            throw new IllegalArgumentException("请输入绝对文件夹路径：" + folderPath);
+        }
+        Path folder = input.normalize();
+        if (!Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS)) {
+            log.warn("拒绝文件夹图片导入：folder={}, reason=文件夹不存在", folder);
+            throw new IllegalArgumentException("文件夹不存在：" + folder);
+        }
+        log.info("开始文件夹图片导入：folder={}", folder);
+
+        List<Path> files;
+        try (var paths = Files.walk(folder)) {
+            files = paths
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(AttachmentImporterService::isSupportedImage)
+                    .sorted(Comparator.comparing(Path::toString))
+                    .toList();
+        } catch (IOException e) {
+            log.error("文件夹读取失败：folder={}", folder, e);
+            throw new IllegalStateException("无法读取文件夹：" + folder, e);
+        }
+        log.info("文件夹图片筛选完成：folder={}, matched={}", folder, files.size());
+
+        int imported = 0;
+        int duplicates = 0;
+        int skipped = 0;
+        List<String> errors = new ArrayList<>();
+        for (Path file : files) {
+            String relativePath = folder.relativize(file).toString().replace('\\', '/');
+            try {
+                AttachmentStageFutureEvent.AttachmentStageResult staged = stageSelectedFile(file);
+                if (staged.duplicated()) {
+                    log.debug("跳过重复原文件名：file={}, fileName={}", file, staged.fileName());
+                    duplicates++;
+                } else if (!staged.fileName().isBlank()) {
+                    log.debug("文件夹图片已复制：source={}, stagedName={}", file, staged.fileName());
+                    imported++;
+                } else {
+                    skipped++;
+                }
+            } catch (Exception e) {
+                errors.add(relativePath + "：" + e.getMessage());
+                log.error("文件夹图片导入失败：{}", file, e);
+            }
+        }
+        log.info("文件夹图片导入完成：folder={}, copied={}, duplicate={}, skipped={}, failed={}",
+                folder, imported, duplicates, skipped, errors.size());
+        return new FolderImportResult(imported, duplicates, skipped, errors);
+    }
+
+    private AttachmentStageFutureEvent.AttachmentStageResult stageSelectedFile(Path source) {
+        AttachmentStageFutureEvent request = AttachmentStageFutureEvent.request(
+                source.toAbsolutePath().toString());
+        mainEventPublisher.publishEvent(request);
+        return request.result()
+                .orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .join();
     }
 
     /**
@@ -90,13 +182,13 @@ public class AttachmentImporterService {
         }
     }
 
-    private void importAttachment(String originalName,
-                                  CardDTO.AttachmentDTO adopted) {
+    private boolean importAttachment(String originalName,
+                                     CardDTO.AttachmentDTO adopted) {
         String fileName = adopted.fileName();
         String title = titleOf(originalName);
         if (title.isBlank()) {
             log.warn("附件 {} 没有可用作标题的文件名，已跳过", originalName);
-            return;
+            return false;
         }
 
         // 按图片原始像素尺寸给出初始卡片框体；读不到尺寸时用 notes 的默认宽高。
@@ -105,15 +197,25 @@ public class AttachmentImporterService {
             mainEventPublisher.publishEvent(CardChangedEvent.requestCardCreate(new CardDTO(meta, cardContent(title, fileName), null), title, DEFAULT_BOOK_ID));
         } catch (Exception e) {
             log.error("附件 {} 生成笔记/卡片失败，下一轮重试", originalName, e);
-            return;
+            return false;
         }
 
         log.info("附件 {} 已接管为 {}，生成笔记「{}」", originalName, fileName, title);
+        return true;
     }
 
     private static String titleOf(String fileName) {
         int dot = fileName.lastIndexOf('.');
-        return dot > 0 ? fileName.substring(0, dot) : fileName;
+        String title = dot > 0 ? fileName.substring(0, dot) : fileName;
+        return title.replace('/', ' ').replace('\\', ' ').trim();
+    }
+
+    private static boolean isSupportedImage(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return name.endsWith(".png")
+                || name.endsWith(".jpg")
+                || name.endsWith(".jpeg")
+                || name.endsWith(".webp");
     }
 
     private static String cardContent(String title,
@@ -140,5 +242,11 @@ public class AttachmentImporterService {
         double cardWidth = Math.round(Math.max(MIN_CARD_WIDTH, width + CARD_HORIZONTAL_CHROME));
         double cardHeight = Math.round(Math.max(MIN_CARD_HEIGHT, height + CARD_VERTICAL_CHROME));
         return new CardDTO.CardMetaDTO(null, null, null, 0d, 0d, cardWidth, cardHeight, null, null, false, null);
+    }
+
+    public record FolderImportResult(int imported,
+                                     int duplicates,
+                                     int skipped,
+                                     List<String> errors) {
     }
 }

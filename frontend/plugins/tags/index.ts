@@ -11,8 +11,16 @@ import TagsSettings from './src/components/TagsSettings.vue'
 import {
   TAGS_FILTER_ID,
   TAGS_PLUGIN_ID,
+  activateTagFilter,
   loadFilteredNoteIds,
 } from './src/tagFilter'
+
+function tagFromLocation(): string {
+  const hash = window.location.hash
+  const queryStart = hash.indexOf('?')
+  const query = queryStart >= 0 ? hash.slice(queryStart + 1) : window.location.search
+  return new URLSearchParams(query).get('tag')?.trim() ?? ''
+}
 
 function register(): void {
   registerPluginSettings({ pluginId: TAGS_PLUGIN_ID, component: TagsSettings })
@@ -45,6 +53,8 @@ function register(): void {
     hidden: true,
     load: loadFilteredNoteIds,
   })
+  const tag = tagFromLocation()
+  if (tag) activateTagFilter(tag)
 }
 
 export const { bootstrap, mount, unmount } = createPluginLifecycle({

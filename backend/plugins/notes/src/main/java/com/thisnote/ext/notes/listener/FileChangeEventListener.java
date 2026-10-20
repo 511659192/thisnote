@@ -3,6 +3,7 @@ package com.thisnote.ext.notes.listener;
 import com.thisnote.plugin.api.event.AttachmentChangedEvent;
 import com.thisnote.plugin.api.event.FileChangeEvent;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
@@ -10,6 +11,7 @@ import org.springframework.context.PayloadApplicationEvent;
 import java.nio.file.Path;
 
 @RequiredArgsConstructor
+@Slf4j
 public class FileChangeEventListener
         implements ApplicationListener<PayloadApplicationEvent<FileChangeEvent>> {
 
@@ -37,9 +39,12 @@ public class FileChangeEventListener
         } else if (previous != null) {
             attachmentEvent = AttachmentChangedEvent.deleted(previous.getFileName().toString());
         } else {
+            log.debug("忽略附件目录外的文件变更：operation={}, file={}", change.operation(), change.url());
             return;
         }
         eventPublisher.publishEvent(attachmentEvent);
+        log.debug("已发布附件变更：operation={}, fileName={}, previousFileName={}",
+                attachmentEvent.operation(), attachmentEvent.fileName(), attachmentEvent.previousFileName());
     }
 
     private static Path normalizedWithin(Path path,

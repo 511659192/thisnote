@@ -9,9 +9,11 @@ import com.thisnote.ext.notes.service.AttachmentService;
 import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
 import com.thisnote.ext.notes.service.BookService;
+import com.thisnote.ext.notes.service.StorageInitializationService;
 import com.thisnote.ext.notes.listener.AttachmentAdoptEventListener;
 import com.thisnote.ext.notes.listener.AttachmentBytesQueryEventListener;
 import com.thisnote.ext.notes.listener.AttachmentQueryEventListener;
+import com.thisnote.ext.notes.listener.AttachmentStageFutureEventListener;
 import com.thisnote.ext.notes.listener.CardAttachmentCleanupListener;
 import com.thisnote.ext.notes.listener.CardCreateRequestListener;
 import com.thisnote.ext.notes.listener.CardQueryEventListener;
@@ -20,6 +22,7 @@ import com.thisnote.ext.notes.listener.NoteContentFutureEventListener;
 import com.thisnote.ext.notes.listener.NoteListFutureEventListener;
 import com.thisnote.ext.notes.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
+import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
 import org.laxture.sbp.spring.boot.SpringBootstrap;
@@ -40,6 +43,7 @@ import java.nio.file.Path;
  * <p><b>本插件不允许停用/在线重载</b>（覆写 {@code undeactivatable()}）：管理面直接拒绝
  * （{@code 409}），否则整个应用的笔记能力会随一次误点整体下线。
  */
+@Slf4j
 public class NotesPlugin extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "notes";
@@ -50,6 +54,7 @@ public class NotesPlugin extends SpringBootPlugin {
     private CardQueryEventListener cardQueryEventListener;
     private AttachmentQueryEventListener attachmentQueryEventListener;
     private AttachmentAdoptEventListener attachmentAdoptEventListener;
+    private AttachmentStageFutureEventListener attachmentStageFutureEventListener;
     private NoteContentFutureEventListener noteContentFutureEventListener;
     private NoteListFutureEventListener noteListFutureEventListener;
     private AttachmentBytesQueryEventListener attachmentBytesQueryEventListener;
@@ -75,6 +80,7 @@ public class NotesPlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
+        ctx.getBean(StorageInitializationService.class).initialize();
         ctx.getBean(BookService.class).initializeDefaultGroup();
         CardService cardService = ctx.getBean(CardService.class);
         NoteService noteService = ctx.getBean(NoteService.class);
@@ -94,6 +100,7 @@ public class NotesPlugin extends SpringBootPlugin {
         cardQueryEventListener = new CardQueryEventListener(cardRepository, notesMapper);
         attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
         attachmentAdoptEventListener = new AttachmentAdoptEventListener(attachmentService);
+        attachmentStageFutureEventListener = new AttachmentStageFutureEventListener(attachmentService);
         noteContentFutureEventListener = new NoteContentFutureEventListener(noteService, cardService);
         noteListFutureEventListener = new NoteListFutureEventListener(noteRepository, notesMapper);
         attachmentBytesQueryEventListener = new AttachmentBytesQueryEventListener(attachmentService);
@@ -104,14 +111,17 @@ public class NotesPlugin extends SpringBootPlugin {
         getMainApplicationContext().addApplicationListener(cardQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentAdoptEventListener);
+        getMainApplicationContext().addApplicationListener(attachmentStageFutureEventListener);
         getMainApplicationContext().addApplicationListener(noteContentFutureEventListener);
         getMainApplicationContext().addApplicationListener(noteListFutureEventListener);
         getMainApplicationContext().addApplicationListener(attachmentBytesQueryEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
+        log.info("笔记插件已启动：root={}", ctx.getBean(NotesConfig.class).getRootDir());
     }
 
     @Override
     public void stop() {
+        log.info("笔记插件正在停止");
         if (fileChangeListener != null) {
             getMainApplicationContext().removeApplicationListener(fileChangeListener);
             fileChangeListener = null;
@@ -135,6 +145,10 @@ public class NotesPlugin extends SpringBootPlugin {
         if (attachmentAdoptEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentAdoptEventListener);
             attachmentAdoptEventListener = null;
+        }
+        if (attachmentStageFutureEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(attachmentStageFutureEventListener);
+            attachmentStageFutureEventListener = null;
         }
         if (noteContentFutureEventListener != null) {
             getMainApplicationContext().removeApplicationListener(noteContentFutureEventListener);

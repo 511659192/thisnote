@@ -12,6 +12,8 @@ export interface TagUsage {
   noteCount: number
 }
 
+export const TAG_DISPLAY_LIMIT = 100
+
 function normalizeTags(tags: unknown): string[] {
   if (!Array.isArray(tags)) return []
   const values = tags

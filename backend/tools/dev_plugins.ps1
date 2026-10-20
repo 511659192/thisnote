@@ -27,6 +27,7 @@ $plugins = [ordered]@{
     'state-reset' = 'plugins/state-reset'
     'graphify' = 'plugins/graphify'
     'tags' = 'plugins/tags'
+    'guide' = 'plugins/guide'
 }
 
 foreach ($id in $plugins.Keys) {

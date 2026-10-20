@@ -1,20 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TagUsage } from '../tagStore'
+import { TAG_DISPLAY_LIMIT, type TagUsage } from '../tagStore'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   tags: TagUsage[]
-}>()
+  metric?: 'occurrences' | 'notes'
+}>(), {
+  metric: 'occurrences',
+})
 
 const emit = defineEmits<{
   select: [tag: string]
 }>()
 
-const visibleTags = computed(() => props.tags.slice(0, 60))
-const maxCount = computed(() => Math.max(1, ...visibleTags.value.map((tag) => tag.count)))
+const visibleTags = computed(() => props.tags.slice(0, TAG_DISPLAY_LIMIT))
+const maxMetric = computed(() => Math.max(1, ...visibleTags.value.map(metricValue)))
+
+function metricValue(tag: TagUsage): number {
+  return props.metric === 'notes' ? tag.noteCount : tag.count
+}
 
 function bubbleSize(tag: TagUsage): number {
-  const scale = Math.sqrt(tag.count / maxCount.value)
+  const scale = Math.sqrt(metricValue(tag) / maxMetric.value)
   return Math.round(56 + scale * 76)
 }
 
@@ -31,7 +38,8 @@ function densityClass(tag: TagUsage): string {
   <section v-if="visibleTags.length" class="bubble-panel">
     <header class="bubble-heading">
       <strong>标签分布</strong>
-      <span>气泡越大出现越多，颜色越深覆盖笔记越多</span>
+      <span v-if="metric === 'notes'">气泡越大关联笔记越多，颜色按关联笔记数加深</span>
+      <span v-else>气泡越大正文出现越多，颜色越深关联笔记越多</span>
     </header>
     <div class="bubble-cloud">
       <button
@@ -41,12 +49,12 @@ function densityClass(tag: TagUsage): string {
         class="bubble"
         :class="densityClass(tag)"
         :style="{ width: bubbleSize(tag) + 'px', height: bubbleSize(tag) + 'px' }"
-        :title="`${tag.label}：${tag.count} 次出现，${tag.noteCount} 篇笔记`"
-        :aria-label="`${tag.label}：${tag.count} 次出现，${tag.noteCount} 篇笔记`"
+        :title="`${tag.label}：${tag.noteCount} 篇笔记，${tag.count} 次出现`"
+        :aria-label="`${tag.label}：${tag.noteCount} 篇笔记，${tag.count} 次出现`"
         @click="emit('select', tag.label)"
       >
         <span class="bubble-label">{{ tag.label }}</span>
-        <span class="bubble-count">{{ tag.count }} 次</span>
+        <span class="bubble-count">{{ metric === 'notes' ? `${tag.noteCount} 篇` : `${tag.count} 次` }}</span>
       </button>
     </div>
   </section>

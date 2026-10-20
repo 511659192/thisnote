@@ -88,6 +88,8 @@ export interface PluginRoute {
   component: RouteRecordRaw['component']
   /** 透传给 vue-router 的 props（如 {@code /notes/:id} 的 {@code props: true}）。 */
   props?: boolean
+  /** 标识顶栏“使用指南”入口对应的插件页面；只应有一个插件声明。 */
+  onboarding?: boolean
 }
 
 /**

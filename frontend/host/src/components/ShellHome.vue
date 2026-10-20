@@ -14,7 +14,7 @@ watchEffect(() => {
   const routes = pluginRoutes()
   if (routes.length === 0) return
   const current = router.currentRoute.value
-  const first = routes.find((r) => r.path === '/notes') ?? routes[0]
+  const first = routes.find((route) => route.path === '/notes') ?? routes[0]
   void router.replace(current.fullPath === '/' ? first.path : current.fullPath)
 })
 </script>

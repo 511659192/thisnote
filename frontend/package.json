@@ -5,6 +5,6 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "dev:host": "pnpm --filter thisnote-frontend dev",
-    "dev:plugins": "pnpm --filter @thisnote/plugin-favorite --filter @thisnote/plugin-memory-cycle --filter @thisnote/plugin-baidu-sync --filter @thisnote/plugin-card-importer --filter @thisnote/plugin-attachment-importer --filter @thisnote/plugin-state-reset --filter @thisnote/plugin-graphify --filter @thisnote/plugin-tags --filter @thisnote/plugin-ai --parallel dev"
+    "dev:plugins": "pnpm --filter @thisnote/plugin-favorite --filter @thisnote/plugin-memory-cycle --filter @thisnote/plugin-baidu-sync --filter @thisnote/plugin-card-importer --filter @thisnote/plugin-attachment-importer --filter @thisnote/plugin-state-reset --filter @thisnote/plugin-graphify --filter @thisnote/plugin-tags --filter @thisnote/plugin-ai --filter @thisnote/plugin-guide --parallel dev"
   }
 }

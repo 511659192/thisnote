@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { http } from '@thisnote/plugin-api'
 import {
   graphifyApi,
@@ -9,9 +9,7 @@ import {
 } from '../api/graphifyApi'
 import GraphifyTagRanking from '../components/GraphifyTagRanking.vue'
 import {
-  activateTagFilter,
   buildTagStats,
-  selectedTag,
   type GraphifyTagItem,
 } from '../tagFilter'
 
@@ -41,6 +39,11 @@ const tagOverview = computed(() => buildTagStats(graph.value))
 let pollTimer: number | null = null
 let lastLoadedAt: string | null | undefined
 let statusRequestVersion = 0
+
+function openRouteInNewTab(location: RouteLocationRaw): void {
+  const resolved = router.resolve(location)
+  window.open(new URL(resolved.href, window.location.href).href, '_blank', 'noopener,noreferrer')
+}
 
 async function loadGraph(): Promise<void> {
   if (!status.value?.graphAvailable) {
@@ -98,9 +101,27 @@ async function startIndex(force: boolean): Promise<void> {
 }
 
 function selectTag(tag: GraphifyTagItem): void {
-  selectedTag.value = activeTagGroup.value + ':' + tag.label
-  activateTagFilter()
-  void router.push('/notes')
+  const graphTag = activeTagGroup.value + ':' + tag.label
+  const noteId = firstNoteForTag(activeTagGroup.value, tag.label)
+  const location: RouteLocationRaw = noteId
+    ? (router.hasRoute('note')
+        ? { name: 'note', params: { id: noteId }, query: { graphTag } }
+        : { path: '/notes/' + encodeURIComponent(noteId), query: { graphTag } })
+    : (router.hasRoute('notes')
+        ? { name: 'notes', query: { graphTag } }
+        : { path: '/notes', query: { graphTag } })
+  openRouteInNewTab(location)
+}
+
+function firstNoteForTag(kind: 'concept' | 'community', label: string): string | null {
+  for (const node of graph.value?.nodes ?? []) {
+    if (typeof node.source_file !== 'string') continue
+    const noteId = normalizeSourceFile(node.source_file).split('/')[0]
+    if (!/^[0-9a-f-]{36}$/i.test(noteId)) continue
+    const value = kind === 'concept' ? node.label?.trim() : node.community_name?.trim()
+    if (value === label) return noteId
+  }
+  return null
 }
 
 async function relabelCommunities(): Promise<void> {
@@ -145,7 +166,11 @@ async function openNoteFromGraph(event: MessageEvent): Promise<void> {
 
   try {
     const note = await http.get<{ noteId?: string }>('/api/notes/get-detail', { noteId })
-    if (note?.noteId === noteId) await router.push('/notes/' + encodeURIComponent(noteId))
+    if (note?.noteId === noteId) {
+      openRouteInNewTab(router.hasRoute('note')
+        ? { name: 'note', params: { id: noteId } }
+        : { path: '/notes/' + encodeURIComponent(noteId) })
+    }
   } catch {
     message.value = '图谱中的笔记已删除或暂时无法打开。'
   }

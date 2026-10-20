@@ -2,7 +2,7 @@ import { nextTick, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
-import { clearActiveListFilter, toast } from '@thisnote/plugin-api'
+import { ApiError, clearActiveListFilter, toast } from '@thisnote/plugin-api'
 import type { NoteDto } from '@/api/types'
 
 interface PageHandle {
@@ -181,13 +181,34 @@ export function useNoteTitle(
       await focusRouteCard()
       return
     }
-    await nodes.select(id)
-    if (nodes.current) {
-      await page.load(id, nodes.current.cardIds ?? [], nodes.current.title)
-      titleDraft.value = nodes.current.title
-      titleDraftNoteId = nodes.current.noteId
+    try {
+      const selected = await nodes.select(id)
+      if (!selected) return
+      await page.load(id, selected.cardIds ?? [], selected.title)
+      titleDraft.value = selected.title
+      titleDraftNoteId = selected.noteId
       await focusRouteCard()
+    } catch (error) {
+      if ((error as ApiError).status !== 404) {
+        toast((error as Error).message, 'error')
+        return
+      }
+      await openFirstAvailableNote(id)
     }
+  }
+
+  async function openFirstAvailableNote(missingId: string) {
+    await nodes.loadList()
+    const first = nodes.notesView[0]
+    nodes.current = null
+    page.noteId = null
+    titleDraft.value = ''
+    titleDraftNoteId = null
+    console.warn('[notes] 笔记不存在，已回退当前列表第一篇', {
+      missingNoteId: missingId,
+      fallbackNoteId: first?.noteId ?? null,
+    })
+    await router.replace(first ? `/notes/${first.noteId}` : '/notes')
   }
 
   watch(() => route.params.id, applyRoute)

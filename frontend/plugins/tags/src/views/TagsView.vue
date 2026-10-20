@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { emitPluginStateChange, toast } from '@thisnote/plugin-api'
 import { tagsApi, TAGS_PLUGIN_ID } from '../api/tagsApi'
-import { activateTagFilter, clearTagFilter, selectedTag } from '../tagFilter'
-import { buildTagUsage, loadTagState, noteTags } from '../tagStore'
+import { clearTagFilter, selectedTag } from '../tagFilter'
+import { buildTagUsage, loadTagState, noteTags, TAG_DISPLAY_LIMIT } from '../tagStore'
 import TagsBubbleChart from '../components/TagsBubbleChart.vue'
 
 const router = useRouter()
@@ -13,15 +13,42 @@ const error = ref('')
 const deleting = ref('')
 const query = ref('')
 const usageCounts = ref<Record<string, number>>({})
-const tags = computed(() =>
-  buildTagUsage(noteTags, usageCounts.value).filter((tag) => tag.count > 0),
+type TagTab = 'occurrences' | 'notes'
+const activeTab = ref<TagTab>('occurrences')
+const expanded = ref(false)
+const allTags = computed(() => buildTagUsage(noteTags, usageCounts.value))
+const tagsByOccurrences = computed(() =>
+  [...allTags.value.filter((tag) => tag.count > 0)]
+    .sort((a, b) => b.count - a.count
+      || b.noteCount - a.noteCount
+      || a.label.localeCompare(b.label, 'zh-CN')),
+)
+const tagsByNotes = computed(() =>
+  [...allTags.value.filter((tag) => tag.noteCount > 0)]
+    .sort((a, b) => b.noteCount - a.noteCount
+      || b.count - a.count
+      || a.label.localeCompare(b.label, 'zh-CN')),
+)
+const activeTags = computed(() =>
+  activeTab.value === 'notes' ? tagsByNotes.value : tagsByOccurrences.value,
 )
 const taggedNoteCount = computed(() => Object.keys(noteTags).length)
-const totalOccurrences = computed(() => tags.value.reduce((sum, tag) => sum + tag.count, 0))
+const totalNoteLinks = computed(() => allTags.value.reduce((sum, tag) => sum + tag.noteCount, 0))
+const totalOccurrences = computed(() => allTags.value.reduce((sum, tag) => sum + tag.count, 0))
 const filteredTags = computed(() => {
   const value = query.value.trim().toLocaleLowerCase('zh-CN')
-  if (!value) return tags.value
-  return tags.value.filter((tag) => tag.label.toLocaleLowerCase('zh-CN').includes(value))
+  if (!value) return activeTags.value
+  return activeTags.value.filter((tag) => tag.label.toLocaleLowerCase('zh-CN').includes(value))
+})
+const displayTags = computed(() =>
+  expanded.value ? filteredTags.value : filteredTags.value.slice(0, TAG_DISPLAY_LIMIT),
+)
+const bubbleTags = computed(() => filteredTags.value.slice(0, TAG_DISPLAY_LIMIT))
+const remainingCount = computed(() => Math.max(0, filteredTags.value.length - TAG_DISPLAY_LIMIT))
+const tabCount = (count: number) => Math.min(count, TAG_DISPLAY_LIMIT)
+
+watch([activeTab, query], () => {
+  expanded.value = false
 })
 
 async function load(): Promise<void> {
@@ -38,8 +65,14 @@ async function load(): Promise<void> {
 }
 
 function openTag(tag: string): void {
-  activateTagFilter(tag)
-  void router.push('/notes')
+  const noteId = Object.entries(noteTags).find(([, tags]) => tags.includes(tag))?.[0]
+  const resolved = noteId && router.hasRoute('note')
+    ? router.resolve({ name: 'note', params: { id: noteId }, query: { tag } })
+    : router.resolve({
+        path: noteId ? `/notes/${noteId}` : '/notes',
+        query: { tag },
+      })
+  window.open(new URL(resolved.href, window.location.href).href, '_blank', 'noopener,noreferrer')
 }
 
 async function removeEverywhere(tag: string): Promise<void> {
@@ -69,7 +102,7 @@ onMounted(() => void load())
     <header class="page-heading">
       <div>
         <h1>标签</h1>
-        <p>{{ tags.length }} 个标签 · {{ totalOccurrences }} 次出现 · {{ taggedNoteCount }} 篇笔记</p>
+        <p>{{ allTags.length }} 个标签 · {{ totalNoteLinks }} 个关联 · {{ totalOccurrences }} 次出现 · {{ taggedNoteCount }} 篇笔记</p>
       </div>
       <div class="heading-actions">
         <input
@@ -83,16 +116,42 @@ onMounted(() => void load())
       </div>
     </header>
 
+    <div class="tag-tabs" role="tablist" aria-label="标签排序方式">
+      <button
+        type="button"
+        class="tag-tab"
+        :class="{ active: activeTab === 'occurrences' }"
+        role="tab"
+        :aria-selected="activeTab === 'occurrences'"
+        @click="activeTab = 'occurrences'"
+      >
+        按出现次数
+        <span>{{ tabCount(tagsByOccurrences.length) }}</span>
+      </button>
+      <button
+        type="button"
+        class="tag-tab"
+        :class="{ active: activeTab === 'notes' }"
+        role="tab"
+        :aria-selected="activeTab === 'notes'"
+        @click="activeTab = 'notes'"
+      >
+        关联笔记
+        <span>{{ tabCount(tagsByNotes.length) }}</span>
+      </button>
+    </div>
+
     <p v-if="error" class="feedback error">{{ error }}</p>
     <p v-else-if="loading" class="feedback">正在读取标签…</p>
-    <p v-else-if="!tags.length" class="empty">暂无标签</p>
-    <p v-else-if="!filteredTags.length" class="empty">没有匹配的标签</p>
+    <p v-else-if="!activeTags.length" class="empty">暂无标签</p>
+    <p v-else-if="!displayTags.length" class="empty">没有匹配的标签</p>
 
     <div v-else class="tag-grid">
-      <div v-for="tag in filteredTags" :key="tag.label" class="tag-row">
+      <div v-for="tag in displayTags" :key="tag.label" class="tag-row">
         <button type="button" class="tag-open" @click="openTag(tag.label)">
           <span class="tag-label">{{ tag.label }}</span>
-          <span class="tag-count">{{ tag.count }} 次 · {{ tag.noteCount }} 篇</span>
+          <span v-if="activeTab === 'notes'" class="tag-count">{{ tag.noteCount }} 篇 · {{ tag.count }} 次</span>
+          <span v-else class="tag-count">{{ tag.count }} 次 · {{ tag.noteCount }} 篇</span>
         </button>
         <button
           type="button"
@@ -105,9 +164,16 @@ onMounted(() => void load())
       </div>
     </div>
 
+    <div v-if="remainingCount > 0" class="tag-more">
+      <button type="button" @click="expanded = !expanded">
+        {{ expanded ? '收起' : `展示更多（${remainingCount}）` }}
+      </button>
+    </div>
+
     <TagsBubbleChart
-      v-if="filteredTags.length"
-      :tags="filteredTags"
+      v-if="bubbleTags.length"
+      :tags="bubbleTags"
+      :metric="activeTab"
       @select="openTag"
     />
   </main>
@@ -152,6 +218,37 @@ onMounted(() => void load())
   gap: 8px;
 }
 
+.tag-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.tag-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: var(--c-text-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tag-tab span {
+  color: var(--c-text-muted, #8b9098);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 .tag-search {
   width: min(260px, 100%);
   min-height: 30px;
@@ -186,6 +283,28 @@ onMounted(() => void load())
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
   gap: 7px;
   width: 100%;
+}
+
+.tag-more {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+
+.tag-more button {
+  padding: 5px 14px;
+  color: var(--c-text-2);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-more button:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--c-border));
 }
 
 .tag-row {

@@ -35,45 +35,78 @@ final class GraphifyChangeQueue {
 
     void queueNote(String noteId) {
         if (noteId == null || noteId.isBlank()) {
+            log.debug("Graphify 忽略空笔记 ID，未加入变更队列");
             return;
         }
         synchronized (lock) {
-            if (!stopped && ready.getAsBoolean() && !deletedNotes.contains(noteId)) {
-                queuedNotes.add(noteId);
-                log.debug("Graphify 变更入队：type=note, noteId={}, queued={}", noteId, queuedNotes.size());
-                schedule();
+            if (stopped) {
+                log.debug("Graphify 已停止，忽略笔记变更：noteId={}", noteId);
+                return;
             }
+            if (!ready.getAsBoolean()) {
+                log.debug("Graphify 尚未就绪，忽略笔记变更：noteId={}", noteId);
+                return;
+            }
+            if (deletedNotes.contains(noteId)) {
+                log.debug("Graphify 笔记已有删除任务，忽略更新：noteId={}", noteId);
+                return;
+            }
+            queuedNotes.add(noteId);
+            log.debug("Graphify 变更入队：type=note, noteId={}, queued={}", noteId, queuedNotes.size());
+            schedule();
         }
     }
 
     void queueNoteDeletion(String noteId) {
         if (noteId == null || noteId.isBlank()) {
+            log.debug("Graphify 忽略空笔记 ID，未加入删除队列");
             return;
         }
         synchronized (lock) {
-            if (!stopped && ready.getAsBoolean()) {
-                queuedNotes.remove(noteId);
-                deletedNotes.add(noteId);
-                log.debug("Graphify 变更入队：type=delete, noteId={}, deleted={}", noteId, deletedNotes.size());
-                schedule();
+            if (stopped) {
+                log.debug("Graphify 已停止，忽略笔记删除：noteId={}", noteId);
+                return;
             }
+            if (!ready.getAsBoolean()) {
+                log.debug("Graphify 尚未就绪，忽略笔记删除：noteId={}", noteId);
+                return;
+            }
+            queuedNotes.remove(noteId);
+            deletedNotes.add(noteId);
+            log.debug("Graphify 变更入队：type=delete, noteId={}, deleted={}", noteId, deletedNotes.size());
+            schedule();
         }
     }
 
     void queueUnresolvedCard(String cardId) {
+        if (cardId == null || cardId.isBlank()) {
+            log.debug("Graphify 忽略空卡片 ID，未加入待解析队列");
+            return;
+        }
         synchronized (lock) {
-            if (!stopped && ready.getAsBoolean()) {
-                unresolvedCardIds.add(cardId);
-                log.debug("Graphify 变更入队：type=unresolved-card, cardId={}", cardId);
-                schedule();
+            if (stopped) {
+                log.debug("Graphify 已停止，忽略卡片变更：cardId={}", cardId);
+                return;
             }
+            if (!ready.getAsBoolean()) {
+                log.debug("Graphify 尚未就绪，忽略卡片变更：cardId={}", cardId);
+                return;
+            }
+            unresolvedCardIds.add(cardId);
+            log.debug("Graphify 变更入队：type=unresolved-card, cardId={}", cardId);
+            schedule();
         }
     }
 
     void queueNotesForAttachments(Set<String> fileNames,
                                   Function<String, List<String>> notesForAttachment) {
         synchronized (lock) {
-            if (stopped || !ready.getAsBoolean()) {
+            if (stopped) {
+                log.debug("Graphify 已停止，忽略附件变更：files={}", fileNames.size());
+                return;
+            }
+            if (!ready.getAsBoolean()) {
+                log.debug("Graphify 尚未就绪，忽略附件变更：files={}", fileNames.size());
                 return;
             }
             int before = queuedNotes.size();

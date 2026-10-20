@@ -67,6 +67,7 @@ public class CardRepository {
             try {
                 cards.add(readCard(notesConfig.getRootDir().resolve("cards").resolve(meta.getFileName()), meta));
             } catch (Exception e) {
+                log.error("读取已管理卡片失败：fileName={}", meta.getFileName(), e);
                 throw new RuntimeException(e);
             }
         }

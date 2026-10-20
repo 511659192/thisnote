@@ -16,4 +16,5 @@ export const PLUGIN_DEV_PORTS: Record<string, number> = {
   graphify: 7118,
   tags: 7119,
   ai: 7120,
+  guide: 7121,
 }

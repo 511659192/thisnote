@@ -11,6 +11,7 @@ import com.thisnote.ext.notes.repository.CardRepository;
 import com.thisnote.ext.notes.repository.NoteRepository;
 import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
+import com.thisnote.plugin.api.event.NotesMovedEvent;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -92,6 +93,11 @@ public class NoteService {
             moved.add(note);
         }
         noteRepository.updateAll(moved);
+        if (!moved.isEmpty()) {
+            mainEventPublisher.publishEvent(new NotesMovedEvent(
+                    moved.stream().map(NotePO::getNoteId).toList(),
+                    bookId));
+        }
         log.info("将 {} 篇笔记转入分组 {}", moved.size(), bookId);
     }
 

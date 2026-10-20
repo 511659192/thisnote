@@ -21,12 +21,6 @@ public class CardChangedEventListener
         if (change.kind() == CardChangedEvent.Kind.REQUEST) {
             return;
         }
-        String noteId = indexService.noteIdForCard(change.cardId());
-        if (noteId == null) {
-            log.debug("Graphify 卡片尚未映射到笔记：cardId={}", change.cardId());
-            indexService.queueUnresolvedCard(change.cardId());
-        } else {
-            indexService.queueNote(noteId);
-        }
+        indexService.queueUnresolvedCard(change.cardId());
     }
 }

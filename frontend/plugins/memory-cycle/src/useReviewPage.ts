@@ -245,27 +245,32 @@ export function useReviewPage() {
   }
 
   async function locateCard(card: { cardId: string; noteId?: string }) {
+    const tab = window.open('', '_blank')
+    if (!tab) {
+      toast('浏览器阻止了新标签页', 'error')
+      return
+    }
+    tab.opener = null
     let noteId = card.noteId
     if (!noteId) {
       try {
         noteId = await resolveCardNoteId(card.cardId)
       } catch (error) {
+        tab.close()
         toast(`解析卡片位置失败：${(error as Error).message}`, 'error')
         return
       }
     }
     if (!noteId) {
+      tab.close()
       toast('卡片所属笔记尚未加载', 'error')
       return
     }
     const target: RouteLocationRaw = router.hasRoute('note')
-      ? { name: 'note', params: { id: noteId }, query: { cardId: card.cardId } }
-      : { path: `/notes/${noteId}`, query: { cardId: card.cardId } }
-    try {
-      await router.push(target)
-    } catch (error) {
-      toast(`打开笔记失败：${(error as Error).message}`, 'error')
-    }
+      ? { name: 'note', params: { id: noteId }, query: { cardId: card.cardId, onlyNote: noteId } }
+      : { path: `/notes/${noteId}`, query: { cardId: card.cardId, onlyNote: noteId } }
+    const resolved = router.resolve(target)
+    tab.location.href = new URL(resolved.href, window.location.href).href
   }
 
   function cancelDeleteCard() {

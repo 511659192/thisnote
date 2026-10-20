@@ -30,6 +30,7 @@ public final class ImageSize {
      * @return {@code [width, height]}；读不出来时返回 {@code null}
      */
     public static int[] of(Path file) {
+        Exception decodeFailure = null;
         try (ImageInputStream input = ImageIO.createImageInputStream(file.toFile())) {
             if (input != null) {
                 Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
@@ -48,11 +49,17 @@ public final class ImageSize {
                 }
             }
         } catch (Exception e) {
-            // 交给 WebP 头解析兜底
+            decodeFailure = e;
+            log.debug("标准图片解码失败，尝试 WebP 头解析：file={}", file, e);
         }
         int[] fallback = webp(file);
         if (fallback == null) {
-            log.error("无法读取图片尺寸：{}", file);
+            if (decodeFailure == null) {
+                log.warn("无法读取图片尺寸，文件头无法识别：file={}", file);
+            } else {
+                log.warn("无法读取图片尺寸，标准解码与 WebP 回退均失败：file={}, decoderError={}",
+                        file, decodeFailure.getMessage());
+            }
         }
         return fallback;
     }
@@ -104,8 +111,10 @@ public final class ImageSize {
                 skipFully(in, size + (size & 1));
             }
         } catch (EOFException e) {
+            log.debug("WebP 文件头不完整：file={}", file, e);
             return null;
         } catch (Exception e) {
+            log.debug("WebP 头解析失败：file={}", file, e);
             return null;
         }
     }

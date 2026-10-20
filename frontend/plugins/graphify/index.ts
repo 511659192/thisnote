@@ -11,8 +11,17 @@ import GraphifySettings from './src/components/GraphifySettings.vue'
 import {
   GRAPHIFY_PLUGIN_ID,
   GRAPHIFY_TAG_FILTER_ID,
+  activateTagFilter,
   loadFilteredNoteIds,
+  selectedTag,
 } from './src/tagFilter'
+
+function graphTagFromLocation(): string {
+  const hash = window.location.hash
+  const queryStart = hash.indexOf('?')
+  const query = queryStart >= 0 ? hash.slice(queryStart + 1) : window.location.search
+  return new URLSearchParams(query).get('graphTag')?.trim() ?? ''
+}
 
 function register(): void {
   registerPluginSettings({ pluginId: GRAPHIFY_PLUGIN_ID, component: GraphifySettings })
@@ -45,6 +54,11 @@ function register(): void {
     hidden: true,
     load: loadFilteredNoteIds,
   })
+  const graphTag = graphTagFromLocation()
+  if (graphTag) {
+    selectedTag.value = graphTag
+    activateTagFilter()
+  }
 }
 
 export const { bootstrap, mount, unmount } = createPluginLifecycle({

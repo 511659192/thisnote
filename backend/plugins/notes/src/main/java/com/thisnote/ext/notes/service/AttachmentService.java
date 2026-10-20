@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.TypeReference;
 import com.thisnote.ext.notes.config.NotesConfig;
 import com.thisnote.ext.notes.model.CardPO;
 import com.thisnote.ext.notes.repository.CardRepository;
+import com.thisnote.plugin.api.event.AttachmentStageFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.util.FileHelper;
 import com.thisnote.plugin.api.util.ImageSize;
@@ -61,7 +62,43 @@ public class AttachmentService {
         Path destination = notesConfig.getRootDir().resolve("attachments").resolve(fileName);
         fileHelper.fileWritten(destination, file);
         putMetadata(fileName, buildMeta(attachmentId, fileName, null, destination, mediaType));
+        log.info("附件已保存：fileName={}, bytes={}", fileName, destination.toFile().length());
         return "../attachments/" + fileName;
+    }
+
+    /**
+     * 把其他插件选中的本地图片复制到待管理附件目录，索引与建卡交给定时导入任务。
+     */
+    public synchronized AttachmentStageFutureEvent.AttachmentStageResult stageImported(Path source) {
+        if (source == null || !Files.isRegularFile(source)) {
+            throw new IllegalArgumentException("源图片不存在：" + source);
+        }
+        String name = source.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String extension = dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
+        String mediaType = MEDIA_TYPES_BY_EXTENSION.get(extension);
+        if (mediaType == null) {
+            throw new IllegalArgumentException("不支持的图片格式：" + name);
+        }
+
+        if (hasOriginalName(name)) {
+            log.debug("跳过同名附件暂存：fileName={}", name);
+            return new AttachmentStageFutureEvent.AttachmentStageResult(name, true);
+        }
+        Path destination = notesConfig.getRootDir().resolve("attachments").resolve(name);
+        long modifiedAt;
+        try {
+            modifiedAt = Files.getLastModifiedTime(source).toMillis();
+            fileHelper.fileWritten(
+                    destination,
+                    Files.newInputStream(source),
+                    modifiedAt
+            );
+        } catch (IOException e) {
+            throw new UncheckedIOException("复制图片失败：" + source, e);
+        }
+        log.debug("图片已复制到待管理附件目录：source={}, destination={}", source, destination);
+        return new AttachmentStageFutureEvent.AttachmentStageResult(name, false);
     }
 
     /**
@@ -71,7 +108,10 @@ public class AttachmentService {
      */
     public synchronized CardDTO.AttachmentDTO adopt(String fileName) {
         Path source = imagePathOrNull(fileName);
-        if (source == null || !Files.isRegularFile(source)) return null;
+        if (source == null || !Files.isRegularFile(source)) {
+            log.debug("跳过附件接管：fileName={} 不存在或文件名非法", fileName);
+            return null;
+        }
 
         String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
         String attachmentId = UUID.randomUUID().toString();
@@ -81,6 +121,7 @@ public class AttachmentService {
 
         CardPO.AttachmentMeta meta = buildMeta(attachmentId, newFileName, fileName, target, MEDIA_TYPES_BY_EXTENSION.get(extension));
         putMetadata(newFileName, meta);
+        log.info("附件已接管：originalName={}, stagedName={}", fileName, newFileName);
         return new CardDTO.AttachmentDTO(newFileName, meta.size(), meta.w(), meta.h());
     }
 
@@ -151,6 +192,9 @@ public class AttachmentService {
                 attachments.add(new CardDTO.AttachmentDTO(fileName, attributes.size(), pixels == null ? 0 : pixels[0], pixels == null ? 0 : pixels[1]));
             }
         }
+        if (!attachments.isEmpty()) {
+            log.debug("未管理附件查询完成：files={}, unmanaged={}", candidates.size(), attachments.size());
+        }
         return attachments;
     }
 
@@ -158,15 +202,36 @@ public class AttachmentService {
         if (candidates == null || candidates.isEmpty()) return;
 
         Set<String> stillReferenced = allReferencedFileNames();
+        int deleted = 0;
+        int retained = 0;
+        int missing = 0;
+        int failed = 0;
         for (String fileName : candidates) {
-            if (stillReferenced.contains(fileName)) continue;
+            if (stillReferenced.contains(fileName)) {
+                retained++;
+                continue;
+            }
             Path path = imagePathOrNull(fileName);
-            if (path == null) continue;
+            if (path == null) {
+                missing++;
+                continue;
+            }
             if (fileHelper.fileDeleted(path)) {
                 removeMetadata(fileName);
+                deleted++;
             } else if (Files.exists(path)) {
+                failed++;
                 log.error("删除未引用附件失败：{}", path);
+            } else {
+                missing++;
             }
+        }
+        if (deleted > 0 || failed > 0) {
+            log.info("无引用附件清理完成：candidates={}, deleted={}, retained={}, missing={}, failed={}",
+                    candidates.size(), deleted, retained, missing, failed);
+        } else {
+            log.debug("无引用附件清理无需删除：candidates={}, retained={}, missing={}",
+                    candidates.size(), retained, missing);
         }
     }
 
@@ -213,6 +278,15 @@ public class AttachmentService {
     private Map<String, CardPO.AttachmentMeta> readMetadata() {
         return FileHelper.readMapIndex(attachmentMetadataFile, new TypeReference<LinkedHashMap<String, CardPO.AttachmentMeta>>() {
         }, "附件");
+    }
+
+    private boolean hasOriginalName(String fileName) {
+        Path pending = notesConfig.getRootDir().resolve("attachments").resolve(fileName);
+        if (Files.exists(pending)) return true;
+        return readMetadata().values().stream()
+                .anyMatch(meta -> meta != null
+                        && meta.originalName() != null
+                        && meta.originalName().equalsIgnoreCase(fileName));
     }
 
     /**

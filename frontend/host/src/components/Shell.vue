@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useUiStore } from '@/stores/ui'
-import { sidebarPanels_, topbarSearches_ } from '@thisnote/plugin-api'
+import { pluginRoutes, sidebarPanels_, topbarSearches_ } from '@thisnote/plugin-api'
 
 const ui = useUiStore()
+const onboardingRoute = computed(() => pluginRoutes().find((route) => route.onboarding))
 
 function onKeydown(event: KeyboardEvent) {
   if (event.repeat || !event.ctrlKey || event.key !== '\\') return
@@ -34,6 +35,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <component :is="w.component" />
       </template>
       <div class="spacer"></div>
+      <button
+        v-if="onboardingRoute"
+        class="btn ghost icon"
+        :class="{ active: $route.name === onboardingRoute.name }"
+        title="使用指南"
+        @click="$router.push(onboardingRoute.path)"
+      >
+        ?
+      </button>
       <button
         class="btn ghost icon"
         :title="ui.theme === 'dark' ? '切换到浅色' : '切换到深色'"
@@ -123,5 +133,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   flex-direction: column;
   background: var(--c-bg);
   overflow: hidden;
+}
+@media (max-width: 520px) {
+  .topbar {
+    gap: 3px;
+    padding: 0 var(--space-2);
+  }
+  .brand-name {
+    display: none;
+  }
 }
 </style>
