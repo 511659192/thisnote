@@ -1,6 +1,6 @@
 package com.thisnote.plugin.api.event;
 
-import com.thisnote.plugin.api.event.ifaces.PluginQuery;
+import com.thisnote.plugin.api.event.ifaces.PluginFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 
 import java.util.List;
@@ -12,11 +12,11 @@ import java.util.concurrent.CompletableFuture;
  * <p>由核心插件（notes）回答 —— 附件存哪儿、卡片正文怎么引用附件，这两件事归它所有；
  * 导入类插件只拿结果，不解析卡片内容，也不自己扫描附件目录。
  *
- * <p>与 {@link CardQueryEvent} 一样是「发布方等结果」的查询事件，必须经主容器发布，
+ * <p>与 {@link CardFutureEvent} 一样是「发布方等结果」的查询事件，必须经主容器发布，
  * 响应方把 listener 注册在主容器上（原因见 {@link CardChangedEvent}）。
  *
  * <p>找不到响应方时 future 不会被完成，发布方应自行设置超时。
  */
-public record AttachmentQueryEvent(CompletableFuture<List<CardDTO.AttachmentDTO>> result)
-        implements PluginQuery<List<CardDTO.AttachmentDTO>> {
+public record AttachmentFutureEvent(CompletableFuture<List<CardDTO.AttachmentDTO>> result)
+        implements PluginFutureEvent<List<CardDTO.AttachmentDTO>> {
 }

@@ -1,6 +1,9 @@
 package com.thisnote.ext.notes;
 
 import com.thisnote.ext.notes.config.NotesConfig;
+import com.thisnote.ext.notes.model.NotesMapper;
+import com.thisnote.ext.notes.repository.CardRepository;
+import com.thisnote.ext.notes.repository.NoteRepository;
 import com.thisnote.ext.notes.service.AttachmentService;
 import com.thisnote.ext.notes.service.CardService;
 import com.thisnote.ext.notes.service.NoteService;
@@ -83,13 +86,16 @@ public class NotesPlugin extends SpringBootPlugin {
         fileChangeListener = new FileChangeEventListener(attachmentsDirectory, getMainApplicationContext());
         cardAttachmentCleanupListener = new CardAttachmentCleanupListener(attachmentService);
         cardCreateRequestListener = new CardCreateRequestListener(cardService, noteService);
-        cardQueryEventListener = new CardQueryEventListener(cardService);
+        CardRepository cardRepository = ctx.getBean(CardRepository.class);
+        NoteRepository noteRepository = ctx.getBean(NoteRepository.class);
+        NotesMapper notesMapper = ctx.getBean(NotesMapper.class);
+        cardQueryEventListener = new CardQueryEventListener(cardRepository, notesMapper);
         attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
         attachmentAdoptEventListener = new AttachmentAdoptEventListener(attachmentService);
         noteContentQueryEventListener = new NoteContentQueryEventListener(noteService, cardService);
-        noteListQueryEventListener = new NoteListQueryEventListener(noteService);
+        noteListQueryEventListener = new NoteListQueryEventListener(noteRepository, notesMapper);
         attachmentBytesQueryEventListener = new AttachmentBytesQueryEventListener(attachmentService);
-        stateResetListener = new PluginStateResetListener(noteService);
+        stateResetListener = new PluginStateResetListener(noteRepository, cardRepository, attachmentService);
         getMainApplicationContext().addApplicationListener(fileChangeListener);
         getMainApplicationContext().addApplicationListener(cardAttachmentCleanupListener);
         getMainApplicationContext().addApplicationListener(cardCreateRequestListener);

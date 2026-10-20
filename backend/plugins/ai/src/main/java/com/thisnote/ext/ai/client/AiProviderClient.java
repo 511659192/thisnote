@@ -3,8 +3,8 @@ package com.thisnote.ext.ai.client;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.thisnote.plugin.api.event.AiRuntimeEvent;
-import lombok.extern.slf4j.Slf4j;
+import com.thisnote.plugin.api.event.AiCompletionFutureEvent;
+import com.thisnote.plugin.api.event.AiRuntimeFututeEvent;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -17,48 +17,27 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Component
 public class AiProviderClient {
 
     private static final String OPENCODE_GO_URL = "https://opencode.ai/inference/go/openai/v1/chat/completions";
-    private static final String TAG_PROMPT = """
-            Extract 10 to 20 high-level, reusable business tags from the note text and images.
-            Return JSON only in the form {"tags":["tag"]}.
-            Tags must be short concepts, not section headings, file names, code symbols, URLs, or full sentences.
-            Prefer concepts that help find the note later. Deduplicate and keep every tag under 24 characters.
-            Use the note's dominant language for the tag labels.
-            """;
-    private static final Pattern FILE_EXTENSION = Pattern.compile(".*\\.(?:java|md|json|yml|yaml|xml|ts|tsx|js|jsx|css|html|properties)$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CAMEL_CASE = Pattern.compile("[a-z][A-Z]");
-    private static final Pattern PATH_OR_CODE = Pattern.compile("[/\\\\`()\\[\\]{}<>=|$]");
-    private static final Pattern SENTENCE_PUNCTUATION = Pattern.compile("[，,、;；:：。.!?！？]");
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(60)).build();
 
-    public void test(AiRuntimeEvent.Runtime runtime) {
+    public void test(AiRuntimeFututeEvent.Runtime runtime) {
         String response = complete(runtime, "Reply with exactly OK.", "Connection test", List.of(), 32);
         if (response == null || response.isBlank()) {
             throw new IllegalStateException("模型没有返回内容");
         }
     }
 
-    public List<String> suggestTags(AiRuntimeEvent.Runtime runtime,
-                                    String noteText,
-                                    List<ImageInput> images) {
-        String response = complete(runtime, TAG_PROMPT, noteText, images, 1200);
-        List<String> tags = parseTags(response);
-        return tags.isEmpty() ? parseTagsFromListFallback(response) : tags;
-    }
-
-    private String complete(AiRuntimeEvent.Runtime runtime,
-                            String system,
-                            String userText,
-                            List<ImageInput> images,
-                            int maxTokens) {
+    public String complete(AiRuntimeFututeEvent.Runtime runtime,
+                           String system,
+                           String userText,
+                           List<AiCompletionFutureEvent.ImageInput> images,
+                           int maxTokens) {
         HttpRequest request = chatRequest(runtime, system, userText, images, maxTokens);
         HttpResponse<String> response;
         try {
@@ -77,10 +56,10 @@ public class AiProviderClient {
         return chatText(body);
     }
 
-    private HttpRequest chatRequest(AiRuntimeEvent.Runtime runtime,
+    private HttpRequest chatRequest(AiRuntimeFututeEvent.Runtime runtime,
                                     String system,
                                     String userText,
-                                    List<ImageInput> images,
+                                    List<AiCompletionFutureEvent.ImageInput> images,
                                     int maxTokens) {
         JSONObject body = new JSONObject();
         body.put("model", runtime.model());
@@ -101,7 +80,7 @@ public class AiProviderClient {
     }
 
     private Object chatContent(String text,
-                               List<ImageInput> images) {
+                               List<AiCompletionFutureEvent.ImageInput> images) {
         if (images.isEmpty()) {
             return text;
         }
@@ -127,65 +106,6 @@ public class AiProviderClient {
         return "";
     }
 
-    private List<String> parseTags(String response) {
-        if (response == null || response.isBlank()) {
-            return List.of();
-        }
-        int start = response.indexOf('{');
-        int end = response.lastIndexOf('}');
-        if (start >= 0 && end > start) {
-            try {
-                JSONObject object = JSON.parseObject(response.substring(start, end + 1).getBytes(StandardCharsets.UTF_8));
-                return cleanTags(object.getJSONArray("tags"));
-            } catch (Exception e) {
-                // Try an array-only response next.
-                log.error("AI 标签响应无法解析为 JSON 对象", e);
-            }
-        }
-        int arrayStart = response.indexOf('[');
-        int arrayEnd = response.lastIndexOf(']');
-        if (arrayStart >= 0 && arrayEnd > arrayStart) {
-            try {
-                return cleanTags(JSON.parseArray(response.substring(arrayStart, arrayEnd + 1).getBytes(StandardCharsets.UTF_8)));
-            } catch (Exception e) {
-                // Fall through to an empty result.
-                log.error("AI 标签响应无法解析为 JSON 数组", e);
-            }
-        }
-        return List.of();
-    }
-
-    private List<String> parseTagsFromListFallback(String response) {
-        if (response == null || response.isBlank()) {
-            return List.of();
-        }
-        return dedupe(response.lines().map(line -> line.replaceFirst("^\\s*[-*\\d.、]+\\s*", "").trim()).filter(this::isMeaningfulTag).toList());
-    }
-
-    private List<String> cleanTags(JSONArray array) {
-        if (array == null) {
-            return List.of();
-        }
-        return array.stream().filter(value -> value instanceof String).map(String::valueOf).map(this::cleanTag).filter(Objects::nonNull).distinct().limit(20).toList();
-    }
-
-    private String cleanTag(String raw) {
-        String value = raw == null ? "" : raw.trim().replaceFirst("^#+\\s*", "").replaceAll("^[\"'“”]+|[\"'“”]+$", "").trim();
-        if (!isMeaningfulTag(value)) {
-            return null;
-        }
-        return value;
-    }
-
-    private boolean isMeaningfulTag(String value) {
-        return value.length() >= 2 && value.length() <= 24 && !FILE_EXTENSION.matcher(value).matches() && !CAMEL_CASE.matcher(value).find() && !PATH_OR_CODE.matcher(value)
-                .find() && !SENTENCE_PUNCTUATION.matcher(value).find() && !value.matches("^(?:\\d+|[0-9a-fA-F]{8,})$");
-    }
-
-    private List<String> dedupe(List<String> tags) {
-        return tags.stream().distinct().toList();
-    }
-
     private static JSONObject object(Object... pairs) {
         JSONObject result = new JSONObject();
         for (int i = 0; i + 1 < pairs.length; i += 2) {
@@ -194,6 +114,4 @@ public class AiProviderClient {
         return result;
     }
 
-    public record ImageInput(String mediaType, String base64) {
-    }
 }

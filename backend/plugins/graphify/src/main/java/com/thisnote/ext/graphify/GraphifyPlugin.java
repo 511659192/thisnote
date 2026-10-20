@@ -1,11 +1,11 @@
 package com.thisnote.ext.graphify;
 
-import com.thisnote.ext.graphify.service.GraphifyIndexService;
+import com.thisnote.ext.graphify.client.GraphifyAiClient;
 import com.thisnote.ext.graphify.listener.AttachmentChangedEventListener;
 import com.thisnote.ext.graphify.listener.CardChangedEventListener;
 import com.thisnote.ext.graphify.listener.NoteChangedEventListener;
 import com.thisnote.ext.graphify.listener.PluginStateResetListener;
-import com.thisnote.ext.graphify.client.GraphifyAiClient;
+import com.thisnote.ext.graphify.service.GraphifyIndexService;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.laxture.sbp.SpringBootPlugin;
@@ -15,7 +15,8 @@ import org.pf4j.PluginWrapper;
 import org.springframework.context.support.GenericApplicationContext;
 
 @Slf4j
-public class GraphifyPlugin extends SpringBootPlugin {
+public class GraphifyPlugin
+        extends SpringBootPlugin {
 
     public static final String PLUGIN_ID = "graphify";
 
@@ -35,20 +36,24 @@ public class GraphifyPlugin extends SpringBootPlugin {
     }
 
     @Override
-    public void onPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
+    public void onPluginBootstrap(SpringBootstrap bootstrap,
+                                  GenericApplicationContext ctx) {
         super.onPluginBootstrap(bootstrap, ctx);
         ctx.registerBean(FileHelper.class, () -> new FileHelper(getMainApplicationContext(), PLUGIN_ID));
     }
 
     @Override
-    public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
+    public void afterPluginBootstrap(SpringBootstrap bootstrap,
+                                     GenericApplicationContext ctx) {
         indexService = ctx.getBean(GraphifyIndexService.class);
         indexService.setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(GraphifyAiClient.class).setMainEventPublisher(getMainApplicationContext());
+
         noteChangedEventListener = new NoteChangedEventListener(indexService);
         cardChangedEventListener = new CardChangedEventListener(indexService);
         attachmentChangedEventListener = new AttachmentChangedEventListener(indexService);
         stateResetListener = new PluginStateResetListener(indexService);
+
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
         getMainApplicationContext().addApplicationListener(cardChangedEventListener);
         getMainApplicationContext().addApplicationListener(attachmentChangedEventListener);

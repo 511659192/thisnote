@@ -66,7 +66,7 @@ async function save(): Promise<boolean> {
   }
   const maxTextChars = Number(settings.value.maxTextChars)
   if (!Number.isInteger(maxTextChars) || maxTextChars < 1_000 || maxTextChars > 1_000_000) {
-    error.value = '标签抽取文本上限必须是 1,000 到 1,000,000 之间的整数'
+    error.value = '单次文本上限必须是 1,000 到 1,000,000 之间的整数'
     return false
   }
   settings.value.maxTextChars = maxTextChars
@@ -138,7 +138,7 @@ onMounted(load)
       </label>
 
       <label>
-        <span>标签抽取文本上限（字符）</span>
+        <span>单次文本上限（字符）</span>
         <input
           v-model.number="settings.maxTextChars"
           type="number"

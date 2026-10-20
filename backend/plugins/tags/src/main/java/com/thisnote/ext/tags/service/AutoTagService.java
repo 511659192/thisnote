@@ -1,54 +1,43 @@
 package com.thisnote.ext.tags.service;
 
-import com.thisnote.plugin.api.event.NoteTagSuggestionEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
+import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 @Service
-@Slf4j
 public class AutoTagService {
 
     private static final int MAX_AUTO_TAGS = 20;
 
     private final TagsService tagsService;
-    private ApplicationEventPublisher eventPublisher;
+    private final TagSuggestionService tagSuggestionService;
 
-    public AutoTagService(TagsService tagsService) {
+    public AutoTagService(TagsService tagsService,
+                          TagSuggestionService tagSuggestionService) {
         this.tagsService = tagsService;
-    }
-
-    public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
-        this.eventPublisher = eventPublisher;
+        this.tagSuggestionService = tagSuggestionService;
     }
 
     public List<String> extract(String noteId) {
-        NoteDTO note = tagsService.note(noteId);
-        if (note == null) {
+        NoteCardDTO content = tagsService.noteContent(noteId);
+        if (content == null || content.note() == null) {
             throw new IllegalArgumentException("笔记不存在");
         }
-        List<CardDTO> cards = tagsService.cards(noteId);
-        List<String> documents = cards == null ? List.of() : cards.stream()
-                                                             .filter(Objects::nonNull)
-                                                             .map(CardDTO::content)
-                                                             .filter(Objects::nonNull)
-                                                             .toList();
-        Set<String> suggestions = new LinkedHashSet<>();
-        NoteTagSuggestionEvent request = NoteTagSuggestionEvent.request(noteId, MAX_AUTO_TAGS);
-        if (eventPublisher != null) {
-            try {
-                eventPublisher.publishEvent(request);
-                if (request.suggestions().isDone()) {
-                    suggestions.addAll(request.suggestions().getNow(List.of()));
-                }
-            } catch (Exception e) {
-                log.error("AI 标签建议跳过：noteId={}", noteId, e);
-            }
-        }
+        NoteDTO note = content.note();
+        List<CardDTO> cards = content.cards() == null ? List.of() : content.cards();
+        List<String> documents = cards.stream()
+                                      .filter(Objects::nonNull)
+                                      .map(CardDTO::content)
+                                      .filter(Objects::nonNull)
+                                      .toList();
+        Set<String> suggestions = new LinkedHashSet<>(tagSuggestionService.suggest(note, cards, MAX_AUTO_TAGS));
         suggestions.addAll(HighLevelTagExtractor.extract(documents, MAX_AUTO_TAGS));
         return tagsService.mergeUpTo(
                 noteId,

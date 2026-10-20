@@ -14,6 +14,14 @@ public class NoteChangedEventListener
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<NoteChangedEvent> event) {
-        indexService.onNoteChanged(event.getPayload());
+        NoteChangedEvent change = event.getPayload();
+        if (change.kind() == NoteChangedEvent.Kind.TEXT_CHANGED) {
+            return;
+        }
+        if (change.kind() == NoteChangedEvent.Kind.DELETED) {
+            indexService.queueNoteDeletion(change.noteId());
+        } else {
+            indexService.queueNote(change.noteId());
+        }
     }
 }

@@ -45,16 +45,6 @@ public class NoteService {
         this.mainEventPublisher = publisher;
     }
 
-    /**
-     * 状态重置：把笔记索引、卡片索引与附件索引重写为空（卡片 md 与附件文件保留）。
-     */
-    public synchronized void resetIndexes() {
-        noteRepository.reset();
-        cardRepository.reset();
-        attachmentService.reset();
-        log.info("笔记索引、卡片索引与附件索引已重置");
-    }
-
     public synchronized NoteDTO create(String title,
                                        String bookId,
                                        List<String> cardIds) {
@@ -146,10 +136,6 @@ public class NoteService {
         NotePO meta = noteRepository.getOne(id);
         if (meta == null) throw new NotFoundException("node " + id);
         return notesMapper.toNoteDTO(meta);
-    }
-
-    public List<NoteDTO> all() {
-        return noteRepository.getAll().stream().map(notesMapper::toNoteDTO).toList();
     }
 
     public List<NoteDTO> list(NoteListRequest query) {

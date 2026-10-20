@@ -1,6 +1,6 @@
 package com.thisnote.plugin.api.event;
 
-import com.thisnote.plugin.api.event.ifaces.PluginQuery;
+import com.thisnote.plugin.api.event.ifaces.PluginFutureEvent;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -8,15 +8,15 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 查询 AI 能力插件当前运行配置。调用方不读取 AI 插件的配置文件。
  */
-public record AiRuntimeEvent(CompletableFuture<Runtime> runtime)
-        implements PluginQuery<AiRuntimeEvent.Runtime> {
+public record AiRuntimeFututeEvent(CompletableFuture<Runtime> runtime)
+        implements PluginFutureEvent<AiRuntimeFututeEvent.Runtime> {
 
-    public AiRuntimeEvent {
+    public AiRuntimeFututeEvent {
         runtime = Objects.requireNonNull(runtime, "runtime");
     }
 
-    public static AiRuntimeEvent request() {
-        return new AiRuntimeEvent(new CompletableFuture<>());
+    public static AiRuntimeFututeEvent request() {
+        return new AiRuntimeFututeEvent(new CompletableFuture<>());
     }
 
     @Override

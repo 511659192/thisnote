@@ -1,7 +1,7 @@
 package com.thisnote.ext.attachmentimporter.service;
 
-import com.thisnote.plugin.api.event.AttachmentAdoptEvent;
-import com.thisnote.plugin.api.event.AttachmentQueryEvent;
+import com.thisnote.plugin.api.event.AttachmentAdoptFutureEvent;
+import com.thisnote.plugin.api.event.AttachmentFutureEvent;
 import com.thisnote.plugin.api.event.CardChangedEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -20,11 +20,11 @@ import java.util.concurrent.TimeUnit;
  * <p>与 card-importer 同构：本插件只负责发现候选、提交创建申请；
  * 笔记与卡片由 notes 通过 {@link CardChangedEvent#requestCardCreate} 创建。
  *
- * <p>候选 = notes 通过 {@link AttachmentQueryEvent} 返回的「未被管理的附件」
+ * <p>候选 = notes 通过 {@link AttachmentFutureEvent} 返回的「未被管理的附件」
  * （attachments 目录里、没有任何卡片引用的 png/jpg/webp）。
  * 不保存导入状态：是否已导入由「有没有卡片引用它」判断。
  *
- * <p>每个候选先经 {@link AttachmentAdoptEvent} 交给 notes：改名为 {@code <uuid>.<ext>}，
+ * <p>每个候选先经 {@link AttachmentAdoptFutureEvent} 交给 notes：改名为 {@code <uuid>.<ext>}，
  * 原始文件名记入附件元数据；本插件再按新文件名建卡，标题取原文件名（去掉扩展名）。
  */
 @Slf4j
@@ -65,7 +65,7 @@ public class AttachmentImporterService {
 
     private void importNewAttachments() {
         CompletableFuture<List<CardDTO.AttachmentDTO>> result = new CompletableFuture<>();
-        mainEventPublisher.publishEvent(new AttachmentQueryEvent(result));
+        mainEventPublisher.publishEvent(new AttachmentFutureEvent(result));
         List<CardDTO.AttachmentDTO> attachments = result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
 
         attachments.forEach(attachment -> {
@@ -81,7 +81,7 @@ public class AttachmentImporterService {
      */
     private CardDTO.AttachmentDTO adopt(String fileName) {
         CompletableFuture<CardDTO.AttachmentDTO> result = new CompletableFuture<>();
-        mainEventPublisher.publishEvent(new AttachmentAdoptEvent(result, fileName));
+        mainEventPublisher.publishEvent(new AttachmentAdoptFutureEvent(result, fileName));
         try {
             return result.orTimeout(REFERENCE_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
         } catch (Exception e) {

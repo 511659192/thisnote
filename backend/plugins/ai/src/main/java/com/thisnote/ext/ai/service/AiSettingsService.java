@@ -2,7 +2,7 @@ package com.thisnote.ext.ai.service;
 
 import com.thisnote.ext.ai.client.AiProviderClient;
 import com.thisnote.ext.ai.repository.AiSettingsRepository;
-import com.thisnote.plugin.api.event.AiRuntimeEvent;
+import com.thisnote.plugin.api.event.AiRuntimeFututeEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -42,9 +42,9 @@ public class AiSettingsService {
         return new Settings(provider.name(), model, normalizeMaxTextChars(stored.maxTextChars()));
     }
 
-    public AiRuntimeEvent.Runtime runtime() {
+    public AiRuntimeFututeEvent.Runtime runtime() {
         Settings settings = settings();
-        return new AiRuntimeEvent.Runtime(settings.provider(), settings.model(), settingsRepository.getApiKey(settings.provider()));
+        return new AiRuntimeFututeEvent.Runtime(settings.provider(), settings.model(), settingsRepository.getApiKey(settings.provider()));
     }
 
     public SettingsResponse response() {
@@ -77,7 +77,7 @@ public class AiSettingsService {
     }
 
     public TestResponse test() {
-        AiRuntimeEvent.Runtime runtime = runtime();
+        AiRuntimeFututeEvent.Runtime runtime = runtime();
         if (!runtime.configured()) {
             return new TestResponse(false, "请先配置 Provider、模型和 API key");
         }
@@ -103,7 +103,7 @@ public class AiSettingsService {
 
     private static int requireMaxTextChars(int value) {
         if (value < MIN_MAX_TEXT_CHARS || value > MAX_MAX_TEXT_CHARS) {
-            throw new IllegalArgumentException("标签抽取文本上限必须在 1,000 到 1,000,000 字符之间");
+            throw new IllegalArgumentException("单次文本上限必须在 1,000 到 1,000,000 字符之间");
         }
         return value;
     }

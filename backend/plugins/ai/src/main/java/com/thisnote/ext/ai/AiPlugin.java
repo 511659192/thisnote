@@ -1,9 +1,9 @@
 package com.thisnote.ext.ai;
 
-import com.thisnote.ext.ai.service.AiTagSuggestionService;
+import com.thisnote.ext.ai.client.AiProviderClient;
+import com.thisnote.ext.ai.listener.AiCompletionEventListener;
 import com.thisnote.ext.ai.listener.AiRuntimeEventListener;
 import com.thisnote.ext.ai.service.AiSettingsService;
-import com.thisnote.ext.ai.listener.NoteTagSuggestionEventListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
 import org.laxture.sbp.spring.boot.IPluginConfigurer;
@@ -16,7 +16,7 @@ public class AiPlugin extends SpringBootPlugin {
     public static final String PLUGIN_ID = "ai";
 
     private AiRuntimeEventListener aiRuntimeEventListener;
-    private NoteTagSuggestionEventListener noteTagSuggestionEventListener;
+    private AiCompletionEventListener aiCompletionEventListener;
 
     public AiPlugin(PluginWrapper wrapper) {
         super(wrapper, new IPluginConfigurer[0]);
@@ -35,12 +35,13 @@ public class AiPlugin extends SpringBootPlugin {
 
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap, GenericApplicationContext ctx) {
-        AiTagSuggestionService tagSuggestionService = ctx.getBean(AiTagSuggestionService.class);
-        tagSuggestionService.setMainEventPublisher(getMainApplicationContext());
         aiRuntimeEventListener = new AiRuntimeEventListener(ctx.getBean(AiSettingsService.class));
-        noteTagSuggestionEventListener = new NoteTagSuggestionEventListener(tagSuggestionService);
+        aiCompletionEventListener = new AiCompletionEventListener(
+                ctx.getBean(AiSettingsService.class),
+                ctx.getBean(AiProviderClient.class)
+        );
         getMainApplicationContext().addApplicationListener(aiRuntimeEventListener);
-        getMainApplicationContext().addApplicationListener(noteTagSuggestionEventListener);
+        getMainApplicationContext().addApplicationListener(aiCompletionEventListener);
     }
 
     @Override
@@ -49,9 +50,9 @@ public class AiPlugin extends SpringBootPlugin {
             getMainApplicationContext().removeApplicationListener(aiRuntimeEventListener);
             aiRuntimeEventListener = null;
         }
-        if (noteTagSuggestionEventListener != null) {
-            getMainApplicationContext().removeApplicationListener(noteTagSuggestionEventListener);
-            noteTagSuggestionEventListener = null;
+        if (aiCompletionEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(aiCompletionEventListener);
+            aiCompletionEventListener = null;
         }
         super.stop();
     }

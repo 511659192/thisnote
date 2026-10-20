@@ -1,7 +1,7 @@
 package com.thisnote.ext.favorite.listener;
 
 import com.thisnote.ext.favorite.FavoritePlugin;
-import com.thisnote.ext.favorite.service.FavoriteService;
+import com.thisnote.ext.favorite.repository.FavoriteRepository;
 import com.thisnote.plugin.api.event.PluginStateResetEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,12 +13,13 @@ import org.springframework.context.PayloadApplicationEvent;
 public class PluginStateResetListener
         implements ApplicationListener<PayloadApplicationEvent<PluginStateResetEvent>> {
 
-    private final FavoriteService favoriteService;
+    private final FavoriteRepository favoriteRepository;
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
         try {
-            favoriteService.clear();
+            favoriteRepository.deleteAll();
+            log.info("收藏状态已清空");
         } catch (Exception e) {
             log.error("插件 {} 状态重置失败", FavoritePlugin.PLUGIN_ID, e);
         }

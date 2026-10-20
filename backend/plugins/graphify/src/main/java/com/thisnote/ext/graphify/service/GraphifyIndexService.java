@@ -6,12 +6,9 @@ import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.GraphifyPlugin;
 import com.thisnote.ext.graphify.client.GraphifyProcessRunner;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
-import com.thisnote.plugin.api.event.AttachmentBytesQueryEvent;
-import com.thisnote.plugin.api.event.AttachmentChangedEvent;
-import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.NoteContentQueryEvent;
-import com.thisnote.plugin.api.event.NoteChangedEvent;
-import com.thisnote.plugin.api.event.NoteListQueryEvent;
+import com.thisnote.plugin.api.event.AttachmentBytesFutureEvent;
+import com.thisnote.plugin.api.event.NoteContentFutureEvent;
+import com.thisnote.plugin.api.event.NoteListFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
@@ -121,7 +118,7 @@ public class GraphifyIndexService {
 
     private List<NoteDTO> allNotes() {
         CompletableFuture<List<NoteDTO>> result = new CompletableFuture<>();
-        publisher().publishEvent(new NoteListQueryEvent(result));
+        publisher().publishEvent(new NoteListFutureEvent(result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
@@ -137,13 +134,13 @@ public class GraphifyIndexService {
 
     private byte[] attachment(String fileName) {
         CompletableFuture<byte[]> result = new CompletableFuture<>();
-        publisher().publishEvent(new AttachmentBytesQueryEvent(fileName, result));
+        publisher().publishEvent(new AttachmentBytesFutureEvent(fileName, result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
     private NoteCardDTO noteContent(String noteId) {
         CompletableFuture<NoteCardDTO> result = new CompletableFuture<>();
-        publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
+        publisher().publishEvent(new NoteContentFutureEvent(noteId, result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
@@ -446,62 +443,6 @@ public class GraphifyIndexService {
                     }
                 }
             });
-        }
-    }
-
-    public void onNoteChanged(NoteChangedEvent change) {
-        if (change.kind() == NoteChangedEvent.Kind.TEXT_CHANGED) {
-            return;
-        }
-        if (change.kind() == NoteChangedEvent.Kind.DELETED) {
-            queueNoteDeletion(change.noteId());
-        } else {
-            queueNote(change.noteId());
-        }
-    }
-
-    public void onCardChanged(CardChangedEvent change) {
-        if (change.kind() == CardChangedEvent.Kind.REQUEST) {
-            return;
-        }
-        if (!shouldObserveChanges()) {
-            return;
-        }
-        String noteId = indexState.cardToNote().get(change.cardId());
-        if (noteId != null) {
-            queueNote(noteId);
-            return;
-        }
-        synchronized (queueLock) {
-            if (!stopped && shouldObserveChanges()) {
-                unresolvedCardIds.add(change.cardId());
-                scheduleQueuedChanges();
-            }
-        }
-    }
-
-    public void onAttachmentChanged(AttachmentChangedEvent change) {
-        if (!shouldObserveChanges()) {
-            return;
-        }
-        synchronized (queueLock) {
-            if (stopped || !shouldObserveChanges()) {
-                return;
-            }
-            Set<String> fileNames = new LinkedHashSet<>();
-            fileNames.add(change.fileName());
-            if (change.previousFileName() != null) {
-                fileNames.add(change.previousFileName());
-            }
-            for (String fileName : fileNames) {
-                if (!SAFE_IMAGE_NAME.matcher(fileName).matches()) {
-                    continue;
-                }
-                queuedNotes.addAll(indexState.attachmentToNotes().getOrDefault(fileName, List.of()));
-            }
-            if (!queuedNotes.isEmpty()) {
-                scheduleQueuedChanges();
-            }
         }
     }
 
@@ -1081,7 +1022,7 @@ public class GraphifyIndexService {
                 : settings.executablePath();
     }
 
-    private void queueNote(String noteId) {
+    public void queueNote(String noteId) {
         if (noteId == null || noteId.isBlank() || !shouldObserveChanges()) {
             return;
         }
@@ -1093,7 +1034,7 @@ public class GraphifyIndexService {
         }
     }
 
-    private void queueNoteDeletion(String noteId) {
+    public void queueNoteDeletion(String noteId) {
         if (noteId == null || noteId.isBlank() || !shouldObserveChanges()) {
             return;
         }
@@ -1106,7 +1047,34 @@ public class GraphifyIndexService {
         }
     }
 
-    private boolean shouldObserveChanges() {
+    public String noteIdForCard(String cardId) {
+        return indexState.cardToNote().get(cardId);
+    }
+
+    public void queueUnresolvedCard(String cardId) {
+        synchronized (queueLock) {
+            if (!stopped && shouldObserveChanges()) {
+                unresolvedCardIds.add(cardId);
+                scheduleQueuedChanges();
+            }
+        }
+    }
+
+    public void queueNotesForAttachments(Set<String> fileNames) {
+        synchronized (queueLock) {
+            if (stopped || !shouldObserveChanges()) {
+                return;
+            }
+            for (String fileName : fileNames) {
+                queuedNotes.addAll(indexState.attachmentToNotes().getOrDefault(fileName, List.of()));
+            }
+            if (!queuedNotes.isEmpty()) {
+                scheduleQueuedChanges();
+            }
+        }
+    }
+
+    public boolean shouldObserveChanges() {
         return !resetting && (indexState.initialized() || currentStatus.running());
     }
 

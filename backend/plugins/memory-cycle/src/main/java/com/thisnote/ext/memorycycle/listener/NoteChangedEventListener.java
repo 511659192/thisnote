@@ -1,6 +1,7 @@
 package com.thisnote.ext.memorycycle.listener;
 
-import com.thisnote.ext.memorycycle.service.MemoryCycleService;
+import com.thisnote.ext.memorycycle.repository.CardScheduleRepository;
+import com.thisnote.ext.memorycycle.repository.ScheduleHistoryRepository;
 import com.thisnote.plugin.api.event.NoteChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +13,8 @@ import org.springframework.context.PayloadApplicationEvent;
 public class NoteChangedEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteChangedEvent>> {
 
-    private final MemoryCycleService memoryCycleService;
+    private final CardScheduleRepository scheduleRepository;
+    private final ScheduleHistoryRepository historyRepository;
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<NoteChangedEvent> event) {
@@ -20,9 +22,14 @@ public class NoteChangedEventListener
         if (change.kind() != NoteChangedEvent.Kind.DELETED) {
             return;
         }
-        long removedCards = change.cardIds().stream()
-                .filter(memoryCycleService::delete)
-                .count();
+        long removedCards = 0;
+        for (String cardId : change.cardIds()) {
+            boolean removed = scheduleRepository.delete(cardId);
+            historyRepository.delete(cardId);
+            if (removed) {
+                removedCards++;
+            }
+        }
         log.info("笔记已删除，相关复习状态已清理：noteId={}, cards={}", change.noteId(), removedCards);
     }
 }

@@ -1,9 +1,10 @@
 package com.thisnote.ext.memorycycle;
 
 import com.thisnote.ext.memorycycle.listener.CardChangedEventListener;
-import com.thisnote.ext.memorycycle.service.MemoryCycleService;
 import com.thisnote.ext.memorycycle.listener.NoteChangedEventListener;
 import com.thisnote.ext.memorycycle.listener.PluginStateResetListener;
+import com.thisnote.ext.memorycycle.repository.CardScheduleRepository;
+import com.thisnote.ext.memorycycle.repository.ScheduleHistoryRepository;
 import com.thisnote.plugin.api.util.FileHelper;
 
 import org.laxture.sbp.SpringBootPlugin;
@@ -62,10 +63,11 @@ public class MemoryCyclePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        MemoryCycleService memoryCycleService = ctx.getBean(MemoryCycleService.class);
-        cardChangedEventListener = new CardChangedEventListener(memoryCycleService);
-        noteChangedEventListener = new NoteChangedEventListener(memoryCycleService);
-        stateResetListener = new PluginStateResetListener(memoryCycleService);
+        CardScheduleRepository scheduleRepository = ctx.getBean(CardScheduleRepository.class);
+        ScheduleHistoryRepository historyRepository = ctx.getBean(ScheduleHistoryRepository.class);
+        cardChangedEventListener = new CardChangedEventListener(scheduleRepository, historyRepository);
+        noteChangedEventListener = new NoteChangedEventListener(scheduleRepository, historyRepository);
+        stateResetListener = new PluginStateResetListener(scheduleRepository, historyRepository);
         getMainApplicationContext().addApplicationListener(cardChangedEventListener);
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);

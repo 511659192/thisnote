@@ -1,17 +1,17 @@
 package com.thisnote.plugin.api.event;
 
-import com.thisnote.plugin.api.event.ifaces.PluginQuery;
+import com.thisnote.plugin.api.event.ifaces.PluginFutureEvent;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
  * 按文件名读取附件字节，由 notes 侧监听填充；不存在时返回 null。
  */
-public record AttachmentBytesQueryEvent(String fileName,
-                                        CompletableFuture<byte[]> result)
-        implements PluginQuery<byte[]> {
+public record AttachmentBytesFutureEvent(String fileName,
+                                         CompletableFuture<byte[]> result)
+        implements PluginFutureEvent<byte[]> {
 
-    public AttachmentBytesQueryEvent {
+    public AttachmentBytesFutureEvent {
         if (fileName == null || fileName.isBlank()) {
             throw new IllegalArgumentException("fileName 不能为空");
         }

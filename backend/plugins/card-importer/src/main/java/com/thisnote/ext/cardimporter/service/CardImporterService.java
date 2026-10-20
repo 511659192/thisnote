@@ -1,7 +1,7 @@
 package com.thisnote.ext.cardimporter.service;
 
 import com.thisnote.plugin.api.event.CardChangedEvent;
-import com.thisnote.plugin.api.event.CardQueryEvent;
+import com.thisnote.plugin.api.event.CardFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +40,7 @@ public class CardImporterService {
      */
     private void requestCardImports() {
         CompletableFuture<List<CardDTO>> result = new CompletableFuture<>();
-        mainEventPublisher.publishEvent(new CardQueryEvent(result));
+        mainEventPublisher.publishEvent(new CardFutureEvent(result));
         List<CardDTO> cards = result.join();
         if (cards.isEmpty()) return;
 

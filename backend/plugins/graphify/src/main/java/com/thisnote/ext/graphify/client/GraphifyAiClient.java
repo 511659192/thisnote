@@ -1,6 +1,6 @@
 package com.thisnote.ext.graphify.client;
 
-import com.thisnote.plugin.api.event.AiRuntimeEvent;
+import com.thisnote.plugin.api.event.AiRuntimeFututeEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -13,16 +13,16 @@ public class GraphifyAiClient {
         this.eventPublisher = eventPublisher;
     }
 
-    public AiRuntimeEvent.Runtime runtime() {
+    public AiRuntimeFututeEvent.Runtime runtime() {
         if (eventPublisher == null) {
             throw new IllegalStateException("AI 核心插件尚未就绪");
         }
-        AiRuntimeEvent request = AiRuntimeEvent.request();
+        AiRuntimeFututeEvent request = AiRuntimeFututeEvent.request();
         eventPublisher.publishEvent(request);
         if (!request.runtime().isDone()) {
             throw new IllegalStateException("AI 核心插件未响应");
         }
-        AiRuntimeEvent.Runtime runtime = request.runtime().getNow(null);
+        AiRuntimeFututeEvent.Runtime runtime = request.runtime().getNow(null);
         if (runtime == null) {
             throw new IllegalStateException("AI 核心插件返回了空配置");
         }

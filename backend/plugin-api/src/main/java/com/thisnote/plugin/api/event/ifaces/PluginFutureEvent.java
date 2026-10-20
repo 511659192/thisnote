@@ -7,7 +7,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * @param <R> 响应类型
  */
-public interface PluginQuery<R> extends PluginEvent {
+public interface PluginFutureEvent<R> extends PluginEvent {
 
     CompletableFuture<R> result();
 }

@@ -28,6 +28,7 @@
 - 【硬规则】修「界面没反应」类问题必须用真实浏览器探针走**会挂载目标组件的路径**（如先打开笔记页再点菜单），从列表页走可能永远不触发卸载钩子，探针绿灯是假阴性。
 
 ## 插件与文件持久化
+- 【硬规则】跨插件 listener 不是转发层：事件类型判断、过滤、路由和重置逻辑放在对应 listener 内；listener 可直接调用仓储或 mapper，尽量不经过只做单次委托的 service，领域服务只保留需要跨仓储一致性或复杂编排的操作。依据：2026-10-20 用户指出「只有薄薄的一层 listener 也是 service，将代码逻辑从 service 中迁出，各自独立负责」，并补充「尽量不调用 service，可直接调用仓储」。
 - 【硬规则】区分业务领域事件与存储层文件事件：`BookChangedEvent` 等领域通知表达业务语义，即使当前仓库内没有消费者也属于公开契约，不得仅因“无人监听”删除；`FileChangeEvent` 是存储引擎层变更，不能替代领域事件。依据：2026-10-20 用户指出两者分层不同。
 - 【硬规则】插件之间不得通过 HTTP 调用其他插件：跨插件读取笔记/卡片/附件一律使用主容器查询事件（`NoteContentQueryEvent`、`NoteListQueryEvent`、`AttachmentBytesQueryEvent` 等），由发布方从主容器发布并等待 `CompletableFuture`；不在 `client` 包新增指向本机 `/api` 的 HTTP 客户端。依据：2026-10-19 用户要求移除 `AiNotesClient`，同形态的 `TagsNotesClient`、`GraphifyNotesClient` 一并删除。
 - 数据根目录统一由 Spring `thisnote.data-root`（默认 `${user.home}/.thisnote`）派生：笔记根 = `data-root/notes`，插件数据 = `data-root/notes/plugins/<pluginId>`；不做旧路径迁移兼容，少调用点的路径拼接直接内联、不留纯封装工具类。

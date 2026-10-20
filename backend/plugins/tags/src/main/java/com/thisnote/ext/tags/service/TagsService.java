@@ -2,8 +2,8 @@ package com.thisnote.ext.tags.service;
 
 import com.thisnote.ext.tags.repository.TagsRepository;
 import com.thisnote.ext.tags.repository.TagsRepository.NoteUsage;
-import com.thisnote.plugin.api.event.NoteContentQueryEvent;
-import com.thisnote.plugin.api.event.NoteListQueryEvent;
+import com.thisnote.plugin.api.event.NoteContentFutureEvent;
+import com.thisnote.plugin.api.event.NoteListFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
@@ -99,14 +99,6 @@ public class TagsService {
 
     public int removeEverywhere(String tag) {
         return tagsRepository.deleteTagEverywhere(requireTag(tag));
-    }
-
-    public boolean removeNote(String noteId) {
-        return tagsRepository.deleteNote(noteId);
-    }
-
-    public void clear() {
-        tagsRepository.deleteAll();
     }
 
     public Map<String, Integer> usageCounts() {
@@ -217,13 +209,13 @@ public class TagsService {
 
     public List<NoteDTO> allNotes() {
         CompletableFuture<List<NoteDTO>> result = new CompletableFuture<>();
-        publisher().publishEvent(new NoteListQueryEvent(result));
+        publisher().publishEvent(new NoteListFutureEvent(result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
-    private NoteCardDTO noteContent(String noteId) {
+    public NoteCardDTO noteContent(String noteId) {
         CompletableFuture<NoteCardDTO> result = new CompletableFuture<>();
-        publisher().publishEvent(new NoteContentQueryEvent(noteId, result));
+        publisher().publishEvent(new NoteContentFutureEvent(noteId, result));
         return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 

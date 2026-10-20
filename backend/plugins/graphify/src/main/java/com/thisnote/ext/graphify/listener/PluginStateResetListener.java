@@ -8,8 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
-import java.util.concurrent.CompletableFuture;
-
 @Slf4j
 @RequiredArgsConstructor
 public class PluginStateResetListener
@@ -19,22 +17,15 @@ public class PluginStateResetListener
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
-        CompletableFuture<Void> future;
         try {
-            future = indexService.resetState();
+            indexService.resetState().whenComplete((ignored, error) -> {
+                if (error != null) {
+                    fail(error);
+                }
+            });
         } catch (Exception e) {
             fail(e);
-            return;
         }
-        if (future == null) {
-            fail(new IllegalStateException("异步重置未返回 future"));
-            return;
-        }
-        future.whenComplete((ignored, error) -> {
-            if (error != null) {
-                fail(error);
-            }
-        });
     }
 
     private void fail(Throwable error) {

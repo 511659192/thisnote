@@ -20,7 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.util.*;
 
 @Service
@@ -37,10 +36,6 @@ public class CardService {
     @Autowired
     public void setMainEventPublisher(ApplicationEventPublisher publisher) {
         this.mainEventPublisher = publisher;
-    }
-
-    public List<CardDTO> listUnowned() throws IOException {
-        return cardRepository.listUnowned().stream().map(notesMapper::toCardDTO).toList();
     }
 
     public List<CardDTO> cards(String noteId,

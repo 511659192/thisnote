@@ -1,6 +1,6 @@
 package com.thisnote.ext.favorite;
 
-import com.thisnote.ext.favorite.service.FavoriteService;
+import com.thisnote.ext.favorite.repository.FavoriteRepository;
 import com.thisnote.ext.favorite.listener.NoteChangedEventListener;
 import com.thisnote.ext.favorite.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
@@ -46,9 +46,9 @@ public class FavoritePlugin extends SpringBootPlugin {
     @Override
     public void afterPluginBootstrap(SpringBootstrap bootstrap,
                                      org.springframework.context.support.GenericApplicationContext ctx) {
-        FavoriteService favoriteService = ctx.getBean(FavoriteService.class);
-        noteChangedEventListener = new NoteChangedEventListener(favoriteService);
-        stateResetListener = new PluginStateResetListener(favoriteService);
+        FavoriteRepository favoriteRepository = ctx.getBean(FavoriteRepository.class);
+        noteChangedEventListener = new NoteChangedEventListener(favoriteRepository);
+        stateResetListener = new PluginStateResetListener(favoriteRepository);
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
     }

@@ -14,6 +14,15 @@ public class CardChangedEventListener
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<CardChangedEvent> event) {
-        indexService.onCardChanged(event.getPayload());
+        CardChangedEvent change = event.getPayload();
+        if (change.kind() == CardChangedEvent.Kind.REQUEST || !indexService.shouldObserveChanges()) {
+            return;
+        }
+        String noteId = indexService.noteIdForCard(change.cardId());
+        if (noteId == null) {
+            indexService.queueUnresolvedCard(change.cardId());
+        } else {
+            indexService.queueNote(noteId);
+        }
     }
 }
