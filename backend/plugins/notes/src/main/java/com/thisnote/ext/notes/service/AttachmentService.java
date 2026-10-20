@@ -171,9 +171,10 @@ public class AttachmentService {
     }
 
     /**
-     * 状态重置：把附件索引重写为空 map（附件文件保留）。
+     * 状态重置：删除附件目录下的本地文件，并把附件索引重写为空 map。
      */
     public synchronized void reset() {
+        fileHelper.deleteRegularFiles(notesConfig.getRootDir().resolve("attachments"));
         fileHelper.fileWritten(attachmentMetadataFile, new LinkedHashMap<>());
     }
 

@@ -15,7 +15,7 @@ public class GraphifySettingsService {
 
     public static final String OPENCODE_GO_PROVIDER = "opencode-go";
 
-    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider("deepseek-v4.1-flash", List.of("OPENAI_API_KEY")));
+    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider(List.of("OPENAI_API_KEY")));
     private static final List<String> ENVIRONMENT_KEY_NAMES_TO_CLEAR = List.of("GEMINI_API_KEY", "GOOGLE_API_KEY", "MOONSHOT_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY",
                                                                                "OLLAMA_API_KEY");
 
@@ -32,8 +32,7 @@ public class GraphifySettingsService {
         String profileId = selectedProfileId();
         String executablePath = settingsRepository.getExecutablePath();
         try {
-            AiRuntimeFutureEvent.Runtime runtime = aiClient.runtime(profileId);
-            return new Settings(profileId, runtime.provider(), runtime.model(), executablePath);
+            return resolveSettings();
         } catch (Exception e) {
             return new Settings(profileId, "", "", executablePath);
         }
@@ -44,12 +43,30 @@ public class GraphifySettingsService {
     }
 
     public SettingsResponse response() {
-        Settings settings = settings();
+        Settings settings;
+        String aiError = "";
+        try {
+            settings = resolveSettings();
+        } catch (Exception e) {
+            String profileId = selectedProfileId();
+            settings = new Settings(profileId, "", "", settingsRepository.getExecutablePath());
+            aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
+        }
         boolean keyConfigured = false;
         try {
             keyConfigured = !apiKey(settings.aiProfileId()).isBlank();
-        } catch (Exception ignored) {
-            // 配置缺失时仍要能打开设置页重新选择。
+        } catch (Exception e) {
+            if (aiError.isBlank()) {
+                aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
+            }
+        }
+        List<AiProfileSummary> profiles;
+        String profilesError = "";
+        try {
+            profiles = aiClient.profiles();
+        } catch (Exception e) {
+            profiles = List.of();
+            profilesError = e.getMessage() == null ? "AI profile 列表不可用" : e.getMessage();
         }
         return new SettingsResponse(
                 settings.aiProfileId(),
@@ -57,7 +74,9 @@ public class GraphifySettingsService {
                 settings.model(),
                 settings.executablePath(),
                 keyConfigured,
-                profiles()
+                profiles,
+                aiError,
+                profilesError
         );
     }
 
@@ -106,18 +125,28 @@ public class GraphifySettingsService {
         return stored == null || stored.isBlank() ? AiProfilesFutureEvent.DEFAULT_PROFILE_ID : stored;
     }
 
+    private Settings resolveSettings() {
+        String profileId = selectedProfileId();
+        AiRuntimeFutureEvent.Runtime runtime = aiClient.runtime(profileId);
+        return new Settings(
+                profileId,
+                runtime.provider(),
+                runtime.model(),
+                settingsRepository.getExecutablePath()
+        );
+    }
+
     private static Provider supportedProvider(String value) {
         Provider provider = value == null ? null : PROVIDERS.get(value.trim().toLowerCase());
         if (provider == null) {
             throw new IllegalArgumentException("AI Provider 配置无效");
         }
-        return new Provider(value.trim().toLowerCase(), provider.defaultModel(), provider.keyNames());
+        return new Provider(value.trim().toLowerCase(), provider.keyNames());
     }
 
-    private record Provider(String name, String defaultModel, List<String> keyNames) {
-        private Provider(String defaultModel,
-                         List<String> keyNames) {
-            this("", defaultModel, keyNames);
+    private record Provider(String name, List<String> keyNames) {
+        private Provider(List<String> keyNames) {
+            this("", keyNames);
         }
     }
 
@@ -132,7 +161,9 @@ public class GraphifySettingsService {
                                    String model,
                                    String executablePath,
                                    boolean keyConfigured,
-                                   List<AiProfileSummary> profiles) {
+                                   List<AiProfileSummary> profiles,
+                                   String aiError,
+                                   String profilesError) {
     }
 
     public record SettingsUpdate(String executablePath, String aiProfileId) {

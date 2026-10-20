@@ -20,9 +20,6 @@ public class AttachmentChangedEventListener
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<AttachmentChangedEvent> event) {
-        if (!indexService.shouldObserveChanges()) {
-            return;
-        }
         AttachmentChangedEvent change = event.getPayload();
         Set<String> fileNames = new LinkedHashSet<>();
         fileNames.add(change.fileName());

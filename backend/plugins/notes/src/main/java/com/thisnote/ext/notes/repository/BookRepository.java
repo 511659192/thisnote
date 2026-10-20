@@ -29,6 +29,11 @@ public class BookRepository {
         fileHelper.fileWritten(file, books);
     }
 
+    public synchronized void reset() {
+        Path file = notesConfig.getRootDir().resolve("book").resolve(".books.json");
+        fileHelper.fileWritten(file, List.of(BookPO.defaultGroup(System.currentTimeMillis())));
+    }
+
     public BookPO getOne(String id) {
         return getOne(getAll(), id);
     }

@@ -109,13 +109,13 @@ async function applyAutoTags(): Promise<void> {
   refreshActiveTagFilter()
   emitPluginStateChange({ pluginId: TAGS_PLUGIN_ID, noteIds: [props.noteId] })
   if (result.pending) {
-    void pollAutoTags(props.noteId)
+    void pollAutoTags(props.noteId, result.deadlineEpochMs)
   }
 }
 
-async function pollAutoTags(noteId: string): Promise<void> {
+async function pollAutoTags(noteId: string, deadlineEpochMs: number): Promise<void> {
   const version = ++autoPollVersion
-  for (let attempt = 0; attempt < 30; attempt++) {
+  while (Date.now() <= deadlineEpochMs) {
     await new Promise((resolve) => window.setTimeout(resolve, 2_000))
     if (version !== autoPollVersion || props.noteId !== noteId) return
     try {
@@ -128,6 +128,9 @@ async function pollAutoTags(noteId: string): Promise<void> {
     } catch {
       return
     }
+  }
+  if (version === autoPollVersion && props.noteId === noteId) {
+    error.value = 'AI 标签未在预期时间内完成，已保留本地标签'
   }
 }
 

@@ -44,6 +44,7 @@ public class GraphifyGraphReader {
     private final Path graphHtmlFile;
     private final GraphifyStateRepository stateRepository;
     private ApplicationEventPublisher eventPublisher;
+    private volatile CachedGraph cachedGraph;
 
     public GraphifyGraphReader(@Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot,
                                GraphifyStateRepository stateRepository) {
@@ -64,7 +65,15 @@ public class GraphifyGraphReader {
             return null;
         }
         try {
-            return JSON.parseObject(Files.readString(graphJsonFile, StandardCharsets.UTF_8));
+            long modifiedAt = Files.getLastModifiedTime(graphJsonFile).toMillis();
+            long size = Files.size(graphJsonFile);
+            CachedGraph cached = cachedGraph;
+            if (cached != null && cached.modifiedAt() == modifiedAt && cached.size() == size) {
+                return cached.graph();
+            }
+            JSONObject graph = JSON.parseObject(Files.readString(graphJsonFile, StandardCharsets.UTF_8));
+            cachedGraph = new CachedGraph(modifiedAt, size, graph);
+            return graph;
         } catch (Exception e) {
             throw new IllegalStateException("Graphify graph.json 无法读取", e);
         }
@@ -410,5 +419,8 @@ public class GraphifyGraphReader {
     }
 
     private record ConceptMatch(String key, String label) {
+    }
+
+    private record CachedGraph(long modifiedAt, long size, JSONObject graph) {
     }
 }

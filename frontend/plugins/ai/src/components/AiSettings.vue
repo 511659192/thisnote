@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ConfirmDialog } from '@thisnote/plugin-api'
-import { aiApi, type AiProfile } from '../api/aiApi'
+import { aiApi, type AiProfile, type AiProviderDefaults } from '../api/aiApi'
 
 interface Draft {
   id: string
@@ -12,9 +12,8 @@ interface Draft {
   maxTextChars: number
 }
 
-const providerOptions = [{ value: 'opencode-go', label: 'OpenCode Go' }]
-
 const profiles = ref<AiProfile[]>([])
+const providerDefaults = ref<AiProviderDefaults[]>([])
 const selectedId = ref('')
 const draft = ref<Draft>(blankDraft())
 const apiKey = ref('')
@@ -34,13 +33,13 @@ const keyStatusText = computed(() => {
   return selectedProfile.value?.keyConfigured ? '当前配置已保存 key。' : '当前配置尚未保存 key。'
 })
 
-function blankDraft(): Draft {
+function blankDraft(defaults = providerDefaults.value[0]): Draft {
   return {
     id: '',
     label: '',
-    provider: 'opencode-go',
-    model: 'deepseek-v4.1-flash',
-    endpoint: 'https://opencode.ai/inference/go/openai/v1/chat/completions',
+    provider: defaults?.id ?? '',
+    model: defaults?.defaultModel ?? '',
+    endpoint: defaults?.defaultEndpoint ?? '',
     maxTextChars: 1_000_000,
   }
 }
@@ -58,7 +57,7 @@ function selectProfile(id: string): void {
         endpoint: profile.endpoint,
         maxTextChars: profile.maxTextChars ?? 1_000_000,
       }
-    : blankDraft()
+    : blankDraft(providerDefaults.value[0])
   apiKey.value = ''
   clearApiKey.value = false
 }
@@ -70,7 +69,7 @@ function onSelectionChange(event: Event): void {
 function newProfile(): void {
   selectedId.value = ''
   isNew.value = true
-  draft.value = blankDraft()
+  draft.value = blankDraft(providerDefaults.value[0])
   apiKey.value = ''
   clearApiKey.value = false
 }
@@ -81,6 +80,7 @@ async function load(): Promise<void> {
   try {
     const settings = await aiApi.settings()
     profiles.value = settings.profiles
+    providerDefaults.value = settings.providers
     if (selectedId.value && profiles.value.some((profile) => profile.id === selectedId.value)) {
       selectProfile(selectedId.value)
     } else if (profiles.value.length) {
@@ -222,7 +222,7 @@ onMounted(load)
         <label>
           <span>Provider</span>
           <select v-model="draft.provider">
-            <option v-for="item in providerOptions" :key="item.value" :value="item.value">
+            <option v-for="item in providerDefaults" :key="item.id" :value="item.id">
               {{ item.label }}
             </option>
           </select>

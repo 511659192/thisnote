@@ -19,6 +19,7 @@ public class PluginStateResetListener
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
         try {
             tagsRepository.deleteAll();
+            log.info("标签文件已清空");
         } catch (Exception e) {
             log.error("插件 {} 状态重置失败", TagsPlugin.PLUGIN_ID, e);
         }

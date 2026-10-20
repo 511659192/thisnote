@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { BLOCK_MIN_H, BLOCK_MIN_W, fitCardMaxWidth, maxCardWidth, usePageStore } from '@/stores/notePage'
 import NoteCard from './NoteCard.vue'
+import NotePagePreview from './NotePagePreview.vue'
 import { activeCardPlugins, createPreviewImageInteractions, host, onPluginStateChange, toast } from '@thisnote/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, getImageDimensions, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode } from './markdownFormat'
@@ -586,28 +587,14 @@ defineExpose({ size, beginEdit, finishEditing })
       <button class="btn sm" :class="{ active: page.snapToGrid }" title="尺寸吸附" @click="page.toggleSnap()">吸附</button>
     </div>
 
-    <!-- 单击卡片弹出的预览浮层：形态对齐复习页「已开启卡片」的预览 -->
-    <div
+    <NotePagePreview
       v-if="previewCard"
-      class="card-preview-overlay"
-      @click.self="closeCardPreview"
-      @dblclick.stop
-      @pointerdown.stop
-    >
-      <section class="card-preview-dialog" role="dialog" aria-modal="true" aria-label="卡片预览">
-        <header class="card-preview-header">
-          <button class="btn sm ghost" aria-label="关闭预览" @click="closeCardPreview">×</button>
-        </header>
-        <div
-          class="card-preview-content"
-          @wheel="onPreviewWheel"
-          @mousedown="onPreviewMouseDown"
-          @dragstart.prevent
-        >
-          <component :is="MarkdownView" :content="previewCard.contentMd || ''" />
-        </div>
-      </section>
-    </div>
+      :card="previewCard"
+      :markdown-view="MarkdownView"
+      :on-wheel="onPreviewWheel"
+      :on-mouse-down="onPreviewMouseDown"
+      @close="closeCardPreview"
+    />
   </div>
 </template>
 
@@ -668,52 +655,4 @@ defineExpose({ size, beginEdit, finishEditing })
   text-align: center;
 }
 
-/* --- 单击卡片预览浮层：尺寸与遮罩对齐复习页 .rv-preview-* --- */
-.card-preview-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-  background: rgb(0 0 0 / 48%);
-  overscroll-behavior: contain;
-}
-.card-preview-dialog {
-  display: flex;
-  width: fit-content;
-  min-width: min(480px, 90vw);
-  max-width: 90vw;
-  max-height: 80vh;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: var(--c-surface);
-  box-shadow: var(--shadow-lg);
-}
-.card-preview-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--c-border);
-}
-.card-preview-content {
-  min-width: 0;
-  max-height: calc(80vh - 56px);
-  overflow: auto;
-  padding: var(--space-4);
-}
-/* 预览按图片实际大小展示，不套用 MarkdownView 默认的 320px 高度上限与列宽约束 */
-.card-preview-content :deep(.md-preview img) {
-  max-width: none;
-  max-height: none;
-  cursor: grab;
-  user-select: none;
-}
-.card-preview-content :deep(.md-preview img.preview-img-grabbing) {
-  cursor: grabbing;
-}
 </style>

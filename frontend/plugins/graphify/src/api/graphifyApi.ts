@@ -26,6 +26,8 @@ export interface GraphifySettings {
   executablePath: string
   keyConfigured: boolean
   profiles: GraphifyAiProfile[]
+  aiError: string
+  profilesError: string
 }
 
 export interface GraphifyAiProfile {

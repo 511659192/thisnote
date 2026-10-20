@@ -14,7 +14,9 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.CopyOption;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -101,6 +103,20 @@ public final class FileHelper {
             return deleted;
         } catch (IOException e) {
             return false;
+        }
+    }
+
+    public void deleteRegularFiles(Path directory) {
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
+            for (Path file : files) {
+                if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) continue;
+                if (!fileDeleted(file) && Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalStateException("删除文件失败：" + file);
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("清空目录失败：" + directory, e);
         }
     }
 

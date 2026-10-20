@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { tagsApi, type TagsSettings } from '../api/tagsApi'
 
-const settings = ref<TagsSettings>({ aiProfileId: '', profiles: [] })
+const settings = ref<TagsSettings>({ aiProfileId: '', profiles: [], profilesError: '' })
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -82,6 +82,7 @@ onMounted(load)
     </form>
 
     <p v-if="message" class="feedback success">{{ message }}</p>
+    <p v-if="settings.profilesError" class="feedback error">{{ settings.profilesError }}</p>
     <p v-if="error" class="feedback error">{{ error }}</p>
   </section>
 </template>

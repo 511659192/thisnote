@@ -7,6 +7,8 @@ import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,8 +24,9 @@ public class AiSettingsService {
     public static final int MAX_MAX_TEXT_CHARS = 1_000_000;
 
     private static final Map<String, Provider> PROVIDERS = Map.of(
-            OPENCODE_GO_PROVIDER, new Provider("deepseek-v4.1-flash", AiSettingsRepository.DEFAULT_ENDPOINT)
+            OPENCODE_GO_PROVIDER, new Provider(AiSettingsRepository.DEFAULT_MODEL, AiSettingsRepository.DEFAULT_ENDPOINT)
     );
+    private static final Map<String, String> PROVIDER_LABELS = Map.of(OPENCODE_GO_PROVIDER, "OpenCode Go");
 
     private final AiSettingsRepository settingsRepository;
     private final AiProviderClient providerClient;
@@ -60,7 +63,7 @@ public class AiSettingsService {
     }
 
     public synchronized SettingsResponse response() {
-        return new SettingsResponse(profiles());
+        return new SettingsResponse(profiles(), providerDefaults());
     }
 
     public synchronized Profile save(ProfileUpdate update) {
@@ -91,12 +94,9 @@ public class AiSettingsService {
         if (model.isBlank()) {
             throw new IllegalArgumentException("模型名称不能为空");
         }
-        String endpoint = blank(update.endpoint())
+        String endpoint = requireEndpoint(blank(update.endpoint())
                 ? (existing == null || existing.endpoint().isBlank() ? provider.defaultEndpoint() : existing.endpoint())
-                : update.endpoint().trim();
-        if (endpoint.isBlank()) {
-            throw new IllegalArgumentException("endpoint 不能为空");
-        }
+                : update.endpoint().trim());
         Integer maxTextChars = update.maxTextChars() != null
                 ? requireMaxTextChars(update.maxTextChars())
                 : (existing == null || existing.maxTextChars() == null
@@ -211,6 +211,34 @@ public class AiSettingsService {
         return value == null || value.isBlank();
     }
 
+    private static List<ProviderDefaults> providerDefaults() {
+        return PROVIDERS.entrySet().stream()
+                .map(entry -> new ProviderDefaults(
+                        entry.getKey(),
+                        PROVIDER_LABELS.getOrDefault(entry.getKey(), entry.getKey()),
+                        entry.getValue().defaultModel(),
+                        entry.getValue().defaultEndpoint()
+                ))
+                .toList();
+    }
+
+    private static String requireEndpoint(String value) {
+        try {
+            URI uri = new URI(value.trim());
+            String scheme = uri.getScheme();
+            if (scheme == null
+                    || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))
+                    || uri.getHost() == null
+                    || uri.getHost().isBlank()
+                    || uri.getUserInfo() != null) {
+                throw new IllegalArgumentException("endpoint 必须是有效的 http/https URL，且不能包含用户信息");
+            }
+            return uri.toString();
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("endpoint 不是有效 URL", e);
+        }
+    }
+
     private record Provider(String defaultModel, String defaultEndpoint) {
     }
 
@@ -223,7 +251,14 @@ public class AiSettingsService {
                           boolean keyConfigured) {
     }
 
-    public record SettingsResponse(List<Profile> profiles) {
+    public record SettingsResponse(List<Profile> profiles,
+                                   List<ProviderDefaults> providers) {
+    }
+
+    public record ProviderDefaults(String id,
+                                   String label,
+                                   String defaultModel,
+                                   String defaultEndpoint) {
     }
 
     public record ProfileUpdate(String id,

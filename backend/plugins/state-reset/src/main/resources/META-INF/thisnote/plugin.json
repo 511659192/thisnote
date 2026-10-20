@@ -1,5 +1,5 @@
 {
   "title": "状态重置",
-  "description": "重置活动插件的缓存、索引和同步基线；停用插件不启动、不清理",
+  "description": "重置活动插件的本地数据、索引、缓存和同步基线；停用插件不启动、不清理",
   "undeactivatable": false
 }

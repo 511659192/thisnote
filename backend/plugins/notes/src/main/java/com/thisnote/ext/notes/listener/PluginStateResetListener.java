@@ -1,6 +1,7 @@
 package com.thisnote.ext.notes.listener;
 
 import com.thisnote.ext.notes.NotesPlugin;
+import com.thisnote.ext.notes.repository.BookRepository;
 import com.thisnote.ext.notes.repository.CardRepository;
 import com.thisnote.ext.notes.repository.NoteRepository;
 import com.thisnote.ext.notes.service.AttachmentService;
@@ -18,14 +19,16 @@ public class PluginStateResetListener
     private final NoteRepository noteRepository;
     private final CardRepository cardRepository;
     private final AttachmentService attachmentService;
+    private final BookRepository bookRepository;
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<PluginStateResetEvent> event) {
         try {
-            noteRepository.reset();
             cardRepository.reset();
             attachmentService.reset();
-            log.info("笔记索引、卡片索引与附件索引已重置");
+            noteRepository.reset();
+            bookRepository.reset();
+            log.info("笔记、卡片、附件与分组数据已清空，默认分组已重建");
         } catch (Exception e) {
             log.error("插件 {} 状态重置失败", NotesPlugin.PLUGIN_ID, e);
         }

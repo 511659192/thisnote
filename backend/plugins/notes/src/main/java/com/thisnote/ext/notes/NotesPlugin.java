@@ -2,6 +2,7 @@ package com.thisnote.ext.notes;
 
 import com.thisnote.ext.notes.config.NotesConfig;
 import com.thisnote.ext.notes.model.NotesMapper;
+import com.thisnote.ext.notes.repository.BookRepository;
 import com.thisnote.ext.notes.repository.CardRepository;
 import com.thisnote.ext.notes.repository.NoteRepository;
 import com.thisnote.ext.notes.service.AttachmentService;
@@ -88,6 +89,7 @@ public class NotesPlugin extends SpringBootPlugin {
         cardCreateRequestListener = new CardCreateRequestListener(cardService, noteService);
         CardRepository cardRepository = ctx.getBean(CardRepository.class);
         NoteRepository noteRepository = ctx.getBean(NoteRepository.class);
+        BookRepository bookRepository = ctx.getBean(BookRepository.class);
         NotesMapper notesMapper = ctx.getBean(NotesMapper.class);
         cardQueryEventListener = new CardQueryEventListener(cardRepository, notesMapper);
         attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
@@ -95,7 +97,7 @@ public class NotesPlugin extends SpringBootPlugin {
         noteContentQueryEventListener = new NoteContentQueryEventListener(noteService, cardService);
         noteListQueryEventListener = new NoteListQueryEventListener(noteRepository, notesMapper);
         attachmentBytesQueryEventListener = new AttachmentBytesQueryEventListener(attachmentService);
-        stateResetListener = new PluginStateResetListener(noteRepository, cardRepository, attachmentService);
+        stateResetListener = new PluginStateResetListener(noteRepository, cardRepository, attachmentService, bookRepository);
         getMainApplicationContext().addApplicationListener(fileChangeListener);
         getMainApplicationContext().addApplicationListener(cardAttachmentCleanupListener);
         getMainApplicationContext().addApplicationListener(cardCreateRequestListener);

@@ -5,6 +5,7 @@ import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -13,30 +14,37 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 public class AutoTagService {
 
     private static final int MAX_AUTO_TAGS = 20;
+    private static final long DEADLINE_GRACE_MILLIS = 5_000;
 
     private final TagsService tagsService;
     private final TagSuggestionService tagSuggestionService;
-    private final ExecutorService aiWorker = Executors.newFixedThreadPool(2, task -> {
-        Thread thread = new Thread(task, "thisnote-tags-ai");
-        thread.setDaemon(true);
-        return thread;
-    });
-    private final Map<String, CompletableFuture<Void>> pending = new ConcurrentHashMap<>();
+    private final ExecutorService aiWorker;
+    private final Map<String, PendingTask> pending = new ConcurrentHashMap<>();
 
+    @Autowired
     public AutoTagService(TagsService tagsService,
                           TagSuggestionService tagSuggestionService) {
+        this(tagsService, tagSuggestionService, defaultExecutor());
+    }
+
+    AutoTagService(TagsService tagsService,
+                   TagSuggestionService tagSuggestionService,
+                   ExecutorService aiWorker) {
         this.tagsService = tagsService;
         this.tagSuggestionService = tagSuggestionService;
+        this.aiWorker = aiWorker;
     }
 
     public ExtractResult extract(String noteId) {
@@ -58,24 +66,35 @@ public class AutoTagService {
                 MAX_AUTO_TAGS,
                 TagTextCounter.noteText(note, cards)
         );
-        scheduleAi(note, cards);
-        return new ExtractResult(noteId.trim(), tags, pending.containsKey(noteId.trim()));
+        long deadlineEpochMs = scheduleAi(note, cards);
+        return new ExtractResult(noteId.trim(), tags, deadlineEpochMs > 0, deadlineEpochMs);
     }
 
     public ExtractStatus status(String noteId) {
         String normalizedNoteId = noteId.trim();
-        return new ExtractStatus(normalizedNoteId, tagsService.noteTags(normalizedNoteId), pending.containsKey(normalizedNoteId));
+        PendingTask task = pending.get(normalizedNoteId);
+        return new ExtractStatus(
+                normalizedNoteId,
+                tagsService.noteTags(normalizedNoteId),
+                task != null,
+                task == null ? 0 : task.deadlineEpochMs()
+        );
     }
 
-    private void scheduleAi(NoteDTO note,
+    private long scheduleAi(NoteDTO note,
                             List<CardDTO> cards) {
         String noteId = note.noteId();
-        if (pending.containsKey(noteId)) {
-            return;
+        PendingTask existing = pending.get(noteId);
+        if (existing != null) {
+            return existing.deadlineEpochMs();
         }
-        CompletableFuture<Void> task = new CompletableFuture<>();
+        long deadlineEpochMs = System.currentTimeMillis()
+                + TagSuggestionService.RESULT_TIMEOUT_SECONDS * 1_000
+                + DEADLINE_GRACE_MILLIS;
+        PendingTask task = new PendingTask(new CompletableFuture<>(), deadlineEpochMs);
         if (pending.putIfAbsent(noteId, task) != null) {
-            return;
+            PendingTask concurrent = pending.get(noteId);
+            return concurrent == null ? 0 : concurrent.deadlineEpochMs();
         }
         try {
             aiWorker.execute(() -> {
@@ -88,13 +107,15 @@ public class AutoTagService {
                     log.error("AI 标签后台任务失败：noteId={}", noteId, e);
                 } finally {
                     pending.remove(noteId, task);
-                    task.complete(null);
+                    task.completion().complete(null);
                 }
             });
         } catch (RuntimeException e) {
             pending.remove(noteId, task);
             log.error("AI 标签后台任务无法启动：noteId={}", noteId, e);
+            return 0;
         }
+        return deadlineEpochMs;
     }
 
     @PreDestroy
@@ -102,9 +123,35 @@ public class AutoTagService {
         aiWorker.shutdownNow();
     }
 
-    public record ExtractResult(String noteId, List<String> tags, boolean pending) {
+    private static ExecutorService defaultExecutor() {
+        return new ThreadPoolExecutor(
+                2,
+                2,
+                0,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(32),
+                task -> {
+                    Thread thread = new Thread(task, "thisnote-tags-ai");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 
-    public record ExtractStatus(String noteId, List<String> tags, boolean pending) {
+    public record ExtractResult(String noteId,
+                                List<String> tags,
+                                boolean pending,
+                                long deadlineEpochMs) {
+    }
+
+    public record ExtractStatus(String noteId,
+                                List<String> tags,
+                                boolean pending,
+                                long deadlineEpochMs) {
+    }
+
+    private record PendingTask(CompletableFuture<Void> completion,
+                               long deadlineEpochMs) {
     }
 }

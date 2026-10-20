@@ -5,6 +5,8 @@ import { activeCardPlugins, host, toast } from '@thisnote/plugin-api'
 import { deleteUnreferencedImageAttachment, getClipboardImage, uploadImageAttachment } from './clipboardImage'
 import { getClipboardMarkdown, getClipboardMarkdownFile, isClipboardCode, isMarkdown, type CardFormat } from './markdownFormat'
 import CustomSizeDialog from './CustomSizeDialog.vue'
+import NoteCardBody from './NoteCardBody.vue'
+import NoteCardToolbar from './NoteCardToolbar.vue'
 
 /** Markdown 渲染由宿主服务提供（markdown-it 只在宿主打一份）。 */
 const MarkdownView = host().MarkdownView
@@ -55,11 +57,9 @@ const fitPastedImage = ref(false)
 let blurAfterImagePaste = false
 const pendingImageAttachments = new Set<string>()
 const loadedFor = ref<string | null>(null)
-const textarea = ref<HTMLTextAreaElement | null>(null)
+const bodyRef = ref<InstanceType<typeof NoteCardBody> | null>(null)
 /** Off-screen copy of the draft, used only to measure how tall the text really is. */
 const measure = ref<HTMLElement | null>(null)
-/** 预览态的渲染容器：量它里面内容根节点的自然高度。 */
-const readBody = ref<HTMLElement | null>(null)
 /** 卡片根元素：用「渲染宽 / 逻辑宽」折算画布缩放，供行宽测量换算回世界像素。 */
 const rootEl = ref<HTMLElement | null>(null)
 
@@ -89,9 +89,9 @@ const {
   card,
   content,
   isImageOnly,
-  readBody,
+  () => bodyRef.value?.readBodyElement() ?? null,
   measure,
-  textarea,
+  () => bodyRef.value?.textareaElement() ?? null,
   rootEl,
   autoFitImageWidth,
   fitPastedImage,
@@ -130,9 +130,10 @@ watch(
     draft.value = content.value
     loadedFor.value = id
     await nextTick()
-    textarea.value?.focus()
-    const len = textarea.value?.value.length ?? 0
-    textarea.value?.setSelectionRange(len, len)
+    bodyRef.value?.focus()
+    const editor = bodyRef.value?.textareaElement()
+    const len = editor?.value.length ?? 0
+    editor?.setSelectionRange(len, len)
   },
   { immediate: true },
 )
@@ -218,7 +219,8 @@ function onBodyDblclick() {
 
 function commit() {
   // Save what is in the DOM right now: an empty card must be recognisable as empty.
-  const text = textarea.value ? textarea.value.value : draft.value
+  const editor = bodyRef.value?.textareaElement()
+  const text = editor ? editor.value : draft.value
   draft.value = text
   for (const markdown of pendingImageAttachments) {
     if (!text.includes(markdown)) void deleteUnreferencedImageAttachment(markdown).catch(() => undefined)
@@ -242,7 +244,8 @@ async function onPaste(e: ClipboardEvent) {
     pastingMarkdownFile.value = Boolean(markdownFile)
     try {
       const markdown = await getClipboardMarkdown(e.clipboardData)
-      if (!markdown || card.value.cardId !== cardId || !props.editing || textarea.value !== input) return
+      if (!markdown || card.value.cardId !== cardId || !props.editing
+        || bodyRef.value?.textareaElement() !== input) return
       input.setRangeText(markdown, Math.min(start, input.value.length), Math.min(end, input.value.length), 'end')
       draft.value = input.value
       if (markdownFile) selectFormat('markdown')
@@ -272,7 +275,7 @@ async function onPaste(e: ClipboardEvent) {
   fitPastedImage.value = true
   try {
     const markdown = await uploadImageAttachment(image)
-    if (card.value.cardId !== cardId || !props.editing || textarea.value !== input) {
+    if (card.value.cardId !== cardId || !props.editing || bodyRef.value?.textareaElement() !== input) {
       await deleteUnreferencedImageAttachment(markdown)
       return
     }
@@ -372,93 +375,35 @@ onBeforeUnmount(() => {
     @contextmenu.prevent.stop="onContextMenu"
     @click="onBodyClick"
   >
-    <!-- Card tools are overlaid in the top-right corner so they cost no layout space. -->
-    <div class="card-tools">
-      <template v-if="!card.collapsed">
-        <component
-          :is="plugin.cardComponent"
-          v-for="plugin in activeCardPlugins()"
-          :key="plugin.id"
-          :card-id="card.cardId"
-        />
-      </template>
-      <button
-        class="collapse"
-        :class="{ active: card.collapsed }"
-        :title="card.collapsed ? '展开卡片' : '折叠卡片'"
-        @pointerdown.stop
-        @click.stop="emit('toggle-collapse', card.cardId)"
-      >
-        {{ card.collapsed ? '▸' : '▾' }}
-      </button>
-    </div>
+    <NoteCardToolbar
+      :card-id="card.cardId"
+      :collapsed="card.collapsed"
+      :format-mode="formatMode"
+      :detected-format-label="detectedFormatLabel"
+      :active-preset="activePreset"
+      :plugins="activeCardPlugins()"
+      @toggle-collapse="emit('toggle-collapse', card.cardId)"
+      @select-format="selectFormat"
+      @focus-format="focusFormatControl"
+      @choose-fit-width="chooseFitWidth"
+      @choose-custom-size="chooseCustomSize"
+    />
 
-    <!-- body: preview by default; editing opens the Markdown source in place. -->
-    <textarea
-      v-if="!card.collapsed && editing"
-      ref="textarea"
-      v-model="draft"
-      class="body edit"
-      :readonly="pastingImage || pastingMarkdownFile"
-      spellcheck="false"
-      placeholder="在这里写…（Ctrl+Enter 保存，Esc 退出）"
-      @pointerdown.stop
-      @dblclick.stop
+    <NoteCardBody
+      ref="bodyRef"
+      v-model:draft="draft"
+      :collapsed="card.collapsed"
+      :editing="editing"
+      :content="content"
+      :effective-format="effectiveFormat"
+      :pasting-image="pastingImage"
+      :pasting-markdown-file="pastingMarkdownFile"
+      :markdown-view="MarkdownView"
       @keydown="onKeydown"
       @paste="onPaste"
       @blur="onBlur"
       @input="fitHeight"
-    ></textarea>
-
-    <div v-else-if="!card.collapsed" ref="readBody" class="body read">
-      <component :is="MarkdownView"
-        v-if="content && effectiveFormat === 'markdown'"
-        :content="content"
-      />
-      <div v-else-if="content" class="preview plain-text">{{ content }}</div>
-      <div v-else class="preview empty-hint">点击写点什么</div>
-    </div>
-
-    <div class="format-control" @pointerdown.stop @click.stop="focusFormatControl">
-      <button
-        class="format-btn"
-        :class="{ active: formatMode === 'auto' }"
-        type="button"
-        :title="'自动判定（当前：' + detectedFormatLabel + '）'"
-        aria-label="格式：自动判定"
-        @click="selectFormat('auto')"
-      >A</button>
-      <button
-        class="format-btn"
-        :class="{ active: formatMode === 'markdown' }"
-        type="button"
-        title="Markdown 格式"
-        aria-label="格式：Markdown"
-        @click="selectFormat('markdown')"
-      >M</button>
-      <button
-        class="format-btn"
-        :class="{ active: formatMode === 'text' }"
-        type="button"
-        title="普通文本格式"
-        aria-label="格式：普通文本"
-        @click="selectFormat('text')"
-      >T</button>
-    </div>
-
-    <div v-if="!card.collapsed" class="fit-tools" @pointerdown.stop @click.stop>
-      <button
-        class="auto-fit"
-        :class="{ active: activePreset === '1:1' }"
-        title="1:1：宽度贴合内容"
-        @click.stop="chooseFitWidth(null)"
-      >1:1</button>
-      <button class="fit-pct" :class="{ active: activePreset === '25%' }" title="卡片宽度：可视宽度的 25%" @click.stop="chooseFitWidth(0.25)">25%</button>
-      <button class="fit-pct" :class="{ active: activePreset === '50%' }" title="卡片宽度：可视宽度的 50%" @click.stop="chooseFitWidth(0.5)">50%</button>
-      <button class="fit-pct" :class="{ active: activePreset === '75%' }" title="卡片宽度：可视宽度的 75%" @click.stop="chooseFitWidth(0.75)">75%</button>
-      <button class="fit-pct" :class="{ active: activePreset === '100%' }" title="卡片宽度：顶满可视宽度（留出页面留白）" @click.stop="chooseFitWidth(1)">100%</button>
-      <button class="fit-pct" :class="{ active: activePreset === 'custom' }" title="自定义尺寸（px）" @click.stop="chooseCustomSize">自定义</button>
-    </div>
+    />
 
     <!-- Off-screen copy of the draft lets "grow to fit" measure text instead of the textarea's
          current card-sized box. -->
@@ -531,195 +476,44 @@ onBeforeUnmount(() => {
 .card.collapsed {
   height: 40px !important;
 }
-
-.format-control {
-  position: absolute;
-  top: 4px;
-  left: 6px;
-  z-index: 4;
-  display: flex;
-  gap: 2px;
-}
-/* 宽度贴合工具（1:1 / 百分比）：放在左侧格式按钮之后，只控制宽度，高度由贴合逻辑负责 */
-.fit-tools {
-  position: absolute;
-  top: 4px;
-  left: 76px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.format-btn {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--c-text-3);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-}
-.format-btn:hover,
-.format-btn.active {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-
-/* --- card tools: an overlay row in the top-right corner ---
-    The container itself never fades: plugin chips stay visible on an enabled card even at rest. */
-.card-tools {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.collapse {
-  /* Hidden by default; the button fades in on hover and while selected or being written in. */
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.card:hover .collapse,
-.card.selected .collapse,
-.card.focused .collapse,
-.card.editing .collapse,
-.card.collapsed .collapse {
+.card:hover :deep(.collapse),
+.card.selected :deep(.collapse),
+.card.focused :deep(.collapse),
+.card.editing :deep(.collapse),
+.card.collapsed :deep(.collapse),
+.card:hover :deep(.auto-fit),
+.card.selected :deep(.auto-fit),
+.card.focused :deep(.auto-fit),
+.card.editing :deep(.auto-fit),
+.card:hover :deep(.fit-pct),
+.card.selected :deep(.fit-pct),
+.card.focused :deep(.fit-pct),
+.card.editing :deep(.fit-pct) {
   opacity: 1;
 }
 
-/* The collapse control shows while expanded too, otherwise there would be no way to fold a
-   card back once the strip that used to hold it is gone. */
-.collapse {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--c-text-3);
-  font-size: 11px;
-  line-height: 1;
-}
-.collapse:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.collapse.active {
-  color: var(--accent);
-}
-/* 「自动调整」与宽度百分比、折叠按钮同排同款，悬停显形 */
-.auto-fit {
-  height: 20px;
-  padding: 0 4px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--c-text-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.card:hover .auto-fit,
-.card.selected .auto-fit,
-.card.focused .auto-fit,
-.card.editing .auto-fit {
-  opacity: 1;
-}
-.auto-fit:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.fit-pct {
-  height: 20px;
-  padding: 0 5px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--c-text-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.card:hover .fit-pct,
-.card.selected .fit-pct,
-.card.focused .fit-pct,
-.card.editing .fit-pct {
-  opacity: 1;
-}
-.fit-pct:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.auto-fit.active,
-.fit-pct.active {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-
-/* --- body: the writing surface --- */
-.body {
-  flex: 1;
-  min-height: 0;
-  /* Without this a textarea's intrinsic width can push a flex item wider than its card. */
-  min-width: 0;
-  margin: 0;
-  /* Kept tight at the top: the tools are a hidden overlay, not a band, so the content should
-     start close to the card's edge. */
-  padding: 10px 14px 12px;
-  font-size: 15px;
-  line-height: 1.85;
-  border-radius: 0;
-}
-.body.read {
-  overflow-y: auto;
-  overflow-x: hidden;
-  user-select: text;
-  /* The read view is the card's grab area now that the top strip is gone. */
-  cursor: move;
-  padding-top: 30px;
-}
-.body.read :deep(.md-preview img) {
-  max-height: none;
-}
 /* 图片卡：内容区宽度即图片宽度，随卡片宽度等比伸缩（1:1 初始）；高度由内容撑开，永不出现滚动条 */
-.card.image-only .body.read :deep(.md-preview img) {
+.card.image-only :deep(.body.read .md-preview img) {
   width: 100%;
   max-width: 100%;
   max-height: none;
   height: auto;
 }
-.card.image-only:not(.manual-size) .body.read {
+.card.image-only:not(.manual-size) :deep(.body.read) {
   overflow: hidden;
-}
-.body.edit {
-  background: transparent;
-  font-family: var(--font-ui);
-  color: var(--c-text);
-  border: none;
-  outline: none;
-  resize: none;
-  overflow-y: auto;
-  padding-top: 30px;
-}
-.body.edit::placeholder {
-  color: var(--c-text-3);
 }
 
 /* Measurement twin of the editing textarea: same box and type metrics, but laid out off-screen
    so it reports the height the text needs instead of the height the card happens to have. */
 .body.measure {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 14px 12px;
+  font-size: 15px;
+  line-height: 1.85;
+  border-radius: 0;
   position: fixed;
   left: -10000px;
   top: 0;
@@ -736,15 +530,6 @@ onBeforeUnmount(() => {
 /* The twin matches the editing textarea's full width. */
 .measure-full {
   width: 100%;
-}
-.preview {
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: hidden;
-}
-.preview.empty-hint {
-  color: var(--c-text-3);
-  font-style: italic;
 }
 
 /* --- edge cursor strips: 只在边缘给出光标提示，判定在 onBodyPointerDown 里按坐标做 --- */

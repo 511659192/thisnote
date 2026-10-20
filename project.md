@@ -155,7 +155,7 @@ host（qiankun 主应用，:5173）
 | 内容 | 说明 |
 |---|---|
 | `util/FileHelper` | 插件所有持久文件写/删/移的统一入口：写盘后按操作发事件；同一事件 5 秒窗口内去重后再投递（`FileHelper.java:37,121-138`）；另含 `readMapIndex`/`readMapOrEmpty` 两个 JSON 索引读取原语（缺失/损坏语义不同） |
-| `util/MarkdownImages` | 统一解析 Markdown 中的 attachments 图片引用，返回原始目标与文件名；Graphify 与 tags 共用，避免扩展名和路径规则漂移 |
+| `util/MarkdownImages` | 统一解析 Markdown 中的 attachments 图片引用，返回原始目标、文件名与目标在源文本中的 `start/end` 偏移；Graphify 与 tags 共用，避免扩展名和路径规则漂移 |
 | `event/PluginEvent` | 所有跨插件事件的强类型标记，不使用 `String + Map` 的通用事件替代具体载荷 |
 | `event/PluginFutureEvent<R>` | 带 `CompletableFuture<R>` 返回值的查询/请求契约 |
 | `event/CardChangedEvent` | `CREATED/UPDATED/DELETED/REQUEST`；`REQUEST` 携带 `CardCreateRequest`（导入卡片用），其中 `meta.w/h` 作为卡片初始尺寸 |
@@ -370,15 +370,19 @@ host（qiankun 主应用，:5173）
 **state-reset**：`POST /api/plugins/state-reset/reset`，发布一次重置事件，不返回结果体。
 
 **ai**：`GET /api/plugins/ai/settings`、`POST /api/plugins/ai/profiles/save`、
-`POST /api/plugins/ai/profiles/delete`、`POST /api/plugins/ai/profiles/test`。设置响应包含 profile 列表；
-每个 profile 含 `keyConfigured`，但不返回 API key。
+`POST /api/plugins/ai/profiles/delete`、`POST /api/plugins/ai/profiles/test`。设置响应包含 profile 列表与
+Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返回 API key。保存时 endpoint 必须是
+可解析的 `http/https` URL、host 非空且不含 user-info；允许删除最后一个 profile。
 
 **graphify**：`GET/POST /api/plugins/graphify/settings`、`GET .../status`、
 `POST .../index`、`GET .../graph`、`GET .../graph.html`、`GET .../tags`、`GET .../related`、
-`POST .../communities/relabel`。Graphify 设置只写 CLI 路径，Provider 信息来自 AI 插件。
+`POST .../communities/relabel`。Graphify 设置只写 CLI 路径，Provider 信息来自 AI 插件；
+设置响应以 `aiError` / `profilesError` 区分运行时配置与 profile 列表读取失败。
 
 **tags**：`GET /api/plugins/tags/tags`、`POST .../tags/add`、`POST .../tags/remove`、
-`POST .../tags/delete`、`POST .../tags/auto`、`GET .../tags/auto/status`。自动标签先同步返回本地候选与 `pending` 状态，AI 在后台完成；前端轮询状态接口刷新结果。标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
+`POST .../tags/delete`、`POST .../tags/auto`、`GET .../tags/auto/status`。自动标签先同步返回本地候选、
+`pending` 与后端统一预算 `deadlineEpochMs`（130 秒 + 5 秒宽限），AI 在后台完成；前端按该截止时间轮询状态接口刷新结果。
+设置响应以 `profilesError` 报告 AI profile 读取失败。标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
 
 ### 5.9 各插件业务规则（读代码得到的事实）
 
@@ -408,7 +412,8 @@ host（qiankun 主应用，:5173）
   和所有已安装插件目录；未知目录不进入备份范围。
 - 备份端不额外排除自身插件或 `.credentials.json`；本地清单、事件增量同步和远端下载共用同一个
   `BackupScope` 判断。
-- `BaiduSyncPlanner` 负责本地/远端快照、差异规划和预览统计；`BaiduSyncService` 只负责同步编排与文件/远端写操作。
+- `BaiduSyncPlanner` 负责本地/远端快照、差异规划和预览统计；`BaiduSyncService` 负责同步编排与状态，
+  `BaiduTransferExecutor` 执行上传、下载、本地/远端删除、远端目录创建与本地路径安全解析。
 - 远端目录形如 `/apps/<appName>/notes/`；同步范围外的远端历史文件保持不动。
 - 双端比较与基线都用 **`size:mtimeSeconds`** 指纹，不用云端 MD5（`.agent/mem/lessons.md:7`；
   `BaiduSyncPlanner.java`）。
@@ -440,7 +445,8 @@ host（qiankun 主应用，:5173）
 - 停用插件不启动容器，也不执行状态清理。
 - 有状态文件的活动插件重写为初始内容：favorite、memory-cycle、tags、baidu-sync、notes 与 Graphify
   分别走自己的 reset；失败只记录 error 日志。
-- AI 的 profile、Provider、模型、API key，Graphify 的 `settings.json`，tags 的 `settings.json`，百度授权凭据和 Notes 卡片/附件文件均保留。
+- AI 的 profile、Provider、模型、API key，Graphify 的 `settings.json`，tags 的 `settings.json` 与百度授权凭据均保留。
+- Notes 的 reset 会删除 `cards/` 下的卡片 md、`attachments/` 下的附件文件，清空笔记/卡片/附件索引，并把 `book/.books.json` 重写为仅含默认分组。
 - attachment-importer / card-importer / state-reset 无状态文件，不注册重置 listener。
 
 **graphify**
@@ -450,18 +456,20 @@ host（qiankun 主应用，:5173）
 - 所有笔记被删除时不调用 Graphify 抽取；插件递归清除整个 `corpus/` 生成内容（包括日期目录中的历史 graph、manifest、报告和缓存），并将索引状态置为空语料，避免缩图保护把正常清空误判成失败。
 - thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
 - Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 使用 `openai` extra；缺少对应包时无法验证 provider。
-- 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。`GraphifyCorpusProjector` 负责投影，`GraphifyGraphReader` 负责只读图谱/标签/相关笔记，`GraphifyIndexService` 只负责索引调度。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
+- 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。`GraphifyCorpusProjector` 按 Markdown 图片引用的精确偏移替换目标，`GraphifyGraphReader` 按 `graph.json` 的 mtime + size 缓存解析结果，`GraphifyChangeQueue` 负责 2 秒防抖队列，`GraphifyPipelineRunner` 负责 CLI 执行与输出备份/发布，`GraphifyIndexService` 负责索引编排与状态。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
 - 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
 - API key 只保存在 AI 插件的 `.credentials.json`，按 profile id 索引且不由 API 返回；Graphify 通过事件取得所选 profile 的运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
   文件未加密；百度备份当前也会包含该凭据文件，排除需要使用者自行处理。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
-- completion profile 当前支持 OpenCode Go（默认 `deepseek-v4.1-flash`）；endpoint 和模型由 profile 配置。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；旧单配置会自动迁移为 `default-chat`。
+- completion profile 当前支持 OpenCode Go；默认 model/endpoint 只在 `AiSettingsRepository` 定义，并由 AI settings API 返回给界面初始化。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；旧单配置与旧凭据仅在读取时兼容为 `default-chat`，读取方法不写盘，不做启动时迁移。
 - 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
 
 **ai**
 - AI 是不可停用的基础能力插件，硬依赖 `notes`，独占 Provider、模型与 API key 配置；
   Graphify 与 tags 都在 `plugin.dependencies` 中声明依赖 `ai,notes`。
 - AI 插件集中管理多个命名 completion profile，当前支持 OpenCode Go；业务插件只保存所选 `aiProfileId`。
+- profile 数量允许为零；此时 Tags/Graphify 设置页显示 AI 不可用原因，执行时返回明确业务错误。
+- Provider 默认 model/endpoint 以 `AiSettingsRepository` 为唯一来源；Graphify 不保存模型副本。
 - AI 插件只响应通用能力事件，不包含笔记、标签或其他业务语义；插件通过 `AiProfilesFutureEvent` 查询可用配置。
 - completion profile 的单次文本上限由 `maxTextChars` 控制，默认 `1,000,000` 字符，允许 `1,000..1,000,000`；它是字符数，不是 token 数。
 - Graphify 通过 `AiRuntimeFutureEvent` 取得所选 profile 的运行时配置；AI 插件不读写 Graphify 或 tags 的业务数据。
@@ -474,7 +482,10 @@ host（qiankun 主应用，:5173）
   不阻塞卡片保存请求。
 - tags 硬依赖 `ai,notes`；在设置中选择 completion profile 并保存到 `notes/plugins/tags/settings.json`。标签 prompt、笔记内容组装、图片筛选和模型结果解析都由 tags 负责，标签落盘仍由 tags 自己完成。
 - 自动抽取通过主容器消息管道读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
-- AI 候选通过带 `profileId` 的 `AiCompletionFutureEvent` 在后台获取，再与本地文本候选合并；接口先返回本地结果和 `pending`，前端轮询完成状态。AI 未配置、profile 缺失或请求失败时保留本地结果。标签仍只写入 tags 插件自己的 `tags.json`。
+- AI 候选通过带 `profileId` 的 `AiCompletionFutureEvent` 在后台获取，再与本地文本候选合并；标签优先级固定为
+  「用户已有标签 > 本地抽取 > AI」。接口先返回本地结果、`pending` 与服务端 `deadlineEpochMs`，前端按该截止时间轮询。
+  AI 任务由 2 线程、32 容量有界队列执行，拒绝时记录 error 并保留本地结果。AI 未配置、profile 缺失或请求失败时同样保留本地结果。
+  标签仍只写入 tags 插件自己的 `tags.json`。
 - 打开笔记时若标签少于 10 个，标签工具自动执行一次抽取；标签不足时仍保留可见的自动抽取按钮，供用户手动重试。
 - 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页按标签文本在全部笔记标题与正文中的实际出现次数排行，显示出现次数与覆盖笔记数，并以气泡图展示 Top 60，可从全部笔记中移除某个标签。
 - 笔记删除或状态重置由主容器事件驱动；插件停用后标签工具、标签页和筛选入口一起下线，数据保留。
@@ -577,9 +588,11 @@ host（qiankun 主应用，:5173）
   （`NoteList.vue:41-123,161-208`）。
 - **页面（`NotePage.vue`）**：单列向下生长的卡片页面，不是白板 —— 双击空白新建卡、Ctrl+V 把剪贴板变成卡片、
   卡片原地编辑写回笔记、空卡片不会被自动清理（`NotePage.vue:11-22`）。支持框选、拖拽/缩放、网格与吸附、
-  自动排版、图片预览缩放（`:37-50,563-737`）。
+  自动排版、图片预览缩放（`:37-50,563-737`）；预览浮层独立为 `NotePagePreview.vue`，画布交互仍由
+  `usePageInteractions` 管理。
 - **卡片（`NoteCard.vue`）**：没有标题字段，卡片名就是正文里的标题；默认渲染 Markdown，编辑时就地显示源码；
-  粘贴图片/ Markdown 文件、按内容自动调高（`NoteCard.vue:12-22,187-320,341-495`）。
+  粘贴图片/ Markdown 文件、按内容自动调高（`NoteCard.vue:12-22,187-320,341-495`）；正文与工具栏拆为
+  `NoteCardBody.vue` / `NoteCardToolbar.vue`，尺寸仍由 `useCardSizing` 统一管理。
 - **视口**：按笔记持久化到 `localStorage['thisnote.page.viewport.<noteId>']`，防抖 300ms + 卸载前刷写
   （`notePage.ts:481-524`）；网格/吸附偏好也持久化（`:552-560`）。
 - **保存策略**：几何写是乐观的（跟手），手势结束才批量 `batch-update`；失败就 toast + 重新载入（`notePage.ts:237-261`）；

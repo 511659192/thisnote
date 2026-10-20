@@ -17,6 +17,7 @@ export interface TagsAiProfile {
 export interface TagsSettings {
   aiProfileId: string
   profiles: TagsAiProfile[]
+  profilesError: string
 }
 
 export const tagsApi = {
@@ -30,9 +31,15 @@ export const tagsApi = {
   remove: (noteId: string, tag: string) =>
     http.post<{ noteId: string; tags: string[] }>(BASE + '/tags/remove', { noteId, tag }),
   auto: (noteId: string) =>
-    http.post<{ noteId: string; tags: string[]; pending: boolean }>(BASE + '/tags/auto', { noteId }),
+    http.post<{ noteId: string; tags: string[]; pending: boolean; deadlineEpochMs: number }>(
+      BASE + '/tags/auto',
+      { noteId },
+    ),
   autoStatus: (noteId: string) =>
-    http.get<{ noteId: string; tags: string[]; pending: boolean }>(BASE + '/tags/auto/status', { noteId }),
+    http.get<{ noteId: string; tags: string[]; pending: boolean; deadlineEpochMs: number }>(
+      BASE + '/tags/auto/status',
+      { noteId },
+    ),
   removeEverywhere: (tag: string) =>
     http.post<{ removedNotes: number }>(BASE + '/tags/delete', { tag }),
 }

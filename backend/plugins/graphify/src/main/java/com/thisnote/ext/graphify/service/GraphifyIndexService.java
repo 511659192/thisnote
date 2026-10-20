@@ -16,33 +16,26 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 public class GraphifyIndexService {
 
-    private static final Pattern SAFE_IMAGE_NAME = Pattern.compile("(?i)[^/\\\\]+\\.(?:png|jpg|webp)");
     private static final long QUERY_TIMEOUT_SECONDS = 30;
 
     private final FileHelper fileHelper;
@@ -50,23 +43,20 @@ public class GraphifyIndexService {
     private final GraphifyStateRepository stateRepository;
     private final GraphifyProcessRunner processRunner;
     private final GraphifyCorpusProjector corpusProjector;
+    private final GraphifyPipelineRunner pipelineRunner;
     private final Path pluginDir;
     private final Path corpusDir;
     private final Path graphifyOutDir;
     private final Path graphJsonFile;
     private final Path graphHtmlFile;
     private final ScheduledExecutorService worker;
-    private final Object queueLock = new Object();
-    private final Set<String> queuedNotes = new LinkedHashSet<>();
-    private final Set<String> deletedNotes = new LinkedHashSet<>();
-    private final Set<String> unresolvedCardIds = new LinkedHashSet<>();
+    private final GraphifyChangeQueue changeQueue;
 
     private volatile GraphifyStateRepository.IndexState indexState = GraphifyStateRepository.IndexState.empty();
     private volatile Status currentStatus = new Status(false, "等待首次索引", 0, 0, 0, 0,
             false, false, false, null, List.of(), null);
     private volatile boolean stopped;
     private String stateLoadError;
-    private ScheduledFuture<?> queuedChangesTask;
     private boolean indexQueued;
     private boolean relabelQueued;
     private volatile boolean resetting;
@@ -88,11 +78,20 @@ public class GraphifyIndexService {
         this.graphJsonFile = graphifyOutDir.resolve("graph.json");
         this.graphHtmlFile = graphifyOutDir.resolve("graph.html");
         this.corpusProjector = new GraphifyCorpusProjector(fileHelper, corpusDir, graphifyOutDir);
+        this.pipelineRunner = new GraphifyPipelineRunner(
+                fileHelper, settingsService, processRunner, corpusDir, graphifyOutDir, graphJsonFile, graphHtmlFile
+        );
         this.worker = Executors.newSingleThreadScheduledExecutor(task -> {
             Thread thread = new Thread(task, "thisnote-graphify-index");
             thread.setDaemon(true);
             return thread;
         });
+        this.changeQueue = new GraphifyChangeQueue(
+                worker,
+                this::processQueuedChanges,
+                this::markChangesQueued,
+                this::shouldObserveChanges
+        );
     }
 
     public void setMainEventPublisher(ApplicationEventPublisher eventPublisher) {
@@ -161,7 +160,7 @@ public class GraphifyIndexService {
     }
 
     public void requestIndex(boolean force) {
-        synchronized (queueLock) {
+        synchronized (this) {
             ensureRunning();
             if (indexQueued) {
                 log.debug("Graphify 全量索引请求已忽略：已有索引任务排队");
@@ -178,9 +177,9 @@ public class GraphifyIndexService {
                 try {
                     indexAll(force);
                 } finally {
-                    synchronized (queueLock) {
+                    synchronized (this) {
                         indexQueued = false;
-                        scheduleQueuedChangesIfReady();
+                        changeQueue.scheduleIfReady();
                     }
                 }
             });
@@ -188,7 +187,7 @@ public class GraphifyIndexService {
     }
 
     public void requestRelabel() {
-        synchronized (queueLock) {
+        synchronized (this) {
             ensureRunning();
             if (relabelQueued) {
                 log.debug("Graphify 社区命名请求已忽略：已有命名任务排队");
@@ -200,9 +199,9 @@ public class GraphifyIndexService {
                 try {
                     relabelCommunities();
                 } finally {
-                    synchronized (queueLock) {
+                    synchronized (this) {
                         relabelQueued = false;
-                        scheduleQueuedChangesIfReady();
+                        changeQueue.scheduleIfReady();
                     }
                 }
             });
@@ -210,38 +209,21 @@ public class GraphifyIndexService {
     }
 
     public void stop() {
-        int pendingNotes;
-        int pendingDeletes;
-        int pendingCards;
-        synchronized (queueLock) {
-            stopped = true;
-            pendingNotes = queuedNotes.size();
-            pendingDeletes = deletedNotes.size();
-            pendingCards = unresolvedCardIds.size();
-            if (queuedChangesTask != null) {
-                queuedChangesTask.cancel(false);
-                queuedChangesTask = null;
-            }
-        }
+        stopped = true;
+        GraphifyChangeQueue.QueueSnapshot pending = changeQueue.stop();
         log.info("Graphify 索引服务正在停止：queuedNotes={}, queuedDeletes={}, unresolvedCards={}",
-                pendingNotes, pendingDeletes, pendingCards);
+                pending.noteIds().size(), pending.deletedNoteIds().size(), pending.unresolvedCardIds().size());
         worker.shutdownNow();
         processRunner.stop();
     }
 
     public CompletableFuture<Void> resetState() {
-        synchronized (queueLock) {
+        synchronized (this) {
             if (stopped) {
                 return CompletableFuture.failedFuture(new IllegalStateException("Graphify 索引线程已停止"));
             }
             resetting = true;
-            queuedNotes.clear();
-            deletedNotes.clear();
-            unresolvedCardIds.clear();
-            if (queuedChangesTask != null) {
-                queuedChangesTask.cancel(false);
-                queuedChangesTask = null;
-            }
+            changeQueue.clear();
         }
         CompletableFuture<Void> result = new CompletableFuture<>();
         try {
@@ -330,9 +312,9 @@ public class GraphifyIndexService {
                 warnings.add("强制重新抽取会绕过 Graphify 语义缓存，可能重新调用模型并产生费用");
             }
             GraphifySettingsService.Settings settings = settingsService.settings();
-            String apiKey = requireApiKey(settings);
+            String apiKey = pipelineRunner.requireApiKey(settings);
             currentStatus = statusFor("Graphify 抽取", true, 80, completed, notes.size(), warnings, null);
-            runGraphifyPipeline(settings, apiKey, force, !previous.initialized());
+            pipelineRunner.run(settings, apiKey, force, !previous.initialized());
 
             String completedAt = Instant.now().toString();
             GraphifyStateRepository.IndexState successful = new GraphifyStateRepository.IndexState(
@@ -357,17 +339,7 @@ public class GraphifyIndexService {
 
     private void processQueuedChanges() {
         long startedAt = System.nanoTime();
-        QueueSnapshot snapshot;
-        synchronized (queueLock) {
-            queuedChangesTask = null;
-            snapshot = new QueueSnapshot(
-                    new LinkedHashSet<>(queuedNotes),
-                    new LinkedHashSet<>(deletedNotes),
-                    new LinkedHashSet<>(unresolvedCardIds));
-            queuedNotes.clear();
-            deletedNotes.clear();
-            unresolvedCardIds.clear();
-        }
+        GraphifyChangeQueue.QueueSnapshot snapshot = changeQueue.snapshotAndClear();
         if (snapshot.isEmpty()) {
             return;
         }
@@ -455,9 +427,9 @@ public class GraphifyIndexService {
                 return;
             }
             GraphifySettingsService.Settings settings = settingsService.settings();
-            String apiKey = requireApiKey(settings);
+            String apiKey = pipelineRunner.requireApiKey(settings);
             currentStatus = statusFor("Graphify 更新", true, 80, completed, changed.size(), warnings, null);
-            runGraphifyPipeline(settings, apiKey, false, false);
+            pipelineRunner.run(settings, apiKey, false, false);
             indexState = new GraphifyStateRepository.IndexState(true, Instant.now().toString(),
                     noteIds, cardToNote, toAttachmentListMap(attachmentToNotes));
             stateRepository.updateIndexState(indexState);
@@ -480,12 +452,12 @@ public class GraphifyIndexService {
         List<String> warnings = new ArrayList<>();
         try {
             GraphifySettingsService.Settings settings = settingsService.settings();
-            String apiKey = requireApiKey(settings);
+            String apiKey = pipelineRunner.requireApiKey(settings);
             if (!Files.isRegularFile(graphJsonFile)) {
                 throw new IllegalStateException("尚无图谱；请先完成首次索引");
             }
             currentStatus = statusFor("重新命名社区", true, 85, 0, 0, warnings, null);
-            relabelCommunitiesNow(settings, apiKey);
+            pipelineRunner.relabel(settings, apiKey);
             GraphifyStateRepository.IndexState current = indexState;
             GraphifyStateRepository.IndexState updated = new GraphifyStateRepository.IndexState(current.initialized(),
                     Instant.now().toString(),
@@ -501,62 +473,6 @@ public class GraphifyIndexService {
                     currentStatus.completedNotes(), currentStatus.totalNotes(), warnings, safeMessage(e));
             log.error("Graphify 社区命名失败：stage={}, elapsedMs={}", failedStage,
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), e);
-        }
-    }
-
-    private void runGraphifyPipeline(GraphifySettingsService.Settings settings,
-                                     String apiKey,
-                                     boolean force,
-                                     boolean labelFirstRun) throws IOException {
-        long startedAt = System.nanoTime();
-        Map<Path, FileBackup> backups = backupGraphOutputs();
-        log.info("Graphify 图谱构建开始：force={}, firstRun={}", force, labelFirstRun);
-        try {
-            List<String> extract = new ArrayList<>(List.of(
-                    "extract", corpusDir.toAbsolutePath().toString(),
-                    "--backend", GraphifySettingsService.graphifyBackend(settings.provider()),
-                    "--model", settings.model()));
-            if (force) {
-                extract.add("--force");
-            }
-            runCommand(settings, apiKey, extract, "抽取");
-
-            List<String> cluster = new ArrayList<>(List.of(
-                    "cluster-only", corpusDir.toAbsolutePath().toString()));
-            if (labelFirstRun) {
-                cluster.addAll(List.of("--backend", GraphifySettingsService.graphifyBackend(settings.provider()),
-                        "--model", settings.model()));
-            }
-            runCommand(settings, apiKey, cluster, "社区聚类");
-            if (!Files.isRegularFile(graphJsonFile)) {
-                throw new IllegalStateException("Graphify 未生成 graph.json");
-            }
-            publishGraphOutputs();
-            log.info("Graphify 图谱构建完成：elapsedMs={}",
-                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
-        } catch (RuntimeException | IOException e) {
-            restoreGraphOutputs(backups);
-            throw e;
-        }
-    }
-
-    private void runCommand(GraphifySettingsService.Settings settings,
-                            String apiKey,
-                            List<String> arguments,
-                            String stage) throws IOException {
-        GraphifyProcessRunner.Result result;
-        try {
-            result = processRunner.run(executable(settings), arguments, corpusDir, settings.provider(), apiKey);
-        } catch (IOException e) {
-            String component = GraphifySettingsService.OPENCODE_GO_PROVIDER.equals(settings.provider())
-                    ? "Graphify 或 OpenCode Go API 转发器"
-                    : "Graphify";
-            throw new IllegalStateException("无法启动 " + component
-                    + "；请确认 Graphify 已安装，或在插件设置中填写可执行文件路径", e);
-        }
-        if (result.exitCode() != 0) {
-            throw new IllegalStateException("Graphify " + stage + "失败（exit " + result.exitCode() + "）"
-                    + diagnostic(result.output()));
         }
     }
 
@@ -579,61 +495,12 @@ public class GraphifyIndexService {
         return result;
     }
 
-    private void relabelCommunitiesNow(GraphifySettingsService.Settings settings,
-                                       String apiKey) throws IOException {
-        if (!Files.isRegularFile(graphJsonFile)) {
-            throw new IllegalStateException("尚无图谱；请先完成首次索引");
-        }
-        Map<Path, FileBackup> backups = backupGraphOutputs();
-        try {
-            runCommand(settings, apiKey, List.of(
-                    "label", corpusDir.toAbsolutePath().toString(),
-                    "--backend", GraphifySettingsService.graphifyBackend(settings.provider()),
-                    "--model", settings.model()), "社区命名");
-            publishGraphOutputs();
-        } catch (RuntimeException | IOException e) {
-            restoreGraphOutputs(backups);
-            throw e;
-        }
-    }
-
-    private String requireApiKey(GraphifySettingsService.Settings settings) {
-        String apiKey = settingsService.apiKey(settings.aiProfileId());
-        if (apiKey.isBlank()) {
-            throw new IllegalStateException("请先在 AI 能力插件中为所选 profile 配置 API key");
-        }
-        return apiKey;
-    }
-
-    private static String executable(GraphifySettingsService.Settings settings) {
-        return settings.executablePath() == null || settings.executablePath().isBlank()
-                ? "graphify"
-                : settings.executablePath();
-    }
-
     public void queueNote(String noteId) {
-        if (noteId == null || noteId.isBlank() || !shouldObserveChanges()) {
-            return;
-        }
-        synchronized (queueLock) {
-            if (!stopped && shouldObserveChanges() && !deletedNotes.contains(noteId)) {
-                queuedNotes.add(noteId);
-                scheduleQueuedChanges();
-            }
-        }
+        changeQueue.queueNote(noteId);
     }
 
     public void queueNoteDeletion(String noteId) {
-        if (noteId == null || noteId.isBlank() || !shouldObserveChanges()) {
-            return;
-        }
-        synchronized (queueLock) {
-            if (!stopped && shouldObserveChanges()) {
-                queuedNotes.remove(noteId);
-                deletedNotes.add(noteId);
-                scheduleQueuedChanges();
-            }
-        }
+        changeQueue.queueNoteDeletion(noteId);
     }
 
     public String noteIdForCard(String cardId) {
@@ -641,37 +508,19 @@ public class GraphifyIndexService {
     }
 
     public void queueUnresolvedCard(String cardId) {
-        synchronized (queueLock) {
-            if (!stopped && shouldObserveChanges()) {
-                unresolvedCardIds.add(cardId);
-                scheduleQueuedChanges();
-            }
-        }
+        changeQueue.queueUnresolvedCard(cardId);
     }
 
     public void queueNotesForAttachments(Set<String> fileNames) {
-        synchronized (queueLock) {
-            if (stopped || !shouldObserveChanges()) {
-                return;
-            }
-            for (String fileName : fileNames) {
-                queuedNotes.addAll(indexState.attachmentToNotes().getOrDefault(fileName, List.of()));
-            }
-            if (!queuedNotes.isEmpty()) {
-                scheduleQueuedChanges();
-            }
-        }
+        changeQueue.queueNotesForAttachments(fileNames,
+                fileName -> indexState.attachmentToNotes().getOrDefault(fileName, List.of()));
     }
 
-    public boolean shouldObserveChanges() {
+    private boolean shouldObserveChanges() {
         return !resetting && (indexState.initialized() || currentStatus.running());
     }
 
-    private void scheduleQueuedChanges() {
-        if (queuedChangesTask != null) {
-            queuedChangesTask.cancel(false);
-        }
-        queuedChangesTask = worker.schedule(this::processQueuedChanges, 2, TimeUnit.SECONDS);
+    private void markChangesQueued() {
         if (!currentStatus.running()) {
             currentStatus = statusFor("变更已排队", false, currentStatus.progress(),
                     currentStatus.completedNotes(), currentStatus.totalNotes(),
@@ -679,19 +528,8 @@ public class GraphifyIndexService {
         }
     }
 
-    private void scheduleQueuedChangesIfReady() {
-        if (indexState.initialized()
-                && (!queuedNotes.isEmpty() || !deletedNotes.isEmpty() || !unresolvedCardIds.isEmpty())) {
-            scheduleQueuedChanges();
-        }
-    }
-
-    private void restoreQueue(QueueSnapshot snapshot) {
-        synchronized (queueLock) {
-            queuedNotes.addAll(snapshot.noteIds());
-            deletedNotes.addAll(snapshot.deletedNoteIds());
-            unresolvedCardIds.addAll(snapshot.unresolvedCardIds());
-        }
+    private void restoreQueue(GraphifyChangeQueue.QueueSnapshot snapshot) {
+        changeQueue.restore(snapshot);
     }
 
     private void removeNoteMappings(String noteId,
@@ -758,56 +596,6 @@ public class GraphifyIndexService {
         return cleared;
     }
 
-    private Map<Path, FileBackup> backupGraphOutputs() throws IOException {
-        Map<Path, FileBackup> backups = new LinkedHashMap<>();
-        for (Path path : graphifyOutputFiles()) {
-            if (Files.isRegularFile(path)) {
-                backups.put(path, new FileBackup(Files.readAllBytes(path),
-                        Files.getLastModifiedTime(path).toMillis()));
-            } else {
-                backups.put(path, null);
-            }
-        }
-        return backups;
-    }
-
-    private void restoreGraphOutputs(Map<Path, FileBackup> backups) {
-        for (Map.Entry<Path, FileBackup> entry : backups.entrySet()) {
-            Path path = entry.getKey();
-            FileBackup backup = entry.getValue();
-            if (backup == null) {
-                if (!fileHelper.fileDeleted(path) && Files.exists(path)) {
-                    log.error("删除 Graphify 文件失败：{}", path);
-                }
-            } else {
-                fileHelper.fileWritten(path, new ByteArrayInputStream(backup.bytes()), backup.modifiedAt());
-            }
-        }
-    }
-
-    private void publishGraphOutputs() throws IOException {
-        int published = 0;
-        for (Path path : graphifyOutputFiles()) {
-            if (Files.isRegularFile(path)) {
-                byte[] bytes = Files.readAllBytes(path);
-                FileTime modifiedAt = Files.getLastModifiedTime(path);
-                fileHelper.fileWritten(path, new ByteArrayInputStream(bytes), modifiedAt.toMillis());
-                published++;
-            }
-        }
-        log.info("Graphify 图谱输出已发布：files={}", published);
-    }
-
-    private List<Path> graphifyOutputFiles() {
-        return List.of(
-                graphJsonFile,
-                graphHtmlFile,
-                graphifyOutDir.resolve("GRAPH_REPORT.md"),
-                graphifyOutDir.resolve(".graphify_labels.json"),
-                graphifyOutDir.resolve(".graphify_analysis.json")
-        );
-    }
-
     private Status statusFor(String stage,
                              boolean running,
                              int progress,
@@ -815,10 +603,7 @@ public class GraphifyIndexService {
                              int totalNotes,
                              List<String> warnings,
                              String error) {
-        int queued;
-        synchronized (queueLock) {
-            queued = queuedNotes.size() + deletedNotes.size() + unresolvedCardIds.size();
-        }
+        int queued = changeQueue.queuedCount();
         return new Status(running, stage, progress, completedNotes, totalNotes, queued,
                 indexState.initialized(), Files.isRegularFile(graphJsonFile),
                 Files.isRegularFile(graphHtmlFile), indexState.lastCompletedAt(),
@@ -829,32 +614,6 @@ public class GraphifyIndexService {
         if (stopped) {
             throw new IllegalStateException("Graphify 插件正在停用");
         }
-    }
-
-    private static String diagnostic(String output) {
-        if (output == null || output.isBlank()) {
-            return "";
-        }
-        String important = output.lines()
-                .filter(line -> {
-                    String lower = line.toLowerCase(Locale.ROOT);
-                    return lower.contains("error")
-                            || lower.contains("failed")
-                            || lower.contains("incomplete")
-                            || lower.contains("shrink")
-                            || lower.contains("semantic cache");
-                })
-                .distinct()
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("");
-        if (!important.isBlank()) {
-            output = important;
-        }
-        String trimmed = output.trim();
-        if (trimmed.length() > 1800) {
-            trimmed = trimmed.substring(trimmed.length() - 1800);
-        }
-        return "：" + trimmed;
     }
 
     private static String safeMessage(Throwable error) {
@@ -877,18 +636,6 @@ public class GraphifyIndexService {
                          String lastCompletedAt,
                          List<String> warnings,
                          String error) {
-    }
-
-    private record FileBackup(byte[] bytes, long modifiedAt) {
-    }
-
-    private record QueueSnapshot(Set<String> noteIds,
-                                 Set<String> deletedNoteIds,
-                                 Set<String> unresolvedCardIds) {
-
-        private boolean isEmpty() {
-            return noteIds.isEmpty() && deletedNoteIds.isEmpty() && unresolvedCardIds.isEmpty();
-        }
     }
 
 }

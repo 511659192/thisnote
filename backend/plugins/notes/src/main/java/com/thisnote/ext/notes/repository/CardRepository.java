@@ -270,9 +270,10 @@ public class CardRepository {
     }
 
     /**
-     * 状态重置：把卡片索引重写为空 map（md 文件保留）。
+     * 状态重置：删除 cards 目录下的本地文件，并把卡片索引重写为空 map。
      */
     public synchronized void reset() {
+        fileHelper.deleteRegularFiles(notesConfig.getRootDir().resolve("cards"));
         fileHelper.fileWritten(cardMetadataFile, new LinkedHashMap<>());
     }
 

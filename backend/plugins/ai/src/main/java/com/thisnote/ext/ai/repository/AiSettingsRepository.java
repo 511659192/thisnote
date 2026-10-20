@@ -3,6 +3,7 @@ package com.thisnote.ext.ai.repository;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.thisnote.plugin.api.event.AiProfilesFutureEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
@@ -18,7 +19,7 @@ import java.util.stream.Collectors;
 @Repository
 public class AiSettingsRepository {
 
-    public static final String DEFAULT_PROFILE_ID = "default-chat";
+    public static final String DEFAULT_PROFILE_ID = AiProfilesFutureEvent.DEFAULT_PROFILE_ID;
     public static final String DEFAULT_PROVIDER = "opencode-go";
     public static final String DEFAULT_MODEL = "deepseek-v4.1-flash";
     public static final String DEFAULT_ENDPOINT = "https://opencode.ai/inference/go/openai/v1/chat/completions";
@@ -46,9 +47,7 @@ public class AiSettingsRepository {
             }
             JSONArray profiles = raw.getJSONArray("profiles");
             if (profiles == null) {
-                StoredProfile migrated = migrateLegacy(raw);
-                updateProfiles(List.of(migrated));
-                return List.of(migrated);
+                return List.of(migrateLegacy(raw));
             }
             List<StoredProfile> result = new ArrayList<>();
             for (Object item : profiles) {
@@ -107,14 +106,7 @@ public class AiSettingsRepository {
                 String value = stored.getString(profileId);
                 return value != null && !value.isBlank();
             }).collect(Collectors.toMap(profileId -> profileId, stored::getString, (first, second) -> first, LinkedHashMap::new));
-            if (credentials.getIntValue("version") < 2) {
-                String legacyKey = result.remove(DEFAULT_PROVIDER);
-                if (legacyKey != null && !result.containsKey(DEFAULT_PROFILE_ID)) {
-                    result.put(DEFAULT_PROFILE_ID, legacyKey);
-                }
-                updateApiKeys(result);
-            }
-            return result;
+            return migrateApiKeys(credentials, result);
         } catch (Exception e) {
             throw new IllegalStateException("AI 凭据文件无法读取", e);
         }
@@ -163,6 +155,18 @@ public class AiSettingsRepository {
                 DEFAULT_ENDPOINT,
                 1_000_000
         );
+    }
+
+    private static Map<String, String> migrateApiKeys(JSONObject credentials,
+                                                       Map<String, String> apiKeys) {
+        if (credentials.getIntValue("version") >= 2) {
+            return apiKeys;
+        }
+        String legacyKey = apiKeys.remove(DEFAULT_PROVIDER);
+        if (legacyKey != null && !apiKeys.containsKey(DEFAULT_PROFILE_ID)) {
+            apiKeys.put(DEFAULT_PROFILE_ID, legacyKey);
+        }
+        return apiKeys;
     }
 
     public record StoredProfile(String id,

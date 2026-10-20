@@ -14,6 +14,14 @@ export interface AiProfile {
 
 export interface AiSettings {
   profiles: AiProfile[]
+  providers: AiProviderDefaults[]
+}
+
+export interface AiProviderDefaults {
+  id: string
+  label: string
+  defaultModel: string
+  defaultEndpoint: string
 }
 
 export interface AiProfileUpdate {

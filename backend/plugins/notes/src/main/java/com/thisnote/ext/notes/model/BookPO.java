@@ -75,6 +75,10 @@ public class BookPO {
         return new BookPO(id, type, title, icon, sortOrder, now, now);
     }
 
+    public static BookPO defaultGroup(long now) {
+        return newBook(DEFAULT_GROUP_ID, TYPE_BOOK, DEFAULT_GROUP_TITLE, "📥", 0, now);
+    }
+
     public static List<BookPO> parse(Path file) {
         try {
             String json = Files.readString(file, StandardCharsets.UTF_8);

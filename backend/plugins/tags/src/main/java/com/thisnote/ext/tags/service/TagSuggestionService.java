@@ -30,7 +30,7 @@ public class TagSuggestionService {
     private static final int MAX_IMAGES = 6;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
     private static final long QUERY_TIMEOUT_SECONDS = 30;
-    private static final long COMPLETION_TIMEOUT_SECONDS = 130;
+    public static final long RESULT_TIMEOUT_SECONDS = 130;
     private static final int MAX_TOKENS = 1200;
     private static final String TAG_PROMPT = """
             Extract 10 to 20 high-level, reusable business tags from the note text and images.
@@ -75,7 +75,7 @@ public class TagSuggestionService {
                 MAX_TOKENS
         );
         publisher().publishEvent(request);
-        return request.completion().orTimeout(COMPLETION_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+        return request.completion().orTimeout(RESULT_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
     }
 
     private List<AiCompletionFutureEvent.ImageInput> images(List<CardDTO> cards) {

@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -68,15 +69,9 @@ public class GraphifyCorpusProjector {
             markdown.append(bodies.get(i));
         }
 
-        List<MarkdownImages.Reference> references = MarkdownImages.attachmentReferences(markdown.toString());
-        Set<String> attachmentNames = new LinkedHashSet<>();
-        for (MarkdownImages.Reference reference : references) {
-            attachmentNames.add(reference.fileName());
-            String replacement = reference.originalTarget().startsWith("<") || reference.fileName().contains(" ")
-                    ? "<attachments/" + reference.fileName() + ">"
-                    : "attachments/" + reference.fileName();
-            markdown = new StringBuilder(markdown.toString().replace(reference.originalTarget(), replacement));
-        }
+        RewrittenMarkdown rewritten = rewriteAttachmentTargets(markdown.toString());
+        markdown = new StringBuilder(rewritten.markdown());
+        Set<String> attachmentNames = rewritten.attachmentNames();
 
         Path noteDir = noteDirectory(note.noteId());
         Set<String> copiedAttachments = new LinkedHashSet<>();
@@ -104,6 +99,24 @@ public class GraphifyCorpusProjector {
             changed = true;
         }
         return new ProjectionMetadata(cardIds, attachmentNames, changed);
+    }
+
+    static RewrittenMarkdown rewriteAttachmentTargets(String source) {
+        List<MarkdownImages.Reference> references = MarkdownImages.attachmentReferences(source);
+        Set<String> attachmentNames = new LinkedHashSet<>();
+        for (MarkdownImages.Reference reference : references) {
+            attachmentNames.add(reference.fileName());
+        }
+        StringBuilder rewritten = new StringBuilder(source);
+        references.stream()
+                .sorted((left, right) -> Integer.compare(right.start(), left.start()))
+                .forEach(reference -> {
+                    String replacement = reference.originalTarget().startsWith("<") || reference.fileName().contains(" ")
+                            ? "<attachments/" + reference.fileName() + ">"
+                            : "attachments/" + reference.fileName();
+                    rewritten.replace(reference.start(), reference.end(), replacement);
+                });
+        return new RewrittenMarkdown(rewritten.toString(), Collections.unmodifiableSet(attachmentNames));
     }
 
     public void remove(String noteId) {
@@ -199,5 +212,8 @@ public class GraphifyCorpusProjector {
     public record ProjectionMetadata(List<String> cardIds,
                                      Set<String> attachmentNames,
                                      boolean changed) {
+    }
+
+    record RewrittenMarkdown(String markdown, Set<String> attachmentNames) {
     }
 }

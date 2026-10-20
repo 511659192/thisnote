@@ -152,8 +152,10 @@ public class TagsRepository {
 
     public synchronized void deleteAll() {
         if (Files.exists(tagsFile)) {
-            if (!fileHelper.fileDeleted(tagsFile) && Files.exists(tagsFile)) {
+            fileHelper.fileDeleted(tagsFile);
+            if (Files.exists(tagsFile)) {
                 log.error("删除标签文件失败：{}", tagsFile);
+                throw new IllegalStateException("删除标签文件失败：" + tagsFile);
             }
         }
     }

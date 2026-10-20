@@ -49,13 +49,7 @@ public class BookService {
     public void initializeDefaultGroup() {
         List<BookPO> books = bookRepository.getAll();
         if (books.stream().noneMatch(book -> BookPO.DEFAULT_GROUP_ID.equals(book.getId()))) {
-            books.add(BookPO.newBook(
-                    BookPO.DEFAULT_GROUP_ID,
-                    BookPO.TYPE_BOOK,
-                    BookPO.DEFAULT_GROUP_TITLE,
-                    "📥",
-                    0,
-                    System.currentTimeMillis()));
+            books.add(BookPO.defaultGroup(System.currentTimeMillis()));
             bookRepository.updateAll(books);
         }
     }

@@ -20,9 +20,9 @@ export function useCardSizing(
   card: ComputedRef<CardView['card']>,
   content: ComputedRef<string>,
   isImageOnly: ComputedRef<boolean>,
-  readBody: Ref<HTMLElement | null>,
+  readBody: () => HTMLElement | null,
   measure: Ref<HTMLElement | null>,
-  textarea: Ref<HTMLTextAreaElement | null>,
+  textarea: () => HTMLTextAreaElement | null,
   rootEl: Ref<HTMLElement | null>,
   autoFitImageWidth: Ref<boolean>,
   fitPastedImage: Ref<boolean>,
@@ -49,7 +49,7 @@ export function useCardSizing(
   function contentEl(): HTMLElement | null {
     return props.editing
       ? measure.value
-      : ((readBody.value?.firstElementChild as HTMLElement | null) ?? null)
+      : ((readBody()?.firstElementChild as HTMLElement | null) ?? null)
   }
 
   function updateImageWidth(): HTMLImageElement[] {
@@ -62,7 +62,7 @@ export function useCardSizing(
   }
 
   function measureMaxContentWidth(): number {
-    const body = readBody.value ?? measure.value
+    const body = readBody() ?? measure.value
     if (!body) return 0
     const clone = body.cloneNode(true) as HTMLElement
     clone.style.cssText += ';position:fixed;left:-10000px;top:0;width:max-content;max-width:none;overflow:visible;'
@@ -105,12 +105,14 @@ export function useCardSizing(
     )
 
     let needed: number
-    if (props.editing && textarea.value) {
-      const boxStyle = getComputedStyle(textarea.value)
+    const editor = textarea()
+    const preview = readBody()
+    if (props.editing && editor) {
+      const boxStyle = getComputedStyle(editor)
       const verticalPadding = parseFloat(boxStyle.paddingTop) + parseFloat(boxStyle.paddingBottom)
       needed = Math.ceil(el.offsetHeight + verticalPadding) + 2
-    } else if (readBody.value) {
-      const bodyStyle = getComputedStyle(readBody.value)
+    } else if (preview) {
+      const bodyStyle = getComputedStyle(preview)
       const verticalPadding = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
       needed = Math.ceil(el.offsetHeight + verticalPadding) + 2
     } else {

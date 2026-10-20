@@ -25,7 +25,15 @@ public final class MarkdownImages {
         List<Reference> references = new ArrayList<>();
         Matcher matcher = IMAGE.matcher(markdown);
         while (matcher.find()) {
-            String originalTarget = matcher.group(1).trim();
+            int start = matcher.start(1);
+            int end = matcher.end(1);
+            while (start < end && Character.isWhitespace(markdown.charAt(start))) {
+                start++;
+            }
+            while (end > start && Character.isWhitespace(markdown.charAt(end - 1))) {
+                end--;
+            }
+            String originalTarget = markdown.substring(start, end);
             String target = originalTarget.startsWith("<") && originalTarget.endsWith(">")
                     ? originalTarget.substring(1, originalTarget.length() - 1)
                     : originalTarget;
@@ -35,12 +43,12 @@ public final class MarkdownImages {
             }
             String fileName = attachment.group(1).replace("%20", " ");
             if (SAFE_NAME.matcher(fileName).matches()) {
-                references.add(new Reference(originalTarget, fileName));
+                references.add(new Reference(originalTarget, fileName, start, end));
             }
         }
         return references;
     }
 
-    public record Reference(String originalTarget, String fileName) {
+    public record Reference(String originalTarget, String fileName, int start, int end) {
     }
 }

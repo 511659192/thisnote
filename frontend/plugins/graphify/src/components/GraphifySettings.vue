@@ -9,6 +9,8 @@ const settings = ref<GraphifySettings>({
   executablePath: '',
   keyConfigured: false,
   profiles: [],
+  aiError: '',
+  profilesError: '',
 })
 const status = ref<GraphifyStatus | null>(null)
 const loading = ref(true)
@@ -117,6 +119,8 @@ onMounted(load)
 
     <p v-if="message" class="feedback success">{{ message }}</p>
     <p v-if="error" class="feedback error">{{ error }}</p>
+    <p v-if="settings.aiError" class="feedback error">{{ settings.aiError }}</p>
+    <p v-if="settings.profilesError" class="feedback error">{{ settings.profilesError }}</p>
     <p v-if="status?.error" class="feedback error">最近索引错误：{{ status.error }}</p>
   </section>
 </template>
