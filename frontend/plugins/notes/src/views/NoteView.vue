@@ -1,3 +1,7 @@
+<script lang="ts">
+let initialNoteRouteChecked = !window.location.hash.startsWith('#/notes/')
+</script>
+
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -251,7 +255,9 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
   const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
-  if (route.params.id && navigation?.type === 'reload') {
+  const resetReloadedRoute = !initialNoteRouteChecked && route.params.id && navigation?.type === 'reload'
+  initialNoteRouteChecked = true
+  if (resetReloadedRoute) {
     void router.replace('/notes')
   } else {
     void applyRoute()

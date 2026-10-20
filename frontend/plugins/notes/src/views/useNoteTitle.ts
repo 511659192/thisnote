@@ -2,11 +2,12 @@ import { nextTick, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
 import { usePageStore } from '@/stores/notePage'
-import { toast } from '@thisnote/plugin-api'
+import { clearActiveListFilter, toast } from '@thisnote/plugin-api'
 import type { NoteDto } from '@/api/types'
 
 interface PageHandle {
   finishEditing: (cardId?: string) => Promise<void>
+  focusCard: (cardId: string) => Promise<boolean>
 }
 
 type NoteStore = ReturnType<typeof useNoteStore>
@@ -156,6 +157,13 @@ export function useNoteTitle(
   onBeforeRouteLeave(() => ensureTitleBeforeLeaving())
   onBeforeRouteUpdate((to, from) => to.params.id === from.params.id ? true : ensureTitleBeforeLeaving())
 
+  async function focusRouteCard() {
+    const cardId = typeof route.query.cardId === 'string' ? route.query.cardId : ''
+    if (!cardId) return
+    await nextTick()
+    await pageRef.value?.focusCard(cardId)
+  }
+
   async function applyRoute() {
     const id = route.params.id as string | undefined
     if (!id) {
@@ -165,16 +173,27 @@ export function useNoteTitle(
       titleDraftNoteId = null
       return
     }
-    if (nodes.current?.noteId === id && page.noteId === id) return
+    if (route.query.cardId) {
+      clearActiveListFilter()
+      if (nodes.activeBookId) nodes.showAll()
+    }
+    if (nodes.current?.noteId === id && page.noteId === id) {
+      await focusRouteCard()
+      return
+    }
     await nodes.select(id)
     if (nodes.current) {
       await page.load(id, nodes.current.cardIds ?? [], nodes.current.title)
       titleDraft.value = nodes.current.title
       titleDraftNoteId = nodes.current.noteId
+      await focusRouteCard()
     }
   }
 
   watch(() => route.params.id, applyRoute)
+  watch(() => route.query.cardId, () => {
+    if (route.params.id) void applyRoute()
+  })
   watch(() => route.name, (name) => {
     if (name === 'notes') void applyRoute()
   })

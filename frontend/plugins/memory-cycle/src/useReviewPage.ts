@@ -1,10 +1,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import {
   formatInterval,
+  deleteReviewCard,
   loadCardContent,
   loadEnabledCards,
   memoryCycleApi,
+  resolveCardNoteId,
   type CardContent,
   type DueCard,
   type EnabledMemoryCard,
@@ -13,7 +15,7 @@ import {
   type ScheduleHistoryEntry,
 } from './api/memoryCycleApi'
 import { memoryCycle } from './stores/memoryCycle'
-import { createPreviewImageInteractions, emitPluginStateChange, host, isPluginActive, refreshPluginAvailability } from '@thisnote/plugin-api'
+import { createPreviewImageInteractions, emitPluginStateChange, host, isPluginActive, refreshPluginAvailability, toast } from '@thisnote/plugin-api'
 
 const PLUGIN_ID = 'memory-cycle'
 
@@ -42,6 +44,10 @@ export function useReviewPage() {
   const histories = ref<Record<string, ScheduleHistoryEntry[]>>({})
   const historiesLoaded = ref(false)
   const orphanCount = ref(0)
+  const deleteTarget = ref<{ cardId: string } | null>(null)
+  const deleting = ref(false)
+  const deleteMessage = ref('')
+  const deleteError = ref('')
 
   function startOfToday(): number {
     const today = new Date()
@@ -231,6 +237,76 @@ export function useReviewPage() {
     previewCard.value = null
   }
 
+  function requestDeleteCard(card: { cardId: string }) {
+    if (busyIds.value.has(card.cardId)) return
+    deleteTarget.value = card
+    deleteError.value = ''
+    deleteMessage.value = ''
+  }
+
+  async function locateCard(card: { cardId: string; noteId?: string }) {
+    let noteId = card.noteId
+    if (!noteId) {
+      try {
+        noteId = await resolveCardNoteId(card.cardId)
+      } catch (error) {
+        toast(`解析卡片位置失败：${(error as Error).message}`, 'error')
+        return
+      }
+    }
+    if (!noteId) {
+      toast('卡片所属笔记尚未加载', 'error')
+      return
+    }
+    const target: RouteLocationRaw = router.hasRoute('note')
+      ? { name: 'note', params: { id: noteId }, query: { cardId: card.cardId } }
+      : { path: `/notes/${noteId}`, query: { cardId: card.cardId } }
+    try {
+      await router.push(target)
+    } catch (error) {
+      toast(`打开笔记失败：${(error as Error).message}`, 'error')
+    }
+  }
+
+  function cancelDeleteCard() {
+    if (!deleting.value) deleteTarget.value = null
+  }
+
+  function removeDeletedCard(cardId: string) {
+    queue.value = queue.value.filter((card) => card.cardId !== cardId)
+    enabledCards.value = enabledCards.value.filter((card) => card.cardId !== cardId)
+    reviewedStates.delete(cardId)
+    if (previewCard.value?.cardId === cardId) previewCard.value = null
+    if (contentLoadingCardId.value === cardId) contentLoadingCardId.value = null
+    const loaded = new Set(loadedContentIds.value)
+    loaded.delete(cardId)
+    loadedContentIds.value = loaded
+    const nextHistories = { ...histories.value }
+    delete nextHistories[cardId]
+    histories.value = nextHistories
+    contentError.value = ''
+  }
+
+  async function confirmDeleteCard() {
+    const target = deleteTarget.value
+    if (!target || deleting.value) return
+    deleting.value = true
+    deleteError.value = ''
+    try {
+      const deleted = await deleteReviewCard(target.cardId)
+      removeDeletedCard(target.cardId)
+      deleteTarget.value = null
+      deleteMessage.value = deleted === 'note' ? '唯一卡片已删除，笔记已一并删除' : '卡片已删除'
+      emitPluginStateChange({ pluginId: PLUGIN_ID, cardIds: [target.cardId] })
+      if (activeTab.value === 'review') await loadCurrentCardContent()
+    } catch (error) {
+      deleteTarget.value = null
+      deleteError.value = error instanceof Error ? error.message : '请稍后重试'
+    } finally {
+      deleting.value = false
+    }
+  }
+
   const { onPreviewWheel, onPreviewMouseDown, dispose: disposePreviewInteractions } = createPreviewImageInteractions({
     grabbingClass: 'rv-img-grabbing',
   })
@@ -310,6 +386,7 @@ export function useReviewPage() {
   function onKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement
     if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return
+    if (deleteTarget.value) return
     if (e.key === 'Escape') {
       if (previewCard.value) {
         closePreview()
@@ -370,10 +447,18 @@ export function useReviewPage() {
     intervalOf,
     intervalHint,
     orphanCount,
+    deleteTarget,
+    deleting,
+    deleteMessage,
+    deleteError,
     dueTodayCards,
     selectTab,
     openPreview,
     closePreview,
+    locateCard,
+    requestDeleteCard,
+    cancelDeleteCard,
+    confirmDeleteCard,
     onPreviewWheel,
     onPreviewMouseDown,
     pluginDisabled,

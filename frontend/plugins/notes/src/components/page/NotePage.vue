@@ -495,6 +495,29 @@ function onCardFocus(id: string) {
   page.bringToFront(id)
 }
 
+async function focusCard(cardId: string): Promise<boolean> {
+  try {
+    const view = await page.ensureCard(cardId)
+    if (!view) {
+      toast('目标卡片不存在或已被删除', 'error')
+      return false
+    }
+    page.select([cardId])
+    page.bringToFront(cardId)
+    await nextTick()
+    const zoom = page.viewport.zoom
+    page.viewport = {
+      zoom,
+      x: view.card.x + view.card.w / 2 - size.width / (2 * zoom),
+      y: view.card.y + view.card.h / 2 - size.height / (2 * zoom),
+    }
+    return true
+  } catch (error) {
+    toast(`定位卡片失败：${(error as Error).message}`, 'error')
+    return false
+  }
+}
+
 function onBlockContext(p: { event: MouseEvent; view: CardView; imageSrc?: string }) {
   if (!page.selection.includes(p.view.card.cardId)) page.select([p.view.card.cardId])
   emit('context', {
@@ -512,7 +535,7 @@ function onSurfaceContext(e: MouseEvent) {
   emit('context', { x: e.clientX, y: e.clientY, target: 'page' })
 }
 
-defineExpose({ size, beginEdit, finishEditing })
+defineExpose({ size, beginEdit, finishEditing, focusCard })
 </script>
 
 <template>

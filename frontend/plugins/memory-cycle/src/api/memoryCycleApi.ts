@@ -50,6 +50,7 @@ export interface DueCard {
 
 /** 一张卡片的渲染内容（由界面侧自己从核心 API 拼出来） */
 export interface CardContent {
+  noteId: string
   noteTitle: string
   contentMd: string
 }
@@ -63,18 +64,30 @@ type NoteCardIndex = { noteId: string; title: string; cardIds: string[] }
 
 let noteCardIndexCache: { notes: NoteCardIndex[]; loadedAt: number } | null = null
 let noteCardIndexRequest: Promise<NoteCardIndex[]> | null = null
+let noteCardIndexVersion = 0
 
 async function loadNoteCardIndex(): Promise<NoteCardIndex[]> {
   if (noteCardIndexCache && Date.now() - noteCardIndexCache.loadedAt <= 60_000) {
     return noteCardIndexCache.notes
   }
+  const version = noteCardIndexVersion
   noteCardIndexRequest ??= http.get<NoteCardIndex[]>('/api/notes/get', { limit: 2000 })
     .then((notes) => {
-      noteCardIndexCache = { notes, loadedAt: Date.now() }
+      if (version === noteCardIndexVersion) {
+        noteCardIndexCache = { notes, loadedAt: Date.now() }
+      }
       return notes
     })
-    .finally(() => { noteCardIndexRequest = null })
+    .finally(() => {
+      if (version === noteCardIndexVersion) noteCardIndexRequest = null
+    })
   return noteCardIndexRequest!
+}
+
+function invalidateNoteCardIndex() {
+  noteCardIndexVersion++
+  noteCardIndexCache = null
+  noteCardIndexRequest = null
 }
 
 export const memoryCycleApi = {
@@ -119,6 +132,32 @@ export const memoryCycleApi = {
     ),
 }
 
+async function findFreshCardOwner(cardId: string): Promise<NoteCardIndex | null> {
+  const notes = await http.get<NoteCardIndex[]>('/api/notes/get', { limit: 2000 })
+  return notes.find((note) => (note.cardIds ?? []).includes(cardId)) ?? null
+}
+
+export async function resolveCardNoteId(cardId: string): Promise<string> {
+  const owner = await findFreshCardOwner(cardId)
+  return owner?.noteId ?? ''
+}
+
+/** 删除卡片；若它是笔记唯一卡片，则删除整篇笔记。 */
+export async function deleteReviewCard(cardId: string): Promise<'card' | 'note'> {
+  const owner = await findFreshCardOwner(cardId)
+  invalidateNoteCardIndex()
+  if (owner && (owner.cardIds?.length ?? 0) <= 1) {
+    await http.post<{ ok: boolean }>('/api/notes/delete', undefined, { id: owner.noteId })
+    void memoryCycleApi.forget(cardId).catch(() => undefined)
+    return 'note'
+  }
+  if (owner) {
+    await http.post<void>('/api/notes/cards/delete', undefined, { noteId: owner.noteId, cardId })
+  }
+  await memoryCycleApi.forget(cardId).catch(() => undefined)
+  return 'card'
+}
+
 /** 按笔记元数据中的 cardIds 定位目标卡片，只读取目标笔记的卡片明细。 */
 export async function loadCardContent(cardIds: string[]): Promise<Map<string, CardContent>> {
   const want = new Set(cardIds)
@@ -135,7 +174,7 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     .filter(({ cardIds: noteCardIds }) => noteCardIds.length > 0)
   let owners = findOwners(notes)
   if (!owners.length && indexWasFresh) {
-    noteCardIndexCache = null
+    invalidateNoteCardIndex()
     notes = await loadNoteCardIndex()
     owners = findOwners(notes)
   }
@@ -147,13 +186,14 @@ export async function loadCardContent(cardIds: string[]): Promise<Map<string, Ca
     )
     return { note, cards }
   })).catch((error) => {
-    noteCardIndexCache = null
+    invalidateNoteCardIndex()
     throw error
   })
   for (const item of pages) {
     for (const card of item.cards) {
       if (want.has(card.meta.cardId)) {
         found.set(card.meta.cardId, {
+          noteId: item.note.noteId,
           noteTitle: item.note.title,
           contentMd: card.content,
         })
@@ -203,7 +243,11 @@ export async function loadEnabledCards(): Promise<EnabledMemoryCard[]> {
         for (const card of cards) {
           const cardId = card.meta.cardId
           if (!contentById.has(cardId)) {
-            contentById.set(cardId, { noteTitle: note.title, contentMd: card.content })
+            contentById.set(cardId, {
+              noteId: note.noteId,
+              noteTitle: note.title,
+              contentMd: card.content,
+            })
           }
         }
       }

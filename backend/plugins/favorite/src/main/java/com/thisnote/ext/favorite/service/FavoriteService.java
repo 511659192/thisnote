@@ -29,4 +29,10 @@ public class FavoriteService {
         log.info("笔记 {} 收藏 → {}", noteId, favorite);
     }
 
+    public int setFavorites(List<String> noteIds, boolean favorite) {
+        int updated = favoriteRepository.updateFavorites(noteIds == null ? List.of() : noteIds, favorite);
+        log.info("批量更新收藏：count={}, favorite={}", updated, favorite);
+        return updated;
+    }
+
 }

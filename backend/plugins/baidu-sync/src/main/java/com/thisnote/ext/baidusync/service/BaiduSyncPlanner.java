@@ -2,6 +2,7 @@ package com.thisnote.ext.baidusync.service;
 
 import com.thisnote.ext.baidusync.client.BaiduPanClient;
 import com.thisnote.ext.baidusync.client.BaiduPanEntry;
+import com.thisnote.ext.baidusync.client.BaiduPanException;
 import com.thisnote.ext.baidusync.model.BaiduSyncPreview;
 import com.thisnote.ext.baidusync.model.BaiduSyncPreviewItem;
 import com.thisnote.ext.baidusync.model.BaiduSyncState;
@@ -10,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -20,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 public class BaiduSyncPlanner {
 
@@ -103,6 +106,98 @@ public class BaiduSyncPlanner {
             }
         }
         return new RemoteSnapshot(files, directoriesSeen);
+    }
+
+    public Set<String> changedRelativePaths(Path notesRoot,
+                                            Set<Path> changedPaths,
+                                            BackupScope backupScope) {
+        Set<String> relatives = new LinkedHashSet<>();
+        for (Path changedPath : changedPaths) {
+            Path path = changedPath.toAbsolutePath().normalize();
+            if (!path.startsWith(notesRoot) || path.equals(notesRoot)) {
+                continue;
+            }
+            String relative = notesRoot.relativize(path).toString().replace('\\', '/');
+            if (backupScope.includes(relative)) {
+                relatives.add(relative);
+            }
+        }
+        return relatives;
+    }
+
+    public Map<String, LocalItem> scanLocalPaths(Path notesRoot,
+                                                 Set<String> relativePaths,
+                                                 BiFunction<Path, String, Path> resolveLocal) throws IOException {
+        Map<String, LocalItem> localFiles = new LinkedHashMap<>();
+        for (String relative : relativePaths) {
+            Path file = resolveLocal.apply(notesRoot, relative);
+            BasicFileAttributes attributes;
+            try {
+                attributes = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            } catch (NoSuchFileException e) {
+                continue;
+            }
+            if (!attributes.isRegularFile()) {
+                throw new IllegalStateException("同步目标不是普通文件：" + relative);
+            }
+            localFiles.put(relative, new LocalItem(file, relative, attributes.lastModifiedTime().toMillis(), attributes.size()));
+        }
+        return localFiles;
+    }
+
+    public Map<String, BaiduPanEntry> scanRemotePaths(String accessToken,
+                                                      String remoteRoot,
+                                                      Set<String> relativePaths) {
+        Map<String, Set<String>> pathsByParent = new LinkedHashMap<>();
+        for (String relative : relativePaths) {
+            int slash = relative.lastIndexOf('/');
+            String parent = slash < 0 ? "" : relative.substring(0, slash);
+            String remoteParent = parent.isBlank() ? remoteRoot : remoteRoot + "/" + parent;
+            pathsByParent.computeIfAbsent(remoteParent, ignored -> new LinkedHashSet<>()).add(relative);
+        }
+
+        Map<String, BaiduPanEntry> remoteFiles = new LinkedHashMap<>();
+        String remotePrefix = remoteRoot.endsWith("/") ? remoteRoot : remoteRoot + "/";
+        for (Map.Entry<String, Set<String>> parentEntry : pathsByParent.entrySet()) {
+            List<BaiduPanEntry> entries;
+            try {
+                entries = panClient.listDirectory(accessToken, parentEntry.getKey());
+            } catch (BaiduPanException e) {
+                if (e.errno() == -9) {
+                    continue;
+                }
+                throw e;
+            }
+            for (BaiduPanEntry entry : entries) {
+                String relative = entry.path().startsWith(remotePrefix) ? entry.path().substring(remotePrefix.length()) : "";
+                if (!parentEntry.getValue().contains(relative)) {
+                    continue;
+                }
+                if (entry.directory()) {
+                    throw new IllegalStateException("本地文件与百度网盘目录路径冲突，请先手动处理：" + relative);
+                }
+                remoteFiles.put(relative, entry);
+            }
+        }
+        return remoteFiles;
+    }
+
+    public List<FileChange> planChanged(Set<String> relativePaths,
+                                        Map<String, LocalItem> localFiles,
+                                        Map<String, BaiduPanEntry> remoteFiles) {
+        List<FileChange> changes = new ArrayList<>();
+        for (String relative : relativePaths) {
+            LocalItem local = localFiles.get(relative);
+            BaiduPanEntry remote = remoteFiles.get(relative);
+            // Resolve a burst of create/update/delete events from the final local state.
+            // 例如重命名 a.md 为 b.md 后，a.md 本地不存在则删云端旧文件，b.md 存在则上传新文件。
+            if (local != null) {
+                changes.add(new FileChange(relative, FileAction.UPLOAD, local, remote, remote != null, false));
+            } else if (remote != null) {
+                changes.add(new FileChange(relative, FileAction.DELETE_REMOTE, null, remote, false, false));
+            }
+        }
+        return changes;
     }
 
     public List<FileChange> plan(Map<String, LocalItem> local,

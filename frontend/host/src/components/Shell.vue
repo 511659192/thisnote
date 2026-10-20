@@ -1,8 +1,18 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted } from 'vue'
 import { useUiStore } from '@/stores/ui'
 import { sidebarPanels_, topbarSearches_ } from '@thisnote/plugin-api'
 
 const ui = useUiStore()
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.repeat || !event.ctrlKey || event.key !== '\\') return
+  event.preventDefault()
+  ui.toggleSidebar()
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>

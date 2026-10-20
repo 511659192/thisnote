@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 final class GraphifyPipelineRunner {
 
     private final FileHelper fileHelper;
-    private final GraphifySettingsService settingsService;
     private final GraphifyProcessRunner processRunner;
     private final Path corpusDir;
     private final Path graphifyOutDir;
@@ -109,15 +108,6 @@ final class GraphifyPipelineRunner {
             restoreOutputs(backups);
             throw e;
         }
-    }
-
-    String requireApiKey(GraphifySettingsService.Settings settings) {
-        String apiKey = settingsService.apiKey(settings.aiProfileId());
-        if (apiKey.isBlank()) {
-            throw new IllegalStateException("请先在 AI 能力插件中为所选 profile 配置 API key");
-        }
-        log.debug("Graphify API key 已就绪：profileId={}, keyConfigured=true", settings.aiProfileId());
-        return apiKey;
     }
 
     private void runCommand(GraphifySettingsService.Settings settings,

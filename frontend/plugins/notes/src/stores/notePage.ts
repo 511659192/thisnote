@@ -165,6 +165,21 @@ export const usePageStore = defineStore('notePage', () => {
     }
   }
 
+  /** 确保指定卡片已加载，供跨插件按 cardId 定位。 */
+  async function ensureCard(cardId: string): Promise<CardView | null> {
+    const existing = cards.value.find((view) => view.card.cardId === cardId)
+    if (existing) return existing
+    const id = noteId.value
+    if (!id) return null
+    const page = await pageApi.get(id, [cardId])
+    const card = page.find((item) => item.meta.cardId === cardId)
+    if (!card) return null
+    const view = toCardView(card)
+    cards.value.push(view)
+    pendingCardIds.value = pendingCardIds.value.filter((item) => item !== cardId)
+    return view
+  }
+
   /** Re-read the page without disturbing the viewport or the card being edited. */
   async function reload() {
     if (!noteId.value) return
@@ -556,6 +571,7 @@ export const usePageStore = defineStore('notePage', () => {
     sentinelY,
     load,
     loadMore,
+    ensureCard,
     reload,
     select,
     clearSelection,

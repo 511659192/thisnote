@@ -33,62 +33,33 @@ public class GraphifySettingsService {
         this.aiClient = aiClient;
     }
 
-    public Settings settings() {
-        String profileId = selectedProfileId();
-        String executablePath = settingsRepository.getExecutablePath();
-        try {
-            return resolveSettings();
-        } catch (Exception e) {
-            log.warn("Graphify 运行时配置不可用：{}", e.getMessage());
-            return new Settings(profileId, "", "", executablePath);
-        }
-    }
-
-    public String apiKey(String profileId) {
-        return aiClient.runtime(profileId).apiKey();
-    }
-
     public SettingsResponse response() {
-        SettingsResolution resolution = resolveForResponse();
-        KeyStatus key = keyStatus(resolution.settings(), resolution.aiError());
-        ProfilesResult profiles = loadProfiles();
-        Settings settings = resolution.settings();
+        return response(loadProfiles());
+    }
+
+    private SettingsResponse response(ProfilesResult profiles) {
+        String profileId = selectedProfileId();
+        Settings settings = new Settings(profileId, "", "", settingsRepository.getExecutablePath());
+        boolean keyConfigured = false;
+        String aiError = "";
+        try {
+            ResolvedSettings resolved = resolve();
+            settings = resolved.settings();
+            keyConfigured = !resolved.apiKey().isBlank();
+        } catch (Exception e) {
+            aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
+            log.warn("读取 Graphify AI 运行时配置失败：{}", aiError);
+        }
         return new SettingsResponse(
                 settings.aiProfileId(),
                 settings.provider(),
                 settings.model(),
                 settings.executablePath(),
-                key.configured(),
+                keyConfigured,
                 profiles.profiles(),
-                key.error(),
+                aiError,
                 profiles.error()
         );
-    }
-
-    private SettingsResolution resolveForResponse() {
-        Settings settings;
-        String aiError = "";
-        try {
-            settings = resolveSettings();
-        } catch (Exception e) {
-            String profileId = selectedProfileId();
-            settings = new Settings(profileId, "", "", settingsRepository.getExecutablePath());
-            aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
-            log.warn("读取 Graphify AI 运行时配置失败：{}", aiError);
-        }
-        return new SettingsResolution(settings, aiError);
-    }
-
-    private KeyStatus keyStatus(Settings settings, String aiError) {
-        boolean keyConfigured = false;
-        try {
-            keyConfigured = !apiKey(settings.aiProfileId()).isBlank();
-        } catch (Exception e) {
-            if (aiError.isBlank()) {
-                aiError = e.getMessage() == null ? "AI 配置不可用" : e.getMessage();
-            }
-        }
-        return new KeyStatus(keyConfigured, aiError);
     }
 
     private ProfilesResult loadProfiles() {
@@ -113,7 +84,8 @@ public class GraphifySettingsService {
             throw new IllegalArgumentException("请选择 AI profile");
         }
         String profileId = update.aiProfileId().trim();
-        List<AiProfileSummary> available = profiles();
+        ProfilesResult profiles = loadProfiles();
+        List<AiProfileSummary> available = profiles.profiles();
         if (available.isEmpty()) {
             throw new IllegalStateException("AI 核心插件未返回可用的 completion 配置");
         }
@@ -122,18 +94,7 @@ public class GraphifySettingsService {
         }
         settingsRepository.update(executablePath, profileId);
         log.info("Graphify 设置保存成功：aiProfileId={}, executablePath={}", profileId, executablePath);
-        return response();
-    }
-
-    public List<AiProfileSummary> profiles() {
-        try {
-            List<AiProfileSummary> profiles = aiClient.profiles();
-            log.debug("Graphify AI profile 列表读取成功：count={}", profiles.size());
-            return profiles;
-        } catch (Exception e) {
-            log.warn("Graphify AI profile 列表读取失败：{}", e.getMessage());
-            return List.of();
-        }
+        return response(profiles);
     }
 
     public static List<String> environmentKeyNamesToClear() {
@@ -154,18 +115,20 @@ public class GraphifySettingsService {
         return stored == null ? "" : stored;
     }
 
-    private Settings resolveSettings() {
+    ResolvedSettings resolve() {
         String profileId = selectedProfileId();
         if (profileId.isBlank()) {
             throw new IllegalStateException("请先选择 AI profile");
         }
         AiRuntimeFutureEvent.Runtime runtime = aiClient.runtime(profileId);
-        return new Settings(
+        String apiKey = runtime.apiKey();
+        Settings settings = new Settings(
                 profileId,
                 runtime.provider(),
                 runtime.model(),
                 settingsRepository.getExecutablePath()
         );
+        return new ResolvedSettings(settings, apiKey);
     }
 
     private static Provider supportedProvider(String value) {
@@ -182,13 +145,17 @@ public class GraphifySettingsService {
         }
     }
 
-    private record SettingsResolution(Settings settings, String aiError) {
-    }
-
-    private record KeyStatus(boolean configured, String error) {
-    }
-
     private record ProfilesResult(List<AiProfileSummary> profiles, String error) {
+    }
+
+    record ResolvedSettings(Settings settings, String apiKey) {
+
+        String requireApiKey() {
+            if (apiKey.isBlank()) {
+                throw new IllegalStateException("请先在 AI 能力插件中为所选 profile 配置 API key");
+            }
+            return apiKey;
+        }
     }
 
     public record Settings(String aiProfileId,

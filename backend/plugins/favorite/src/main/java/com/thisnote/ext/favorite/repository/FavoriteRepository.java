@@ -68,6 +68,33 @@ public class FavoriteRepository {
         }
     }
 
+    public int updateFavorites(List<String> noteIds,
+                               boolean favorite) {
+        synchronized (lock) {
+            Properties properties = readProperties();
+            boolean changed = false;
+            int updated = 0;
+            for (String noteId : noteIds) {
+                if (StringUtils.isBlank(noteId)) {
+                    continue;
+                }
+                updated++;
+                if (favorite) {
+                    if (!Boolean.parseBoolean(properties.getProperty(noteId))) {
+                        properties.setProperty(noteId, "true");
+                        changed = true;
+                    }
+                } else if (properties.remove(noteId) != null) {
+                    changed = true;
+                }
+            }
+            if (changed) {
+                writeProperties(properties);
+            }
+            return updated;
+        }
+    }
+
     public boolean deleteFavorite(String noteId) {
         requireNoteId(noteId);
 

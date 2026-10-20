@@ -56,12 +56,7 @@ public class FavoriteController {
      */
     @PostMapping("/update-state-batch")
     public Map<String, Object> setStateBatch(@RequestBody FavoriteBatchRequest request) {
-        int updated = 0;
-        for (String noteId : request.noteIds()) {
-            if (noteId == null || noteId.isBlank()) continue;
-            favoriteService.setFavorite(noteId, request.value());
-            updated++;
-        }
+        int updated = favoriteService.setFavorites(request.noteIds(), request.value());
         return Map.of("updated", updated);
     }
 }

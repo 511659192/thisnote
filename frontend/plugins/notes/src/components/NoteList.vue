@@ -33,6 +33,7 @@ const titleInput = ref<HTMLInputElement | null>(null)
 const selecting = computed(() => store.batchSelecting)
 const selected = computed(() => store.batchSelected)
 const moveMenuOpen = ref(false)
+const listBody = ref<HTMLElement | null>(null)
 let titleOpenTimer: number | null = null
 let savingNoteId: string | null = null
 
@@ -232,6 +233,20 @@ async function runBatchAction(action: NoteBatchAction) {
   }
 }
 
+async function revealCurrentNote() {
+  if (!props.currentId) return
+  await nextTick()
+  const body = listBody.value
+  const row = body?.querySelector<HTMLElement>(
+    `[data-node-id="${CSS.escape(props.currentId)}"]`,
+  )
+  if (!body || !row) return
+  const bodyRect = body.getBoundingClientRect()
+  const rowRect = row.getBoundingClientRect()
+  if (rowRect.top >= bodyRect.top && rowRect.bottom <= bodyRect.bottom) return
+  body.scrollTop += rowRect.top - bodyRect.top - (body.clientHeight - rowRect.height) / 2
+}
+
 function loadActionStates() {
   const notes = props.nodes.map(noteRef)
   for (const action of rowActions.value) {
@@ -242,6 +257,8 @@ function loadActionStates() {
 
 onMounted(loadActionStates)
 watch(() => props.nodes, loadActionStates)
+watch(() => props.currentId, revealCurrentNote, { flush: 'post' })
+watch(() => props.nodes.map((note) => note.noteId).join(','), revealCurrentNote, { flush: 'post' })
 </script>
 
 <template>
@@ -280,7 +297,7 @@ watch(() => props.nodes, loadActionStates)
         @click="moveSelected(book.id)"
       >{{ book.title }}</button>
     </div>
-    <div class="list-body">
+    <div ref="listBody" class="list-body">
       <div v-if="loading" class="list-loading small muted">加载中…</div>
       <div v-else-if="!nodes.length" class="list-empty">
         <p class="small muted">{{ emptyState }}</p>

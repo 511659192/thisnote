@@ -7,7 +7,6 @@ import com.google.common.collect.Sets;
 import com.thisnote.ext.baidusync.client.BaiduOAuthClient;
 import com.thisnote.ext.baidusync.client.BaiduPanClient;
 import com.thisnote.ext.baidusync.client.BaiduPanEntry;
-import com.thisnote.ext.baidusync.client.BaiduPanException;
 import com.thisnote.ext.baidusync.model.*;
 import com.thisnote.ext.baidusync.repository.BaiduSyncSettingsRepository;
 import com.thisnote.ext.baidusync.repository.BaiduSyncStateRepository;
@@ -29,7 +28,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -222,7 +220,7 @@ public class BaiduSyncService {
     private void syncChangedFiles(Set<Path> changedPaths) {
         SyncCounters counters = new SyncCounters();
         try {
-            Set<String> relativePaths = relativeChangedPaths(changedPaths);
+            Set<String> relativePaths = planner.changedRelativePaths(notesRoot, changedPaths, backupScope);
             if (relativePaths.isEmpty()) {
                 status = new BaiduSyncStatus(false, 0, 0, 0, 0, "");
                 log.debug("relativePaths size:{}", CollectionUtil.size(relativePaths));
@@ -230,11 +228,11 @@ public class BaiduSyncService {
             }
 
             // 仅按变更路径查询，不扫描整个本地笔记树或网盘目录树。
-            Map<String, LocalItem> localFiles = localFilesForPaths(notesRoot, relativePaths);
+            Map<String, LocalItem> localFiles = planner.scanLocalPaths(notesRoot, relativePaths, transferExecutor::resolveLocal);
 
             String accessToken = oauthClient.accessToken();
-            Map<String, BaiduPanEntry> remoteFiles = listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths);
-            List<FileChange> changes = planChangedFileOperations(relativePaths, localFiles, remoteFiles);
+            Map<String, BaiduPanEntry> remoteFiles = planner.scanRemotePaths(accessToken, remoteRoot, relativePaths);
+            List<FileChange> changes = planner.planChanged(relativePaths, localFiles, remoteFiles);
 
             transferExecutor.uploadChanges(accessToken, remoteRoot, changes.stream().filter(change -> change.action() == FileAction.UPLOAD).toList(), counters);
             transferExecutor.deleteRemoteChanges(accessToken, changes.stream().filter(change -> change.action() == FileAction.DELETE_REMOTE).toList(), counters);
@@ -246,101 +244,12 @@ public class BaiduSyncService {
         }
     }
 
-    private Set<String> relativeChangedPaths(Set<Path> changedPaths) {
-        Set<String> relatives = new LinkedHashSet<>();
-        for (Path changedPath : changedPaths) {
-            Path path = changedPath.toAbsolutePath().normalize();
-            if (!path.startsWith(notesRoot) || path.equals(notesRoot)) {
-                continue;
-            }
-            String relative = notesRoot.relativize(path).toString().replace('\\', '/');
-            if (backupScope.includes(relative)) {
-                relatives.add(relative);
-            }
-        }
-        return relatives;
-    }
-
-    private Map<String, LocalItem> localFilesForPaths(Path notesRoot,
-                                                      Set<String> relativePaths) throws IOException {
-        Map<String, LocalItem> localFiles = new LinkedHashMap<>();
-        for (String relative : relativePaths) {
-            Path file = transferExecutor.resolveLocal(notesRoot, relative);
-            BasicFileAttributes attributes;
-            try {
-                attributes = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-            } catch (NoSuchFileException e) {
-                continue;
-            }
-            if (!attributes.isRegularFile()) {
-                throw new IllegalStateException("同步目标不是普通文件：" + relative);
-            }
-            localFiles.put(relative, new LocalItem(file, relative, attributes.lastModifiedTime().toMillis(), attributes.size()));
-        }
-        return localFiles;
-    }
-
-    private Map<String, BaiduPanEntry> listRemoteFilesForPaths(String accessToken,
-                                                               String remoteRoot,
-                                                               Set<String> relativePaths) {
-        Map<String, Set<String>> pathsByParent = new LinkedHashMap<>();
-        for (String relative : relativePaths) {
-            int slash = relative.lastIndexOf('/');
-            String parent = slash < 0 ? "" : relative.substring(0, slash);
-            String remoteParent = parent.isBlank() ? remoteRoot : remoteRoot + "/" + parent;
-            pathsByParent.computeIfAbsent(remoteParent, ignored -> new LinkedHashSet<>()).add(relative);
-        }
-
-        Map<String, BaiduPanEntry> remoteFiles = new LinkedHashMap<>();
-        String remotePrefix = remoteRoot.endsWith("/") ? remoteRoot : remoteRoot + "/";
-        for (Map.Entry<String, Set<String>> parentEntry : pathsByParent.entrySet()) {
-            List<BaiduPanEntry> entries;
-            try {
-                entries = panClient.listDirectory(accessToken, parentEntry.getKey());
-            } catch (BaiduPanException e) {
-                if (e.errno() == -9) {
-                    continue;
-                }
-                throw e;
-            }
-            for (BaiduPanEntry entry : entries) {
-                String relative = entry.path().startsWith(remotePrefix) ? entry.path().substring(remotePrefix.length()) : "";
-                if (!parentEntry.getValue().contains(relative)) {
-                    continue;
-                }
-                if (entry.directory()) {
-                    throw new IllegalStateException("本地文件与百度网盘目录路径冲突，请先手动处理：" + relative);
-                }
-                remoteFiles.put(relative, entry);
-            }
-        }
-        return remoteFiles;
-    }
-
-    private List<FileChange> planChangedFileOperations(Set<String> relativePaths,
-                                                       Map<String, LocalItem> localFiles,
-                                                       Map<String, BaiduPanEntry> remoteFiles) {
-        List<FileChange> changes = new ArrayList<>();
-        for (String relative : relativePaths) {
-            LocalItem local = localFiles.get(relative);
-            BaiduPanEntry remote = remoteFiles.get(relative);
-            // Resolve a burst of create/update/delete events from the final local state.
-            // 例如重命名 a.md 为 b.md 后，a.md 本地不存在则删云端旧文件，b.md 存在则上传新文件。
-            if (local != null) {
-                changes.add(new FileChange(relative, FileAction.UPLOAD, local, remote, remote != null, false));
-            } else if (remote != null) {
-                changes.add(new FileChange(relative, FileAction.DELETE_REMOTE, null, remote, false, false));
-            }
-        }
-        return changes;
-    }
-
     private void saveChangedFileBaseline(String accessToken,
                                          Path notesRoot,
                                          String remoteRoot,
                                          Set<String> relativePaths) throws IOException {
-        Map<String, LocalItem> localFiles = localFilesForPaths(notesRoot, relativePaths);
-        Map<String, BaiduPanEntry> remoteFiles = listRemoteFilesForPaths(accessToken, remoteRoot, relativePaths);
+        Map<String, LocalItem> localFiles = planner.scanLocalPaths(notesRoot, relativePaths, transferExecutor::resolveLocal);
+        Map<String, BaiduPanEntry> remoteFiles = planner.scanRemotePaths(accessToken, remoteRoot, relativePaths);
         // 重新读取传输后的两端状态；只有仍匹配的路径才写入基线。
         // 例如上传期间本地文件又被编辑、两端指纹不一致时，移除旧基线，下一轮再按无基线差异决策。
         BaiduSyncState current = stateRepository.getState(notesRoot.toString(), remoteRoot);
