@@ -57,22 +57,27 @@ public final class FileHelper {
         } catch (IOException e) {
             throw new UncheckedIOException("写入文件失败 " + file, e);
         }
+        log.info("文件已{}：sourcePluginId={}, path={}, chars={}",
+                previouslyExisted ? "更新" : "创建", sourcePluginId, file.toAbsolutePath().normalize(), content.length());
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
     }
 
     public void fileWritten(Path destination,
                             MultipartFile file) {
         boolean previouslyExisted = Files.exists(destination);
+        long writtenBytes;
         try {
             createParentDirectories(destination);
             try (InputStream input = file.getInputStream()) {
-                Files.copy(input, destination, StandardCopyOption.REPLACE_EXISTING);
+                writtenBytes = Files.copy(input, destination, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
             throw new UncheckedIOException("保存图片附件失败", e);
         }
+        log.info("图片附件已{}：sourcePluginId={}, originalFilename={}, path={}, bytes={}",
+                previouslyExisted ? "更新" : "保存", sourcePluginId, file.getOriginalFilename(),
+                destination.toAbsolutePath().normalize(), writtenBytes);
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, destination, null);
-        log.info("保存图片附件 {}", destination.getFileName());
     }
 
     /**
@@ -82,15 +87,19 @@ public final class FileHelper {
                             InputStream content,
                             long modifiedAtMillis) {
         boolean previouslyExisted = Files.exists(file);
+        long writtenBytes;
         try (InputStream input = content) {
             createParentDirectories(file);
-            Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING);
+            writtenBytes = Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING);
             if (modifiedAtMillis > 0) {
                 Files.setLastModifiedTime(file, FileTime.fromMillis(modifiedAtMillis));
             }
         } catch (IOException e) {
             throw new UncheckedIOException("写入文件失败 " + file, e);
         }
+        log.info("文件已{}：sourcePluginId={}, path={}, bytes={}, modifiedAtMillis={}",
+                previouslyExisted ? "更新" : "创建", sourcePluginId, file.toAbsolutePath().normalize(),
+                writtenBytes, modifiedAtMillis);
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
     }
 
@@ -98,25 +107,36 @@ public final class FileHelper {
         try {
             boolean deleted = Files.deleteIfExists(file);
             if (deleted) {
+                log.info("文件已删除：sourcePluginId={}, path={}",
+                        sourcePluginId, file.toAbsolutePath().normalize());
                 publishFileChange(FileChangeEvent.Operation.DELETED, file, null);
             }
             return deleted;
         } catch (IOException e) {
+            log.warn("文件删除失败：sourcePluginId={}, path={}",
+                    sourcePluginId, file.toAbsolutePath().normalize(), e);
             return false;
         }
     }
 
     public void deleteRegularFiles(Path directory) {
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        int removed = 0;
         try (DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
             for (Path file : files) {
                 if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) continue;
-                if (!fileDeleted(file) && Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+                if (fileDeleted(file)) {
+                    removed++;
+                } else if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
                     throw new IllegalStateException("删除文件失败：" + file);
                 }
             }
         } catch (IOException e) {
             throw new UncheckedIOException("清空目录失败：" + directory, e);
+        }
+        if (removed > 0) {
+            log.info("目录常规文件已清理：sourcePluginId={}, directory={}, removed={}",
+                    sourcePluginId, directory.toAbsolutePath().normalize(), removed);
         }
     }
 
@@ -129,6 +149,8 @@ public final class FileHelper {
         } catch (IOException e) {
             throw new UncheckedIOException("移动文件失败 " + previousFile + " -> " + file, e);
         }
+        log.info("文件已重命名：sourcePluginId={}, previousPath={}, path={}",
+                sourcePluginId, previousFile.toAbsolutePath().normalize(), moved.toAbsolutePath().normalize());
         publishFileChange(FileChangeEvent.Operation.RENAME, moved, previousFile);
         return moved;
     }
@@ -149,6 +171,8 @@ public final class FileHelper {
             if (bufferedFileEvents.remove(key) == null) {
                 return;
             }
+            log.info("文件变更事件已发布：sourcePluginId={}, operation={}, url={}, previousUrl={}",
+                    sourcePluginId, operation, url, previousUrl);
             eventPublisher.publishEvent(event);
         });
     }
