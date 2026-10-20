@@ -13,6 +13,7 @@ const busy = ref(false)
 const draft = ref('')
 const error = ref('')
 const loadError = ref('')
+const autoEnabled = ref(true)
 const tags = computed(() => noteTags[props.noteId] ?? [])
 const hasTags = computed(() => tags.value.length > 0)
 const tagSummary = computed(() => tags.value.join('；'))
@@ -28,13 +29,14 @@ const availableTags = computed(() => {
 
 async function ensureTagState(): Promise<void> {
   try {
-    await loadTagState(true)
+    const [, settings] = await Promise.all([loadTagState(true), tagsApi.settings()])
+    autoEnabled.value = settings.autoEnabled
     loadError.value = ''
-    if (!autoAttempted.has(props.noteId) && tags.value.length < AUTO_TAG_MIN) {
+    if (autoEnabled.value && !autoAttempted.has(props.noteId) && tags.value.length < AUTO_TAG_MIN) {
       autoAttempted.add(props.noteId)
       busy.value = true
       try {
-        await applyAutoTags()
+        await applyAutoTags(true)
       } finally {
         busy.value = false
       }
@@ -102,8 +104,8 @@ async function addTag(): Promise<void> {
   await addTagValue(draft.value.trim())
 }
 
-async function applyAutoTags(): Promise<void> {
-  const result = await tagsApi.auto(props.noteId)
+async function applyAutoTags(automatic: boolean): Promise<void> {
+  const result = await tagsApi.auto(props.noteId, automatic)
   updateNoteTags(props.noteId, result.tags)
   draft.value = ''
   refreshActiveTagFilter()
@@ -139,7 +141,7 @@ async function autoExtractTags(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
-    await applyAutoTags()
+    await applyAutoTags(false)
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -193,12 +195,12 @@ async function removeTag(tag: string): Promise<void> {
     </span>
     <span v-else-if="loadError" class="load-error" :title="loadError">标签加载失败</span>
     <button
-      v-if="tags.length < AUTO_TAG_MIN"
+      v-if="!autoEnabled || tags.length < AUTO_TAG_MIN"
       type="button"
       class="auto-inline"
       :disabled="busy"
-      title="自动抽取标签"
-      aria-label="自动抽取标签"
+      :title="autoEnabled ? '自动抽取标签' : '手动抽取标签'"
+      :aria-label="autoEnabled ? '自动抽取标签' : '手动抽取标签'"
       @click.stop="autoExtractTags"
     >✦</button>
 
@@ -229,6 +231,7 @@ async function removeTag(tag: string): Promise<void> {
         />
         <button type="submit" :disabled="busy || !draft.trim()">添加</button>
         <button
+          v-if="autoEnabled"
           type="button"
           class="auto"
           :disabled="busy"

@@ -16,24 +16,25 @@ export interface TagsAiProfile {
 
 export interface TagsSettings {
   aiProfileId: string
+  autoEnabled: boolean
   profiles: TagsAiProfile[]
   profilesError: string
 }
 
 export const tagsApi = {
   settings: () => http.get<TagsSettings>(BASE + '/settings'),
-  saveSettings: (aiProfileId: string) =>
-    http.post<TagsSettings>(BASE + '/settings', { aiProfileId }),
+  saveSettings: (aiProfileId: string, autoEnabled: boolean) =>
+    http.post<TagsSettings>(BASE + '/settings', { aiProfileId, autoEnabled }),
   tags: () => http.get<TagsByNote>(BASE + '/tags'),
   usage: () => http.get<Record<string, number>>(BASE + '/tags/usage'),
   add: (noteId: string, tag: string) =>
     http.post<{ noteId: string; tags: string[] }>(BASE + '/tags/add', { noteId, tag }),
   remove: (noteId: string, tag: string) =>
     http.post<{ noteId: string; tags: string[] }>(BASE + '/tags/remove', { noteId, tag }),
-  auto: (noteId: string) =>
+  auto: (noteId: string, automatic = false) =>
     http.post<{ noteId: string; tags: string[]; pending: boolean; deadlineEpochMs: number }>(
       BASE + '/tags/auto',
-      { noteId },
+      { noteId, automatic },
     ),
   autoStatus: (noteId: string) =>
     http.get<{ noteId: string; tags: string[]; pending: boolean; deadlineEpochMs: number }>(

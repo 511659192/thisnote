@@ -33,6 +33,78 @@ let defaultPluginPanelsOpened = false
 const notesRootDir = ref('')
 const activeTab = ref<'storage' | 'plugins'>('storage')
 
+interface PluginDescriptionBlock {
+  type: 'paragraph' | 'list' | 'table'
+  text?: string
+  items?: string[]
+  headers?: string[]
+  rows?: string[][]
+}
+
+function tableCells(line: string): string[] | null {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|')) return null
+  return trimmed.replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
+}
+
+function isTableSeparator(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+function pluginDescriptionBlocks(description: string): PluginDescriptionBlock[] {
+  const blocks: PluginDescriptionBlock[] = []
+  let paragraph: string[] = []
+  let items: string[] = []
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return
+    blocks.push({ type: 'paragraph', text: paragraph.join('\n') })
+    paragraph = []
+  }
+  const flushList = () => {
+    if (!items.length) return
+    blocks.push({ type: 'list', items })
+    items = []
+  }
+
+  const lines = description.split(/\r?\n/)
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].trimEnd()
+    const headers = tableCells(line)
+    const separator = index + 1 < lines.length ? tableCells(lines[index + 1]) : null
+    if (headers && separator && headers.length === separator.length && isTableSeparator(separator)) {
+      flushParagraph()
+      flushList()
+      const rows: string[][] = []
+      let rowIndex = index + 2
+      while (rowIndex < lines.length) {
+        const cells = tableCells(lines[rowIndex])
+        if (!cells || !lines[rowIndex].trim()) break
+        rows.push(headers.map((_, cellIndex) => cells[cellIndex] ?? ''))
+        rowIndex++
+      }
+      blocks.push({ type: 'table', headers, rows })
+      index = rowIndex - 1
+      continue
+    }
+    const listItem = line.match(/^\s*[•-]\s+(.*)$/)
+    if (listItem) {
+      flushParagraph()
+      items.push(listItem[1])
+      continue
+    }
+    flushList()
+    if (!line.trim()) {
+      flushParagraph()
+      continue
+    }
+    paragraph.push(line)
+  }
+  flushList()
+  flushParagraph()
+  return blocks
+}
+
 interface NotesRootSettings {
   rootDir: string
 }
@@ -283,7 +355,29 @@ onMounted(async () => {
               </button>
             </div>
 
-            <p class="small muted plugin-desc">{{ plugin.description }}</p>
+            <div class="small muted plugin-desc">
+              <template
+                v-for="(block, blockIndex) in pluginDescriptionBlocks(plugin.description)"
+                :key="blockIndex"
+              >
+                <p v-if="block.type === 'paragraph'" class="plugin-desc-paragraph">{{ block.text }}</p>
+                <table v-else-if="block.type === 'table'" class="plugin-desc-table">
+                  <thead>
+                    <tr>
+                      <th v-for="(header, headerIndex) in (block.headers ?? [])" :key="headerIndex">{{ header }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rowIndex) in (block.rows ?? [])" :key="rowIndex">
+                      <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <ul v-else class="plugin-desc-list">
+                  <li v-for="(item, itemIndex) in (block.items ?? [])" :key="itemIndex">{{ item }}</li>
+                </ul>
+              </template>
+            </div>
             <p v-if="plugin.dependencies?.length" class="small muted">
               依赖：<span class="mono">{{ plugin.dependencies.join(', ') }}</span>
             </p>
@@ -497,9 +591,40 @@ onMounted(async () => {
   color: #14161a;
 }
 .plugin-desc {
+  display: grid;
+  gap: 6px;
   margin: var(--space-1) 0 0;
-  white-space: pre-line;
   line-height: 1.55;
+}
+.plugin-desc-paragraph {
+  margin: 0;
+  white-space: pre-line;
+}
+.plugin-desc-list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 1.4em;
+}
+.plugin-desc-table {
+  width: min(360px, 100%);
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.plugin-desc-table th,
+.plugin-desc-table td {
+  padding: 4px 6px;
+  border: 1px solid var(--c-border);
+  text-align: center;
+}
+.plugin-desc-table th {
+  color: var(--c-text);
+  font-weight: 600;
+  background: var(--c-surface-2);
+}
+.plugin-desc-table th:first-child,
+.plugin-desc-table td:first-child {
+  text-align: left;
 }
 .plugin-body {
   margin-top: var(--space-2);

@@ -29,7 +29,8 @@ public class TagsController {
     @PostMapping("/settings")
     public TagsSettingsService.SettingsResponse saveSettings(@RequestBody TagsSettingsService.SettingsUpdate update) {
         TagsSettingsService.SettingsResponse response = settingsService.save(update);
-        log.info("标签设置已保存：aiProfileId={}", response.aiProfileId());
+        log.info("标签设置已保存：aiProfileId={}, autoEnabled={}",
+                response.aiProfileId(), response.autoEnabled());
         return response;
     }
 
@@ -66,8 +67,8 @@ public class TagsController {
 
     @PostMapping("/tags/auto")
     public AutoTagService.ExtractResult auto(@RequestBody NoteRequest request) {
-        log.info("收到自动标签请求：noteId={}", request.noteId());
-        return autoTagService.extract(request.noteId());
+        log.info("收到自动标签请求：noteId={}, automatic={}", request.noteId(), request.automatic());
+        return autoTagService.extract(request.noteId(), request.automatic());
     }
 
     @GetMapping("/tags/auto/status")
@@ -76,7 +77,7 @@ public class TagsController {
         return autoTagService.status(noteId);
     }
 
-    public record NoteRequest(String noteId) {
+    public record NoteRequest(String noteId, boolean automatic) {
     }
 
     public record TagRequest(String noteId, String tag) {

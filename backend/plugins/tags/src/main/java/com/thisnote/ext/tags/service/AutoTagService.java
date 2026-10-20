@@ -33,24 +33,34 @@ public class AutoTagService {
 
     private final TagsService tagsService;
     private final TagAiClient tagAiClient;
+    private final TagsSettingsService settingsService;
     private final ExecutorService aiWorker;
     private final Map<String, PendingTask> pending = new ConcurrentHashMap<>();
 
     @Autowired
     public AutoTagService(TagsService tagsService,
-                          TagAiClient tagAiClient) {
-        this(tagsService, tagAiClient, defaultExecutor());
+                          TagAiClient tagAiClient,
+                          TagsSettingsService settingsService) {
+        this(tagsService, tagAiClient, settingsService, defaultExecutor());
     }
 
     AutoTagService(TagsService tagsService,
                    TagAiClient tagAiClient,
+                   TagsSettingsService settingsService,
                    ExecutorService aiWorker) {
         this.tagsService = tagsService;
         this.tagAiClient = tagAiClient;
+        this.settingsService = settingsService;
         this.aiWorker = aiWorker;
     }
 
-    public ExtractResult extract(String noteId) {
+    public ExtractResult extract(String noteId,
+                                 boolean automatic) {
+        if (automatic && !settingsService.autoEnabled()) {
+            String normalizedNoteId = noteId.trim();
+            log.info("自动标签已关闭，跳过自动抽取：noteId={}", normalizedNoteId);
+            return new ExtractResult(normalizedNoteId, tagsService.noteTags(normalizedNoteId), false, 0);
+        }
         NoteCardDTO content = tagsService.noteContent(noteId);
         if (content == null || content.note() == null) {
             throw new IllegalArgumentException("笔记不存在");

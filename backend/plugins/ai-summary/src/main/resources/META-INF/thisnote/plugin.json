@@ -1,0 +1,5 @@
+{
+  "title": "AI 总结",
+  "description": "结合 Graphify 知识图谱生成笔记摘要，并展示在笔记标题下方；关闭插件即整体下线，摘要数据保留",
+  "undeactivatable": false
+}

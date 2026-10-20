@@ -4,6 +4,7 @@ import com.thisnote.ext.graphify.GraphifyPlugin;
 import com.thisnote.ext.graphify.client.GraphifyProcessRunner;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
 import com.thisnote.plugin.api.event.AttachmentBytesFutureEvent;
+import com.thisnote.plugin.api.event.GraphifyIndexCompletedEvent;
 import com.thisnote.plugin.api.event.NoteContentFutureEvent;
 import com.thisnote.plugin.api.event.NoteListFutureEvent;
 import com.thisnote.plugin.api.notes.dto.CardDTO;
@@ -240,6 +241,7 @@ public class GraphifyIndexService {
             indexState = IndexState.empty();
             currentStatus = statusFor("等待首次索引", false, 0, 0, 0, List.of(), null);
             log.info("Graphify 状态已重置");
+            publishGraphChanged(Instant.now().toString());
         } catch (Exception e) {
             failure = e;
             currentStatus = statusFor("重置失败", false, currentStatus.progress(),
@@ -335,6 +337,7 @@ public class GraphifyIndexService {
         log.info("Graphify 全量索引完成：notes={}, cards={}, attachments={}, warnings={}, elapsedMs={}",
                 projection.completed(), projection.cardToNote().size(), projection.attachmentToNotes().size(),
                 warnings.size(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+        publishGraphChanged(completedAt);
     }
 
     private ProjectedCorpus projectAllNotes(List<NoteDTO> notes,
@@ -488,13 +491,15 @@ public class GraphifyIndexService {
                 changed, context.snapshot().deletedNoteIds().size(), settings.model());
         pipelineRunner.run(settings, resolved.requireApiKey(), false, false);
         log.info("Graphify 增量抽取完成：changed={}", changed);
+        String completedAt = Instant.now().toString();
         persistIncremental(context.noteIds(), context.cardToNote(),
-                context.attachmentToNotes(), Instant.now().toString());
+                context.attachmentToNotes(), completedAt);
         currentStatus = statusFor("就绪", false, 100, changed, changed, context.warnings(), null);
         log.info("Graphify 增量同步完成：updated={}, deleted={}, cards={}, attachments={}, warnings={}, elapsedMs={}",
                 changed, context.snapshot().deletedNoteIds().size(), context.cardToNote().size(),
                 context.attachmentToNotes().size(), context.warnings().size(),
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+        publishGraphChanged(completedAt);
     }
 
     private void resolveUnresolvedCards(GraphifyChangeQueue.QueueSnapshot snapshot,
@@ -602,6 +607,7 @@ public class GraphifyIndexService {
             indexState = updated;
             currentStatus = statusFor("就绪", false, 100, 0, 0, warnings, null);
             log.info("Graphify 社区命名完成：elapsedMs={}", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+            publishGraphChanged(updated.lastCompletedAt());
         } catch (Exception e) {
             String failedStage = currentStatus.stage();
             currentStatus = statusFor("社区命名失败", false, currentStatus.progress(), currentStatus.completedNotes(), currentStatus.totalNotes(), warnings, safeMessage(e));
@@ -679,11 +685,26 @@ public class GraphifyIndexService {
     }
 
     private void resetEmptyGraph(String reason) {
+        String completedAt = Instant.now().toString();
         int cleared = clearGeneratedContent();
-        indexState = new IndexState(true, Instant.now().toString(), Set.of(), Map.of(), Map.of());
+        indexState = new IndexState(true, completedAt, Set.of(), Map.of(), Map.of());
         stateRepository.updateIndexState(indexState);
         currentStatus = statusFor("就绪", false, 100, 0, 0, List.of(), null);
         log.info("{}：clearedFiles={}", reason, cleared);
+        publishGraphChanged(completedAt);
+    }
+
+    private void publishGraphChanged(String completedAt) {
+        if (eventPublisher == null) {
+            log.debug("Graphify 图谱更新消息跳过：主容器事件发布器尚未就绪，completedAt={}", completedAt);
+            return;
+        }
+        try {
+            eventPublisher.publishEvent(new GraphifyIndexCompletedEvent(completedAt));
+            log.debug("Graphify 图谱更新消息已发布：completedAt={}", completedAt);
+        } catch (Exception e) {
+            log.error("Graphify 图谱更新消息发布失败：completedAt={}", completedAt, e);
+        }
     }
 
     private int clearGeneratedContent() {

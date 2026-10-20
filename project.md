@@ -39,8 +39,8 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 |---|---|---|
 | 后端端口 | `45917`（可用 `THISNOTE_PORT` 覆盖），只监听 `127.0.0.1` | `backend/app/src/main/resources/application.yml:2-4` |
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNOTE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
-| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120`、guide `7121` | `frontend/host/src/plugins/devPorts.ts` |
-| 后端插件模块数 | 11（notes + ai + 9 个功能插件） | `backend/pom.xml` |
+| 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120`、guide `7121`、ai-summary `7122` | `frontend/host/src/plugins/devPorts.ts` |
+| 后端插件模块数 | 12（notes + ai + 10 个功能插件） | `backend/pom.xml` |
 | 数据根目录 | `${thisnote.data-root:${user.home}/.thisnote}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnote/ext/notes/config/NotesConfig.java:18-20` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
@@ -62,7 +62,7 @@ thisnote/
 ├── backend/                  Maven 反应堆（从 backend/ 构建，仓库根不放 Maven 文件）
 │   ├── pom.xml               父 POM：模块、版本、plugin.properties 过滤 profile
 │   ├── plugin-api/           插件契约（扩展点 / 事件 / DTO / 异常 / FileHelper）
-│   ├── plugins/              11 个插件模块（各产出一个独立 jar）
+│   ├── plugins/              12 个插件模块（各产出一个独立 jar）
 │   ├── app/                  平台主体（纯 API，无业务、无数据库）
 │   ├── runtime/plugins/      后端交付目录：<pluginId>.jar + disabled.txt（不入库）
 │   ├── plugins-dev/          dev 模式插件目录（目录联接，不入库）
@@ -70,7 +70,7 @@ thisnote/
 ├── frontend/                 pnpm 工作区（界面侧）
 │   ├── host/                 主应用（qiankun 宿主 + 设置页 + 壳）
 │   ├── plugin-api/           界面侧插件契约（**注意：目前未被 git 跟踪，见 §9**）
-│   ├── plugins/              11 个微应用源码
+│   ├── plugins/              12 个微应用源码
 │   ├── runtime/plugins/      界面交付目录（不入库）
 │   └── tools/deliver.mjs     dist → runtime/plugins 的交付脚本
 └── scripts/seed-notes.mjs    压测/造数据脚本（通过 HTTP API 灌 1000 篇笔记）
@@ -174,6 +174,8 @@ host（qiankun 主应用，:5173）
 | `event/AttachmentAdoptEvent` | `CompletableFuture<AttachmentDTO>` + `fileName`：接管一个未被管理的附件（改名为 `<uuid>.<ext>`、原名记入元数据），notes 侧监听填充 |
 | `event/AttachmentStageFutureEvent` | 把用户指定的本地图片复制到待管理附件目录，后续由定时导入任务解析和建卡 |
 | `event/AttachmentChangedEvent` | Notes 发布附件创建、更新、删除、重命名；Graphify 只消费此事件，不解析附件目录 |
+| `event/GraphifyNoteContextFutureEvent` | 查询单篇笔记的图谱概念、社区与相关笔记；Graphify 填充，AI 总结使用 |
+| `event/GraphifyIndexCompletedEvent` | Graphify 图谱更新完成通知；AI 总结据此把已有摘要标记为过期 |
 | `event/PluginStateResetEvent` | 状态重置控制事件：活动插件执行自身清理，不回报结果 |
 | `event/FileChangeEvent` | `CREATED/UPDATED/DELETED/RENAME`，绝对路径，重命名带 `previousUrl` |
 | `exception/*` | `NotFoundException(404) / ConflictException(409) / CardLimitException(409 + limit)`；放契约里是因为要跨容器被主体 advice 捕获 |
@@ -201,6 +203,7 @@ host（qiankun 主应用，:5173）
 | `attachment-importer` | 定时把未被引用的图片附件导入成笔记；支持绝对路径文件夹复制 | 否 | `notes` | 无（原文件名由 notes 附件状态判重） |
 | `state-reset` | 重置全部已安装插件并汇总结果 | 否 | 无 | 无（平台控制插件） |
 | `graphify` | Graphify 知识图谱与社区自动标签 | 否 | `ai,notes` | `notes/plugins/graphify/`（CLI 设置、索引映射与投影语料） |
+| `ai-summary` | 基于 Graphify 图谱生成 AI 笔记总结并展示在标题下方 | 否 | `graphify,ai,notes` | `notes/plugins/ai-summary/{settings.json,summaries.json}` |
 | `tags` | 独立笔记标签、标签页与标签筛选 | 否 | `ai,notes` | `notes/plugins/tags/{tags.json,settings.json}` |
 | `guide` | 用户导航与使用指南 | 否 | 无 | 无（配置入口跳转，进度保存在浏览器本地） |
 
@@ -270,8 +273,9 @@ host（qiankun 主应用，:5173）
     ├── graphify/
     │   ├── settings.json / index-state.json
     │   └── corpus/<noteId>/note.md + attachments/；corpus/graphify-out/{graph.json,graph.html,...}
+    ├── ai-summary/settings.json / summaries.json   AI completion、自动生成开关与 noteId → 摘要缓存
     ├── tags/tags.json            noteId → { tags, occurrences }（独立插件存储）
-    ├── tags/settings.json        aiProfileId（标签插件选择的 AI profile）
+    ├── tags/settings.json        aiProfileId + autoEnabled（标签插件 AI 配置与自动抽取开关）
     └── <pluginId>/              其它插件自己的数据
 ```
 
@@ -279,7 +283,8 @@ host（qiankun 主应用，:5173）
   `.card-metadata.json`、`.attachment-metadata.json`，favorite 的 `.favorites.properties`，
   memory-cycle 的 `.scheduling.json` / `.schedule-history.json`，baidu-sync 的 `.credentials.json` /
   `.sync-state.json`，notes 分组台账 `book/.books.json`。AI 插件使用 `ai/settings.json` 与
-  `.credentials.json`；Graphify 只保留 CLI 设置和索引状态；标签插件使用 `tags/tags.json` 与 `tags/settings.json`。
+  `.credentials.json`；Graphify 只保留 CLI 设置和索引状态；AI 总结使用 `ai-summary/settings.json` 与
+  `summaries.json`；标签插件使用 `tags/tags.json` 与 `tags/settings.json`。
   卡片 md 与附件等内容文件保持原命名。
 - **空 notes 索引必须保留为空 JSON**：`.note-metadata.json`、`.card-metadata.json`、
   `.attachment-metadata.json` 缺失会被 `FileHelper.readMapIndex` 判定为损坏，手工清库后应写回 `{}`。
@@ -389,10 +394,15 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 `POST .../communities/relabel`。Graphify 设置只写 CLI 路径，Provider 信息来自 AI 插件；
 设置响应以 `aiError` / `profilesError` 区分运行时配置与 profile 列表读取失败。
 
+**ai-summary**：`GET /api/plugins/ai-summary/get?noteId=`、`POST .../generate`、
+`GET/POST /api/plugins/ai-summary/settings`。生成请求只负责排队，前端轮询 `get` 直到 `pending=false`；
+摘要缓存写入插件自己的 `summaries.json`。`generate` 的 `automatic` 为 true 时受 `autoEnabled` 开关约束。
+
 **tags**：`GET /api/plugins/tags/tags`、`POST .../tags/add`、`POST .../tags/remove`、
 `POST .../tags/delete`、`POST .../tags/auto`、`GET .../tags/auto/status`。自动标签先同步返回本地候选、
 `pending` 与后端统一预算 `deadlineEpochMs`（130 秒 + 5 秒宽限），AI 在后台完成；前端按该截止时间轮询状态接口刷新结果。
-设置响应以 `profilesError` 报告 AI profile 读取失败。标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
+`tags/auto` 的 `automatic` 为 true 时受 `autoEnabled` 开关约束；设置响应以 `profilesError` 报告 AI profile 读取失败。
+标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
 
 **guide**：`GET /api/plugins/guide/environment` 检查数据目录初始化状态。配置入口跳转到设置页，
 指南不读取其他插件业务状态，也不创建示例数据。
@@ -466,9 +476,9 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - `POST /api/plugins/state-reset/reset` 向活动插件发布 `PluginStateResetEvent`，事件派发完成后立即返回；
   Graphify 等异步清理不会被等待，也不会返回逐插件结果。
 - 停用插件不启动容器，也不执行状态清理。
-- 有状态文件的活动插件重写为初始内容：favorite、memory-cycle、tags、baidu-sync、notes 与 Graphify
+- 有状态文件的活动插件重写为初始内容：favorite、memory-cycle、tags、baidu-sync、notes、Graphify 与 ai-summary
   分别走自己的 reset；失败只记录 error 日志。
-- AI 的 profile、Provider、模型、API key，Graphify 的 `settings.json`，tags 的 `settings.json` 与百度授权凭据均保留。
+- AI 的 profile、Provider、模型、API key，Graphify、ai-summary 与 tags 的 `settings.json`，以及百度授权凭据均保留。
 - Notes 的 reset 会删除 `cards/` 下的卡片 md、`attachments/` 下的附件文件，清空笔记/卡片/附件索引，并把 `book/.books.json` 重写为仅含默认分组。
 - card-importer / attachment-importer / state-reset 无状态文件。
 
@@ -489,15 +499,25 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
 - 图谱标签、交互图笔记节点和「相关笔记」的跳转都在新浏览器标签页打开；图谱标签打开该标签关联的第一篇笔记，并通过 `graphTag=<kind>:<label>` 恢复笔记列表筛选。
 
+**ai-summary**
+- 硬依赖 `graphify,ai,notes`；Graphify 通过 `GraphifyNoteContextFutureEvent` 返回当前笔记的概念、社区和相关笔记，
+  AI 总结再通过 `NoteContentFutureEvent` 取正文、通过 `AiCompletionFutureEvent` 生成 2-4 句中文摘要。
+- 摘要只保存在自己的 `notes/plugins/ai-summary/summaries.json`；笔记创建/正文或标题变更时标记过期，删除笔记时清除；
+  Graphify 完成全量、增量、社区重命名或重置后发布 `GraphifyIndexCompletedEvent`，所有已有摘要标记过期。
+- 插件启动时保守地把已有摘要标记为过期，避免停用期间漏掉事件；打开笔记时前端先读缓存，摘要缺失或过期且
+  `autoEnabled=true` 才后台生成。关闭自动后只能点击标题下方的 ↻ 图标手动生成。
+- 生成任务按 noteId 去重，`automatic=true` 的后端请求会再次校验开关；插件停用会摘除 listener 并关闭线程池。
+- 插件设置保存自己的 `aiProfileId` 与 `autoEnabled`，Provider、模型与 API key 仍由不可停用的 AI 能力插件管理。
+
 **ai**
 - AI 是不可停用的基础能力插件，硬依赖 `notes`，独占 Provider、模型与 API key 配置；
-  Graphify 与 tags 都在 `plugin.dependencies` 中声明依赖 `ai,notes`。
+  Graphify、tags 与 ai-summary 都在 `plugin.dependencies` 中声明依赖 `ai,notes`。
 - AI 插件集中管理多个命名 completion profile，当前支持 OpenCode Go；业务插件只保存所选 `aiProfileId`。
-- profile 数量允许为零；此时 Tags/Graphify 设置页显示 AI 不可用原因，执行时返回明确业务错误。
+- profile 数量允许为零；此时 Tags/Graphify/ai-summary 设置页显示 AI 不可用原因，执行时返回明确业务错误。
 - Provider 默认 model/endpoint 以 `AiSettingsRepository` 为唯一来源；Graphify 不保存模型副本。
 - AI 插件只响应通用能力事件，不包含笔记、标签或其他业务语义；插件通过 `AiProfilesFutureEvent` 查询可用配置。
 - completion profile 的单次文本上限由 `maxTextChars` 控制，默认 `1,000,000` 字符，允许 `1,000..1,000,000`；它是字符数，不是 token 数。
-- Graphify 通过 `AiRuntimeFutureEvent` 取得所选 profile 的运行时配置；AI 插件不读写 Graphify 或 tags 的业务数据。
+- Graphify 通过 `AiRuntimeFutureEvent` 取得所选 profile 的运行时配置；AI 插件不读写 Graphify、tags 或 ai-summary 的业务数据。
 
 **tags**
 - 标签是独立插件的业务状态，存储在 `notes/plugins/tags/tags.json`；插件不读取 Graphify、notes 或其他插件的数据目录。
@@ -505,14 +525,16 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   `/tags/usage` 直接聚合持久化计数，不再每次读取全部笔记正文。
 - Notes 发布 `NoteChangedEvent(TITLE_CHANGED/TEXT_CHANGED)` 后，tags 将对应笔记标记为待刷新，并由单线程防抖任务重算该笔记，
   不阻塞卡片保存请求。
-- tags 硬依赖 `ai,notes`；在设置中选择 completion profile 并保存到 `notes/plugins/tags/settings.json`。标签 prompt、笔记内容组装、图片筛选和模型结果解析由 `client/TagAiClient` 负责，标签落盘仍由 tags 自己完成。
+- tags 硬依赖 `ai,notes`；在设置中选择 completion profile 与自动抽取开关，并保存到 `notes/plugins/tags/settings.json`。
+  标签 prompt、笔记内容组装、图片筛选和模型结果解析由 `client/TagAiClient` 负责，标签落盘仍由 tags 自己完成。
 - `TagsService` 统一承担标签状态与计数查询；自动抽取编排、设置和异步计数刷新各自保留独立服务，标签规则与文本工具放在 `support` 包。
 - 自动抽取通过主容器消息管道读取卡片正文，从标题层级、强调项和短首行中筛选高层标签；候选足够时补齐到 20 个，过滤文件路径、代码符号和通用标题，不调用模型。
 - AI 候选通过带 `profileId` 的 `AiCompletionFutureEvent` 在后台获取，再与本地文本候选合并；标签优先级固定为
   「用户已有标签 > 本地抽取 > AI」。接口先返回本地结果、`pending` 与服务端 `deadlineEpochMs`，前端按该截止时间轮询。
   AI 任务由 2 线程、32 容量有界队列执行，拒绝时记录 error 并保留本地结果。AI 未配置、profile 缺失或请求失败时同样保留本地结果。
   标签仍只写入 tags 插件自己的 `tags.json`。
-- 打开笔记时若标签少于 10 个，标签工具自动执行一次抽取；标签不足时仍保留可见的自动抽取按钮，供用户手动重试。
+- 打开笔记时若 `autoEnabled=true` 且标签少于 10 个，标签工具自动执行一次抽取；关闭自动后不发起自动请求，
+  标签工具始终显示 ✦ 图标，只能由用户点击该图标手动抽取。
 - 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页提供「按出现次数」和「关联笔记」两个页签：前者按正文实际命中次数排行，后者展示全部已分配标签并按覆盖笔记数排行；两者都显示出现次数与覆盖笔记数，列表默认展示前 100 个并可展开查看全部筛选结果，气泡图固定展示前 100 个，可从全部笔记中移除某个标签。点击标签在新浏览器标签页打开该标签关联的第一篇笔记，并带上 `tag=<tag>` 查询参数，新页面由 tags 插件从 URL 恢复标签筛选。
 - 笔记删除或状态重置由主容器事件驱动；插件停用后标签工具、标签页和筛选入口一起下线，数据保留。
 
@@ -522,7 +544,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 
 ### 6.1 工作区
 
-`frontend/pnpm-workspace.yaml`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes,graphify,tags,ai,guide}`。
+`frontend/pnpm-workspace.yaml`：`host`、`plugin-api`、`plugins/{favorite,baidu-sync,card-importer,attachment-importer,state-reset,memory-cycle,notes,graphify,tags,ai-summary,ai,guide}`。
 
 | 包 | 作用 |
 |---|---|
@@ -637,6 +659,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 | `frontend/plugins/graphify/index.ts` |
+| ai-summary | 设置面板 + 标题下方 AI 总结工具；打开笔记后按缓存状态自动生成或刷新 | `frontend/plugins/ai-summary/index.ts` |
 | tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 标题下方标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
 | guide | 从侧栏或顶栏在当前宿主右侧主内容区打开 `/guide`；指南内的笔记、设置和功能入口统一在新浏览器页签打开，支持前进/后退、点击跳步 | `frontend/plugins/guide/index.ts` |
 | ai | 只有设置面板：Provider、模型、API key、连接测试 | `frontend/plugins/ai/index.ts` |
@@ -694,7 +717,7 @@ pnpm -r build                                   # 各包构建（插件 build �
 
 | 位置 | 内容 | 运行方式 |
 |---|---|---|
-| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 11 个插件 jar 的契约：描述符、依赖、注册类索引、静态插件清单、版本与产物分离；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
+| `backend/app/src/test/java/com/thisnote/plugin/PluginJarContractTest.java` | 12 个插件 jar 的契约：描述符、依赖、注册类索引、静态插件清单、版本与产物分离；jar 未构建时 **skip** | `mvn test`（从 `backend/`） |
 | `backend/app/src/test/.../PluginMetadataReaderTest.java` | 停用场景所需的静态清单可从开发目录读取，管理字段解析正确 | `mvn test`（从 `backend/`） |
 | `backend/plugins/notes/src/test/.../AttachmentServiceTest.java` | 未被管理的附件返回真实像素宽高，附件导入无需读取 Notes 目录 | `mvn test`（从 `backend/`） |
 | `backend/plugins/baidu-sync/src/test/.../BackupScopeTest.java` | 备份范围包含笔记与所有已安装插件目录，拒绝未知/越界路径 | `mvn test`（从 `backend/`） |

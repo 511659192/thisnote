@@ -10,6 +10,7 @@ packages:
   - 'plugins/state-reset'
   - 'plugins/graphify'
   - 'plugins/tags'
+  - 'plugins/ai-summary'
   - 'plugins/ai'
   - 'plugins/guide'
 

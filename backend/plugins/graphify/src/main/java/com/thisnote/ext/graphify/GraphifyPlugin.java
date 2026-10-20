@@ -3,6 +3,7 @@ package com.thisnote.ext.graphify;
 import com.thisnote.ext.graphify.client.GraphifyAiClient;
 import com.thisnote.ext.graphify.listener.AttachmentChangedEventListener;
 import com.thisnote.ext.graphify.listener.CardChangedEventListener;
+import com.thisnote.ext.graphify.listener.GraphifyNoteContextFutureEventListener;
 import com.thisnote.ext.graphify.listener.NoteChangedEventListener;
 import com.thisnote.ext.graphify.listener.PluginStateResetListener;
 import com.thisnote.ext.graphify.service.GraphifyGraphReader;
@@ -25,6 +26,7 @@ public class GraphifyPlugin
     private NoteChangedEventListener noteChangedEventListener;
     private CardChangedEventListener cardChangedEventListener;
     private AttachmentChangedEventListener attachmentChangedEventListener;
+    private GraphifyNoteContextFutureEventListener graphContextListener;
     private PluginStateResetListener stateResetListener;
 
     public GraphifyPlugin(PluginWrapper wrapper) {
@@ -54,13 +56,15 @@ public class GraphifyPlugin
         noteChangedEventListener = new NoteChangedEventListener(indexService);
         cardChangedEventListener = new CardChangedEventListener(indexService);
         attachmentChangedEventListener = new AttachmentChangedEventListener(indexService);
+        graphContextListener = new GraphifyNoteContextFutureEventListener(ctx.getBean(GraphifyGraphReader.class));
         stateResetListener = new PluginStateResetListener(indexService);
 
         getMainApplicationContext().addApplicationListener(noteChangedEventListener);
         getMainApplicationContext().addApplicationListener(cardChangedEventListener);
         getMainApplicationContext().addApplicationListener(attachmentChangedEventListener);
+        getMainApplicationContext().addApplicationListener(graphContextListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
-        log.info("Graphify 插件已启动并注册笔记、卡片和附件监听器");
+        log.info("Graphify 插件已启动并注册笔记、卡片、附件和上下文查询监听器");
     }
 
     @Override
@@ -77,6 +81,10 @@ public class GraphifyPlugin
         if (attachmentChangedEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentChangedEventListener);
             attachmentChangedEventListener = null;
+        }
+        if (graphContextListener != null) {
+            getMainApplicationContext().removeApplicationListener(graphContextListener);
+            graphContextListener = null;
         }
         if (stateResetListener != null) {
             getMainApplicationContext().removeApplicationListener(stateResetListener);

@@ -2,7 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { tagsApi, type TagsSettings } from '../api/tagsApi'
 
-const settings = ref<TagsSettings>({ aiProfileId: '', profiles: [], profilesError: '' })
+const settings = ref<TagsSettings>({
+  aiProfileId: '',
+  autoEnabled: true,
+  profiles: [],
+  profilesError: '',
+})
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -29,7 +34,10 @@ async function save(): Promise<void> {
   error.value = ''
   message.value = ''
   try {
-    settings.value = await tagsApi.saveSettings(settings.value.aiProfileId)
+    settings.value = await tagsApi.saveSettings(
+      settings.value.aiProfileId,
+      settings.value.autoEnabled,
+    )
     message.value = '标签设置已保存'
   } catch (e) {
     error.value = '保存失败：' + (e as Error).message
@@ -61,6 +69,12 @@ onMounted(load)
         <small v-if="!settings.profiles.length" class="muted">
           AI 能力插件中还没有 completion 配置。
         </small>
+      </label>
+
+      <label class="switch-row">
+        <input v-model="settings.autoEnabled" type="checkbox" />
+        <span>允许自动抽取标签</span>
+        <small class="muted">关闭后仅在点击笔记页的 ✦ 图标时抽取。</small>
       </label>
 
       <dl v-if="selectedProfile" class="profile-summary">
@@ -117,6 +131,22 @@ onMounted(load)
   display: grid;
   gap: 5px;
   font-size: 13px;
+}
+
+.settings-form .switch-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px 8px;
+}
+
+.switch-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.switch-row small {
+  grid-column: 2;
 }
 
 .settings-form select {

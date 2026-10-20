@@ -4,6 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.repository.GraphifyStateRepository;
+import com.thisnote.plugin.api.event.GraphifyNoteContext;
+import com.thisnote.plugin.api.event.GraphifyNoteContextFutureEvent;
 import com.thisnote.plugin.api.event.NoteListFutureEvent;
 import com.thisnote.plugin.api.notes.dto.NoteDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -189,6 +191,42 @@ public class GraphifyGraphReader {
         List<RelatedNote> related = rankRelated(notesById, candidates, conceptFrequency);
         log.debug("Graphify 相关笔记查询完成：noteId={}, related={}", noteId, related.size());
         return new RelatedNotes(true, related);
+    }
+
+    public GraphifyNoteContext noteContext(String noteId) {
+        if (noteId == null || noteId.isBlank()) {
+            throw new IllegalArgumentException("noteId 不能为空");
+        }
+        String normalizedNoteId = noteId.trim();
+        JSONObject graph = graph();
+        if (graph == null) {
+            log.debug("Graphify 笔记上下文不可用：graph.json 不存在，noteId={}", normalizedNoteId);
+            return new GraphifyNoteContext(false, List.of(), List.of(), List.of());
+        }
+
+        RelatedNotes related = relatedNotes(normalizedNoteId);
+        GraphSignals signals = collectGraphSignals(graph);
+        List<String> concepts = signals.conceptsByNote()
+                .getOrDefault(normalizedNoteId, Map.of())
+                .values()
+                .stream()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .limit(12)
+                .toList();
+        List<String> communities = signals.communitiesByNote()
+                .getOrDefault(normalizedNoteId, Set.of())
+                .stream()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .limit(8)
+                .toList();
+        List<GraphifyNoteContext.RelatedNote> relatedNotes = related.notes()
+                .stream()
+                .map(note -> new GraphifyNoteContext.RelatedNote(
+                        note.noteId(), note.title(), note.reasons()))
+                .toList();
+        log.debug("Graphify 笔记上下文已构建：noteId={}, concepts={}, communities={}, related={}",
+                normalizedNoteId, concepts.size(), communities.size(), relatedNotes.size());
+        return new GraphifyNoteContext(true, concepts, communities, relatedNotes);
     }
 
     private static Map<String, NoteDTO> notesById(List<NoteDTO> notes) {

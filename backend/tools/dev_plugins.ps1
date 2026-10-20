@@ -1,4 +1,4 @@
-﻿# 建立/修复 dev 模式插件目录（幂等，可反复运行）。
+# 建立/修复 dev 模式插件目录（幂等，可反复运行）。
 #
 # 用法：backend/ 下执行   powershell -File tools\dev_plugins.ps1
 #
@@ -27,6 +27,7 @@ $plugins = [ordered]@{
     'state-reset' = 'plugins/state-reset'
     'graphify' = 'plugins/graphify'
     'tags' = 'plugins/tags'
+    'ai-summary' = 'plugins/ai-summary'
     'guide' = 'plugins/guide'
 }
 

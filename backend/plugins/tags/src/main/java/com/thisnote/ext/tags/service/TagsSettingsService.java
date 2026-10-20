@@ -29,16 +29,20 @@ public class TagsSettingsService {
         return stored == null ? "" : stored;
     }
 
+    public boolean autoEnabled() {
+        return settingsRepository.getAutoEnabled();
+    }
+
     public SettingsResponse response() {
         if (eventPublisher == null) {
             log.warn("AI 核心插件尚未就绪，无法读取标签 profile");
-            return new SettingsResponse(aiProfileId(), List.of(), "AI 核心插件尚未就绪");
+            return new SettingsResponse(aiProfileId(), autoEnabled(), List.of(), "AI 核心插件尚未就绪");
         }
         try {
-            return new SettingsResponse(aiProfileId(), profiles(), "");
+            return new SettingsResponse(aiProfileId(), autoEnabled(), profiles(), "");
         } catch (Exception e) {
             log.warn("读取标签 AI profile 失败：{}", e.getMessage());
-            return new SettingsResponse(aiProfileId(), List.of(), e.getMessage());
+            return new SettingsResponse(aiProfileId(), autoEnabled(), List.of(), e.getMessage());
         }
     }
 
@@ -57,8 +61,8 @@ public class TagsSettingsService {
         if (available.stream().noneMatch(profile -> profileId.equals(profile.id()))) {
             throw new IllegalArgumentException("AI profile 不存在：" + profileId);
         }
-        settingsRepository.updateAiProfileId(profileId);
-        log.info("标签 AI profile 已保存：profileId={}", profileId);
+        settingsRepository.update(profileId, update.autoEnabled());
+        log.info("标签设置已保存：profileId={}, autoEnabled={}", profileId, update.autoEnabled());
         return response();
     }
 
@@ -75,10 +79,11 @@ public class TagsSettingsService {
     }
 
     public record SettingsResponse(String aiProfileId,
+                                   boolean autoEnabled,
                                    List<AiProfileSummary> profiles,
                                    String profilesError) {
     }
 
-    public record SettingsUpdate(String aiProfileId) {
+    public record SettingsUpdate(String aiProfileId, boolean autoEnabled) {
     }
 }
