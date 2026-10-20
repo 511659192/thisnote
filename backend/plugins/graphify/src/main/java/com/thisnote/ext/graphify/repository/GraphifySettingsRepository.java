@@ -17,8 +17,7 @@ public class GraphifySettingsRepository {
     public GraphifySettingsRepository(FileHelper fileHelper,
                                       @Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
         this.fileHelper = fileHelper;
-        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize()
-                .resolve("notes").resolve("plugins").resolve("graphify");
+        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("graphify");
         this.settingsFile = pluginDir.resolve("settings.json");
     }
 

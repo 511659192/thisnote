@@ -7,12 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Repository
 public class GraphifyStateRepository {
@@ -24,8 +19,7 @@ public class GraphifyStateRepository {
     public GraphifyStateRepository(FileHelper fileHelper,
                                    @Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
         this.fileHelper = fileHelper;
-        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize()
-                .resolve("notes").resolve("plugins").resolve("graphify");
+        Path pluginDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("graphify");
         this.indexStateFile = pluginDir.resolve("index-state.json");
     }
 
@@ -58,25 +52,16 @@ public class GraphifyStateRepository {
         cachedIndexState = IndexState.empty();
     }
 
-    public record IndexState(boolean initialized,
-                             String lastCompletedAt,
-                             Set<String> noteIds,
-                             Map<String, String> cardToNote,
-                             Map<String, List<String>> attachmentToNotes) {
+    public record IndexState(boolean initialized, String lastCompletedAt, Set<String> noteIds, Map<String, String> cardToNote, Map<String, List<String>> attachmentToNotes) {
 
         public IndexState {
-            noteIds = noteIds == null
-                    ? Set.of()
-                    : Collections.unmodifiableSet(new LinkedHashSet<>(noteIds));
-            cardToNote = cardToNote == null
-                    ? Map.of()
-                    : Collections.unmodifiableMap(new LinkedHashMap<>(cardToNote));
+            noteIds = noteIds == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(noteIds));
+            cardToNote = cardToNote == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(cardToNote));
             if (attachmentToNotes == null) {
                 attachmentToNotes = Map.of();
             } else {
                 Map<String, List<String>> copy = new LinkedHashMap<>();
-                attachmentToNotes.forEach((name, ids) ->
-                        copy.put(name, ids == null ? List.of() : List.copyOf(ids)));
+                attachmentToNotes.forEach((name, ids) -> copy.put(name, ids == null ? List.of() : List.copyOf(ids)));
                 attachmentToNotes = Collections.unmodifiableMap(copy);
             }
         }

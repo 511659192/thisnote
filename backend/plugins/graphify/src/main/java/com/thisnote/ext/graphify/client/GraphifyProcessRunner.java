@@ -41,9 +41,7 @@ public class GraphifyProcessRunner {
             List<String> command = new ArrayList<>();
             command.add(executable);
             command.addAll(arguments);
-            ProcessBuilder builder = new ProcessBuilder(command)
-                    .directory(workingDirectory.toFile())
-                    .redirectErrorStream(true);
+            ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory.toFile()).redirectErrorStream(true);
             Map<String, String> environment = builder.environment();
             environment.put("GRAPHIFY_NO_AUTO_REFRESH", "1");
             GraphifySettingsService.environmentKeyNamesToClear().forEach(environment::remove);
@@ -68,8 +66,7 @@ public class GraphifyProcessRunner {
                 activeProcess = process;
             }
             ArrayDeque<String> output = new ArrayDeque<>();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (output.size() == OUTPUT_LINE_LIMIT) {
@@ -80,11 +77,9 @@ public class GraphifyProcessRunner {
                 int exitCode = process.waitFor();
                 long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
                 if (exitCode == 0) {
-                    log.info("Graphify 命令完成：operation={}, provider={}, exitCode={}, elapsedMs={}",
-                            operation, provider, exitCode, elapsedMillis);
+                    log.info("Graphify 命令完成：operation={}, provider={}, exitCode={}, elapsedMs={}", operation, provider, exitCode, elapsedMillis);
                 } else {
-                    log.warn("Graphify 命令失败：operation={}, provider={}, exitCode={}, elapsedMs={}",
-                            operation, provider, exitCode, elapsedMillis);
+                    log.warn("Graphify 命令失败：operation={}, provider={}, exitCode={}, elapsedMs={}", operation, provider, exitCode, elapsedMillis);
                 }
                 return new Result(exitCode, String.join("\n", output));
             } catch (InterruptedException e) {
@@ -130,15 +125,15 @@ public class GraphifyProcessRunner {
         log.info("Graphify 子进程已停止");
     }
 
-    private String redact(String line, String... apiKeys) {
+    private String redact(String line,
+                          String... apiKeys) {
         String safe = line;
         for (String apiKey : apiKeys) {
             if (apiKey != null && !apiKey.isBlank()) {
                 safe = safe.replace(apiKey, "[redacted]");
             }
         }
-        return safe.replaceAll("(?i)(bearer\\s+)[^\\s,;]+", "$1[redacted]")
-                .replaceAll("(?i)(api[_-]?key\\s*[:=]\\s*)[^\\s,;]+", "$1[redacted]");
+        return safe.replaceAll("(?i)(bearer\\s+)[^\\s,;]+", "$1[redacted]").replaceAll("(?i)(api[_-]?key\\s*[:=]\\s*)[^\\s,;]+", "$1[redacted]");
     }
 
     private static String noProxyWithLoopback(String existing) {

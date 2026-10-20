@@ -17,12 +17,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Slf4j
-final class OpenCodeGoProxy implements AutoCloseable {
+final class OpenCodeGoProxy
+        implements AutoCloseable {
 
     private static final String UPSTREAM_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
-    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 
     private final HttpServer server;
     private final ExecutorService executor;
@@ -56,21 +55,17 @@ final class OpenCodeGoProxy implements AutoCloseable {
 
     private void forward(HttpExchange exchange) throws IOException {
         try {
-            if (!"POST".equals(exchange.getRequestMethod())
-                    || !"/v1/chat/completions".equals(exchange.getRequestURI().getRawPath())) {
-                writeResponse(exchange, 404, "{\"error\":{\"message\":\"Unsupported OpenCode Go request\"}}",
-                        "application/json");
+            if (!"POST".equals(exchange.getRequestMethod()) || !"/v1/chat/completions".equals(exchange.getRequestURI().getRawPath())) {
+                writeResponse(exchange, 404, "{\"error\":{\"message\":\"Unsupported OpenCode Go request\"}}", "application/json");
                 return;
             }
             if (!("Bearer " + localApiKey).equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
-                writeResponse(exchange, 401, "{\"error\":{\"message\":\"Unauthorized local request\"}}",
-                        "application/json");
+                writeResponse(exchange, 401, "{\"error\":{\"message\":\"Unauthorized local request\"}}", "application/json");
                 return;
             }
 
             String query = exchange.getRequestURI().getRawQuery();
-            URI target = URI.create(UPSTREAM_BASE_URL + "/chat/completions"
-                    + (query == null ? "" : "?" + query));
+            URI target = URI.create(UPSTREAM_BASE_URL + "/chat/completions" + (query == null ? "" : "?" + query));
             String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
             byte[] requestBody = exchange.getRequestBody().readAllBytes();
             HttpRequest request = HttpRequest.newBuilder(target)
@@ -82,19 +77,15 @@ final class OpenCodeGoProxy implements AutoCloseable {
                     .build();
 
             HttpResponse<byte[]> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            response.headers().firstValue("retry-after")
-                    .ifPresent(value -> exchange.getResponseHeaders().set("Retry-After", value));
-            writeResponse(exchange, response.statusCode(), response.body(),
-                    response.headers().firstValue("content-type").orElse("application/json"));
+            response.headers().firstValue("retry-after").ifPresent(value -> exchange.getResponseHeaders().set("Retry-After", value));
+            writeResponse(exchange, response.statusCode(), response.body(), response.headers().firstValue("content-type").orElse("application/json"));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("OpenCode Go request interrupted", e);
-            writeResponse(exchange, 502, "{\"error\":{\"message\":\"OpenCode Go request interrupted\"}}",
-                    "application/json");
+            writeResponse(exchange, 502, "{\"error\":{\"message\":\"OpenCode Go request interrupted\"}}", "application/json");
         } catch (IOException e) {
             log.error("OpenCode Go request failed", e);
-            writeResponse(exchange, 502, "{\"error\":{\"message\":\"OpenCode Go request failed\"}}",
-                    "application/json");
+            writeResponse(exchange, 502, "{\"error\":{\"message\":\"OpenCode Go request failed\"}}", "application/json");
         } finally {
             exchange.close();
         }
