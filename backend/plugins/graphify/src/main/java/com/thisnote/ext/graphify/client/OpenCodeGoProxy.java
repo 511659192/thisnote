@@ -16,6 +16,9 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Graphify CLI 的通用 OpenAI 客户端与 OpenCode Go 专用会话要求之间的本机回环适配器。
+ */
 @Slf4j
 final class OpenCodeGoProxy
         implements AutoCloseable {

@@ -10,18 +10,16 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 把 Notes 的 note/card 碎片投影为 Graphify CLI 可消费的目录结构。
+ *
+ * <p>每篇笔记生成 {@code <noteId>/note.md}，只复制被引用的图片。写入前做内容比较，
+ * 未变化时保持 mtime 稳定，使 Graphify 的 manifest 和语义缓存可以继续增量工作。
+ */
 @Slf4j
 public class GraphifyCorpusProjector {
 
@@ -43,12 +41,10 @@ public class GraphifyCorpusProjector {
                                       List<CardDTO> cards,
                                       List<String> warnings,
                                       Function<String, byte[]> attachmentLoader) {
-        log.debug("Graphify 投影开始：noteId={}, titleLength={}, cards={}",
-                note.noteId(), note.title() == null ? 0 : note.title().length(),
-                cards == null ? 0 : cards.size());
+        log.debug("Graphify 投影开始：noteId={}, titleLength={}, cards={}", note.noteId(), note.title() == null ? 0 : note.title().length(), cards == null ? 0 : cards.size());
         Map<String, CardDTO> cardsById = cards == null ? new HashMap<>() : cards.stream()
-                .filter(card -> card != null && card.meta() != null && card.meta().cardId() != null)
-                .collect(Collectors.toMap(card -> card.meta().cardId(), card -> card, (first, second) -> second));
+                                                                           .filter(card -> card != null && card.meta() != null && card.meta().cardId() != null)
+                                                                           .collect(Collectors.toMap(card -> card.meta().cardId(), card -> card, (first, second) -> second));
 
         List<String> cardIds = new ArrayList<>();
         List<String> bodies = new ArrayList<>();
@@ -62,9 +58,8 @@ public class GraphifyCorpusProjector {
             bodies.add(card.content() == null ? "" : card.content());
         }
 
-        StringBuilder markdown = new StringBuilder("# ")
-                .append(note.title() == null ? "" : note.title().replace('\n', ' ').replace('\r', ' '))
-                .append("\n\n");
+        // Graphify 只识别文档，因此按笔记顺序拼接卡片正文，并保留标题作为文档标题。
+        StringBuilder markdown = new StringBuilder("# ").append(note.title() == null ? "" : note.title().replace('\n', ' ').replace('\r', ' ')).append("\n\n");
         for (int i = 0; i < bodies.size(); i++) {
             if (i > 0) {
                 markdown.append("\n\n---\n\n");
@@ -75,25 +70,25 @@ public class GraphifyCorpusProjector {
         RewrittenMarkdown rewritten = rewriteAttachmentTargets(markdown.toString());
         markdown = new StringBuilder(rewritten.markdown());
         Set<String> attachmentNames = rewritten.attachmentNames();
-        log.debug("Graphify 图片引用处理完成：noteId={}, attachments={}",
-                note.noteId(), attachmentNames.size());
+        log.debug("Graphify 图片引用处理完成：noteId={}, attachments={}", note.noteId(), attachmentNames.size());
 
         Path noteDir = noteDirectory(note.noteId());
         Set<String> copiedAttachments = new LinkedHashSet<>();
         boolean changed = false;
+        // CLI 以 note.md 为基准解析相对图片路径，因此被引用的图片必须存在于该笔记投影目录。
         for (String fileName : attachmentNames) {
             log.debug("Graphify 读取投影附件：noteId={}, fileName={}", note.noteId(), fileName);
             byte[] bytes = attachmentLoader.apply(fileName);
             if (bytes == null) {
                 warnings.add("图片附件不存在或无法读取：" + fileName);
+                log.warn("Graphify 投影附件不存在：noteId={}, fileName={}", note.noteId(), fileName);
                 continue;
             }
             Path destination = noteDir.resolve("attachments").resolve(fileName);
             if (!sameBytes(destination, bytes)) {
                 fileHelper.fileWritten(destination, new ByteArrayInputStream(bytes), 0);
                 changed = true;
-                log.debug("Graphify 投影附件已写入：noteId={}, fileName={}, bytes={}",
-                        note.noteId(), fileName, bytes.length);
+                log.debug("Graphify 投影附件已写入：noteId={}, fileName={}, bytes={}", note.noteId(), fileName, bytes.length);
             }
             copiedAttachments.add(fileName);
             if (bytes.length > IMAGE_INLINE_LIMIT) {
@@ -108,26 +103,23 @@ public class GraphifyCorpusProjector {
             log.debug("Graphify 投影正文已写入：noteId={}, file={}", note.noteId(), noteFile);
         }
         ProjectionMetadata result = new ProjectionMetadata(cardIds, attachmentNames, changed);
-        log.debug("Graphify 投影完成：noteId={}, cards={}, attachments={}, changed={}",
-                note.noteId(), result.cardIds().size(), result.attachmentNames().size(), result.changed());
+        log.debug("Graphify 投影完成：noteId={}, cards={}, attachments={}, changed={}", note.noteId(), result.cardIds().size(), result.attachmentNames().size(), result.changed());
         return result;
     }
 
     static RewrittenMarkdown rewriteAttachmentTargets(String source) {
         List<MarkdownImages.Reference> references = MarkdownImages.attachmentReferences(source);
+        log.debug("Graphify 图片引用重写：references={}", references.size());
         Set<String> attachmentNames = new LinkedHashSet<>();
         for (MarkdownImages.Reference reference : references) {
             attachmentNames.add(reference.fileName());
         }
         StringBuilder rewritten = new StringBuilder(source);
-        references.stream()
-                .sorted((left, right) -> Integer.compare(right.start(), left.start()))
-                .forEach(reference -> {
-                    String replacement = reference.originalTarget().startsWith("<") || reference.fileName().contains(" ")
-                            ? "<attachments/" + reference.fileName() + ">"
-                            : "attachments/" + reference.fileName();
-                    rewritten.replace(reference.start(), reference.end(), replacement);
-                });
+        references.stream().sorted((left, right) -> Integer.compare(right.start(), left.start())).forEach(reference -> {
+            String replacement = reference.originalTarget().startsWith("<") || reference.fileName()
+                    .contains(" ") ? "<attachments/" + reference.fileName() + ">" : "attachments/" + reference.fileName();
+            rewritten.replace(reference.start(), reference.end(), replacement);
+        });
         return new RewrittenMarkdown(rewritten.toString(), Collections.unmodifiableSet(attachmentNames));
     }
 
@@ -204,9 +196,7 @@ public class GraphifyCorpusProjector {
     private static boolean sameBytes(Path path,
                                      byte[] content) {
         try {
-            return Files.isRegularFile(path)
-                    && Files.size(path) == content.length
-                    && Arrays.equals(Files.readAllBytes(path), content);
+            return Files.isRegularFile(path) && Files.size(path) == content.length && Arrays.equals(Files.readAllBytes(path), content);
         } catch (Exception e) {
             log.error("读取 Graphify 二进制投影失败：{}", path, e);
             return false;
@@ -224,9 +214,7 @@ public class GraphifyCorpusProjector {
         return target;
     }
 
-    public record ProjectionMetadata(List<String> cardIds,
-                                     Set<String> attachmentNames,
-                                     boolean changed) {
+    public record ProjectionMetadata(List<String> cardIds, Set<String> attachmentNames, boolean changed) {
     }
 
     record RewrittenMarkdown(String markdown, Set<String> attachmentNames) {

@@ -8,7 +8,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
 @RequiredArgsConstructor
-public class NoteListQueryEventListener
+public class NoteListFutureEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteListFutureEvent>> {
 
     private final NoteRepository noteRepository;

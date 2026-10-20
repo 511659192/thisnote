@@ -10,6 +10,10 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 把选中的 AI profile 解析为 Graphify CLI 使用的 provider/model/key，
+ * profile 本身仍由 AI 插件统一存储。
+ */
 @Service
 @Slf4j
 public class GraphifySettingsService {

@@ -10,7 +10,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 
 @RequiredArgsConstructor
-public class NoteContentQueryEventListener
+public class NoteContentFutureEventListener
         implements ApplicationListener<PayloadApplicationEvent<NoteContentFutureEvent>> {
 
     private final NoteService noteService;

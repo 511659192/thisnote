@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -27,17 +28,20 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+/**
+ * 只读访问 Graphify 生成的 graph.json。
+ *
+ * <p>标签和相关笔记查询频率较高，而 graph.json 只会在索引后变化，
+ * 因此按 mtime + size 缓存解析结果。
+ */
 @Service
 @Slf4j
 public class GraphifyGraphReader {
 
     private static final Pattern PASTE_ASSET_REFERENCE = Pattern.compile("paste-[0-9a-f]{8,}", Pattern.CASE_INSENSITIVE);
-    private static final Pattern IMAGE_PLACEHOLDER = Pattern.compile(
-            "^(?:pasted image(?: note| attachment)?|referenced image attachment\\b.*|image attachment\\s*:.*|paste note\\s*:.*)$",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern HASH_ONLY = Pattern.compile(
-            "^(?:[0-9a-f]{16,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern IMAGE_PLACEHOLDER = Pattern.compile("^(?:pasted image(?: note| attachment)?|referenced image attachment\\b.*|image attachment\\s*:.*|paste note\\s*:.*)$",
+                                                                     Pattern.CASE_INSENSITIVE);
+    private static final Pattern HASH_ONLY = Pattern.compile("^(?:[0-9a-f]{16,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$", Pattern.CASE_INSENSITIVE);
     private static final String POST_MESSAGE_MARKER = "thisnote-graphify-open-note";
     private static final int RELATED_NOTES_LIMIT = 5;
     private static final long QUERY_TIMEOUT_SECONDS = 30;
@@ -50,9 +54,7 @@ public class GraphifyGraphReader {
 
     public GraphifyGraphReader(@Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot,
                                GraphifyStateRepository stateRepository) {
-        Path graphifyOutDir = Path.of(dataRoot).toAbsolutePath().normalize()
-                .resolve("notes").resolve("plugins").resolve("graphify")
-                .resolve("corpus").resolve("graphify-out");
+        Path graphifyOutDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes").resolve("plugins").resolve("graphify").resolve("corpus").resolve("graphify-out");
         this.graphJsonFile = graphifyOutDir.resolve("graph.json");
         this.graphHtmlFile = graphifyOutDir.resolve("graph.html");
         this.stateRepository = stateRepository;
@@ -64,6 +66,7 @@ public class GraphifyGraphReader {
 
     public JSONObject graph() {
         if (!Files.isRegularFile(graphJsonFile)) {
+            log.debug("Graphify graph.json 不存在：file={}", graphJsonFile);
             return null;
         }
         try {
@@ -71,6 +74,7 @@ public class GraphifyGraphReader {
             long size = Files.size(graphJsonFile);
             CachedGraph cached = cachedGraph;
             if (cached != null && cached.modifiedAt() == modifiedAt && cached.size() == size) {
+                log.debug("Graphify graph.json 命中缓存：file={}, size={}", graphJsonFile, size);
                 return cached.graph();
             }
             JSONObject graph = JSON.parseObject(Files.readString(graphJsonFile, StandardCharsets.UTF_8));
@@ -114,6 +118,9 @@ public class GraphifyGraphReader {
         Map<String, Set<String>> concepts = new LinkedHashMap<>();
         Map<String, Set<String>> communities = new LinkedHashMap<>();
         JSONObject graph = graph();
+        if (graph == null) {
+            log.debug("Graphify 标签查询：graph.json 不存在，仅使用索引状态");
+        }
         if (graph != null) {
             JSONArray nodes = graph.getJSONArray("nodes");
             if (nodes != null) {
@@ -156,19 +163,37 @@ public class GraphifyGraphReader {
         }
         JSONObject graph = graph();
         if (graph == null) {
+            log.debug("Graphify 相关笔记查询跳过：graph.json 不存在");
             return new RelatedNotes(false, List.of());
         }
 
-        Map<String, NoteDTO> notesById = new LinkedHashMap<>();
-        for (NoteDTO note : allNotes()) {
-            if (note != null && note.noteId() != null) {
-                notesById.put(note.noteId(), note);
-            }
-        }
+        Map<String, NoteDTO> notesById = notesById(allNotes());
         if (!notesById.containsKey(noteId)) {
             return new RelatedNotes(true, List.of());
         }
 
+        GraphSignals signals = collectGraphSignals(graph);
+        removeTitleConcepts(signals.conceptsByNote(), notesById);
+        Map<String, Integer> conceptFrequency = conceptFrequency(signals.conceptsByNote());
+        Map<String, RelatedCandidate> candidates = conceptCandidates(noteId, signals.conceptsByNote(), conceptFrequency);
+        mergeRelationCandidates(graph, noteId, signals.nodeNotes(), notesById, candidates);
+        mergeCommunityScores(noteId, signals.communitiesByNote(), candidates);
+        List<RelatedNote> related = rankRelated(notesById, candidates, conceptFrequency);
+        log.debug("Graphify 相关笔记查询完成：noteId={}, related={}", noteId, related.size());
+        return new RelatedNotes(true, related);
+    }
+
+    private static Map<String, NoteDTO> notesById(List<NoteDTO> notes) {
+        Map<String, NoteDTO> result = new LinkedHashMap<>();
+        for (NoteDTO note : notes) {
+            if (note != null && note.noteId() != null) {
+                result.put(note.noteId(), note);
+            }
+        }
+        return result;
+    }
+
+    private static GraphSignals collectGraphSignals(JSONObject graph) {
         Map<String, Map<String, String>> conceptsByNote = new LinkedHashMap<>();
         Map<String, Set<String>> communitiesByNote = new LinkedHashMap<>();
         Map<String, String> nodeNotes = new HashMap<>();
@@ -184,7 +209,6 @@ public class GraphifyGraphReader {
                     continue;
                 }
                 nodeNotes.put(nodeId, ownerNoteId);
-
                 String label = node.getString("label");
                 if (isMeaningfulTag(label)) {
                     conceptsByNote.computeIfAbsent(ownerNoteId, ignored -> new LinkedHashMap<>())
@@ -197,89 +221,119 @@ public class GraphifyGraphReader {
                 }
             }
         }
+        return new GraphSignals(conceptsByNote, communitiesByNote, nodeNotes);
+    }
 
-        for (Map.Entry<String, NoteDTO> entry : notesById.entrySet()) {
-            Map<String, String> concepts = conceptsByNote.get(entry.getKey());
+    private static void removeTitleConcepts(Map<String, Map<String, String>> conceptsByNote,
+                                            Map<String, NoteDTO> notesById) {
+        notesById.forEach((noteId, note) -> {
+            Map<String, String> concepts = conceptsByNote.get(noteId);
             if (concepts != null) {
-                concepts.remove(normalizeLabel(entry.getValue().title()));
+                concepts.remove(normalizeLabel(note.title()));
             }
-        }
+        });
+    }
 
-        Map<String, Integer> conceptFrequency = new HashMap<>();
-        for (Map<String, String> concepts : conceptsByNote.values()) {
-            for (String concept : concepts.keySet()) {
-                conceptFrequency.merge(concept, 1, Integer::sum);
-            }
-        }
+    private static Map<String, Integer> conceptFrequency(Map<String, Map<String, String>> conceptsByNote) {
+        Map<String, Integer> frequency = new HashMap<>();
+        conceptsByNote.values().forEach(concepts ->
+                concepts.keySet().forEach(concept -> frequency.merge(concept, 1, Integer::sum)));
+        return frequency;
+    }
 
+    private static Map<String, RelatedCandidate> conceptCandidates(String noteId,
+                                                                   Map<String, Map<String, String>> conceptsByNote,
+                                                                   Map<String, Integer> conceptFrequency) {
         Map<String, RelatedCandidate> candidates = new LinkedHashMap<>();
         Map<String, String> currentConcepts = conceptsByNote.getOrDefault(noteId, Map.of());
-        for (Map.Entry<String, Map<String, String>> entry : conceptsByNote.entrySet()) {
-            String otherNoteId = entry.getKey();
+        conceptsByNote.forEach((otherNoteId, concepts) -> {
             if (otherNoteId.equals(noteId)) {
+                return;
+            }
+            currentConcepts.forEach((key, label) -> {
+                if (!concepts.containsKey(key)) {
+                    return;
+                }
+                RelatedCandidate candidate = candidates.computeIfAbsent(otherNoteId, RelatedCandidate::new);
+                candidate.score += 6.0 / conceptFrequency.getOrDefault(key, 1);
+                candidate.sharedConcepts.add(new ConceptMatch(key, label));
+            });
+        });
+        return candidates;
+    }
+
+    private static void mergeRelationCandidates(JSONObject graph,
+                                                String noteId,
+                                                Map<String, String> nodeNotes,
+                                                Map<String, NoteDTO> notesById,
+                                                Map<String, RelatedCandidate> candidates) {
+        JSONArray links = graph.getJSONArray("links");
+        if (links == null) {
+            return;
+        }
+        for (Object value : links) {
+            if (!(value instanceof JSONObject link)) {
                 continue;
             }
-            for (Map.Entry<String, String> concept : currentConcepts.entrySet()) {
-                if (!entry.getValue().containsKey(concept.getKey())) {
-                    continue;
-                }
-                RelatedCandidate candidate = candidates.computeIfAbsent(otherNoteId, RelatedCandidate::new);
-                candidate.score += 6.0 / conceptFrequency.getOrDefault(concept.getKey(), 1);
-                candidate.sharedConcepts.add(new ConceptMatch(concept.getKey(), concept.getValue()));
+            String sourceNoteId = nodeNotes.get(endpointId(link.get("source")));
+            String targetNoteId = nodeNotes.get(endpointId(link.get("target")));
+            String otherNoteId = otherNoteId(noteId, sourceNoteId, targetNoteId);
+            if (otherNoteId == null || !notesById.containsKey(otherNoteId)) {
+                continue;
             }
+            addRelationScore(link, candidates.computeIfAbsent(otherNoteId, RelatedCandidate::new));
         }
+    }
 
-        JSONArray links = graph.getJSONArray("links");
-        if (links != null) {
-            for (Object value : links) {
-                if (!(value instanceof JSONObject link)) {
-                    continue;
-                }
-                String sourceNoteId = nodeNotes.get(endpointId(link.get("source")));
-                String targetNoteId = nodeNotes.get(endpointId(link.get("target")));
-                String otherNoteId;
-                if (noteId.equals(sourceNoteId) && targetNoteId != null && !noteId.equals(targetNoteId)) {
-                    otherNoteId = targetNoteId;
-                } else if (noteId.equals(targetNoteId) && sourceNoteId != null && !noteId.equals(sourceNoteId)) {
-                    otherNoteId = sourceNoteId;
-                } else {
-                    continue;
-                }
-                if (!notesById.containsKey(otherNoteId)) {
-                    continue;
-                }
-
-                String relation = link.getString("relation");
-                RelatedCandidate candidate = candidates.computeIfAbsent(otherNoteId, RelatedCandidate::new);
-                if (candidate.relationLabels.add(relationLabel(relation))) {
-                    double confidence = link.getDoubleValue("confidence_score");
-                    if (confidence <= 0) {
-                        confidence = 1.0;
-                    }
-                    candidate.score += relationWeight(relation) * (0.5 + 0.5 * Math.min(1.0, confidence));
-                }
-            }
+    private static String otherNoteId(String noteId,
+                                      String sourceNoteId,
+                                      String targetNoteId) {
+        if (noteId.equals(sourceNoteId) && targetNoteId != null && !noteId.equals(targetNoteId)) {
+            return targetNoteId;
         }
+        if (noteId.equals(targetNoteId) && sourceNoteId != null && !noteId.equals(sourceNoteId)) {
+            return sourceNoteId;
+        }
+        return null;
+    }
 
+    private static void addRelationScore(JSONObject link, RelatedCandidate candidate) {
+        String relation = link.getString("relation");
+        if (!candidate.relationLabels.add(relationLabel(relation))) {
+            return;
+        }
+        double confidence = link.getDoubleValue("confidence_score");
+        if (confidence <= 0) {
+            confidence = 1.0;
+        }
+        candidate.score += relationWeight(relation) * (0.5 + 0.5 * Math.min(1.0, confidence));
+    }
+
+    private static void mergeCommunityScores(String noteId,
+                                             Map<String, Set<String>> communitiesByNote,
+                                             Map<String, RelatedCandidate> candidates) {
         Set<String> currentCommunities = communitiesByNote.getOrDefault(noteId, Set.of());
-        for (RelatedCandidate candidate : candidates.values()) {
+        candidates.values().forEach(candidate -> {
             Set<String> otherCommunities = communitiesByNote.get(candidate.noteId);
             if (otherCommunities == null) {
-                continue;
+                return;
             }
-            for (String community : currentCommunities) {
-                if (otherCommunities.contains(community)) {
-                    candidate.sharedCommunities.add(community);
-                }
-            }
+            currentCommunities.stream()
+                    .filter(otherCommunities::contains)
+                    .forEach(candidate.sharedCommunities::add);
             if (!candidate.sharedCommunities.isEmpty()) {
                 candidate.score += 1.0;
             }
-        }
+        });
+    }
 
-        List<RelatedNote> related = candidates.values().stream()
+    private static List<RelatedNote> rankRelated(Map<String, NoteDTO> notesById,
+                                                 Map<String, RelatedCandidate> candidates,
+                                                 Map<String, Integer> conceptFrequency) {
+        return candidates.values().stream()
                 .filter(candidate -> notesById.containsKey(candidate.noteId))
-                .sorted(Comparator.comparingDouble((RelatedCandidate candidate) -> candidate.score).reversed()
+                .sorted(Comparator.comparingDouble((RelatedCandidate candidate) -> candidate.score)
+                        .reversed()
                         .thenComparing(candidate -> noteTitle(notesById.get(candidate.noteId)),
                                 String.CASE_INSENSITIVE_ORDER))
                 .limit(RELATED_NOTES_LIMIT)
@@ -288,8 +342,6 @@ public class GraphifyGraphReader {
                         noteTitle(notesById.get(candidate.noteId)),
                         relatedReasons(candidate, conceptFrequency)))
                 .toList();
-        log.debug("Graphify 相关笔记查询完成：noteId={}, related={}", noteId, related.size());
-        return new RelatedNotes(true, related);
     }
 
     private List<NoteDTO> allNotes() {
@@ -298,7 +350,9 @@ public class GraphifyGraphReader {
         }
         CompletableFuture<List<NoteDTO>> result = new CompletableFuture<>();
         eventPublisher.publishEvent(new NoteListFutureEvent(result));
-        return result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+        List<NoteDTO> notes = result.orTimeout(QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+        log.debug("Graphify 相关笔记查询读取笔记完成：notes={}", notes.size());
+        return notes;
     }
 
     private static String noteIdFromSource(String sourceFile) {
@@ -371,12 +425,8 @@ public class GraphifyGraphReader {
         }
         if (!candidate.sharedConcepts.isEmpty()) {
             candidate.sharedConcepts.sort(
-                    Comparator.comparingInt((ConceptMatch match) -> conceptFrequency.getOrDefault(match.key(), 1))
-                            .thenComparing(ConceptMatch::label, String.CASE_INSENSITIVE_ORDER));
-            List<String> labels = candidate.sharedConcepts.stream()
-                    .limit(3)
-                    .map(ConceptMatch::label)
-                    .toList();
+                    Comparator.comparingInt((ConceptMatch match) -> conceptFrequency.getOrDefault(match.key(), 1)).thenComparing(ConceptMatch::label, String.CASE_INSENSITIVE_ORDER));
+            List<String> labels = candidate.sharedConcepts.stream().limit(3).map(ConceptMatch::label).toList();
             String detail = String.join("、", labels);
             if (candidate.sharedConcepts.size() > labels.size()) {
                 detail += " 等 " + candidate.sharedConcepts.size() + " 个";
@@ -397,9 +447,7 @@ public class GraphifyGraphReader {
             return false;
         }
         String value = label.trim();
-        return !PASTE_ASSET_REFERENCE.matcher(value).find()
-                && !IMAGE_PLACEHOLDER.matcher(value).matches()
-                && !HASH_ONLY.matcher(value).matches();
+        return !PASTE_ASSET_REFERENCE.matcher(value).find() && !IMAGE_PLACEHOLDER.matcher(value).matches() && !HASH_ONLY.matcher(value).matches();
     }
 
     public record NoteTags(List<String> concept, List<String> community) {
@@ -424,6 +472,11 @@ public class GraphifyGraphReader {
     }
 
     private record ConceptMatch(String key, String label) {
+    }
+
+    private record GraphSignals(Map<String, Map<String, String>> conceptsByNote,
+                                Map<String, Set<String>> communitiesByNote,
+                                Map<String, String> nodeNotes) {
     }
 
     private record CachedGraph(long modifiedAt, long size, JSONObject graph) {

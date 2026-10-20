@@ -16,8 +16,8 @@ import com.thisnote.ext.notes.listener.CardAttachmentCleanupListener;
 import com.thisnote.ext.notes.listener.CardCreateRequestListener;
 import com.thisnote.ext.notes.listener.CardQueryEventListener;
 import com.thisnote.ext.notes.listener.FileChangeEventListener;
-import com.thisnote.ext.notes.listener.NoteContentQueryEventListener;
-import com.thisnote.ext.notes.listener.NoteListQueryEventListener;
+import com.thisnote.ext.notes.listener.NoteContentFutureEventListener;
+import com.thisnote.ext.notes.listener.NoteListFutureEventListener;
 import com.thisnote.ext.notes.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
@@ -50,8 +50,8 @@ public class NotesPlugin extends SpringBootPlugin {
     private CardQueryEventListener cardQueryEventListener;
     private AttachmentQueryEventListener attachmentQueryEventListener;
     private AttachmentAdoptEventListener attachmentAdoptEventListener;
-    private NoteContentQueryEventListener noteContentQueryEventListener;
-    private NoteListQueryEventListener noteListQueryEventListener;
+    private NoteContentFutureEventListener noteContentFutureEventListener;
+    private NoteListFutureEventListener noteListFutureEventListener;
     private AttachmentBytesQueryEventListener attachmentBytesQueryEventListener;
     private PluginStateResetListener stateResetListener;
 
@@ -94,8 +94,8 @@ public class NotesPlugin extends SpringBootPlugin {
         cardQueryEventListener = new CardQueryEventListener(cardRepository, notesMapper);
         attachmentQueryEventListener = new AttachmentQueryEventListener(attachmentService);
         attachmentAdoptEventListener = new AttachmentAdoptEventListener(attachmentService);
-        noteContentQueryEventListener = new NoteContentQueryEventListener(noteService, cardService);
-        noteListQueryEventListener = new NoteListQueryEventListener(noteRepository, notesMapper);
+        noteContentFutureEventListener = new NoteContentFutureEventListener(noteService, cardService);
+        noteListFutureEventListener = new NoteListFutureEventListener(noteRepository, notesMapper);
         attachmentBytesQueryEventListener = new AttachmentBytesQueryEventListener(attachmentService);
         stateResetListener = new PluginStateResetListener(noteRepository, cardRepository, attachmentService, bookRepository);
         getMainApplicationContext().addApplicationListener(fileChangeListener);
@@ -104,8 +104,8 @@ public class NotesPlugin extends SpringBootPlugin {
         getMainApplicationContext().addApplicationListener(cardQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentQueryEventListener);
         getMainApplicationContext().addApplicationListener(attachmentAdoptEventListener);
-        getMainApplicationContext().addApplicationListener(noteContentQueryEventListener);
-        getMainApplicationContext().addApplicationListener(noteListQueryEventListener);
+        getMainApplicationContext().addApplicationListener(noteContentFutureEventListener);
+        getMainApplicationContext().addApplicationListener(noteListFutureEventListener);
         getMainApplicationContext().addApplicationListener(attachmentBytesQueryEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
     }
@@ -136,13 +136,13 @@ public class NotesPlugin extends SpringBootPlugin {
             getMainApplicationContext().removeApplicationListener(attachmentAdoptEventListener);
             attachmentAdoptEventListener = null;
         }
-        if (noteContentQueryEventListener != null) {
-            getMainApplicationContext().removeApplicationListener(noteContentQueryEventListener);
-            noteContentQueryEventListener = null;
+        if (noteContentFutureEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteContentFutureEventListener);
+            noteContentFutureEventListener = null;
         }
-        if (noteListQueryEventListener != null) {
-            getMainApplicationContext().removeApplicationListener(noteListQueryEventListener);
-            noteListQueryEventListener = null;
+        if (noteListFutureEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteListFutureEventListener);
+            noteListFutureEventListener = null;
         }
         if (attachmentBytesQueryEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentBytesQueryEventListener);

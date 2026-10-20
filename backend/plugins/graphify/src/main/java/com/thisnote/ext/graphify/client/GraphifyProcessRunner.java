@@ -15,6 +15,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 使用隔离的 Provider 环境启动 Graphify CLI，并把输出流写入后端日志。
+ *
+ * <p>OpenCode Go 使用本机回环代理：CLI 拿到短期本地 key，代理再注入
+ * 真实 key 和必需的 session header。
+ */
 @Slf4j
 @Component
 public class GraphifyProcessRunner {
@@ -52,6 +58,8 @@ public class GraphifyProcessRunner {
                 environment.put("NO_PROXY", noProxyWithLoopback(environment.get("NO_PROXY")));
                 processApiKey = proxy.localApiKey();
             }
+            log.debug("Graphify 运行环境：proxy={}, keyConfigured={}",
+                    proxy != null, processApiKey != null && !processApiKey.isBlank());
             if (processApiKey != null && !processApiKey.isBlank()) {
                 for (String name : GraphifySettingsService.environmentKeyNames(provider)) {
                     environment.put(name, processApiKey);
@@ -139,6 +147,7 @@ public class GraphifyProcessRunner {
 
     private String redact(String line,
                           String... apiKeys) {
+        // 输出可能包含请求头或模型错误，写日志前先脱敏。
         String safe = line;
         for (String apiKey : apiKeys) {
             if (apiKey != null && !apiKey.isBlank()) {

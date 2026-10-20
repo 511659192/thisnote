@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
 
     <section class="status-card">
       <div class="status-line">
-        <strong>{{ status?.stage ?? (loading ? '读取状态…' : '状态不可用') }}</strong>
+        <strong>阶段：{{ status?.stage ?? (loading ? '读取状态…' : '状态不可用') }}</strong>
         <span v-if="status?.indexed">最近完成：{{ status.lastCompletedAt || '未知' }}</span>
         <span v-if="status?.queuedNotes">待处理笔记：{{ status.queuedNotes }}</span>
       </div>
