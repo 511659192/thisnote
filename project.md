@@ -399,7 +399,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 
 **graphify**：`GET/POST /api/plugins/graphify/settings`、`GET .../status`、
 `POST .../index`、`GET .../graph`、`GET .../graph.html`、`GET .../tags`、`GET .../related`、
-`POST .../communities/relabel`。Graphify 设置只写 CLI 路径，Provider 信息来自 AI 插件；
+`GET .../search?query=`、`POST .../communities/relabel`。Graphify 设置只写 CLI 路径，Provider 信息来自 AI 插件；
 设置响应以 `aiError` / `profilesError` 区分运行时配置与 profile 列表读取失败。
 
 **ai-summary**：`GET /api/plugins/ai-summary/get?noteId=`、`POST .../generate`、
@@ -505,6 +505,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
 - Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 使用 `openai` extra；缺少对应包时无法验证 provider。
 - 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。`GraphifyCorpusProjector` 按 Markdown 图片引用的精确偏移替换目标，`GraphifyGraphReader` 按 `graph.json` 的 mtime + size 缓存解析结果，`GraphifyChangeQueue` 负责 2 秒防抖队列，`GraphifyPipelineRunner` 负责 CLI 执行与输出备份/发布，`GraphifyIndexService` 负责索引编排与状态。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
+- 顶栏自然语言查询先由 `GraphifyGraphReader.searchCandidates` 从标题、概念、社区和图中派生信号召回最多 24 篇候选，再由 `GraphifySearchAiClient` 通过所选 AI profile 生成简短结论并重排最多 5 篇笔记；AI 只允许返回候选内的笔记 ID，候选外 ID 会被过滤。查询不改写图谱或索引状态，但会把用户问题及候选笔记的标题、概念和社区发送给所选 Provider。
 - Graphify CLI 是抽取与图处理引擎；项目侧只保留笔记投影、进程/Provider 适配和索引状态编排，不在 Java 中重写文本分块、语义抽取、社区聚类、语义缓存或 `graph.html` 生成。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
 - 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
@@ -633,7 +634,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | 列表筛选 | `registerNoteListFilter` | 笔记列表（`activeNoteListFilters()`） |
 | 侧栏主面板 | `registerSidebarPanel` | `Shell`（notes 的列表面板） |
 | 列表头 | `registerListHeader` | `NoteList`（标题搜索框） |
-| 顶栏搜索 | `registerTopbarSearch` | `Shell`（全局搜索） |
+| 顶栏搜索 | `registerTopbarSearch` | `Shell`（当前由 Graphify 插件注册 NLP 搜索；Notes 不再注册顶栏搜索） |
 | 列表行内动作 | `registerNoteRowAction` | `NoteList`（`activeNoteRowActions()`，如 ☆/🧠） |
 | 列表批量动作 | `registerNoteBatchAction` | `NoteList`（`activeNoteBatchActions()`，如「收藏 +/−」「记忆 +/−」） |
 
@@ -694,13 +695,13 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | card-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/card-importer/index.ts:6-8` |
 | attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
-| graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 | `frontend/plugins/graphify/index.ts` |
+| graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 + 顶栏 NLP 搜索 | `frontend/plugins/graphify/index.ts` |
 | ai-summary | 设置面板 + 标题下方可收起 AI 总结工具；打开笔记后按缓存状态自动生成或刷新 | `frontend/plugins/ai-summary/index.ts` |
 | ai-title | 设置面板 + 笔记标题右侧「AI 标题」按钮；生成可收起的 1–3 个候选并选择替换 | `frontend/plugins/ai-title/index.ts` |
 | tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 标题下方标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
 | guide | 从侧栏或顶栏在当前宿主右侧主内容区打开 `/guide`；指南内的笔记、设置和功能入口统一在新浏览器页签打开，支持前进/后退、点击跳步 | `frontend/plugins/guide/index.ts` |
 | ai | 只有设置面板：Provider、模型、API key、连接测试 | `frontend/plugins/ai/index.ts` |
-| notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 顶栏搜索 + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
+| notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
 
 复习页（`ReviewView.vue`）：三个页签 —— **今日复习**（到期队列逐张评分）、**今日到期**（最新一条排期在今天或更早（含过期），
 或历史上任意一条排期落在今天；默认 3 列，卡片列表不展示历史）、
@@ -778,7 +779,7 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
    原先前端按 `{ cards: [...] }` 解包，而后端 `/api/notes/cards/get` 返回裸数组 `List<CardDTO>`；
    现在 `memoryCycleApi.ts` 直接按数组使用，复习页不再报 `item.page.cards is not iterable`。
 3. ~~顶栏全局搜索的「摘要命中」实际不生效~~（已修复：summary 匹配/摘要片段属不可达死代码，
-    2026-10-18 删除，`GlobalSearch.vue` 现为纯标题匹配）。
+    2026-10-18 删除；2026-10-21 顶栏入口改由 Graphify 的 NLP 搜索注册，`GlobalSearch.vue` 不再注册）。
 4. **生产插件目录是写死的绝对路径**：`D:/projects/thisnote/backend/runtime/plugins`
    （`backend/app/src/main/resources/application.yml:19`）。换机器/换目录/换用户名即找不到插件；
    dev profile 用相对路径 `plugins-dev` 才不会踩到（`backend/app/src/main/resources/application-dev.yml:22`）。

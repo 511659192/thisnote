@@ -302,6 +302,113 @@ public class GraphifyGraphReader {
         return new GraphifyNoteContext(true, concepts, communities, List.of());
     }
 
+    public SearchCandidates searchCandidates(String text, int limit) {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("查询内容不能为空");
+        }
+        JSONObject graph = graph();
+        if (graph == null) {
+            log.debug("Graphify NLP 查询跳过：graph.json 不存在");
+            return new SearchCandidates(false, List.of());
+        }
+
+        Map<String, NoteDTO> notesById = notesById(allNotes());
+        if (notesById.isEmpty()) {
+            log.debug("Graphify NLP 查询完成：没有可搜索笔记");
+            return new SearchCandidates(true, List.of());
+        }
+
+        GraphSignals signals = collectGraphSignals(graph);
+        removeTitleConcepts(signals.conceptsByNote(), notesById);
+        String normalizedQuery = normalizeLabel(text);
+        Set<String> terms = searchTerms(normalizedQuery);
+        List<SearchCandidate> candidates = new ArrayList<>();
+        for (NoteDTO note : notesById.values()) {
+            List<String> concepts = signals.conceptsByNote()
+                    .getOrDefault(note.noteId(), Map.of())
+                    .values()
+                    .stream()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .limit(12)
+                    .toList();
+            List<String> communities = signals.communitiesByNote()
+                    .getOrDefault(note.noteId(), Set.of())
+                    .stream()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .limit(4)
+                    .toList();
+            double score = searchScore(normalizeLabel(noteTitle(note)), normalizedQuery, terms) * 3.0
+                    + bestSearchScore(concepts, normalizedQuery, terms) * 2.0
+                    + bestSearchScore(communities, normalizedQuery, terms);
+            candidates.add(new SearchCandidate(note.noteId(), noteTitle(note), concepts, communities, score));
+        }
+        candidates.sort(Comparator.comparingDouble(SearchCandidate::score)
+                .reversed()
+                .thenComparing(SearchCandidate::title, String.CASE_INSENSITIVE_ORDER));
+        List<SearchCandidate> result = candidates.stream().limit(Math.max(1, limit)).toList();
+        log.debug("Graphify NLP 图谱召回完成：queryLength={}, notes={}, candidates={}",
+                text.length(), notesById.size(), result.size());
+        return new SearchCandidates(true, result);
+    }
+
+    private static double bestSearchScore(List<String> values,
+                                          String normalizedQuery,
+                                          Set<String> terms) {
+        return values.stream()
+                .mapToDouble(value -> searchScore(normalizeLabel(value), normalizedQuery, terms))
+                .max()
+                .orElse(0);
+    }
+
+    private static double searchScore(String value,
+                                      String normalizedQuery,
+                                      Set<String> terms) {
+        if (value.isBlank()) {
+            return 0;
+        }
+        double score = value.contains(normalizedQuery) ? 30 : 0;
+        int matches = 0;
+        for (String term : terms) {
+            if (value.contains(term)) {
+                matches++;
+            }
+        }
+        if (!terms.isEmpty()) {
+            score += 20.0 * matches / terms.size();
+        }
+        return score + Math.min(matches, 12);
+    }
+
+    private static Set<String> searchTerms(String normalizedText) {
+        Set<String> terms = new LinkedHashSet<>();
+        if (normalizedText.isBlank()) {
+            return terms;
+        }
+        for (String segment : normalizedText.split("[^\\p{L}\\p{N}._-]+")) {
+            if (segment.length() < 2) {
+                continue;
+            }
+            boolean han = segment.codePoints()
+                    .anyMatch(codePoint -> Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN);
+            if (!han) {
+                terms.add(segment);
+            } else {
+                if (segment.length() <= 8) {
+                    terms.add(segment);
+                }
+                for (int size = 2; size <= Math.min(4, segment.length()); size++) {
+                    for (int start = 0; start + size <= segment.length(); start++) {
+                        terms.add(segment.substring(start, start + size));
+                    }
+                }
+            }
+            if (terms.size() >= 64) {
+                break;
+            }
+        }
+        return terms;
+    }
+
     private static Set<String> contextTerms(String normalizedText) {
         Set<String> terms = new LinkedHashSet<>();
         if (normalizedText.isBlank()) {
@@ -613,6 +720,16 @@ public class GraphifyGraphReader {
     }
 
     public record RelatedNote(String noteId, String title, List<String> reasons) {
+    }
+
+    public record SearchCandidates(boolean available, List<SearchCandidate> notes) {
+    }
+
+    public record SearchCandidate(String noteId,
+                                  String title,
+                                  List<String> concepts,
+                                  List<String> communities,
+                                  double score) {
     }
 
     private static final class RelatedCandidate {

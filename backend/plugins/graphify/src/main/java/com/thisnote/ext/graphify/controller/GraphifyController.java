@@ -3,6 +3,7 @@ package com.thisnote.ext.graphify.controller;
 import com.alibaba.fastjson2.JSONObject;
 import com.thisnote.ext.graphify.service.GraphifyGraphReader;
 import com.thisnote.ext.graphify.service.GraphifyIndexService;
+import com.thisnote.ext.graphify.service.GraphifyNlpSearchService;
 import com.thisnote.ext.graphify.service.GraphifySettingsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -19,13 +20,16 @@ public class GraphifyController {
 
     private final GraphifyIndexService graphifyService;
     private final GraphifyGraphReader graphReader;
+    private final GraphifyNlpSearchService nlpSearchService;
     private final GraphifySettingsService settingsService;
 
     public GraphifyController(GraphifyIndexService graphifyService,
                               GraphifyGraphReader graphReader,
+                              GraphifyNlpSearchService nlpSearchService,
                               GraphifySettingsService settingsService) {
         this.graphifyService = graphifyService;
         this.graphReader = graphReader;
+        this.nlpSearchService = nlpSearchService;
         this.settingsService = settingsService;
     }
 
@@ -78,6 +82,12 @@ public class GraphifyController {
     public GraphifyGraphReader.RelatedNotes related(@RequestParam String noteId) {
         log.debug("查询 Graphify 相关笔记：noteId={}", noteId);
         return graphReader.relatedNotes(noteId);
+    }
+
+    @GetMapping("/search")
+    public GraphifyNlpSearchService.SearchResponse search(@RequestParam String query) {
+        log.info("收到 Graphify NLP 查询：queryLength={}", query == null ? 0 : query.length());
+        return nlpSearchService.search(query);
     }
 
     @PostMapping("/communities/relabel")

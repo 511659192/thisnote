@@ -6,9 +6,7 @@ import {
   registerPluginRoute,
   registerPluginSettings,
   registerSidebarPanel,
-  registerTopbarSearch,
 } from '@thisnote/plugin-api'
-import GlobalSearch from './src/components/GlobalSearch.vue'
 import TitleSearchBox from './src/components/TitleSearchBox.vue'
 import NoteView from './src/views/NoteView.vue'
 import NotesSidebarPanel from './src/components/NotesSidebarPanel.vue'
@@ -19,13 +17,12 @@ import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stor
  * 笔记域微应用的界面侧注册 —— 产物分离对齐后的「核心业务域」参考实现。
  *
  * <p>后端：plugin-notes（kind=CORE 的插件 jar，不可停用）；界面侧：本微应用。
- * 它登记本域的路由、侧栏主面板，以及两种搜索插槽：
+ * 它登记本域的路由、侧栏主面板和列表头搜索插槽：
  *
  * <ol>
  *   <li><b>插件路由</b>：/notes（列表）与 /notes/:id（笔记页面）；</li>
  *   <li><b>侧栏主面板</b>：新建/筛选/分组树/标签（原宿主 AppSidebar 的业务部分）；</li>
- *   <li><b>标题搜索</b>：列表页头按标题过滤；</li>
- *   <li><b>模糊搜索</b>：顶栏跨标题查询。两者随 notes 核心微应用一起装载。</li>
+ *   <li><b>标题搜索</b>：列表页头按标题过滤。</li>
  * </ol>
  *
  * <p>favorite ★ 与 memory-cycle 🧠 通过卡片工具/笔记工具/列表筛选插槽插进本域的视图 ——
@@ -54,7 +51,6 @@ function register(): void {
       return ids
     },
   })
-  registerTopbarSearch({ pluginId: PLUGIN_ID, component: GlobalSearch })
   registerPluginRoute({ pluginId: PLUGIN_ID, path: '/notes', name: 'notes', component: NoteView })
   registerPluginRoute({
     pluginId: PLUGIN_ID,

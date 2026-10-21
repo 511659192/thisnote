@@ -110,7 +110,7 @@ public class GraphifySettingsService {
         return OPENCODE_GO_PROVIDER.equals(name) ? "openai" : name;
     }
 
-    private String selectedProfileId() {
+    public String selectedProfileId() {
         String stored = settingsRepository.getAiProfileId();
         return stored == null ? "" : stored;
     }

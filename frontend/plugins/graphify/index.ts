@@ -5,7 +5,9 @@ import {
   registerNoteTool,
   registerPluginRoute,
   registerPluginSettings,
+  registerTopbarSearch,
 } from '@thisnote/plugin-api'
+import GraphifyNlpSearch from './src/components/GraphifyNlpSearch.vue'
 import GraphifyNoteTool from './src/components/GraphifyNoteTool.vue'
 import GraphifySettings from './src/components/GraphifySettings.vue'
 import {
@@ -25,6 +27,7 @@ function graphTagFromLocation(): string {
 
 function register(): void {
   registerPluginSettings({ pluginId: GRAPHIFY_PLUGIN_ID, component: GraphifySettings })
+  registerTopbarSearch({ pluginId: GRAPHIFY_PLUGIN_ID, component: GraphifyNlpSearch })
   registerNavEntry({
     pluginId: GRAPHIFY_PLUGIN_ID,
     label: '知识图谱',

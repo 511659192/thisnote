@@ -59,6 +59,18 @@ export interface GraphifyRelatedNotes {
   notes: GraphifyRelatedNote[]
 }
 
+export interface GraphifyNlpSearchNote {
+  noteId: string
+  title: string
+  reason: string
+}
+
+export interface GraphifyNlpSearchResponse {
+  available: boolean
+  answer: string
+  notes: GraphifyNlpSearchNote[]
+}
+
 export interface GraphifyGraphNode {
   id?: string
   label?: string
@@ -86,5 +98,6 @@ export const graphifyApi = {
   graphHtmlUrl: () => http.url(BASE + '/graph.html'),
   tags: () => http.get<Record<string, GraphifyNoteTags>>(BASE + '/tags'),
   related: (noteId: string) => http.get<GraphifyRelatedNotes>(BASE + '/related', { noteId }),
+  search: (query: string) => http.get<GraphifyNlpSearchResponse>(BASE + '/search', { query }),
   relabelCommunities: () => http.post<{ accepted: boolean }>(BASE + '/communities/relabel'),
 }

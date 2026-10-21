@@ -1,6 +1,7 @@
 package com.thisnote.ext.graphify;
 
 import com.thisnote.ext.graphify.client.GraphifyAiClient;
+import com.thisnote.ext.graphify.client.GraphifySearchAiClient;
 import com.thisnote.ext.graphify.listener.AttachmentChangedEventListener;
 import com.thisnote.ext.graphify.listener.CardChangedEventListener;
 import com.thisnote.ext.graphify.listener.GraphifyNoteContextFutureEventListener;
@@ -54,6 +55,7 @@ public class GraphifyPlugin
         indexService.setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(GraphifyGraphReader.class).setMainEventPublisher(getMainApplicationContext());
         ctx.getBean(GraphifyAiClient.class).setMainEventPublisher(getMainApplicationContext());
+        ctx.getBean(GraphifySearchAiClient.class).setMainEventPublisher(getMainApplicationContext());
 
         noteChangedEventListener = new NoteChangedEventListener(indexService);
         cardChangedEventListener = new CardChangedEventListener(indexService);
