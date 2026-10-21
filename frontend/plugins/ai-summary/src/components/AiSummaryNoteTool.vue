@@ -264,7 +264,7 @@ onBeforeUnmount(() => {
 .summary-hint,
 .summary-error {
   margin: 0;
-  font-size: 0.87em;
+  font-size: 1em;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }

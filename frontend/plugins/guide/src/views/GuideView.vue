@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   host,
   pluginApi,
+  setActiveListFilter,
   type PluginInfo,
 } from '@thisnote/plugin-api'
 import {
@@ -12,6 +13,14 @@ import {
 import createGroupImage from '../assets/create-group.png?inline'
 import createNoteImage from '../assets/create-note.png?inline'
 import reviewImage from '../assets/review.png?inline'
+import searchNavImage from '../assets/search-nav.png?inline'
+import favoriteNavImage from '../assets/favorite-nav.png?inline'
+import settingsPluginsImage from '../assets/settings-plugins.png?inline'
+import tagsSettingsImage from '../assets/tags-settings.png?inline'
+import graphifySettingsImage from '../assets/graphify-settings.png?inline'
+import dataSafetyImage from '../assets/data-safety.png?inline'
+import importersImage from '../assets/importers.png?inline'
+import dangerImage from '../assets/danger.png?inline'
 
 const STEP_KEY = 'thisnote.guide.step'
 const MANUAL_PREFIX = 'thisnote.guide.task.'
@@ -166,6 +175,8 @@ const stepTasks = computed<GuideTask[]>(() => [
   ...advancedTasks.value,
 ])
 const currentStepId = ref(localStorage.getItem(STEP_KEY) ?? '')
+const stepPanelRef = ref<HTMLElement | null>(null)
+const imagePreview = ref<{ src: string; alt: string; caption: string } | null>(null)
 const currentStepIndex = computed(() => {
   const index = stepTasks.value.findIndex((task) => task.id === currentStepId.value)
   return index >= 0 ? index : 0
@@ -214,9 +225,41 @@ function progressOf(tasks: GuideTask[]) {
   }
 }
 
-function selectStep(id: string) {
+function progressPercent(progress: { done: number; total: number }) {
+  return progress.total ? Math.round(progress.done / progress.total * 100) : 0
+}
+
+async function selectStep(id: string) {
   currentStepId.value = id
   localStorage.setItem(STEP_KEY, id)
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(id)}"]`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'nearest',
+    inline: 'center',
+  })
+  if (window.innerWidth <= 760) stepPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function onStepBodyClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const figure = target?.closest<HTMLElement>('.guide-shot')
+  const image = figure?.querySelector<HTMLImageElement>('img')
+  if (!figure || !image) return
+  imagePreview.value = {
+    src: image.src,
+    alt: image.alt,
+    caption: figure.querySelector('figcaption')?.textContent?.trim() ?? '',
+  }
+  document.body.style.overflow = 'hidden'
+}
+function closeImagePreview() {
+  imagePreview.value = null
+  document.body.style.overflow = ''
+}
+
+function onGuideKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && imagePreview.value) closeImagePreview()
 }
 
 function previousStep() {
@@ -230,7 +273,7 @@ async function nextStep() {
     selectStep(next.id)
     return
   }
-  openBrowserTab('/notes')
+  navigate('/notes')
 }
 
 function manualKey(id: string) {
@@ -269,13 +312,13 @@ async function refresh() {
 
 function go(path: string, taskId?: string) {
   if (taskId) markManual(taskId)
-  openBrowserTab(path)
+  navigate(path)
 }
 
-function openBrowserTab(path: string) {
-  const base = window.location.href.split('#')[0]
-  window.open(`${base}#${path}`, '_blank', 'noopener,noreferrer')
+function navigate(path: string) {
+  window.location.hash = path.startsWith('/') ? path : '/' + path
 }
+
 
 async function runAction(task: GuideTask) {
   if (!task.action) return
@@ -285,19 +328,27 @@ async function runAction(task: GuideTask) {
       break
     case 'route':
       markManual(task.id)
-      openBrowserTab(task.action.route)
+      navigate(task.action.route)
       break
     case 'open-favorites':
       markManual('favorite')
-      openBrowserTab('/notes')
+      setActiveListFilter('favorite', 'favorites')
+      navigate('/notes')
       break
   }
 }
 
 onMounted(async () => {
+  document.addEventListener('keydown', onGuideKeydown)
   loadManual()
   await refresh()
 })
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onGuideKeydown)
+  document.body.style.overflow = ''
+})
+
 </script>
 
 <template>
@@ -305,7 +356,7 @@ onMounted(async () => {
     <header class="guide-head">
       <div>
         <p class="eyebrow">thisnote / getting started</p>
-        <h1>从这里开始</h1>
+        <h1 id="guide-title">从这里开始</h1>
         <p class="lead">先完成一条真实笔记的闭环，再按需了解插件和进阶能力。指南不会自动修改你的数据。</p>
       </div>
       <div class="head-actions">
@@ -315,13 +366,19 @@ onMounted(async () => {
     </header>
 
     <div class="progress-strip">
-      <div>
-        <span class="progress-label">基础上手</span>
-        <strong>{{ basicProgress.done }} / {{ basicProgress.total }}</strong>
+      <div class="progress-item">
+        <div class="progress-row">
+          <span class="progress-label">基础上手</span>
+          <strong>{{ basicProgress.done }} / {{ basicProgress.total }}</strong>
+        </div>
+        <div class="progress-bar" aria-hidden="true"><span :style="{ width: progressPercent(basicProgress) + '%' }"></span></div>
       </div>
-      <div>
-        <span class="progress-label">可选功能</span>
-        <strong>{{ optionalProgress.done }} / {{ optionalProgress.total }}</strong>
+      <div class="progress-item">
+        <div class="progress-row">
+          <span class="progress-label">可选功能</span>
+          <strong>{{ optionalProgress.done }} / {{ optionalProgress.total }}</strong>
+        </div>
+        <div class="progress-bar" aria-hidden="true"><span :style="{ width: progressPercent(optionalProgress) + '%' }"></span></div>
       </div>
       <span class="progress-hint">进阶帮助不阻塞基础进度</span>
     </div>
@@ -339,6 +396,7 @@ onMounted(async () => {
           class="rail-step"
           :class="{ active: task.id === currentTask?.id, done: task.done }"
           @click="selectStep(task.id)"
+          :data-step-id="task.id"
         >
           <span class="rail-index">{{ String(index + 1).padStart(2, '0') }}</span>
           <span class="rail-copy">
@@ -349,7 +407,7 @@ onMounted(async () => {
         </button>
       </nav>
 
-      <section v-if="currentTask" class="step-panel">
+      <section v-if="currentTask" ref="stepPanelRef" class="step-panel">
         <header class="step-head">
           <div class="step-meta">
             <span>{{ currentSectionLabel }}</span>
@@ -370,8 +428,49 @@ onMounted(async () => {
           <p v-if="currentTask.detail" class="task-detail">{{ currentTask.detail }}</p>
         </header>
 
-        <div class="step-body">
+        <div class="step-body" @click="onStepBodyClick">
+          <figure v-if="currentTask.id === 'plugins'" class="guide-shot detail">
+            <img :src="settingsPluginsImage" alt="插件管理页面中的插件卡片和设置入口" />
+            <figcaption>插件管理页集中展示启停状态和设置入口；点击「设置」会展开并定位到对应插件。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'search'" class="guide-shot wide">
+            <img :src="searchNavImage" alt="顶栏模糊搜索和列表标题搜索" />
+            <figcaption>顶栏用于跨笔记模糊搜索；列表顶部搜索只过滤当前标题列表。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'favorite'" class="guide-shot compact">
+            <img :src="favoriteNavImage" alt="侧栏收藏入口" />
+            <figcaption>收藏不是独立页面；在笔记行的星标按钮收藏后，从侧栏「收藏」筛选查看。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'tags'" class="guide-shot detail">
+            <img :src="tagsSettingsImage" alt="标签插件设置页中的模型和标签字号配置" />
+            <figcaption>标签插件设置页可配置 AI completion、标签字号和自动抽取开关。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'graphify'" class="guide-shot detail">
+            <img :src="graphifySettingsImage" alt="Graphify 插件设置页" />
+            <figcaption>Graphify 使用 AI 插件提供的模型配置；首次索引需要手动启动并可能产生 Provider 费用。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'data-safety'" class="guide-shot detail">
+            <img :src="dataSafetyImage" alt="插件管理中的百度网盘同步插件" />
+            <figcaption>百度网盘同步用于保持文件一致；本地文件仍是唯一权威，网盘副本不是历史版本备份。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'importers'" class="guide-shot detail">
+            <img :src="importersImage" alt="插件管理中的卡片导入和附件导入插件" />
+            <figcaption>卡片导入与附件导入在后台运行；启用后请检查扫描间隔和导入目录设置。</figcaption>
+          </figure>
+
+          <figure v-if="currentTask.id === 'danger'" class="guide-shot detail">
+            <img :src="dangerImage" alt="插件状态重置设置面板" />
+            <figcaption>删除和插件状态重置都不可撤销；执行前先确认本地文件与同步基线。</figcaption>
+          </figure>
+
           <div v-if="currentTask.id === 'group-note'" class="guide-shot-pair">
+
             <figure class="guide-shot">
               <img :src="createGroupImage" alt="侧栏全部笔记右侧的新建分组按钮" />
               <figcaption>先在侧栏红框位置创建分组，新分组会显示在「全部笔记」下方。</figcaption>
@@ -414,6 +513,16 @@ onMounted(async () => {
         </footer>
       </section>
     </main>
+
+    <Teleport to="body">
+      <div v-if="imagePreview" class="guide-image-modal" role="dialog" aria-modal="true" @click.self="closeImagePreview">
+        <figure class="guide-image-dialog">
+          <button type="button" class="guide-image-close" aria-label="关闭图片预览" @click="closeImagePreview">×</button>
+          <img :src="imagePreview.src" :alt="imagePreview.alt" />
+          <figcaption v-if="imagePreview.caption">{{ imagePreview.caption }}</figcaption>
+        </figure>
+      </div>
+    </Teleport>
 
   </div>
 </template>
@@ -467,10 +576,29 @@ onMounted(async () => {
   border-bottom: 1px solid var(--c-border);
   background: var(--c-surface-2);
 }
-.progress-strip > div {
+.progress-item {
+  display: grid;
+  gap: 4px;
+  min-width: 135px;
+}
+.progress-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
+}
+.progress-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--c-border);
+}
+.progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
 .progress-label,
 .progress-hint {
@@ -485,30 +613,37 @@ onMounted(async () => {
   margin-left: auto;
 }
 .guide-content {
-  max-width: 1180px;
-  margin: 0 auto;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
   padding: 26px clamp(18px, 4vw, 54px) 80px;
+  overflow: auto;
 }
 .wizard-layout {
-  display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  align-items: start;
-  gap: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
 }
 .step-rail {
-  position: sticky;
-  top: 14px;
-  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  overflow-x: auto;
   border: 1px solid var(--c-border);
   border-radius: 8px;
   background: var(--c-surface);
+  scrollbar-width: thin;
 }
 .rail-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex: 0 0 86px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--c-border);
+  border-right: 1px solid var(--c-border);
   color: var(--c-text-3);
   font-size: 12px;
 }
@@ -518,19 +653,20 @@ onMounted(async () => {
 .rail-step {
   display: grid;
   grid-template-columns: 27px minmax(0, 1fr) auto;
+  flex: 0 0 170px;
   gap: 8px;
   align-items: center;
-  width: 100%;
+  min-height: 56px;
   padding: 8px 10px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent);
   background: transparent;
   color: var(--c-text-2);
   text-align: left;
   cursor: pointer;
 }
 .rail-step:last-child {
-  border-bottom: 0;
+  border-right: 0;
 }
 .rail-step:hover {
   background: var(--c-surface-2);
@@ -565,7 +701,7 @@ onMounted(async () => {
 }
 .step-panel {
   display: flex;
-  min-height: 560px;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--c-border);
@@ -650,10 +786,10 @@ onMounted(async () => {
 }
 .guide-shot-pair {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.6fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
-  max-width: 820px;
+  gap: 14px;
+  max-width: 100%;
   margin-bottom: 18px;
 }
 .guide-shot-pair .guide-shot {
@@ -661,7 +797,8 @@ onMounted(async () => {
   margin: 0;
 }
 .guide-shot {
-  max-width: 820px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 0 18px;
   overflow: hidden;
   border: 1px solid var(--c-border);
@@ -672,9 +809,30 @@ onMounted(async () => {
   display: block;
   width: auto;
   max-width: 100%;
+  max-height: 560px;
   height: auto;
   margin: 0 auto;
+  object-fit: contain;
 }
+.guide-shot.detail {
+  width: min(900px, 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.guide-shot.detail img {
+  width: 100%;
+  max-height: none;
+}
+
+.guide-shot.compact {
+  max-width: 360px;
+}
+
+.guide-shot.wide img {
+  width: 100%;
+}
+
 .guide-shot figcaption {
   padding: 9px 12px;
   border-top: 1px solid var(--c-border);
@@ -689,6 +847,9 @@ onMounted(async () => {
   color: var(--c-text-3);
 }
 @media (max-width: 760px) {
+  .guide-content {
+    padding: 12px 16px 18px;
+  }
   .guide-head {
     flex-direction: column;
     gap: 12px;
@@ -702,23 +863,19 @@ onMounted(async () => {
     margin-left: 0;
   }
   .wizard-layout {
-    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
   .step-rail {
-    position: static;
-    display: flex;
-    overflow-x: auto;
+    border-radius: 0;
   }
   .rail-head {
     display: none;
   }
   .rail-step {
-    min-width: 180px;
-    border-right: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent);
-    border-bottom: 0;
+    flex-basis: 180px;
   }
   .step-panel {
-    min-height: 460px;
+    min-height: 0;
   }
   .step-head {
     padding: 18px 16px 14px;
@@ -746,4 +903,68 @@ onMounted(async () => {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.guide-shot {
+  cursor: zoom-in;
+}
+
+.guide-shot:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--c-border));
+}
+
+.guide-image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 68%);
+  backdrop-filter: blur(3px);
+}
+
+.guide-image-dialog {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  max-width: min(1400px, 94vw);
+  max-height: 90vh;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.guide-image-dialog img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(90vh - 100px);
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.guide-image-dialog figcaption {
+  color: var(--c-text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.guide-image-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--c-border);
+  border-radius: 50%;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 20px;
+  cursor: pointer;
+}
+
 </style>

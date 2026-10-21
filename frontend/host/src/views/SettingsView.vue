@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ConfirmDialog,
@@ -29,7 +29,6 @@ const confirmation = ref<{
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
 const openPlugins = ref<Set<string>>(new Set())
-let defaultPluginPanelsOpened = false
 const notesRootDir = ref('')
 const activeTab = ref<'storage' | 'plugins'>('storage')
 
@@ -112,15 +111,6 @@ interface NotesRootSettings {
 async function refreshPlugins() {
   try {
     plugins.value = await pluginApi.list()
-    if (!defaultPluginPanelsOpened) {
-      const configured = plugins.value
-        .filter((plugin) => Boolean(pluginSettings(plugin.id)))
-        .map((plugin) => plugin.id)
-      if (configured.length) {
-        openPlugins.value = new Set(configured)
-        defaultPluginPanelsOpened = true
-      }
-    }
   } catch {
     plugins.value = []
   }
@@ -214,7 +204,7 @@ function isPluginOpen(pluginId: string): boolean {
   return openPlugins.value.has(pluginId)
 }
 
-function togglePluginPanel(plugin: PluginInfo) {
+async function togglePluginPanel(plugin: PluginInfo) {
   const next = new Set(openPlugins.value)
   if (next.has(plugin.id)) {
     next.delete(plugin.id)
@@ -222,6 +212,11 @@ function togglePluginPanel(plugin: PluginInfo) {
     next.add(plugin.id)
   }
   openPlugins.value = next
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-plugin-id="${CSS.escape(plugin.id)}"]`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
 }
 
 async function refresh() {
@@ -312,8 +307,8 @@ onMounted(async () => {
 
         <div v-if="!plugins.length" class="small muted">没有已注册的插件。</div>
 
-        <div v-if="plugins.length" class="plugin-list">
-          <div v-for="plugin in plugins" :key="plugin.id" class="plugin-card">
+        <div v-if="plugins.length" class="plugin-list" :class="{ 'has-expanded': openPlugins.size > 0 }">
+          <div v-for="plugin in plugins" :key="plugin.id" class="plugin-card" :class="{ expanded: isPluginOpen(plugin.id) }" :data-plugin-id="plugin.id">
             <div class="plugin-head">
               <!-- 只有「不可停用」的插件需要一枚徽标；其余没有分类标签（分类由插槽事实决定，不靠声明） -->
               <span v-if="plugin.undeactivatable" class="kind kind-core">核心</span>
@@ -538,10 +533,14 @@ onMounted(async () => {
 }
 
 .plugin-list {
-  column-count: 5;
-  column-width: auto;
+  column-count: 4;
   column-gap: var(--space-3);
   margin-top: var(--space-3);
+}
+.plugin-list.has-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 .plugin-card {
   display: inline-block;
@@ -557,6 +556,16 @@ onMounted(async () => {
   -webkit-column-break-inside: avoid;
   page-break-inside: avoid;
 }
+.plugin-list.has-expanded .plugin-card {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+.plugin-card.expanded {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--c-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .plugin-head {
   display: flex;
   align-items: center;
@@ -596,6 +605,7 @@ onMounted(async () => {
   gap: 6px;
   margin: var(--space-1) 0 0;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .plugin-desc-paragraph {
   margin: 0;
@@ -631,6 +641,7 @@ onMounted(async () => {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px dashed var(--c-border);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1700px) {

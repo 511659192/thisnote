@@ -88,12 +88,17 @@ watch(
 
 <style scoped>
 .related-notes {
+  box-sizing: border-box;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 4px 8px;
   width: 100%;
   min-width: 0;
+  padding: 5px 7px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
 }
 
 .related-toggle {

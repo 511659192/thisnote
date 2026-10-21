@@ -21,6 +21,7 @@ const hasTags = computed(() => tags.value.length > 0)
 const tagSummary = computed(() => tags.value.join('；'))
 const autoAttempted = new Set<string>()
 let autoPollVersion = 0
+let collapseInitialized = false
 const availableTags = computed(() => {
   const query = draft.value.trim().toLocaleLowerCase('zh-CN')
   const selected = new Set(tags.value)
@@ -34,6 +35,10 @@ async function ensureTagState(): Promise<void> {
     const [, settings] = await Promise.all([loadTagState(true), tagsApi.settings()])
     autoEnabled.value = settings.autoEnabled
     fontSize.value = typeof settings.fontSize === 'number' && Number.isInteger(settings.fontSize) && settings.fontSize >= 10 && settings.fontSize <= 32 ? settings.fontSize : 15
+    if (!collapseInitialized) {
+      collapseInitialized = true
+      collapsed.value = tags.value.length > 8
+    }
     loadError.value = ''
     if (autoEnabled.value && !autoAttempted.has(props.noteId) && tags.value.length < AUTO_TAG_MIN) {
       autoAttempted.add(props.noteId)
@@ -54,6 +59,7 @@ function closeOnOutsidePointerDown(event: PointerEvent): void {
   const target = event.target
   if (target instanceof Node && root.value?.contains(target)) return
   open.value = false
+  collapseInitialized = false
 }
 
 onMounted(() => {
@@ -184,6 +190,7 @@ async function removeTag(tag: string): Promise<void> {
     >
       <span class="tag-glyph" aria-hidden="true">🏷</span>
       <span>标签</span>
+      <span v-if="hasTags" class="tag-count">{{ tags.length }}</span>
     </button>
     <button
       v-if="hasTags"
@@ -194,6 +201,16 @@ async function removeTag(tag: string): Promise<void> {
       :aria-label="collapsed ? '展开标签' : '收起标签'"
       @click.stop="toggleCollapsed"
     >{{ collapsed ? '▸' : '▾' }}</button>
+    <button
+      v-if="!autoEnabled || tags.length < AUTO_TAG_MIN"
+      type="button"
+      class="auto-inline"
+      :disabled="busy"
+      :title="autoEnabled ? '自动抽取标签' : '手动抽取标签'"
+      :aria-label="autoEnabled ? '自动抽取标签' : '手动抽取标签'"
+      @click.stop="autoExtractTags"
+    >✦</button>
+
 
     <span
       v-if="hasTags && !collapsed"
@@ -210,16 +227,6 @@ async function removeTag(tag: string): Promise<void> {
       >{{ tag }}</span>
     </span>
     <span v-else-if="loadError" class="load-error" :title="loadError">标签加载失败</span>
-    <button
-      v-if="!autoEnabled || tags.length < AUTO_TAG_MIN"
-      type="button"
-      class="auto-inline"
-      :disabled="busy"
-      :title="autoEnabled ? '自动抽取标签' : '手动抽取标签'"
-      :aria-label="autoEnabled ? '自动抽取标签' : '手动抽取标签'"
-      @click.stop="autoExtractTags"
-    >✦</button>
-
     <div v-if="open" class="tag-popover" @click.stop>
       <div class="popover-heading">
         <strong>标签</strong>
@@ -291,6 +298,18 @@ async function removeTag(tag: string): Promise<void> {
   font-size: var(--tag-font-size, 15px);
 }
 
+.tag-count {
+  min-width: 16px;
+  padding: 0 4px;
+  color: var(--c-text-muted, #8b9098);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 0.68em;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .tag-strip {
   display: inline-flex;
   flex-wrap: wrap;
@@ -349,8 +368,8 @@ async function removeTag(tag: string): Promise<void> {
   height: 22px;
   padding: 0;
   color: var(--accent, #6258d5);
-  background: transparent;
-  border: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
   border-radius: 50%;
   font-size: 13px;
   cursor: pointer;
@@ -439,8 +458,9 @@ async function removeTag(tag: string): Promise<void> {
   gap: 3px;
   max-width: 100%;
   padding: 2px 6px;
+  border: 1px solid var(--c-border);
   border-radius: 10px;
-  font-size: 0.8em;
+  font-size: 1em;
   overflow-wrap: anywhere;
   color: var(--c-text);
   background: var(--c-surface);
@@ -449,7 +469,7 @@ async function removeTag(tag: string): Promise<void> {
 .tag.suggestion {
   border: 1px solid var(--c-border);
   font: inherit;
-  font-size: 0.8em;
+  font-size: 1em;
   cursor: pointer;
 }
 
