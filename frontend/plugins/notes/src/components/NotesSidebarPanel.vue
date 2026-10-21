@@ -41,6 +41,7 @@ const collapsed = computed(() => shellState.sidebarCollapsed)
 
 /** 当前是否停在某个插件页面上：入口与核心视图同级，同一时刻只该有一行是亮的。 */
 const isPluginPage = computed(() => pluginNav.value.some((entry) => route.path === entry.to))
+const isSettingsPage = computed(() => route.name === 'settings')
 const badges = ref<Record<string, number>>({})
 let unsubscribePluginState: (() => void) | null = null
 
@@ -128,7 +129,7 @@ function openBook(id: string) {
   void router.push('/notes')
 }
 
-function openPluginEntry(path: string) {
+function openNavRoute(path: string) {
   void router.push(path)
 }
 
@@ -290,7 +291,7 @@ watch(
       <div v-if="!collapsed" class="group-title">笔记</div>
       <button
         class="nav-item"
-        :class="{ active: !isPluginPage && !nodes.activeBookId && !activePluginFilter }"
+        :class="{ active: !isSettingsPage && !isPluginPage && !nodes.activeBookId && !activePluginFilter }"
         @click="openAll()"
         :title="collapsed ? '全部笔记' : undefined"
       >
@@ -316,7 +317,7 @@ watch(
             v-for="group in nodes.books"
             :key="group.id"
             class="nav-item group-item"
-            :class="{ active: nodes.activeBookId === group.id, 'drop-target': dragOverGroupId === group.id }"
+            :class="{ active: !isSettingsPage && nodes.activeBookId === group.id, 'drop-target': dragOverGroupId === group.id }"
             :title="group.title"
             @click="openBook(group.id)"
             @contextmenu.prevent="onGroupContext($event, group)"
@@ -333,7 +334,7 @@ watch(
         v-for="pf in pluginFilters"
         :key="pf.id"
         class="nav-item"
-        :class="{ active: !isPluginPage && activePluginFilter?.pluginId === pf.pluginId && activePluginFilter?.id === pf.id }"
+        :class="{ active: !isSettingsPage && !isPluginPage && activePluginFilter?.pluginId === pf.pluginId && activePluginFilter?.id === pf.id }"
         @click="openPluginFilter(pf)"
       >
         <span class="ico" :title="collapsed ? pf.label : undefined">{{ pf.icon || '★' }}</span>
@@ -341,23 +342,36 @@ watch(
       </button>
 
       <!--
-        插件贡献的入口（复习 / 收藏…）与上面的核心视图**同一层级**：同样的行、同样的选中态、
-        同样的计数位 —— 还原拆分前的展示形式。核心依旧不认识任何一个具体插件。
+        功能入口：插件页面与设置放在同一分组，设置固定在组内最后一行；
+        行样式和计数位保持与核心导航一致。
       -->
-      <button
-        v-for="entry in pluginNav"
-        :key="entry.pluginId"
-        type="button"
-        class="nav-item plugin-entry"
-        :class="{ active: route.path === entry.to }"
-        @click="openPluginEntry(entry.to)"
-      >
-        <span class="ico" :title="collapsed ? entry.label : undefined">{{ entry.glyph }}</span>
-        <span v-if="!collapsed" class="label">{{ entry.label }}</span>
-        <span v-if="(badges[entry.pluginId] ?? 0) > 0" class="count">
-          {{ (badges[entry.pluginId] ?? 0) > 50 ? '50+' : badges[entry.pluginId] }}
-        </span>
-      </button>
+      <div class="plugin-section">
+        <div v-if="!collapsed" class="group-title">功能</div>
+        <button
+          v-for="entry in pluginNav"
+          :key="entry.pluginId"
+          type="button"
+          class="nav-item plugin-entry"
+          :class="{ active: route.path === entry.to }"
+          @click="openNavRoute(entry.to)"
+        >
+          <span class="ico" :title="collapsed ? entry.label : undefined">{{ entry.glyph }}</span>
+          <span v-if="!collapsed" class="label">{{ entry.label }}</span>
+          <span v-if="(badges[entry.pluginId] ?? 0) > 0" class="count">
+            {{ (badges[entry.pluginId] ?? 0) > 50 ? '50+' : badges[entry.pluginId] }}
+          </span>
+        </button>
+        <button
+          type="button"
+          class="nav-item settings-entry"
+          :class="{ active: isSettingsPage }"
+          :title="collapsed ? '设置' : undefined"
+          @click="openNavRoute('/settings')"
+        >
+          <span class="ico" :title="collapsed ? '设置' : undefined">⚙</span>
+          <span v-if="!collapsed" class="label">设置</span>
+        </button>
+      </div>
 
     </nav>
   </aside>
@@ -408,6 +422,14 @@ watch(
   padding-bottom: var(--space-3);
 }
 
+.plugin-section {
+  margin-top: var(--space-3);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--c-border);
+}
+.plugin-section .group-title {
+  padding-top: 0;
+}
 .group-title {
   display: flex;
   align-items: center;

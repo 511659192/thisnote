@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '@/stores/notes'
 import {
@@ -11,6 +11,7 @@ import {
   modifierLabel,
   onNoteTitleChange,
   request,
+  setActiveListFilter,
   toast,
 } from '@thisnote/plugin-api'
 import { usePageStore } from '@/stores/notePage'
@@ -51,6 +52,19 @@ const allowNoteManagement = computed(() => {
   )
   return !filter?.hideNoteManagement
 })
+
+function applyFilterQuery() {
+  const value = typeof route.query.filter === 'string' ? route.query.filter : ''
+  if (!value) return
+  const [pluginId, filterId] = value.split(':', 2)
+  const registered = activeNoteListFilters().some((item) => item.pluginId === pluginId && item.id === filterId)
+  if (!pluginId || !filterId || !registered) {
+    console.warn('[notes] 忽略无效的列表筛选链接', { filter: value })
+    return
+  }
+  setActiveListFilter(pluginId, filterId)
+  console.info('[notes] 已应用列表筛选链接', { pluginId, filterId })
+}
 const {
   renaming,
   titleDraft,
@@ -238,10 +252,26 @@ function onNodeContext(payload: { node: NoteDto; x: number; y: number }) {
 
 // ---------------------------------------------------------------- shortcuts
 
+async function createNoteFromShortcut() {
+  const shortcut = `${modifierLabel()}+N`
+  const bookId = nodes.activeBookId
+  const created = await nodes.createNode({ bookId: bookId ?? undefined })
+  if (!created) {
+    console.warn('[notes] 快捷键新建笔记失败', { shortcut, bookId })
+    return
+  }
+  console.info('[notes] 快捷键已新建笔记', { shortcut, noteId: created.noteId, bookId: created.bookId ?? null })
+  await router.push(`/notes/${created.noteId}`)
+}
+
 function onKeydown(e: KeyboardEvent) {
   const primary = navigator.platform.toLowerCase().includes('mac') ? e.metaKey : e.ctrlKey
   const target = e.target as HTMLElement
   const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable
+  if (primary && !e.repeat && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n' && allowNoteManagement.value) {
+    e.preventDefault()
+    void createNoteFromShortcut()
+  }
   if (primary && e.key.toLowerCase() === 's' && !typing) {
     e.preventDefault()
     void pageRef.value?.finishEditing()
@@ -273,11 +303,14 @@ onMounted(() => {
     if (renaming.value) cancelRename()
     page.noteTitle = change.title
   })
+  applyFilterQuery()
   void applyRoute()
   void loadNoteFontSize()
   // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })
+watch(() => route.query.filter, applyFilterQuery)
+
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)

@@ -7,13 +7,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
 /**
- * 首次启动时为真正空的数据目录补齐索引；任何已有内容都不会被覆盖。
+ * Creates the note directory skeleton and missing empty indexes without overwriting existing content.
  */
 @Service
 @RequiredArgsConstructor
@@ -24,33 +25,43 @@ public class StorageInitializationService {
     private final FileHelper fileHelper;
 
     public synchronized void initialize() {
-        Path root = notesConfig.getRootDir();
+        initialize(notesConfig.getDataRoot(), true);
+    }
+
+    public synchronized void initializeDataRoot(Path dataRoot) {
+        initialize(dataRoot, false);
+    }
+
+    private void initialize(Path dataRoot, boolean publishEvents) {
+        Path normalizedDataRoot = dataRoot.toAbsolutePath().normalize();
+        Path root = normalizedDataRoot.resolve("notes");
         Path cards = root.resolve("cards");
         Path attachments = root.resolve("attachments");
         Path pluginDir = root.resolve("plugins").resolve("notes");
-        log.info("开始初始化笔记存储：root={}", root);
+        log.info("开始初始化笔记存储：dataRoot={}, notesRoot={}", normalizedDataRoot, root);
         try {
             Files.createDirectories(cards);
             Files.createDirectories(root.resolve("book"));
             Files.createDirectories(attachments);
             Files.createDirectories(pluginDir);
         } catch (IOException e) {
-            log.error("创建笔记数据目录失败：root={}", root, e);
-            throw new IllegalStateException("无法创建笔记数据目录：" + root, e);
+            log.error("创建笔记数据目录失败：dataRoot={}, notesRoot={}", normalizedDataRoot, root, e);
+            throw new IllegalStateException("无法创建笔记数据目录：" + normalizedDataRoot, e);
         }
 
         boolean hasCards = contains(cards, ".md");
         boolean hasAttachments = contains(attachments, ".png", ".jpg", ".jpeg", ".webp");
-        boolean noteIndexCreated = initializeIndex(pluginDir.resolve(".note-metadata.json"), hasCards, "卡片正文");
-        boolean cardIndexCreated = initializeIndex(pluginDir.resolve(".card-metadata.json"), hasCards, "卡片正文");
-        boolean attachmentIndexCreated = initializeIndex(pluginDir.resolve(".attachment-metadata.json"), hasAttachments, "附件文件");
-        log.info("笔记存储初始化完成：root={}, noteIndexCreated={}, cardIndexCreated={}, attachmentIndexCreated={}",
-                root, noteIndexCreated, cardIndexCreated, attachmentIndexCreated);
+        boolean noteIndexCreated = initializeIndex(pluginDir.resolve(".note-metadata.json"), hasCards, "卡片正文", publishEvents);
+        boolean cardIndexCreated = initializeIndex(pluginDir.resolve(".card-metadata.json"), hasCards, "卡片正文", publishEvents);
+        boolean attachmentIndexCreated = initializeIndex(pluginDir.resolve(".attachment-metadata.json"), hasAttachments, "附件文件", publishEvents);
+        log.info("笔记存储初始化完成：dataRoot={}, notesRoot={}, noteIndexCreated={}, cardIndexCreated={}, attachmentIndexCreated={}",
+                normalizedDataRoot, root, noteIndexCreated, cardIndexCreated, attachmentIndexCreated);
     }
 
     private boolean initializeIndex(Path file,
                                     boolean hasContent,
-                                    String contentLabel) {
+                                    String contentLabel,
+                                    boolean publishEvents) {
         if (Files.exists(file)) {
             log.debug("索引已存在，跳过初始化：file={}", file);
             return false;
@@ -61,7 +72,16 @@ public class StorageInitializationService {
             throw new IllegalStateException("数据目录已有" + contentLabel + "，但索引缺失：" + file
                     + "。为避免破坏已有数据，已停止自动初始化，请先恢复索引或备份数据。");
         }
-        fileHelper.fileWritten(file, "{}");
+        if (publishEvents) {
+            fileHelper.fileWritten(file, "{}");
+        } else {
+            try {
+                Files.writeString(file, "{}", StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                log.error("创建空索引失败：file={}", file, e);
+                throw new IllegalStateException("无法创建空索引：" + file, e);
+            }
+        }
         log.info("已创建空索引：file={}", file);
         return true;
     }

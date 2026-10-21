@@ -103,6 +103,16 @@ public final class FileHelper {
         publishFileChange(previouslyExisted ? FileChangeEvent.Operation.UPDATED : FileChangeEvent.Operation.CREATED, file, null);
     }
 
+    /**
+     * Registers a change produced by an external process without touching the file bytes.
+     */
+    public void fileChanged(Path file,
+                            FileChangeEvent.Operation operation) {
+        log.info("外部文件变更已登记：sourcePluginId={}, operation={}, path={}",
+                sourcePluginId, operation, file.toAbsolutePath().normalize());
+        publishFileChange(operation, file, null);
+    }
+
     public boolean fileDeleted(Path file) {
         try {
             boolean deleted = Files.deleteIfExists(file);

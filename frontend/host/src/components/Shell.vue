@@ -51,14 +51,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       >
         {{ ui.theme === 'dark' ? '☀' : '☾' }}
       </button>
-      <button
-        class="btn ghost icon"
-        :class="{ active: $route.name === 'settings' }"
-        :title="$route.name === 'settings' ? '关闭设置，返回笔记' : '设置'"
-        @click="$route.name === 'settings' ? $router.push('/notes') : $router.push('/settings')"
-      >
-        ⚙
-      </button>
     </header>
 
     <div class="body">

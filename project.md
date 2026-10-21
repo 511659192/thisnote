@@ -41,7 +41,7 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 | 界面 dev server | `5173`，`/api` 代理到 45917（`THISNOTE_BACKEND` 可覆盖目标） | `frontend/host/vite.config.ts:63-73` |
 | 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120`、guide `7121`、ai-summary `7122`、ai-title `7123` | `frontend/host/src/plugins/devPorts.ts` |
 | 后端插件模块数 | 13（notes + ai + 11 个功能插件） | `backend/pom.xml` |
-| 数据根目录 | `${thisnote.data-root:${user.home}/.thisnote}` → 笔记根 = `<data-root>/notes` | `backend/plugins/notes/src/main/java/com/thisnote/ext/notes/config/NotesConfig.java:18-20` |
+| 数据根目录 | 启动时优先读取 `~/.thisnote/settings.json` 的 `dataRoot`，否则用 `${thisnote.data-root:${user.home}/.thisnote}`；笔记根 = `<data-root>/notes`，修改后重启生效 | `DataRootSettings.java`; `NotesConfig.java:18-22` |
 | 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
@@ -295,8 +295,11 @@ host（qiankun 主应用，:5173）
   卡片 md 与附件等内容文件保持原命名。
 - **空 notes 索引必须保留为空 JSON**：`.note-metadata.json`、`.card-metadata.json`、
   `.attachment-metadata.json` 缺失会被 `FileHelper.readMapIndex` 判定为损坏，手工清库后应写回 `{}`。
-- **首次启动初始化**：notes 启动时创建 `cards/book/attachments/plugins/notes`，仅在数据目录确实为空时补写
+- **存储初始化**：notes 启动时初始化当前数据根，设置页保存新根目录时也会初始化目标目录；均创建
+  `notes/cards`、`notes/book`、`notes/attachments`、`notes/plugins/notes`。仅在数据目录确实为空时补写
   三个空 JSON 索引；已有卡片或附件但索引缺失时停止初始化并报错，不覆盖现场。
+- **数据根切换**：`~/.thisnote/settings.json` 是启动引导配置，不属于笔记内容；显式 `THISNOTE_DATA_ROOT` 或 `--thisnote.data-root` 优先。保存新根目录后当前进程继续使用
+  `activeDataRoot`，重启后笔记与全部插件状态统一切换到新根。
 - **卡片文件格式**：md 只存正文，没有首行元数据注释；元数据（几何、归属…）在
   `notes/plugins/notes/.card-metadata.json` 的 `cardId → meta` 里，`CardMeta` 字段不变
   （`CardPO.java:50-70`），文件名就是 `meta.sourceFileName`。几何下限 `MIN_W=240 / MIN_H=88`（`CardRepository.java:27-28`）。
@@ -359,8 +362,9 @@ host（qiankun 主应用，:5173）
 | POST | `/api/notes/attachments/upload` | multipart `file`，返回 `../attachments/<name>` |
 | GET | `/api/notes/attachments/get?fileName=` | 读图（`no-cache` + `nosniff`） |
 | POST | `/api/notes/attachments/delete?fileName=` | 无引用才删 |
-| GET | `/api/notes/settings/get` | 笔记根目录与正文字号（`rootDir/activeRootDir/restartRequired/fontSize`） |
+| GET | `/api/notes/settings/get` | 数据根、笔记目录、重启状态与字号（`dataRoot/activeDataRoot/notesRoot/activeNotesRoot/restartRequired/fontSize`） |
 | POST | `/api/notes/settings/update` | body `{fontSize}`，更新卡片正文编辑/预览字号 |
+| POST | `/api/notes/settings/update-root` | body `{dataRoot}`，校验并初始化目标目录后保存配置，重启后统一切换笔记与插件数据根 |
 | GET | `/api/books/get` | 分组列表（type=book） |
 | POST | `/api/books/create` / `/update?id=` / `/delete?id=` | 分组增删改 |
 
@@ -504,7 +508,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - 所有笔记被删除时不调用 Graphify 抽取；插件递归清除整个 `corpus/` 生成内容（包括日期目录中的历史 graph、manifest、报告和缓存），并将索引状态置为空语料，避免缩图保护把正常清空误判成失败。
 - thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
 - Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 使用 `openai` extra；缺少对应包时无法验证 provider。
-- 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。`GraphifyCorpusProjector` 按 Markdown 图片引用的精确偏移替换目标，`GraphifyGraphReader` 按 `graph.json` 的 mtime + size 缓存解析结果，`GraphifyChangeQueue` 负责 2 秒防抖队列，`GraphifyPipelineRunner` 负责 CLI 执行与输出备份/发布，`GraphifyIndexService` 负责索引编排与状态。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
+- 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。`GraphifyCorpusProjector` 按 Markdown 图片引用的精确偏移替换目标，`GraphifyGraphReader` 按 `graph.json` 的 mtime + size 缓存解析结果，`GraphifyChangeQueue` 负责 2 秒防抖队列，`GraphifyPipelineRunner` 负责 CLI 执行与输出备份；Graphify 原生输出由 CLI 写入，应用只登记并发布变更事件，不重写原文件，`GraphifyIndexService` 负责索引编排与状态。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
 - 顶栏自然语言查询先由 `GraphifyGraphReader.searchCandidates` 从标题、概念、社区和图中派生信号召回最多 24 篇候选，再由 `GraphifySearchAiClient` 通过所选 AI profile 生成简短结论并重排最多 5 篇笔记；AI 只允许返回候选内的笔记 ID，候选外 ID 会被过滤。查询不改写图谱或索引状态，但会把用户问题及候选笔记的标题、概念和社区发送给所选 Provider。
 - Graphify CLI 是抽取与图处理引擎；项目侧只保留笔记投影、进程/Provider 适配和索引状态编排，不在 Java 中重写文本分块、语义抽取、社区聚类、语义缓存或 `graph.html` 生成。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
@@ -670,7 +674,8 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 
 - 大组件逻辑已按职责拆成 composable：`useCardSizing` 负责卡片贴合/自定义尺寸，`usePageInteractions` 负责缩放、框选与拖拽，`useNoteTitle` 负责标题编辑和离页守卫；`ReviewView` 的队列与评分状态由 `useReviewPage` 管理。
 - **路由**：`/notes`（列表 + 空页面）与 `/notes/:id`（笔记页），都由 notes 微应用登记（`frontend/plugins/notes/index.ts:57-64`）。
-- **侧栏面板**：新建分组、全部笔记、分组树（右键改名/删除）、插件筛选行、插件入口行（`NotesSidebarPanel.vue`）。
+- **侧栏面板**：新建分组、全部笔记、分组树（右键改名/删除）、插件筛选行、功能组（插件页面 + 末位设置，`NotesSidebarPanel.vue`）。
+- **笔记设置**：数据根目录、安全初始化与正文字号由 notes 插件设置面板（`NotesSettings.vue`）管理；宿主 `/settings` 只保留平台级插件管理。
 - **列表**：296px 宽；单击延迟 250ms 打开（让双击能进改名），双击标题改名，悬停出现 ×，行内显示归属分组 chip
   （`NoteList.vue:41-123,161-208`）。
 - **页面（`NotePage.vue`）**：单列向下生长的卡片页面，不是白板 —— 双击空白新建卡、Ctrl+V 把剪贴板变成卡片、
@@ -701,7 +706,8 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 标题下方标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
 | guide | 从侧栏或顶栏在当前宿主右侧主内容区打开 `/guide`；指南内的笔记、设置和功能入口统一在新浏览器页签打开，支持前进/后退、点击跳步 | `frontend/plugins/guide/index.ts` |
 | ai | 只有设置面板：Provider、模型、API key、连接测试 | `frontend/plugins/ai/index.ts` |
-| notes | 侧栏主面板 + 列表头（标题搜索）+ 隐藏筛选 `title` + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
+| notes | 侧栏主面板（「笔记 / 功能」分组，功能组末位为设置）+ 列表头（标题搜索）+ 隐藏筛选 `title` + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
+- `/notes` 支持 `filter=<pluginId>:<filterId>` 查询参数：仅当对应列表筛选已注册时激活；指南的「打开收藏筛选」通过新页签打开该 URL，避免跨页签丢失筛选状态。
 
 复习页（`ReviewView.vue`）：三个页签 —— **今日复习**（到期队列逐张评分）、**今日到期**（最新一条排期在今天或更早（含过期），
 或历史上任意一条排期落在今天；默认 3 列，卡片列表不展示历史）、

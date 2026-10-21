@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   ConfirmDialog,
   pluginApi,
   pluginSettings,
   refreshPluginAvailability,
-  request,
   type PluginInfo,
 } from '@thisnote/plugin-api'
 import {
@@ -17,7 +16,6 @@ import { useUiStore } from '@/stores/ui'
 
 const ui = useUiStore()
 const router = useRouter()
-const route = useRoute()
 const busy = ref('')
 const confirmation = ref<{
   title: string
@@ -29,8 +27,6 @@ const confirmation = ref<{
 // ---- 插件管理（列表来自后端注册表；每个插件可启停、可配置）
 const plugins = ref<PluginInfo[]>([])
 const openPlugins = ref<Set<string>>(new Set())
-const notesRootDir = ref('')
-const activeTab = ref<'storage' | 'plugins'>('storage')
 
 interface PluginDescriptionBlock {
   type: 'paragraph' | 'list' | 'table'
@@ -104,24 +100,11 @@ function pluginDescriptionBlocks(description: string): PluginDescriptionBlock[] 
   return blocks
 }
 
-interface NotesRootSettings {
-  rootDir: string
-}
-
 async function refreshPlugins() {
   try {
     plugins.value = await pluginApi.list()
   } catch {
     plugins.value = []
-  }
-}
-
-async function refreshNotesRoot() {
-  try {
-    const settings = await request<NotesRootSettings>('GET', '/api/notes/settings/get')
-    notesRootDir.value = settings.rootDir
-  } catch (e) {
-    ui.toast(`读取笔记设置失败：${(e as Error).message}`, 'error')
   }
 }
 
@@ -220,22 +203,10 @@ async function togglePluginPanel(plugin: PluginInfo) {
 }
 
 async function refresh() {
-  await Promise.all([refreshPlugins(), refreshNotesRoot()])
+  await refreshPlugins()
 }
 
-function applyRouteTarget() {
-  if (route.query.tab === 'plugins') activeTab.value = 'plugins'
-}
-
-watch(
-  () => route.query.tab,
-  applyRouteTarget,
-)
-
-onMounted(async () => {
-  await refresh()
-  applyRouteTarget()
-})
+onMounted(refresh)
 </script>
 
 <template>
@@ -247,57 +218,11 @@ onMounted(async () => {
       <button class="btn sm" :disabled="!!busy" @click="refresh">刷新</button>
     </header>
 
-    <nav class="settings-tabs" role="tablist" aria-label="设置分类">
-      <button
-        id="settings-tab-storage"
-        class="settings-tab"
-        :class="{ active: activeTab === 'storage' }"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === 'storage'"
-        aria-controls="settings-panel-storage"
-        @click="activeTab = 'storage'"
-      >
-        笔记存储
-      </button>
-      <button
-        id="settings-tab-plugins"
-        class="settings-tab"
-        :class="{ active: activeTab === 'plugins' }"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === 'plugins'"
-        aria-controls="settings-panel-plugins"
-        @click="activeTab = 'plugins'"
-      >
-        插件管理
-      </button>
-    </nav>
-
     <div class="body">
       <div v-if="busy" class="busy-bar">{{ busy }}…</div>
 
-      <section
-        id="settings-panel-storage"
-        class="panel"
-        role="tabpanel"
-        aria-labelledby="settings-tab-storage"
-        v-show="activeTab === 'storage'"
-      >
-        <h3>笔记存储</h3>
-        <p class="small muted">笔记根目录由服务配置确定。</p>
-        <p class="small muted notes-root-active">当前笔记根目录：<span class="mono">{{ notesRootDir }}</span></p>
-
-      </section>
-
       <!-- ------------------------------ plugins ------------------------------ -->
-      <section
-        id="settings-panel-plugins"
-        class="panel"
-        role="tabpanel"
-        aria-labelledby="settings-tab-plugins"
-        v-show="activeTab === 'plugins'"
-      >
+      <section class="panel plugin-panel">
         <h3>已安装的插件</h3>
         <p class="small muted">
           插件分两类：<b>卡片插件</b>给卡片右上角加工具（如记忆周期）；<b>服务插件</b>提供整库范围的能力。
@@ -403,15 +328,13 @@ onMounted(async () => {
 
 <style scoped>
 .settings {
-  display: grid;
-  grid-template-columns: 176px minmax(0, 1fr);
-  grid-template-rows: 40px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
 }
 .tabs {
-  grid-column: 1 / -1;
-  grid-row: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -425,34 +348,6 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--c-text-2);
 }
-.settings-tabs {
-  grid-column: 1;
-  grid-row: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  padding: var(--space-3) var(--space-2);
-  border-right: 1px solid var(--c-border);
-  background: var(--c-surface);
-}
-.settings-tab {
-  width: 100%;
-  text-align: left;
-  padding: 9px 12px;
-  border: 0;
-  border-left: 2px solid transparent;
-  background: transparent;
-  color: var(--c-text-3);
-  font-size: 13px;
-  cursor: pointer;
-}
-.settings-tab.active {
-  border-left-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-}
 .tabs button {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
@@ -460,8 +355,7 @@ onMounted(async () => {
   color: var(--c-text-3);
 }
 .body {
-  grid-column: 2;
-  grid-row: 2;
+  flex: 1;
   overflow-y: auto;
   min-width: 0;
   min-height: 0;
@@ -488,47 +382,10 @@ onMounted(async () => {
   margin: 0;
   padding-left: var(--space-4);
 }
-.notes-root-active {
-  overflow-wrap: anywhere;
-  margin: var(--space-2) 0 0;
-}
 
-@media (max-width: 640px) {
-  .settings {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 40px auto minmax(0, 1fr);
-  }
-  .tabs {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .settings-tabs {
-    grid-column: 1;
-    grid-row: 2;
-    flex-direction: row;
-    overflow-x: auto;
-    padding: 0 var(--space-2);
-    border-right: 0;
-    border-bottom: 1px solid var(--c-border);
-  }
-  .body {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  .settings-tab {
-    width: auto;
-    flex: 0 0 auto;
-    white-space: nowrap;
-    border-left: 0;
-    border-bottom: 2px solid transparent;
-  }
-  .settings-tab.active {
-    border-bottom-color: var(--accent);
-  }
-}
 
 /* --- 插件管理 --- */
-#settings-panel-plugins {
+.plugin-panel {
   max-width: none;
 }
 

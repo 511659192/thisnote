@@ -2,9 +2,11 @@ package com.thisnote.ext.notes.service;
 
 import com.thisnote.ext.notes.config.NotesConfig;
 import com.thisnote.ext.notes.repository.NotesSettingsRepository;
+import com.thisnote.plugin.api.util.DataRootSettings;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 
 @Slf4j
@@ -17,16 +19,20 @@ public class NotesSettingsService {
 
     private final NotesConfig notesConfig;
     private final NotesSettingsRepository settingsRepository;
+    private final StorageInitializationService storageInitializationService;
 
     public NotesSettingsService(NotesConfig notesConfig,
-                                NotesSettingsRepository settingsRepository) {
+                                NotesSettingsRepository settingsRepository,
+                                StorageInitializationService storageInitializationService) {
         this.notesConfig = notesConfig;
         this.settingsRepository = settingsRepository;
+        this.storageInitializationService = storageInitializationService;
     }
 
     public SettingsResponse response() {
-        Path root = notesConfig.getRootDir();
-        return new SettingsResponse(root.toString(), root.toString(), false, currentFontSize());
+        Path activeDataRoot = notesConfig.getDataRoot();
+        Path configuredDataRoot = DataRootSettings.configuredDataRoot().orElse(activeDataRoot);
+        return response(configuredDataRoot, activeDataRoot);
     }
 
     public synchronized SettingsResponse update(FontSizeUpdate update) {
@@ -44,17 +50,57 @@ public class NotesSettingsService {
         return response();
     }
 
+    public synchronized SettingsResponse updateDataRoot(DataRootUpdate update) {
+        if (update == null || update.dataRoot() == null || update.dataRoot().isBlank()) {
+            throw new IllegalArgumentException("数据根目录不能为空");
+        }
+        Path dataRoot;
+        try {
+            dataRoot = DataRootSettings.normalize(Path.of(update.dataRoot().trim()));
+        } catch (InvalidPathException e) {
+            log.warn("数据根目录格式无效：value={}", update.dataRoot());
+            throw new IllegalArgumentException("数据根目录不是有效路径：" + update.dataRoot(), e);
+        } catch (RuntimeException e) {
+            log.warn("数据根目录校验失败：value={}, reason={}", update.dataRoot(), e.getMessage());
+            throw e;
+        }
+
+        storageInitializationService.initializeDataRoot(dataRoot);
+        DataRootSettings.save(dataRoot);
+        SettingsResponse response = response();
+        log.info("数据根目录配置已更新：dataRoot={}, activeDataRoot={}, restartRequired={}",
+                response.dataRoot(), response.activeDataRoot(), response.restartRequired());
+        return response;
+    }
+
+    private SettingsResponse response(Path configuredDataRoot,
+                                      Path activeDataRoot) {
+        Path notesRoot = configuredDataRoot.resolve("notes");
+        Path activeNotesRoot = activeDataRoot.resolve("notes");
+        return new SettingsResponse(configuredDataRoot.toString(),
+                activeDataRoot.toString(),
+                notesRoot.toString(),
+                activeNotesRoot.toString(),
+                !configuredDataRoot.equals(activeDataRoot),
+                currentFontSize());
+    }
+
     private int currentFontSize() {
         int fontSize = settingsRepository.getFontSize();
         return fontSize < MIN_FONT_SIZE || fontSize > MAX_FONT_SIZE ? DEFAULT_FONT_SIZE : fontSize;
     }
 
-    public record SettingsResponse(String rootDir,
-                                   String activeRootDir,
+    public record SettingsResponse(String dataRoot,
+                                   String activeDataRoot,
+                                   String notesRoot,
+                                   String activeNotesRoot,
                                    boolean restartRequired,
                                    int fontSize) {
     }
 
     public record FontSizeUpdate(int fontSize) {
+    }
+
+    public record DataRootUpdate(String dataRoot) {
     }
 }

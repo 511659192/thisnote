@@ -1,6 +1,7 @@
 package com.thisnote.ext.graphify.service;
 
 import com.thisnote.ext.graphify.client.GraphifyProcessRunner;
+import com.thisnote.plugin.api.event.FileChangeEvent;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +10,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -159,11 +159,9 @@ final class GraphifyPipelineRunner {
         int published = 0;
         for (Path path : outputFiles()) {
             if (Files.isRegularFile(path)) {
-                byte[] bytes = Files.readAllBytes(path);
-                FileTime modifiedAt = Files.getLastModifiedTime(path);
-                fileHelper.fileWritten(path, new ByteArrayInputStream(bytes), modifiedAt.toMillis());
+                fileHelper.fileChanged(path, FileChangeEvent.Operation.UPDATED);
                 published++;
-                log.debug("Graphify 输出已发布：file={}, bytes={}", path, bytes.length);
+                log.debug("Graphify 原生产物变更已登记：file={}, bytes={}", path, Files.size(path));
             }
         }
         log.info("Graphify 图谱输出已发布：files={}", published);

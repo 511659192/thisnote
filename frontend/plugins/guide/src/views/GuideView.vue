@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   host,
   pluginApi,
-  setActiveListFilter,
   type PluginInfo,
 } from '@thisnote/plugin-api'
 import {
@@ -24,12 +24,12 @@ import dangerImage from '../assets/danger.png?inline'
 
 const STEP_KEY = 'thisnote.guide.step'
 const MANUAL_PREFIX = 'thisnote.guide.task.'
+const router = useRouter()
 
 type Section = 'basic' | 'optional' | 'advanced'
 type TaskAction =
   | { kind: 'manual'; label: string }
   | { kind: 'route'; label: string; route: string }
-  | { kind: 'open-favorites'; label: string }
 
 interface GuideTask {
   id: string
@@ -96,7 +96,7 @@ const optionalTasks = computed<GuideTask[]>(() => {
       title: '收藏笔记',
       description: '收藏是笔记列表的筛选条件，不是独立页面；先收藏一篇笔记，再从侧栏打开「收藏」。',
       done: manualDone('favorite'),
-      action: { kind: 'open-favorites', label: '打开收藏筛选' },
+      action: { kind: 'route', label: '打开收藏筛选', route: '/notes?filter=favorite:favorites' },
     })
   }
   if (activeIds.value.has('memory-cycle')) {
@@ -267,13 +267,13 @@ function previousStep() {
   if (previous) selectStep(previous.id)
 }
 
-async function nextStep() {
+function nextStep() {
   const next = stepTasks.value[currentStepIndex.value + 1]
   if (next) {
     selectStep(next.id)
     return
   }
-  navigate('/notes')
+  openInNewTab('/notes')
 }
 
 function manualKey(id: string) {
@@ -310,32 +310,20 @@ async function refresh() {
   }
 }
 
-function go(path: string, taskId?: string) {
-  if (taskId) markManual(taskId)
-  navigate(path)
-}
-
-function navigate(path: string) {
-  window.location.hash = path.startsWith('/') ? path : '/' + path
+function openInNewTab(path: string) {
+  const resolved = router.resolve(path)
+  window.open(new URL(resolved.href, window.location.href).href, '_blank', 'noopener,noreferrer')
 }
 
 
-async function runAction(task: GuideTask) {
+function runAction(task: GuideTask) {
   if (!task.action) return
-  switch (task.action.kind) {
-    case 'manual':
-      markManual(task.id)
-      break
-    case 'route':
-      markManual(task.id)
-      navigate(task.action.route)
-      break
-    case 'open-favorites':
-      markManual('favorite')
-      setActiveListFilter('favorite', 'favorites')
-      navigate('/notes')
-      break
+  if (task.action.kind === 'manual') {
+    markManual(task.id)
+    return
   }
+  markManual(task.id)
+  openInNewTab(task.action.route)
 }
 
 onMounted(async () => {
@@ -360,7 +348,7 @@ onBeforeUnmount(() => {
         <p class="lead">先完成一条真实笔记的闭环，再按需了解插件和进阶能力。指南不会自动修改你的数据。</p>
       </div>
       <div class="head-actions">
-        <button class="btn ghost" @click="go('/notes')">进入笔记</button>
+        <button class="btn ghost" @click="openInNewTab('/notes')">进入笔记</button>
         <button class="btn ghost" :disabled="loading" @click="refresh">刷新状态</button>
       </div>
     </header>

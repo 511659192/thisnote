@@ -27,4 +27,10 @@ public class NotesSettingsController {
         log.info("收到笔记设置更新请求：fontSize={}", update == null ? null : update.fontSize());
         return settingsService.update(update);
     }
+
+    @PostMapping("/update-root")
+    public NotesSettingsService.SettingsResponse updateDataRoot(@RequestBody NotesSettingsService.DataRootUpdate update) {
+        log.info("收到数据根目录更新请求：dataRoot={}", update == null ? null : update.dataRoot());
+        return settingsService.updateDataRoot(update);
+    }
 }

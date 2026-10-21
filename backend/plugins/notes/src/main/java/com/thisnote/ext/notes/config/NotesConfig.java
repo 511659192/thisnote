@@ -13,9 +13,11 @@ import java.nio.file.Path;
 @Getter
 public class NotesConfig {
 
+    private final Path dataRoot;
     private final Path rootDir;
 
     public NotesConfig(@Value("${thisnote.data-root:${user.home}/.thisnote}") String dataRoot) {
-        this.rootDir = Path.of(dataRoot).toAbsolutePath().normalize().resolve("notes");
+        this.dataRoot = Path.of(dataRoot).toAbsolutePath().normalize();
+        this.rootDir = this.dataRoot.resolve("notes");
     }
 }
