@@ -10,10 +10,15 @@ const view = ref<AiSummaryView>(emptyView(''))
 const loading = ref(false)
 const working = ref(false)
 const localError = ref('')
+const collapsed = ref(false)
 let requestVersion = 0
 
 const busy = computed(() => loading.value || working.value || view.value.pending)
 const displayedError = computed(() => localError.value || view.value.error)
+
+function toggleCollapsed(): void {
+  collapsed.value = !collapsed.value
+}
 
 function emptyView(noteId: string): AiSummaryView {
   return {
@@ -127,7 +132,16 @@ onBeforeUnmount(() => {
 <template>
   <section class="ai-summary" aria-live="polite">
     <div class="summary-head">
-      <span class="summary-label">AI 总结</span>
+      <button
+        type="button"
+        class="collapse"
+        :aria-expanded="!collapsed"
+        :title="collapsed ? '展开 AI 总结' : '收起 AI 总结'"
+        @click.stop="toggleCollapsed"
+      >
+        <span class="chevron" aria-hidden="true">{{ collapsed ? '▸' : '▾' }}</span>
+        <span class="summary-label">AI 总结</span>
+      </button>
       <span v-if="view.stale && view.summary" class="summary-state">
         {{ working || view.pending ? '更新中…' : '待更新' }}
       </span>
@@ -140,13 +154,15 @@ onBeforeUnmount(() => {
         @click.stop="refresh"
       >↻</button>
     </div>
-    <p v-if="view.summary" class="summary-text" :class="{ stale: view.stale }">{{ view.summary }}</p>
-    <p v-else-if="view.pending || working" class="summary-hint">根据知识图谱生成中…</p>
-    <p v-else-if="!displayedError && !view.autoEnabled" class="summary-hint">
-      自动生成已关闭，点击 ↻ 生成 AI 总结
-    </p>
-    <p v-else-if="!displayedError" class="summary-hint">打开笔记后根据知识图谱自动生成</p>
-    <p v-if="displayedError" class="summary-error" :title="displayedError">{{ displayedError }}</p>
+    <template v-if="!collapsed">
+      <p v-if="view.summary" class="summary-text" :class="{ stale: view.stale }">{{ view.summary }}</p>
+      <p v-else-if="view.pending || working" class="summary-hint">根据知识图谱生成中…</p>
+      <p v-else-if="!displayedError && !view.autoEnabled" class="summary-hint">
+        自动生成已关闭，点击 ↻ 生成 AI 总结
+      </p>
+      <p v-else-if="!displayedError" class="summary-hint">打开笔记后根据知识图谱自动生成</p>
+      <p v-if="displayedError" class="summary-error" :title="displayedError">{{ displayedError }}</p>
+    </template>
   </section>
 </template>
 
@@ -166,8 +182,30 @@ onBeforeUnmount(() => {
   min-height: 20px;
 }
 
-.summary-label {
+.collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
   color: var(--c-text-muted, #8b9098);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.collapse:hover {
+  color: var(--accent, #6258d5);
+}
+
+.chevron {
+  width: 10px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.summary-label {
+  color: inherit;
   font-size: 11px;
   font-weight: 600;
 }

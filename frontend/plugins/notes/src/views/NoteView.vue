@@ -9,6 +9,7 @@ import {
   activeNoteTools,
   ConfirmDialog,
   modifierLabel,
+  onNoteTitleChange,
   toast,
 } from '@thisnote/plugin-api'
 import { usePageStore } from '@/stores/notePage'
@@ -23,6 +24,7 @@ const route = useRoute()
 const router = useRouter()
 const nodes = useNoteStore()
 const page = usePageStore()
+let unsubscribeNoteTitleChange: (() => void) | null = null
 
 const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
 const noteListRef = ref<InstanceType<typeof NoteList> | null>(null)
@@ -254,6 +256,11 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
+  unsubscribeNoteTitleChange = onNoteTitleChange((change) => {
+    if (nodes.current?.noteId !== change.noteId) return
+    if (renaming.value) cancelRename()
+    page.noteTitle = change.title
+  })
   void applyRoute()
   // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
@@ -261,6 +268,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  unsubscribeNoteTitleChange?.()
+  unsubscribeNoteTitleChange = null
 })
 </script>
 

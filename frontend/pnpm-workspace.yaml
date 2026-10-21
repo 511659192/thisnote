@@ -11,6 +11,7 @@ packages:
   - 'plugins/graphify'
   - 'plugins/tags'
   - 'plugins/ai-summary'
+  - 'plugins/ai-title'
   - 'plugins/ai'
   - 'plugins/guide'
 

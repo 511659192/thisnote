@@ -145,8 +145,8 @@ public class AutoTagService {
 
     private static ExecutorService defaultExecutor() {
         return new ThreadPoolExecutor(
-                2,
-                2,
+                1,
+                1,
                 0,
                 TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(32),

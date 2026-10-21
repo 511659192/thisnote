@@ -35,6 +35,7 @@
     <module>plugins/graphify</module>
     <module>plugins/tags</module>
     <module>plugins/ai-summary</module>
+    <module>plugins/ai-title</module>
     <module>plugins/guide</module>
     <module>app</module>
   </modules>

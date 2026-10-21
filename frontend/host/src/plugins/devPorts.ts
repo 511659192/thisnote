@@ -18,4 +18,5 @@ export const PLUGIN_DEV_PORTS: Record<string, number> = {
   ai: 7120,
   guide: 7121,
   'ai-summary': 7122,
+  'ai-title': 7123,
 }

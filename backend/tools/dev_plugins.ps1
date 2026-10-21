@@ -28,6 +28,7 @@ $plugins = [ordered]@{
     'graphify' = 'plugins/graphify'
     'tags' = 'plugins/tags'
     'ai-summary' = 'plugins/ai-summary'
+    'ai-title' = 'plugins/ai-title'
     'guide' = 'plugins/guide'
 }
 

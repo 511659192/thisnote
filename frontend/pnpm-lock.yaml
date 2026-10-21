@@ -330,6 +330,28 @@ importers:
         specifier: ^6.2.6
         version: 6.4.3(@types/node@22.20.4)
 
+  plugins/ai-title:
+    dependencies:
+      '@thisnote/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.43(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.43(typescript@5.9.3))
+    devDependencies:
+      '@qiankunjs/bundler-plugin':
+        specifier: ^0.0.1-rc.2
+        version: 0.0.1-rc.2(vite@6.4.3(@types/node@22.20.4))
+      '@vitejs/plugin-vue':
+        specifier: ^5.2.3
+        version: 5.2.4(vite@6.4.3(@types/node@22.20.4))(vue@3.5.43(typescript@5.9.3))
+      vite:
+        specifier: ^6.2.6
+        version: 6.4.3(@types/node@22.20.4)
+
 packages:
 
   '@babel/helper-string-parser@7.29.7':

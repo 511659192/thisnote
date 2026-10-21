@@ -229,6 +229,109 @@ public class GraphifyGraphReader {
         return new GraphifyNoteContext(true, concepts, communities, relatedNotes);
     }
 
+    public GraphifyNoteContext textContext(String text) {
+        JSONObject graph = graph();
+        if (graph == null) {
+            log.debug("Graphify 文本上下文不可用：graph.json 不存在");
+            return new GraphifyNoteContext(false, List.of(), List.of(), List.of());
+        }
+
+        String normalizedText = normalizeLabel(text);
+        Set<String> terms = contextTerms(normalizedText);
+        Map<String, String> labelsByKey = new LinkedHashMap<>();
+        Map<String, Integer> conceptFrequency = new LinkedHashMap<>();
+        Map<String, Set<String>> communitiesByConcept = new LinkedHashMap<>();
+        Map<String, Integer> communityFrequency = new LinkedHashMap<>();
+        JSONArray nodes = graph.getJSONArray("nodes");
+        if (nodes != null) {
+            for (Object value : nodes) {
+                if (!(value instanceof JSONObject node)) {
+                    continue;
+                }
+                String label = node.getString("label");
+                if (!isMeaningfulTag(label)) {
+                    continue;
+                }
+                String key = normalizeLabel(label);
+                labelsByKey.putIfAbsent(key, label.trim());
+                conceptFrequency.merge(key, 1, Integer::sum);
+                String community = node.getString("community_name");
+                if (isMeaningfulTag(community)) {
+                    String communityName = community.trim();
+                    communitiesByConcept.computeIfAbsent(key, ignored -> new LinkedHashSet<>())
+                            .add(communityName);
+                    communityFrequency.merge(communityName, 1, Integer::sum);
+                }
+            }
+        }
+
+        List<String> conceptKeys = conceptFrequency.keySet().stream()
+                .sorted((left, right) -> {
+                    int score = Integer.compare(
+                            textContextScore(right, normalizedText, terms),
+                            textContextScore(left, normalizedText, terms));
+                    if (score != 0) {
+                        return score;
+                    }
+                    int frequency = Integer.compare(
+                            conceptFrequency.getOrDefault(right, 0),
+                            conceptFrequency.getOrDefault(left, 0));
+                    return frequency != 0
+                            ? frequency
+                            : labelsByKey.get(left).compareToIgnoreCase(labelsByKey.get(right));
+                })
+                .limit(12)
+                .toList();
+        List<String> concepts = conceptKeys.stream().map(labelsByKey::get).toList();
+
+        Set<String> selectedCommunities = new LinkedHashSet<>();
+        conceptKeys.forEach(key -> selectedCommunities.addAll(
+                communitiesByConcept.getOrDefault(key, Set.of())));
+        communityFrequency.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER)))
+                .map(Map.Entry::getKey)
+                .forEach(community -> {
+                    if (selectedCommunities.size() < 8) {
+                        selectedCommunities.add(community);
+                    }
+                });
+        List<String> communities = selectedCommunities.stream().limit(8).toList();
+        log.debug("Graphify 文本上下文已构建：textLength={}, concepts={}, communities={}",
+                text == null ? 0 : text.length(), concepts.size(), communities.size());
+        return new GraphifyNoteContext(true, concepts, communities, List.of());
+    }
+
+    private static Set<String> contextTerms(String normalizedText) {
+        Set<String> terms = new LinkedHashSet<>();
+        if (normalizedText.isBlank()) {
+            return terms;
+        }
+        for (String token : normalizedText.split("[^\\p{L}\\p{N}._-]+")) {
+            if (token.length() >= 2) {
+                terms.add(token);
+            }
+        }
+        return terms;
+    }
+
+    private static int textContextScore(String concept,
+                                        String normalizedText,
+                                        Set<String> terms) {
+        if (concept.isBlank()) {
+            return 0;
+        }
+        int score = !normalizedText.isBlank() && normalizedText.contains(concept) ? 100 : 0;
+        for (String term : terms) {
+            if (concept.contains(term)) {
+                score += 10;
+            } else if (term.contains(concept)) {
+                score += 5;
+            }
+        }
+        return score;
+    }
+
     private static Map<String, NoteDTO> notesById(List<NoteDTO> notes) {
         Map<String, NoteDTO> result = new LinkedHashMap<>();
         for (NoteDTO note : notes) {

@@ -21,6 +21,7 @@ import com.thisnote.ext.notes.listener.CardStageFutureEventListener;
 import com.thisnote.ext.notes.listener.FileChangeEventListener;
 import com.thisnote.ext.notes.listener.NoteContentFutureEventListener;
 import com.thisnote.ext.notes.listener.NoteListFutureEventListener;
+import com.thisnote.ext.notes.listener.NoteTitleUpdateFutureEventListener;
 import com.thisnote.ext.notes.listener.PluginStateResetListener;
 import com.thisnote.plugin.api.util.FileHelper;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,7 @@ public class NotesPlugin extends SpringBootPlugin {
     private AttachmentStageFutureEventListener attachmentStageFutureEventListener;
     private NoteContentFutureEventListener noteContentFutureEventListener;
     private NoteListFutureEventListener noteListFutureEventListener;
+    private NoteTitleUpdateFutureEventListener noteTitleUpdateFutureEventListener;
     private AttachmentBytesQueryEventListener attachmentBytesQueryEventListener;
     private PluginStateResetListener stateResetListener;
 
@@ -107,6 +109,7 @@ public class NotesPlugin extends SpringBootPlugin {
         attachmentStageFutureEventListener = new AttachmentStageFutureEventListener(attachmentService);
         noteContentFutureEventListener = new NoteContentFutureEventListener(noteService, cardService);
         noteListFutureEventListener = new NoteListFutureEventListener(noteRepository, notesMapper);
+        noteTitleUpdateFutureEventListener = new NoteTitleUpdateFutureEventListener(noteService);
         attachmentBytesQueryEventListener = new AttachmentBytesQueryEventListener(attachmentService);
         stateResetListener = new PluginStateResetListener(noteRepository, cardRepository, attachmentService, bookRepository);
         getMainApplicationContext().addApplicationListener(fileChangeListener);
@@ -119,6 +122,7 @@ public class NotesPlugin extends SpringBootPlugin {
         getMainApplicationContext().addApplicationListener(attachmentStageFutureEventListener);
         getMainApplicationContext().addApplicationListener(noteContentFutureEventListener);
         getMainApplicationContext().addApplicationListener(noteListFutureEventListener);
+        getMainApplicationContext().addApplicationListener(noteTitleUpdateFutureEventListener);
         getMainApplicationContext().addApplicationListener(attachmentBytesQueryEventListener);
         getMainApplicationContext().addApplicationListener(stateResetListener);
         log.info("笔记插件已启动：root={}", ctx.getBean(NotesConfig.class).getRootDir());
@@ -166,6 +170,10 @@ public class NotesPlugin extends SpringBootPlugin {
         if (noteListFutureEventListener != null) {
             getMainApplicationContext().removeApplicationListener(noteListFutureEventListener);
             noteListFutureEventListener = null;
+        }
+        if (noteTitleUpdateFutureEventListener != null) {
+            getMainApplicationContext().removeApplicationListener(noteTitleUpdateFutureEventListener);
+            noteTitleUpdateFutureEventListener = null;
         }
         if (attachmentBytesQueryEventListener != null) {
             getMainApplicationContext().removeApplicationListener(attachmentBytesQueryEventListener);

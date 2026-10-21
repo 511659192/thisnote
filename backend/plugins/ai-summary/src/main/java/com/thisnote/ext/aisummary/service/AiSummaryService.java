@@ -5,12 +5,14 @@ import com.thisnote.ext.aisummary.repository.AiSummaryRepository;
 import com.thisnote.plugin.api.event.GraphifyNoteContext;
 import com.thisnote.plugin.api.event.GraphifyNoteContextFutureEvent;
 import com.thisnote.plugin.api.event.NoteContentFutureEvent;
+import com.thisnote.plugin.api.notes.dto.CardDTO;
 import com.thisnote.plugin.api.notes.dto.NoteCardDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -20,12 +22,15 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 public class AiSummaryService {
 
     private static final long QUERY_TIMEOUT_SECONDS = 30;
+    private static final Pattern IMAGE_ONLY_CARD = Pattern.compile(
+            "^\\s*!\\[[^\\]]*\\]\\([^)]*\\)\\s*$", Pattern.DOTALL);
 
     private final AiSummaryRepository repository;
     private final AiSummarySettingsService settingsService;
@@ -44,8 +49,8 @@ public class AiSummaryService {
         this.settingsService = settingsService;
         this.aiClient = aiClient;
         this.worker = new ThreadPoolExecutor(
-                2,
-                2,
+                1,
+                1,
                 0,
                 TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(32),
@@ -157,9 +162,16 @@ public class AiSummaryService {
             if (content == null || content.note() == null) {
                 throw new IllegalArgumentException("笔记不存在");
             }
-            GraphifyNoteContext context = graphContext(noteId);
-            if (!context.available()) {
-                throw new IllegalStateException("Graphify 尚未生成可用的知识图谱，请先完成索引");
+            GraphifyNoteContext context;
+            if (isAttachmentOnly(content)) {
+                context = new GraphifyNoteContext(false, List.of(), List.of(), List.of());
+                log.info("附件图片笔记直接使用 AI 视觉总结：noteId={}, cards={}",
+                        noteId, content.cards().size());
+            } else {
+                context = graphContext(noteId);
+                if (!context.available()) {
+                    throw new IllegalStateException("Graphify 尚未生成可用的知识图谱，请先完成索引");
+                }
             }
             String summary = aiClient.generate(profileId, content, context);
             if (!isCurrent(noteId, task)) {
@@ -218,6 +230,20 @@ public class AiSummaryService {
             throw new IllegalArgumentException("noteId 不能为空");
         }
         return noteId.trim();
+    }
+
+    private static boolean isAttachmentOnly(NoteCardDTO content) {
+        boolean hasImageCard = false;
+        for (CardDTO card : content.cards()) {
+            if (card == null || card.content() == null || card.content().isBlank()) {
+                continue;
+            }
+            if (!IMAGE_ONLY_CARD.matcher(card.content()).matches()) {
+                return false;
+            }
+            hasImageCard = true;
+        }
+        return hasImageCard;
     }
 
     private static String safeMessage(Throwable error) {
