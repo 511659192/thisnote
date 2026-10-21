@@ -4,6 +4,7 @@ import com.thisnote.ext.ai.client.AiProviderClient;
 import com.thisnote.ext.ai.listener.AiProfilesEventListener;
 import com.thisnote.ext.ai.listener.AiCompletionEventListener;
 import com.thisnote.ext.ai.listener.AiRuntimeEventListener;
+import com.thisnote.ext.ai.service.AiCompletionExecutor;
 import com.thisnote.ext.ai.service.AiSettingsService;
 import com.thisnote.plugin.api.util.FileHelper;
 import org.laxture.sbp.SpringBootPlugin;
@@ -41,7 +42,8 @@ public class AiPlugin extends SpringBootPlugin {
         aiProfilesEventListener = new AiProfilesEventListener(ctx.getBean(AiSettingsService.class));
         aiCompletionEventListener = new AiCompletionEventListener(
                 ctx.getBean(AiSettingsService.class),
-                ctx.getBean(AiProviderClient.class)
+                ctx.getBean(AiProviderClient.class),
+                ctx.getBean(AiCompletionExecutor.class)
         );
         getMainApplicationContext().addApplicationListener(aiRuntimeEventListener);
         getMainApplicationContext().addApplicationListener(aiProfilesEventListener);

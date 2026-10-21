@@ -14,6 +14,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class AiSummarySettingsService {
 
+    public static final int DEFAULT_FONT_SIZE = 15;
+    public static final int MIN_FONT_SIZE = 10;
+    public static final int MAX_FONT_SIZE = 32;
+
     private static final long QUERY_TIMEOUT_SECONDS = 30;
 
     private final AiSummarySettingsRepository settingsRepository;
@@ -44,15 +48,20 @@ public class AiSummarySettingsService {
         return settingsRepository.getAutoEnabled();
     }
 
+    public int fontSize() {
+        int fontSize = settingsRepository.getFontSize();
+        return fontSize < MIN_FONT_SIZE || fontSize > MAX_FONT_SIZE ? DEFAULT_FONT_SIZE : fontSize;
+    }
+
     public SettingsResponse response() {
         if (eventPublisher == null) {
-            return new SettingsResponse(aiProfileId(), autoEnabled(), List.of(), "AI 核心插件尚未就绪");
+            return new SettingsResponse(aiProfileId(), autoEnabled(), fontSize(), List.of(), "AI 核心插件尚未就绪");
         }
         try {
-            return new SettingsResponse(aiProfileId(), autoEnabled(), profiles(), "");
+            return new SettingsResponse(aiProfileId(), autoEnabled(), fontSize(), profiles(), "");
         } catch (Exception e) {
             log.warn("读取 AI 总结 profile 失败：{}", e.getMessage());
-            return new SettingsResponse(aiProfileId(), autoEnabled(), List.of(), e.getMessage());
+            return new SettingsResponse(aiProfileId(), autoEnabled(), fontSize(), List.of(), e.getMessage());
         }
     }
 
@@ -68,9 +77,20 @@ public class AiSummarySettingsService {
         if (available.stream().noneMatch(profile -> profileId.equals(profile.id()))) {
             throw new IllegalArgumentException("AI profile 不存在：" + profileId);
         }
-        settingsRepository.update(profileId, update.autoEnabled());
-        log.info("AI 总结设置已保存：profileId={}, autoEnabled={}", profileId, update.autoEnabled());
+        int fontSize = update.fontSize() == null ? fontSize() : requireFontSize(update.fontSize());
+        settingsRepository.update(profileId, update.autoEnabled(), fontSize);
+        log.info("AI 总结设置已保存：profileId={}, autoEnabled={}, fontSize={}",
+                profileId, update.autoEnabled(), fontSize);
         return response();
+    }
+
+    private int requireFontSize(int value) {
+        if (value < MIN_FONT_SIZE || value > MAX_FONT_SIZE) {
+            log.warn("AI 总结字号设置被拒绝：fontSize={}, min={}, max={}",
+                    value, MIN_FONT_SIZE, MAX_FONT_SIZE);
+            throw new IllegalArgumentException("AI 总结字号必须在 10 到 32 之间");
+        }
+        return value;
     }
 
     private List<AiProfileSummary> profiles() {
@@ -84,10 +104,11 @@ public class AiSummarySettingsService {
 
     public record SettingsResponse(String aiProfileId,
                                    boolean autoEnabled,
+                                   int fontSize,
                                    List<AiProfileSummary> profiles,
                                    String profilesError) {
     }
 
-    public record SettingsUpdate(String aiProfileId, boolean autoEnabled) {
+    public record SettingsUpdate(String aiProfileId, boolean autoEnabled, Integer fontSize) {
     }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { aiSummaryApi, type AiSummaryView } from '../api/aiSummaryApi'
 
 const props = defineProps<{ noteId: string }>()
@@ -11,6 +11,7 @@ const loading = ref(false)
 const working = ref(false)
 const localError = ref('')
 const collapsed = ref(false)
+const fontSize = ref(15)
 let requestVersion = 0
 
 const busy = computed(() => loading.value || working.value || view.value.pending)
@@ -18,6 +19,16 @@ const displayedError = computed(() => localError.value || view.value.error)
 
 function toggleCollapsed(): void {
   collapsed.value = !collapsed.value
+}
+
+async function loadFontSize(): Promise<void> {
+  try {
+    const settings = await aiSummaryApi.settings()
+    const value = settings.fontSize
+    fontSize.value = typeof value === 'number' && Number.isInteger(value) && value >= 10 && value <= 32 ? value : 15
+  } catch (e) {
+    console.warn('读取 AI 总结字号失败，使用默认值 15px', e)
+  }
 }
 
 function emptyView(noteId: string): AiSummaryView {
@@ -118,6 +129,8 @@ function refresh(): void {
   void generate(props.noteId, true, false)
 }
 
+onMounted(() => void loadFontSize())
+
 watch(
   () => props.noteId,
   (noteId) => void load(noteId),
@@ -130,7 +143,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="ai-summary" aria-live="polite">
+  <section class="ai-summary" :style="{ '--ai-summary-font-size': `${fontSize}px` }" aria-live="polite">
     <div class="summary-head">
       <button
         type="button"
@@ -168,11 +181,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ai-summary {
+  font-size: var(--ai-summary-font-size, 15px);
+  box-sizing: border-box;
   display: grid;
   gap: 3px;
   width: 100%;
   min-width: 0;
-  padding: 2px 0;
+  padding: 6px 8px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
 }
 
 .summary-head {
@@ -206,16 +224,16 @@ onBeforeUnmount(() => {
 
 .summary-label {
   color: inherit;
-  font-size: 11px;
+  font-size: 0.8em;
   font-weight: 600;
 }
 
 .summary-state {
   padding: 1px 5px;
   color: var(--c-text-muted, #8b9098);
-  background: var(--c-surface-2);
+  background: var(--c-surface);
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 0.73em;
 }
 
 .refresh {
@@ -246,19 +264,16 @@ onBeforeUnmount(() => {
 .summary-hint,
 .summary-error {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.87em;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
 .summary-text {
-  max-width: 960px;
+  max-width: 100%;
   color: var(--c-text-2);
 }
 
-.summary-text.stale {
-  color: var(--c-text-muted, #8b9098);
-}
 
 .summary-hint {
   color: var(--c-text-muted, #8b9098);

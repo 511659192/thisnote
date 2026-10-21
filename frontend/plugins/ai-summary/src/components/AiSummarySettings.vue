@@ -5,6 +5,7 @@ import { aiSummaryApi, type AiSummarySettings } from '../api/aiSummaryApi'
 const settings = ref<AiSummarySettings>({
   aiProfileId: '',
   autoEnabled: true,
+  fontSize: 15,
   profiles: [],
   profilesError: '',
 })
@@ -37,6 +38,7 @@ async function save(): Promise<void> {
     settings.value = await aiSummaryApi.saveSettings(
       settings.value.aiProfileId,
       settings.value.autoEnabled,
+      settings.value.fontSize,
     )
     message.value = 'AI 总结设置已保存'
   } catch (e) {
@@ -69,6 +71,15 @@ onMounted(load)
         <small v-if="!settings.profiles.length" class="muted">
           AI 能力插件中还没有 completion 配置。
         </small>
+      </label>
+
+      <label>
+        <span>总结字号</span>
+        <div class="font-size-row">
+          <input v-model.number="settings.fontSize" type="number" min="10" max="32" step="1" />
+          <span>px</span>
+        </div>
+        <small class="muted">控制 AI 总结正文、提示与错误文字的字号。</small>
       </label>
 
       <label class="switch-row">
@@ -147,6 +158,23 @@ onMounted(load)
 
 .switch-row small {
   grid-column: 2;
+}
+
+.font-size-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.font-size-row input {
+  width: 84px;
+  box-sizing: border-box;
+  padding: 6px 9px;
+  color: var(--c-text);
+  background: var(--c-surface, #fff);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font: inherit;
 }
 
 .settings-form select {

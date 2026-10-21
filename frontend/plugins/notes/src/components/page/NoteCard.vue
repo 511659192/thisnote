@@ -511,7 +511,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   padding: 10px 14px 12px;
-  font-size: 15px;
+  font-size: var(--note-font-size, 15px);
   line-height: 1.85;
   border-radius: 0;
   position: fixed;

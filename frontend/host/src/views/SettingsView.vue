@@ -131,7 +131,7 @@ async function refreshNotesRoot() {
     const settings = await request<NotesRootSettings>('GET', '/api/notes/settings/get')
     notesRootDir.value = settings.rootDir
   } catch (e) {
-    ui.toast(`读取笔记根目录失败：${(e as Error).message}`, 'error')
+    ui.toast(`读取笔记设置失败：${(e as Error).message}`, 'error')
   }
 }
 
@@ -292,6 +292,7 @@ onMounted(async () => {
         <h3>笔记存储</h3>
         <p class="small muted">笔记根目录由服务配置确定。</p>
         <p class="small muted notes-root-active">当前笔记根目录：<span class="mono">{{ notesRootDir }}</span></p>
+
       </section>
 
       <!-- ------------------------------ plugins ------------------------------ -->

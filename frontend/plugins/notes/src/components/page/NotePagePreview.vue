@@ -74,6 +74,7 @@ defineEmits<{
   max-height: calc(80vh - 56px);
   overflow: auto;
   padding: var(--space-4);
+  font-size: var(--note-font-size, 15px);
 }
 .card-preview-content :deep(.md-preview img) {
   max-width: none;

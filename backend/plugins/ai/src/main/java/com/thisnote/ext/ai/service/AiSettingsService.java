@@ -28,11 +28,14 @@ public class AiSettingsService {
 
     private final AiSettingsRepository settingsRepository;
     private final AiProviderClient providerClient;
+    private final AiCompletionExecutor completionExecutor;
 
     public AiSettingsService(AiSettingsRepository settingsRepository,
-                             AiProviderClient providerClient) {
+                             AiProviderClient providerClient,
+                             AiCompletionExecutor completionExecutor) {
         this.settingsRepository = settingsRepository;
         this.providerClient = providerClient;
+        this.completionExecutor = completionExecutor;
     }
 
     public synchronized List<Profile> profiles() {
@@ -123,7 +126,10 @@ public class AiSettingsService {
             return new TestResponse(false, "请先配置 Provider、模型和 API key");
         }
         try {
-            providerClient.test(runtime);
+            completionExecutor.call(() -> {
+                providerClient.test(runtime);
+                return null;
+            });
             log.info("AI 连接测试成功：profileId={}", profileId);
             return new TestResponse(true, "AI 连接测试成功");
         } catch (Exception e) {

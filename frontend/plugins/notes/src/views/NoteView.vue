@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   modifierLabel,
   onNoteTitleChange,
+  request,
   toast,
 } from '@thisnote/plugin-api'
 import { usePageStore } from '@/stores/notePage'
@@ -27,6 +28,7 @@ const page = usePageStore()
 let unsubscribeNoteTitleChange: (() => void) | null = null
 
 const pageRef = ref<InstanceType<typeof NotePage> | null>(null)
+const noteFontSize = ref(15)
 const noteListRef = ref<InstanceType<typeof NoteList> | null>(null)
 const notesForList = computed(() => {
   const onlyNote = typeof route.query.onlyNote === 'string' ? route.query.onlyNote : ''
@@ -253,6 +255,16 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
+async function loadNoteFontSize() {
+  try {
+    const settings = await request<{ fontSize?: number }>('GET', '/api/notes/settings/get')
+    const fontSize = settings.fontSize
+    noteFontSize.value = typeof fontSize === 'number' && Number.isInteger(fontSize) && fontSize >= 10 && fontSize <= 32 ? fontSize : 15
+  } catch (e) {
+    console.warn('读取笔记正文字号失败，使用默认值 15px', e)
+  }
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
@@ -262,6 +274,7 @@ onMounted(() => {
     page.noteTitle = change.title
   })
   void applyRoute()
+  void loadNoteFontSize()
   // 面板已在启动时加载列表；这里只在列表意外为空时兜底重拉一次。
   if (nodes.notesView.length === 0 && !nodes.loadingList) void nodes.refreshAll()
 })
@@ -293,7 +306,7 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-if="nodes.current">
-        <div class="page-column">
+        <div class="page-column" :style="{ '--note-font-size': `${noteFontSize}px` }">
           <!-- The note's own header belongs to the page column, not to the whole view: it must
                sit beside the list rather than across the top of it. -->
           <header class="note-head">

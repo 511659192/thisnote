@@ -20,6 +20,9 @@ export interface AiTitleSuggestions {
   noteId: string
   currentTitle: string
   candidates: string[]
+  pending: boolean
+  deadlineEpochMs: number
+  error: string
 }
 
 export interface AiTitleUpdate {
@@ -32,6 +35,8 @@ export const aiTitleApi = {
   saveSettings: (aiProfileId: string) =>
     http.post<AiTitleSettings>(BASE + '/settings', { aiProfileId }),
   suggest: (noteId: string) => http.post<AiTitleSuggestions>(BASE + '/suggest', { noteId }),
+  status: (noteId: string) =>
+    http.get<AiTitleSuggestions>(BASE + '/status?noteId=' + encodeURIComponent(noteId)),
   applyTitle: (noteId: string, title: string) =>
     http.post<AiTitleUpdate>(BASE + '/apply', { noteId, title }),
 }

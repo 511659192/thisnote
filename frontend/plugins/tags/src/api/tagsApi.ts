@@ -17,14 +17,15 @@ export interface TagsAiProfile {
 export interface TagsSettings {
   aiProfileId: string
   autoEnabled: boolean
+  fontSize: number
   profiles: TagsAiProfile[]
   profilesError: string
 }
 
 export const tagsApi = {
   settings: () => http.get<TagsSettings>(BASE + '/settings'),
-  saveSettings: (aiProfileId: string, autoEnabled: boolean) =>
-    http.post<TagsSettings>(BASE + '/settings', { aiProfileId, autoEnabled }),
+  saveSettings: (aiProfileId: string, autoEnabled: boolean, fontSize: number) =>
+    http.post<TagsSettings>(BASE + '/settings', { aiProfileId, autoEnabled, fontSize }),
   tags: () => http.get<TagsByNote>(BASE + '/tags'),
   usage: () => http.get<Record<string, number>>(BASE + '/tags/usage'),
   add: (noteId: string, tag: string) =>

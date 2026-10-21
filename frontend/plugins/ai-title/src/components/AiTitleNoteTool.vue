@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { emitNoteTitleChange, toast } from '@thisnote/plugin-api'
-import { aiTitleApi } from '../api/aiTitleApi'
+import { aiTitleApi, type AiTitleSuggestions } from '../api/aiTitleApi'
 
 const props = defineProps<{ noteId: string }>()
+const POLL_INTERVAL_MS = 1_500
+const POLL_DEADLINE_MS = 140_000
 
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
@@ -15,6 +17,8 @@ let requestVersion = 0
 
 function close(): void {
   open.value = false
+  requestVersion++
+  busy.value = false
 }
 
 function closeOnOutsidePointerDown(event: PointerEvent): void {
@@ -35,22 +39,58 @@ function toggle(): void {
 async function suggest(): Promise<void> {
   if (busy.value) return
   const version = ++requestVersion
+  const noteId = props.noteId
   open.value = true
   busy.value = true
   status.value = '正在生成标题候选…'
   error.value = ''
   candidates.value = []
   try {
-    const result = await aiTitleApi.suggest(props.noteId)
-    if (version !== requestVersion) return
-    candidates.value = result.candidates
-    status.value = result.candidates.length ? '' : '没有可用的标题候选'
+    const result = await aiTitleApi.suggest(noteId)
+    if (version !== requestVersion || props.noteId !== noteId) return
+    apply(result)
+    if (result.pending) {
+      await poll(noteId, result.deadlineEpochMs, version)
+    }
   } catch (e) {
     if (version !== requestVersion) return
     error.value = (e as Error).message
     status.value = ''
   } finally {
     if (version === requestVersion) busy.value = false
+  }
+}
+
+function apply(view: AiTitleSuggestions): void {
+  candidates.value = view.candidates
+  error.value = view.error
+  if (view.pending) {
+    status.value = '正在生成标题候选…'
+  } else {
+    status.value = view.error || view.candidates.length ? '' : '没有可用的标题候选'
+  }
+}
+
+async function poll(noteId: string, deadlineEpochMs: number, version: number): Promise<void> {
+  const deadline = Math.min(deadlineEpochMs, Date.now() + POLL_DEADLINE_MS)
+  while (Date.now() <= deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS))
+    if (version !== requestVersion || props.noteId !== noteId) return
+    try {
+      const view = await aiTitleApi.status(noteId)
+      if (version !== requestVersion || props.noteId !== noteId) return
+      apply(view)
+      if (!view.pending) return
+    } catch (e) {
+      if (version !== requestVersion) return
+      error.value = (e as Error).message
+      status.value = ''
+      return
+    }
+  }
+  if (version === requestVersion && props.noteId === noteId) {
+    status.value = ''
+    error.value = 'AI 标题未在预期时间内完成，请稍后重试'
   }
 }
 

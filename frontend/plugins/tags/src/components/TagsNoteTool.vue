@@ -9,6 +9,8 @@ const props = defineProps<{ noteId: string }>()
 const AUTO_TAG_MIN = 10
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
+const collapsed = ref(false)
+const fontSize = ref(15)
 const busy = ref(false)
 const draft = ref('')
 const error = ref('')
@@ -31,6 +33,7 @@ async function ensureTagState(): Promise<void> {
   try {
     const [, settings] = await Promise.all([loadTagState(true), tagsApi.settings()])
     autoEnabled.value = settings.autoEnabled
+    fontSize.value = typeof settings.fontSize === 'number' && Number.isInteger(settings.fontSize) && settings.fontSize >= 10 && settings.fontSize <= 32 ? settings.fontSize : 15
     loadError.value = ''
     if (autoEnabled.value && !autoAttempted.has(props.noteId) && tags.value.length < AUTO_TAG_MIN) {
       autoAttempted.add(props.noteId)
@@ -67,6 +70,10 @@ watch(() => props.noteId, () => {
   error.value = ''
   void ensureTagState()
 })
+
+function toggleCollapsed(): void {
+  collapsed.value = !collapsed.value
+}
 
 async function toggleEditor(): Promise<void> {
   open.value = !open.value
@@ -167,7 +174,7 @@ async function removeTag(tag: string): Promise<void> {
 </script>
 
 <template>
-  <div ref="root" class="tags-note-tool" @click.stop>
+  <div ref="root" class="tags-note-tool" :style="{ '--tag-font-size': `${fontSize}px` }" @click.stop>
     <button
       type="button"
       class="tag-toggle"
@@ -178,9 +185,18 @@ async function removeTag(tag: string): Promise<void> {
       <span class="tag-glyph" aria-hidden="true">🏷</span>
       <span>标签</span>
     </button>
+    <button
+      v-if="hasTags"
+      type="button"
+      class="tag-collapse"
+      :aria-expanded="!collapsed"
+      :title="collapsed ? '展开标签' : '收起标签'"
+      :aria-label="collapsed ? '展开标签' : '收起标签'"
+      @click.stop="toggleCollapsed"
+    >{{ collapsed ? '▸' : '▾' }}</button>
 
     <span
-      v-if="hasTags"
+      v-if="hasTags && !collapsed"
       class="tag-strip"
       role="group"
       :title="tagSummary"
@@ -231,13 +247,12 @@ async function removeTag(tag: string): Promise<void> {
         />
         <button type="submit" :disabled="busy || !draft.trim()">添加</button>
         <button
-          v-if="autoEnabled"
           type="button"
           class="auto"
           :disabled="busy"
-          title="结合本地文本与可用的视觉索引抽取最多 20 个高层标签"
+          :title="autoEnabled ? '结合本地文本与可用的视觉索引抽取最多 20 个高层标签' : '手动触发 AI 标签抽取，最多 20 个标签'"
           @click.stop="autoExtractTags"
-        >自动抽取</button>
+        >AI 抽取</button>
       </form>
       <div v-if="availableTags.length" class="tag-group suggestion-group">
         <span class="group-label">已有标签</span>
@@ -262,12 +277,18 @@ async function removeTag(tag: string): Promise<void> {
 <style scoped>
 .tags-note-tool {
   position: relative;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 8px;
   width: 100%;
   min-width: 0;
+  padding: 5px 7px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: var(--tag-font-size, 15px);
 }
 
 .tag-strip {
@@ -289,11 +310,28 @@ async function removeTag(tag: string): Promise<void> {
   border: 1px solid transparent;
   border-radius: 10px;
   font: inherit;
-  font-size: 11px;
+  font-size: 0.8em;
   line-height: 1.5;
   cursor: pointer;
 }
 
+.tag-collapse {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--c-text-muted, #8b9098);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  font-size: 0.8em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tag-collapse:hover {
+  color: var(--accent, #6258d5);
+  background: color-mix(in srgb, var(--accent, #6258d5) 8%, transparent);
+}
 .tag-toggle:hover,
 .tag-toggle[aria-expanded='true'] {
   color: var(--accent, #6258d5);
@@ -301,7 +339,7 @@ async function removeTag(tag: string): Promise<void> {
 }
 
 .tag-glyph {
-  font-size: 12px;
+  font-size: 0.87em;
   line-height: 1;
 }
 
@@ -370,12 +408,12 @@ async function removeTag(tag: string): Promise<void> {
 .muted,
 .empty {
   color: var(--c-text-muted, #8b9098);
-  font-size: 11px;
+  font-size: 0.8em;
 }
 
 .load-error {
   color: var(--c-danger, #c33);
-  font-size: 11px;
+  font-size: 0.73em;
 }
 
 .tag-list {
@@ -402,16 +440,16 @@ async function removeTag(tag: string): Promise<void> {
   max-width: 100%;
   padding: 2px 6px;
   border-radius: 10px;
-  font-size: 11px;
+  font-size: 0.8em;
   overflow-wrap: anywhere;
   color: var(--c-text);
-  background: var(--c-surface-2);
+  background: var(--c-surface);
 }
 
 .tag.suggestion {
   border: 1px solid var(--c-border);
   font: inherit;
-  font-size: 11px;
+  font-size: 0.8em;
   cursor: pointer;
 }
 
@@ -446,7 +484,7 @@ async function removeTag(tag: string): Promise<void> {
   background: var(--c-surface, #fff);
   border: 1px solid var(--c-border);
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 0.8em;
 }
 
 .add-form button {
@@ -475,6 +513,6 @@ async function removeTag(tag: string): Promise<void> {
 
 .error {
   color: var(--c-danger, #c33);
-  font-size: 11px;
+  font-size: 0.73em;
 }
 </style>

@@ -4,6 +4,7 @@ import {
   registerListHeader,
   registerNoteListFilter,
   registerPluginRoute,
+  registerPluginSettings,
   registerSidebarPanel,
   registerTopbarSearch,
 } from '@thisnote/plugin-api'
@@ -11,6 +12,7 @@ import GlobalSearch from './src/components/GlobalSearch.vue'
 import TitleSearchBox from './src/components/TitleSearchBox.vue'
 import NoteView from './src/views/NoteView.vue'
 import NotesSidebarPanel from './src/components/NotesSidebarPanel.vue'
+import NotesSettings from './src/components/NotesSettings.vue'
 import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stores/titleSearch'
 
 /**
@@ -30,6 +32,7 @@ import { FILTER_ID, PLUGIN_ID, query, setMatchCount, setQuery } from './src/stor
  * 注册表在共享的 @thisnote/plugin-api 实例里（shallowReactive），装载顺序无关。
  */
 function register(): void {
+  registerPluginSettings({ pluginId: PLUGIN_ID, component: NotesSettings })
   registerSidebarPanel({ pluginId: PLUGIN_ID, component: NotesSidebarPanel })
   const titleSearchHeader = { pluginId: PLUGIN_ID, component: TitleSearchBox, noteManagement: true }
   registerListHeader(titleSearchHeader)

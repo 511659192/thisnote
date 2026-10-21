@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
@@ -33,9 +34,15 @@ public class TitleController {
     }
 
     @PostMapping("/suggest")
-    public TitleSuggestionService.SuggestionsResponse suggest(@RequestBody NoteRequest request) {
+    public TitleSuggestionService.SuggestionsView suggest(@RequestBody NoteRequest request) {
         log.info("收到 AI 标题候选请求：noteId={}", request.noteId());
         return suggestionService.suggest(request.noteId());
+    }
+
+    @GetMapping("/status")
+    public TitleSuggestionService.SuggestionsView status(@RequestParam String noteId) {
+        log.debug("查询 AI 标题任务状态：noteId={}", noteId);
+        return suggestionService.view(noteId);
     }
 
     @PostMapping("/apply")

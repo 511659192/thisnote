@@ -25,7 +25,7 @@ public class TitleAiClient {
 
     private static final long RESULT_TIMEOUT_SECONDS = 60;
     private static final long ATTACHMENT_TIMEOUT_SECONDS = 30;
-    private static final int MAX_TOKENS = 160;
+    private static final int MAX_TOKENS = 64_000;
     private static final int MAX_IMAGES = 3;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
     private static final int MAX_CONTENT_CHARS = 30_000;
@@ -56,12 +56,19 @@ public class TitleAiClient {
         return TitleHeuristics.normalizeGenerated(response);
     }
 
-    public List<String> generateCandidates(String profileId,
-                                           String currentTitle,
-                                           String contentMd,
-                                           GraphifyNoteContext context) {
-        String response = complete(profileId, CANDIDATE_PROMPT, currentTitle, contentMd, context);
-        return TitleHeuristics.normalizeCandidates(response);
+    public CompletableFuture<String> requestCandidates(String profileId,
+                                                       String currentTitle,
+                                                       String contentMd,
+                                                       GraphifyNoteContext context) {
+        AiCompletionFutureEvent request = AiCompletionFutureEvent.request(
+                profileId,
+                CANDIDATE_PROMPT,
+                userText(currentTitle, contentMd, context),
+                images(contentMd),
+                MAX_TOKENS
+        );
+        publisher().publishEvent(request);
+        return request.result();
     }
 
     private String complete(String profileId,

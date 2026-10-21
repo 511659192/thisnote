@@ -5,6 +5,7 @@ import { tagsApi, type TagsSettings } from '../api/tagsApi'
 const settings = ref<TagsSettings>({
   aiProfileId: '',
   autoEnabled: true,
+  fontSize: 15,
   profiles: [],
   profilesError: '',
 })
@@ -37,6 +38,7 @@ async function save(): Promise<void> {
     settings.value = await tagsApi.saveSettings(
       settings.value.aiProfileId,
       settings.value.autoEnabled,
+      settings.value.fontSize,
     )
     message.value = '标签设置已保存'
   } catch (e) {
@@ -71,10 +73,19 @@ onMounted(load)
         </small>
       </label>
 
+      <label>
+        <span>标签字号</span>
+        <div class="font-size-row">
+          <input v-model.number="settings.fontSize" type="number" min="10" max="32" step="1" />
+          <span>px</span>
+        </div>
+        <small class="muted">控制标签入口、标签胶囊和标签面板文字的字号。</small>
+      </label>
+
       <label class="switch-row">
         <input v-model="settings.autoEnabled" type="checkbox" />
         <span>允许自动抽取标签</span>
-        <small class="muted">关闭后仅在点击笔记页的 ✦ 图标时抽取。</small>
+        <small class="muted">关闭后不会自动触发；仍可点击 ✦ 或标签面板中的“AI 抽取”手动执行。</small>
       </label>
 
       <dl v-if="selectedProfile" class="profile-summary">
@@ -147,6 +158,23 @@ onMounted(load)
 
 .switch-row small {
   grid-column: 2;
+}
+
+.font-size-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.font-size-row input {
+  width: 84px;
+  box-sizing: border-box;
+  padding: 6px 9px;
+  color: var(--c-text);
+  background: var(--c-surface, #fff);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font: inherit;
 }
 
 .settings-form select {

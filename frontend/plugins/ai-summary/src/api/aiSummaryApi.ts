@@ -23,6 +23,7 @@ export interface AiSummaryProfile {
 export interface AiSummarySettings {
   aiProfileId: string
   autoEnabled: boolean
+  fontSize: number
   profiles: AiSummaryProfile[]
   profilesError: string
 }
@@ -32,6 +33,6 @@ export const aiSummaryApi = {
   generate: (noteId: string, force = false, automatic = false) =>
     http.post<AiSummaryView>(BASE + '/generate', { noteId, force, automatic }),
   settings: () => http.get<AiSummarySettings>(BASE + '/settings'),
-  saveSettings: (aiProfileId: string, autoEnabled: boolean) =>
-    http.post<AiSummarySettings>(BASE + '/settings', { aiProfileId, autoEnabled }),
+  saveSettings: (aiProfileId: string, autoEnabled: boolean, fontSize: number) =>
+    http.post<AiSummarySettings>(BASE + '/settings', { aiProfileId, autoEnabled, fontSize }),
 }

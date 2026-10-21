@@ -1,6 +1,7 @@
 package com.thisnote.ext.ai.listener;
 
 import com.thisnote.ext.ai.client.AiProviderClient;
+import com.thisnote.ext.ai.service.AiCompletionExecutor;
 import com.thisnote.ext.ai.service.AiSettingsService;
 import com.thisnote.plugin.api.event.AiCompletionFutureEvent;
 import com.thisnote.plugin.api.event.AiRuntimeFutureEvent;
@@ -16,10 +17,24 @@ public class AiCompletionEventListener
 
     private final AiSettingsService settingsService;
     private final AiProviderClient providerClient;
+    private final AiCompletionExecutor executor;
 
     @Override
     public void onApplicationEvent(PayloadApplicationEvent<AiCompletionFutureEvent> event) {
         AiCompletionFutureEvent request = event.getPayload();
+        try {
+            executor.execute(() -> run(request));
+        } catch (Exception e) {
+            log.error("AI completion 无法排队：profileId={}", request.profileId(), e);
+            request.completion().completeExceptionally(e);
+        }
+    }
+
+    private void run(AiCompletionFutureEvent request) {
+        if (request.completion().isDone()) {
+            log.debug("AI completion 已超时或被取消，跳过执行：profileId={}", request.profileId());
+            return;
+        }
         try {
             AiRuntimeFutureEvent.Runtime runtime = settingsService.runtime(request.profileId());
             if (!runtime.configured()) {

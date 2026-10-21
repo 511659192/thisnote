@@ -8,6 +8,7 @@ const router = useRouter()
 const result = ref<GraphifyRelatedNotes>({ available: false, notes: [] })
 const loading = ref(true)
 const error = ref('')
+const collapsed = ref(false)
 let requestSeq = 0
 
 async function load(noteId: string): Promise<void> {
@@ -33,6 +34,10 @@ async function load(noteId: string): Promise<void> {
   }
 }
 
+function toggleCollapsed(): void {
+  collapsed.value = !collapsed.value
+}
+
 function openNote(noteId: string): void {
   const target: RouteLocationRaw = router.hasRoute('note')
     ? { name: 'note', params: { id: noteId } }
@@ -50,23 +55,34 @@ watch(
 
 <template>
   <section class="related-notes" aria-label="相关笔记">
-    <span class="related-label">相关笔记</span>
-    <span v-if="loading" class="related-hint">查找中…</span>
-    <span v-else-if="error" class="related-hint error" :title="error">加载失败</span>
-    <div v-else-if="result.available && result.notes.length" class="related-list">
-      <button
-        v-for="note in result.notes"
-        :key="note.noteId"
-        type="button"
-        class="related-item"
-        :title="note.title + '：' + note.reasons.join('；')"
-        @click.stop="openNote(note.noteId)"
-      >
-        <span class="related-title">{{ note.title }}</span>
-        <span class="related-reason">{{ note.reasons.join(' · ') }}</span>
-      </button>
-    </div>
-    <span v-else class="related-hint">{{ result.available ? '暂无相关笔记' : '索引完成后可用' }}</span>
+    <button
+      type="button"
+      class="related-toggle"
+      :aria-expanded="!collapsed"
+      :title="collapsed ? '展开相关笔记' : '收起相关笔记'"
+      @click.stop="toggleCollapsed"
+    >
+      <span class="related-chevron" aria-hidden="true">{{ collapsed ? '▸' : '▾' }}</span>
+      <span>相关笔记</span>
+    </button>
+    <template v-if="!collapsed">
+      <span v-if="loading" class="related-hint">查找中…</span>
+      <span v-else-if="error" class="related-hint error" :title="error">加载失败</span>
+      <div v-else-if="result.available && result.notes.length" class="related-list">
+        <button
+          v-for="note in result.notes"
+          :key="note.noteId"
+          type="button"
+          class="related-item"
+          :title="note.title + '：' + note.reasons.join('；')"
+          @click.stop="openNote(note.noteId)"
+        >
+          <span class="related-title">{{ note.title }}</span>
+          <span class="related-reason">{{ note.reasons.join(' · ') }}</span>
+        </button>
+      </div>
+      <span v-else class="related-hint">{{ result.available ? '暂无相关笔记' : '索引完成后可用' }}</span>
+    </template>
   </section>
 </template>
 
@@ -80,12 +96,31 @@ watch(
   min-width: 0;
 }
 
-.related-label {
+.related-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
-  padding-top: 4px;
+  padding: 1px 7px;
   color: var(--c-text-muted, #8b9098);
-  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12px;
   line-height: 1.5;
+  cursor: pointer;
+}
+
+.related-toggle:hover,
+.related-toggle[aria-expanded='true'] {
+  color: var(--accent, #6258d5);
+  background: color-mix(in srgb, var(--accent, #6258d5) 8%, transparent);
+}
+
+.related-chevron {
+  font-size: 10px;
+  line-height: 1;
 }
 
 .related-list {

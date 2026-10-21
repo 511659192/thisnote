@@ -274,21 +274,22 @@ host（qiankun 主应用，:5173）
     ├── notes/.note-metadata.json   noteId → NotePO（扁平 map）
     ├── notes/.card-metadata.json   cardId → meta（扁平 map；meta.fileName 即文件名）
     ├── notes/.attachment-metadata.json  fileName → {attachmentId,fileName,originalName,cardId,noteId,w,h,size,contentType,uploadedAt}
+    ├── notes/settings.json        笔记正文字号（10–32px，默认 15px）
     ├── ai/settings.json / .credentials.json   profile 列表、模型/endpoint、单次文本上限与按 profile 保存的 API key
     ├── graphify/
     │   ├── settings.json / index-state.json
     │   └── corpus/<noteId>/note.md + attachments/；corpus/graphify-out/{graph.json,graph.html,...}
-    ├── ai-summary/settings.json / summaries.json   AI completion、自动生成开关与 noteId → 摘要缓存
+    ├── ai-summary/settings.json / summaries.json   AI completion、自动生成开关、字号与 noteId → 摘要缓存
     ├── ai-title/settings.json    AI 标题候选使用的 completion profile
     ├── tags/tags.json            noteId → { tags, occurrences }（独立插件存储）
-    ├── tags/settings.json        aiProfileId + autoEnabled（标签插件 AI 配置与自动抽取开关）
+    ├── tags/settings.json        aiProfileId + autoEnabled + fontSize（标签插件 AI 配置、自动抽取开关与字号）
     └── <pluginId>/              其它插件自己的数据
 ```
 
 - **既有插件持久化文件多使用隐藏命名**：notes 的 `.note-metadata.json`、
   `.card-metadata.json`、`.attachment-metadata.json`，favorite 的 `.favorites.properties`，
   memory-cycle 的 `.scheduling.json` / `.schedule-history.json`，baidu-sync 的 `.credentials.json` /
-  `.sync-state.json`，notes 分组台账 `book/.books.json`。AI 插件使用 `ai/settings.json` 与
+  `.sync-state.json`，notes 分组台账 `book/.books.json`，笔记核心设置 `notes/settings.json`。AI 插件使用 `ai/settings.json` 与
   `.credentials.json`；Graphify 只保留 CLI 设置和索引状态；AI 总结使用 `ai-summary/settings.json` 与
   `summaries.json`；AI 标题候选使用 `ai-title/settings.json`；标签插件使用 `tags/tags.json` 与 `tags/settings.json`。
   卡片 md 与附件等内容文件保持原命名。
@@ -358,7 +359,8 @@ host（qiankun 主应用，:5173）
 | POST | `/api/notes/attachments/upload` | multipart `file`，返回 `../attachments/<name>` |
 | GET | `/api/notes/attachments/get?fileName=` | 读图（`no-cache` + `nosniff`） |
 | POST | `/api/notes/attachments/delete?fileName=` | 无引用才删 |
-| GET | `/api/notes/settings/get` | 笔记根目录（`rootDir/activeRootDir/restartRequired`） |
+| GET | `/api/notes/settings/get` | 笔记根目录与正文字号（`rootDir/activeRootDir/restartRequired/fontSize`） |
+| POST | `/api/notes/settings/update` | body `{fontSize}`，更新卡片正文编辑/预览字号 |
 | GET | `/api/books/get` | 分组列表（type=book） |
 | POST | `/api/books/create` / `/update?id=` / `/delete?id=` | 分组增删改 |
 
@@ -401,15 +403,16 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 设置响应以 `aiError` / `profilesError` 区分运行时配置与 profile 列表读取失败。
 
 **ai-summary**：`GET /api/plugins/ai-summary/get?noteId=`、`POST .../generate`、
-`GET/POST /api/plugins/ai-summary/settings`。生成请求只负责排队，前端轮询 `get` 直到 `pending=false`；
+`GET/POST /api/plugins/ai-summary/settings`。设置包含 completion profile、自动生成开关和总结字号；生成请求只负责排队，前端轮询 `get` 直到 `pending=false`；
 摘要缓存写入插件自己的 `summaries.json`。`generate` 的 `automatic` 为 true 时受 `autoEnabled` 开关约束。
 
 **ai-title**：`GET/POST /api/plugins/ai-title/settings`、`POST /api/plugins/ai-title/suggest`、
-`POST /api/plugins/ai-title/apply`。设置只保存标题候选使用的 `aiProfileId`；`suggest` 读取笔记内容并返回
-1–3 个候选，`apply` 通过 `NoteTitleUpdateFutureEvent` 交给 notes 更新标题。卡片/附件导入不再自动生成标题。
+`GET /api/plugins/ai-title/status?noteId=`、`POST /api/plugins/ai-title/apply`。设置只保存标题候选使用的 `aiProfileId`；
+`suggest` 只负责入队并返回 `pending`、`deadlineEpochMs`、`candidates` 与 `error`，前端轮询 `status` 直到 `pending=false`；
+`apply` 通过 `NoteTitleUpdateFutureEvent` 交给 notes 更新标题。卡片/附件导入不再自动生成标题。
 
 **tags**：`GET /api/plugins/tags/tags`、`POST .../tags/add`、`POST .../tags/remove`、
-`POST .../tags/delete`、`POST .../tags/auto`、`GET .../tags/auto/status`。自动标签先同步返回本地候选、
+`POST .../tags/delete`、`POST .../tags/auto`、`GET .../tags/auto/status`。设置包含 completion profile、自动抽取开关和标签字号；自动标签先同步返回本地候选、
 `pending` 与后端统一预算 `deadlineEpochMs`（130 秒 + 5 秒宽限），AI 在后台完成；前端按该截止时间轮询状态接口刷新结果。
 `tags/auto` 的 `automatic` 为 true 时受 `autoEnabled` 开关约束；设置响应以 `profilesError` 报告 AI profile 读取失败。
 标签只存于 tags 插件自己的 `tags.json`，不读取 Graphify 或 notes 的数据目录。
@@ -529,8 +532,10 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 **ai-title**
 - 硬依赖 `graphify,ai,notes`；注册标题能力监听器，停用时全部摘除。
 - 卡片/附件导入不再触发 AI 标题生成，录入时直接使用原文件名；AI 标题只由笔记页的用户显式操作触发。
-- 笔记标题右侧的「AI 标题」按钮通过 `POST /suggest` 获取 1–3 个候选，用户在弹层中点击候选后通过
-  `POST /apply` 交给 notes 更新标题；取消或失败时不修改标题。
+- 笔记标题右侧的「AI 标题」按钮通过 `POST /suggest` 排队生成候选并立即返回 `pending` 与 `deadlineEpochMs`，
+  前端按该截止时间轮询 `GET /status?noteId=`；同一 noteId 去重，队列满或 AI 失败写入 `error`。
+  用户点击候选后通过 `POST /apply` 交给 notes 更新标题；取消或失败时不修改标题。
+- 候选生成只在 HTTP 线程完成笔记/图谱读取与入队，模型调用由 AI 插件的共享单线程执行器完成。
 - 候选弹层支持收起：再次点击「AI 标题」按钮、点击弹层内「收起」或点击外部都会关闭。
 - 候选生成通过 `NoteContentFutureEvent` 读取当前标题与卡片正文，通过 `GraphifyTextContextFutureEvent`
   获取相关概念/社区；图谱不可用时仅按正文生成。正文引用图片会作为视觉输入。
@@ -545,6 +550,8 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - profile 数量允许为零；此时 Tags/Graphify/ai-summary/ai-title 设置页显示 AI 不可用原因，执行时返回明确业务错误。
 - Provider 默认 model/endpoint 以 `AiSettingsRepository` 为唯一来源；Graphify 不保存模型副本。
 - AI 插件只响应通用能力事件，不包含笔记、标签或其他业务语义；插件通过 `AiProfilesFutureEvent` 查询可用配置。
+- 所有 completion（tags、ai-summary、ai-title 与连接测试）都提交到 AI 插件的单线程执行器，32 容量有界队列；
+  队列满立即失败，已超时/取消的请求在开始执行前跳过；429 请求失败且不重试，存在 `Retry-After` 时延迟后续队列任务。除 Graphify CLI 外，全局同时最多一个模型请求。
 - completion profile 的单次文本上限由 `maxTextChars` 控制，默认 `1,000,000` 字符，允许 `1,000..1,000,000`；它是字符数，不是 token 数。
 - Graphify 通过 `AiRuntimeFutureEvent` 取得所选 profile 的运行时配置；AI 插件不读写 Graphify、tags、ai-summary 或 ai-title 的业务数据。
 

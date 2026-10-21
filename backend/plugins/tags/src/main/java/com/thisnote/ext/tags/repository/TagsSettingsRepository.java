@@ -13,6 +13,8 @@ import java.nio.file.Path;
 @Repository
 public class TagsSettingsRepository {
 
+    private static final int DEFAULT_FONT_SIZE = 15;
+
     private final FileHelper fileHelper;
     private final Path settingsFile;
 
@@ -31,31 +33,38 @@ public class TagsSettingsRepository {
         return read().autoEnabled();
     }
 
+    public synchronized int getFontSize() {
+        return read().fontSize();
+    }
+
     public synchronized void update(String aiProfileId,
-                                    boolean autoEnabled) {
+                                    boolean autoEnabled,
+                                    int fontSize) {
         try {
-            fileHelper.fileWritten(settingsFile, new StoredSettings(aiProfileId, autoEnabled));
-            log.info("标签设置已写入：path={}, profileId={}, autoEnabled={}",
-                    settingsFile, aiProfileId, autoEnabled);
+            fileHelper.fileWritten(settingsFile, new StoredSettings(aiProfileId, autoEnabled, fontSize));
+            log.info("标签设置已写入：path={}, profileId={}, autoEnabled={}, fontSize={}",
+                    settingsFile, aiProfileId, autoEnabled, fontSize);
         } catch (RuntimeException e) {
-            log.error("标签设置写入失败：path={}, profileId={}, autoEnabled={}",
-                    settingsFile, aiProfileId, autoEnabled, e);
+            log.error("标签设置写入失败：path={}, profileId={}, autoEnabled={}, fontSize={}",
+                    settingsFile, aiProfileId, autoEnabled, fontSize, e);
             throw e;
         }
     }
 
     private StoredSettings read() {
         if (!Files.exists(settingsFile)) {
-            return new StoredSettings("", true);
+            return new StoredSettings("", true, DEFAULT_FONT_SIZE);
         }
         try {
             var raw = JSON.parseObject(Files.readString(settingsFile));
             if (raw == null) {
-                return new StoredSettings("", true);
+                return new StoredSettings("", true, DEFAULT_FONT_SIZE);
             }
+            Integer fontSize = raw.getInteger("fontSize");
             return new StoredSettings(
                     raw.getString("aiProfileId") == null ? "" : raw.getString("aiProfileId"),
-                    !Boolean.FALSE.equals(raw.getBoolean("autoEnabled"))
+                    !Boolean.FALSE.equals(raw.getBoolean("autoEnabled")),
+                    fontSize == null ? DEFAULT_FONT_SIZE : fontSize
             );
         } catch (Exception e) {
             log.error("标签设置文件读取失败：{}", settingsFile, e);
@@ -63,6 +72,6 @@ public class TagsSettingsRepository {
         }
     }
 
-    private record StoredSettings(String aiProfileId, boolean autoEnabled) {
+    private record StoredSettings(String aiProfileId, boolean autoEnabled, int fontSize) {
     }
 }
