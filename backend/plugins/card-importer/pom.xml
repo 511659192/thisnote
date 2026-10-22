@@ -17,7 +17,7 @@
     <plugin.id>card-importer</plugin.id>
   </properties>
 
-  <description>定时扫描 notes/cards 的 Markdown 卡片，并支持从本地文件夹复制后导入</description>
+  <description>定时扫描 notes/cards 的 Markdown 卡片，并支持从本地文件夹复制或浏览器 HTTP 上传后导入</description>
 
   <dependencies>
     <dependency>

@@ -1,0 +1,20 @@
+name: thisnote
+
+services:
+  thisnote:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: thisnote:local
+    container_name: thisnote
+    ports:
+      - "${THISNOTE_HTTP_PORT:-8081}:8080"
+    environment:
+      TZ: Asia/Shanghai
+      THISNOTE_DATA_ROOT: /app/data
+      THISNOTE_PLUGINS_ROOT: /app/runtime/plugins
+      THISNOTE_PORT: "45917"
+      SERVER_ADDRESS: 127.0.0.1
+      LOGGING_FILE_NAME: /app/data/logs/backend.log
+    restart: unless-stopped
+    stop_grace_period: 30s

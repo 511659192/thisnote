@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -135,6 +136,53 @@ public class CardImporterService {
         return new FolderImportResult(imported, duplicates, skipped, errors);
     }
 
+    /**
+     * 接收浏览器上传的 Markdown 卡片，先写入临时目录，再复用 notes 的暂存事件。
+     */
+    public synchronized FolderImportResult importUpload(MultipartFile upload) {
+        if (upload == null) {
+            log.warn("拒绝卡片 HTTP 上传：reason=文件为空");
+            return new FolderImportResult(0, 0, 1, List.of("未收到上传文件"));
+        }
+        String fileName = uploadedFileName(upload);
+        String displayName = fileName.isBlank() ? "未命名文件" : fileName;
+        if (upload.isEmpty()) {
+            log.warn("拒绝卡片 HTTP 上传：fileName={}, reason=文件为空", displayName);
+            return new FolderImportResult(0, 0, 1, List.of(displayName + "：文件为空"));
+        }
+        if (fileName.isBlank() || !isMarkdownCard(fileName)) {
+            log.warn("拒绝卡片 HTTP 上传：fileName={}, reason=只支持 Markdown", displayName);
+            return new FolderImportResult(0, 0, 1, List.of(displayName + "：只支持 .md 文件"));
+        }
+
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("thisnote-card-upload-");
+            Path tempFile = tempDir.resolve(fileName);
+            upload.transferTo(tempFile);
+            log.info("卡片 HTTP 上传已暂存：fileName={}, bytes={}, tempFile={}",
+                    fileName, upload.getSize(), tempFile);
+
+            CardStageFutureEvent.CardStageResult staged = stageSelectedFile(tempFile);
+            if (staged.duplicated()) {
+                log.debug("跳过重复卡片文件名：fileName={}", staged.fileName());
+                return new FolderImportResult(0, 1, 0, List.of());
+            }
+            if (!staged.fileName().isBlank()) {
+                log.debug("卡片 HTTP 上传已复制：fileName={}, stagedName={}", fileName, staged.fileName());
+                return new FolderImportResult(1, 0, 0, List.of());
+            }
+            log.warn("卡片 HTTP 上传未暂存：fileName={}", fileName);
+            return new FolderImportResult(0, 0, 1, List.of());
+        } catch (Exception e) {
+            String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            log.error("卡片 HTTP 上传失败：fileName={}", fileName, e);
+            return new FolderImportResult(0, 0, 0, List.of(displayName + "：" + reason));
+        } finally {
+            cleanup(tempDir);
+        }
+    }
+
     private CardStageFutureEvent.CardStageResult stageSelectedFile(Path source) {
         CardStageFutureEvent request = CardStageFutureEvent.request(
                 source.toAbsolutePath().toString());
@@ -148,8 +196,36 @@ public class CardImporterService {
         return fileName.substring(0, fileName.length() - ".md".length());
     }
 
+    private static boolean isMarkdownCard(String fileName) {
+        return fileName.toLowerCase(Locale.ROOT).endsWith(".md");
+    }
+
     private static boolean isMarkdownCard(Path path) {
-        return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".md");
+        return isMarkdownCard(path.getFileName().toString());
+    }
+
+    private static String uploadedFileName(MultipartFile upload) {
+        String original = upload.getOriginalFilename();
+        if (original == null) return "";
+        String normalized = original.replace('\\', '/');
+        String name = normalized.substring(normalized.lastIndexOf('/') + 1).trim();
+        if (name.equals(".") || name.equals("..")) return "";
+        return name.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+    }
+
+    private static void cleanup(Path tempDir) {
+        if (tempDir == null) return;
+        try (var paths = Files.walk(tempDir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    log.warn("卡片上传临时文件清理失败：path={}", path, e);
+                }
+            });
+        } catch (IOException e) {
+            log.warn("卡片上传临时目录清理失败：tempDir={}", tempDir, e);
+        }
     }
 
     public record FolderImportResult(int imported,

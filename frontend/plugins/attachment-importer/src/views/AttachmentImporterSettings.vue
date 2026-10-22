@@ -6,22 +6,52 @@ import {
 } from '../api/attachmentImporterApi'
 
 const folderPath = ref('')
-const importing = ref(false)
-const error = ref('')
-const result = ref<FolderImportResult | null>(null)
-const canImport = computed(() => folderPath.value.trim().length > 0 && !importing.value)
+const importingFolder = ref(false)
+const folderError = ref('')
+const folderResult = ref<FolderImportResult | null>(null)
+const canImportFolder = computed(() => folderPath.value.trim().length > 0 && !importingFolder.value)
+
+const fileInput = ref<HTMLInputElement | null>(null)
+const selectedFiles = ref<File[]>([])
+const uploading = ref(false)
+const uploadError = ref('')
+const uploadResult = ref<FolderImportResult | null>(null)
+const canUpload = computed(() => selectedFiles.value.length > 0 && !uploading.value)
 
 async function importFolder() {
-  if (!canImport.value) return
-  importing.value = true
-  error.value = ''
-  result.value = null
+  if (!canImportFolder.value) return
+  importingFolder.value = true
+  folderError.value = ''
+  folderResult.value = null
   try {
-    result.value = await attachmentImporterApi.importFolder(folderPath.value.trim())
+    folderResult.value = await attachmentImporterApi.importFolder(folderPath.value.trim())
   } catch (e) {
-    error.value = `导入失败：${(e as Error).message}`
+    folderError.value = `导入失败：${(e as Error).message}`
   } finally {
-    importing.value = false
+    importingFolder.value = false
+  }
+}
+
+function onUploadFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  selectedFiles.value = Array.from(input.files ?? [])
+  uploadError.value = ''
+  uploadResult.value = null
+}
+
+async function importUploads() {
+  if (!canUpload.value) return
+  uploading.value = true
+  uploadError.value = ''
+  uploadResult.value = null
+  try {
+    uploadResult.value = await attachmentImporterApi.importUploads(selectedFiles.value)
+    selectedFiles.value = []
+    if (fileInput.value) fileInput.value.value = ''
+  } catch (e) {
+    uploadError.value = `上传失败：${(e as Error).message}`
+  } finally {
+    uploading.value = false
   }
 }
 </script>
@@ -37,9 +67,9 @@ async function importFolder() {
       <li>已被卡片引用的图片会跳过，编辑器里粘贴的图片不会重复生成笔记。</li>
       <li>未管理的附件会改名为 <code>&lt;uuid&gt;.&lt;扩展名&gt;</code>，原始文件名记入附件元数据，并作为笔记标题。</li>
       <li>自动扫描每轮都按「没有被任何卡片引用」判断，引用关系由 notes 提供；已被引用的图片不会重复生成笔记。</li>
-      <li>手动文件夹导入按原文件名与 notes 的待管理附件/元数据判重，相同文件名再次导入会跳过。</li>
+      <li>手动文件夹导入和 HTTP 上传都按原文件名与 notes 的待管理附件/元数据判重，相同文件名再次导入会跳过。</li>
       <li>卡片框体按图片原始尺寸生成（宽度上限 680），打开时图片铺满卡片，不留大片空白。</li>
-      <li>只处理 png / jpg / webp，其它文件与非普通文件一律跳过。</li>
+      <li>只处理 png / jpg / jpeg / webp，其它文件与非普通文件一律跳过。</li>
     </ul>
 
     <div class="manual-import">
@@ -53,19 +83,50 @@ async function importFolder() {
           v-model="folderPath"
           class="input"
           placeholder="例如 D:\Pictures\待导入"
-          :disabled="importing"
+          :disabled="importingFolder"
         />
-        <button type="button" class="btn sm primary" :disabled="!canImport" @click="importFolder">
-          {{ importing ? '正在导入…' : '导入图片' }}
+        <button type="button" class="btn sm primary" :disabled="!canImportFolder" @click="importFolder">
+          {{ importingFolder ? '正在导入…' : '导入图片' }}
         </button>
       </div>
-      <p v-if="error" class="feedback error">{{ error }}</p>
-      <p v-if="result" class="feedback success">
-        复制完成：成功 {{ result.imported }} 张，重复 {{ result.duplicates }} 张，跳过 {{ result.skipped }} 张。
+      <p v-if="folderError" class="feedback error">{{ folderError }}</p>
+      <p v-if="folderResult" class="feedback success">
+        复制完成：成功 {{ folderResult.imported }} 张，重复 {{ folderResult.duplicates }} 张，跳过 {{ folderResult.skipped }} 张。
         图片将在下一轮自动扫描时生成笔记。
       </p>
-      <ul v-if="result?.errors.length" class="error-list">
-        <li v-for="item in result.errors" :key="item">{{ item }}</li>
+      <ul v-if="folderResult?.errors.length" class="error-list">
+        <li v-for="item in folderResult.errors" :key="item">{{ item }}</li>
+      </ul>
+    </div>
+
+    <div class="manual-import">
+      <h4>HTTP 上传</h4>
+      <p class="small muted">
+        从当前浏览器选择图片，适合 Docker 等后端无法读取浏览器本地路径的场景。
+        多个文件会按顺序逐个上传，单个文件不超过 25MB。
+      </p>
+      <div class="folder-row">
+        <input
+          ref="fileInput"
+          class="input"
+          type="file"
+          multiple
+          accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+          :disabled="uploading"
+          @change="onUploadFilesSelected"
+        />
+        <button type="button" class="btn sm primary" :disabled="!canUpload" @click="importUploads">
+          {{ uploading ? '正在上传…' : '上传并导入' }}
+        </button>
+      </div>
+      <p v-if="selectedFiles.length" class="small muted">已选择 {{ selectedFiles.length }} 个文件。</p>
+      <p v-if="uploadError" class="feedback error">{{ uploadError }}</p>
+      <p v-if="uploadResult" class="feedback" :class="uploadResult.errors.length ? 'error' : 'success'">
+        处理完成：成功 {{ uploadResult.imported }} 张，重复 {{ uploadResult.duplicates }} 张，跳过 {{ uploadResult.skipped }} 张。
+        图片将在下一轮自动扫描时生成笔记。
+      </p>
+      <ul v-if="uploadResult?.errors.length" class="error-list">
+        <li v-for="item in uploadResult.errors" :key="item">{{ item }}</li>
       </ul>
     </div>
   </section>

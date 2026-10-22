@@ -203,8 +203,8 @@ host（qiankun 主应用，:5173）
 | `favorite` | 笔记收藏（★ + 列表筛选） | 否 | 无 | `notes/plugins/favorite/.favorites.properties` |
 | `memory-cycle` | 间隔重复（Anki 式） | 否 | 无 | `notes/plugins/memory-cycle/.scheduling.json`（排期）、`.schedule-history.json`（复习历史） |
 | `baidu-sync` | 平台级百度网盘备份适配器 | 否 | 无 | `notes/plugins/baidu-sync/{.credentials,.sync-state}.json` |
-| `card-importer` | 定时把「无主卡片」导入成笔记 | 否 | `notes` | 无（只通过事件协作） |
-| `attachment-importer` | 定时把未被引用的图片附件导入成笔记；支持绝对路径文件夹复制 | 否 | `notes` | 无（原文件名由 notes 附件状态判重） |
+| `card-importer` | 定时把「无主卡片」导入成笔记；支持绝对路径文件夹复制与 HTTP 上传 | 否 | `notes` | 无（只通过事件协作） |
+| `attachment-importer` | 定时把未被引用的图片附件导入成笔记；支持绝对路径文件夹复制与 HTTP 上传 | 否 | `notes` | 无（原文件名由 notes 附件状态判重） |
 | `state-reset` | 重置全部已安装插件并汇总结果 | 否 | 无 | 无（平台控制插件） |
 | `graphify` | Graphify 知识图谱与社区自动标签 | 否 | `ai,notes` | `notes/plugins/graphify/`（CLI 设置、索引映射与投影语料） |
 | `ai-summary` | 基于 Graphify 图谱生成 AI 笔记总结并展示在标题下方 | 否 | `graphify,ai,notes` | `notes/plugins/ai-summary/{settings.json,summaries.json}` |
@@ -389,10 +389,16 @@ host（qiankun 主应用，:5173）
 **card-importer**：`POST /api/plugins/card-importer/import-folder`，请求体 `{path}`；
 `path` 必须是绝对文件夹路径；后端递归复制其中扩展名为 `.md` 的普通文件到 notes 的 `cards/`，
 不立即解析，随后由现有 10 秒定时任务生成笔记与卡片。
+另有 `POST /api/plugins/card-importer/import-upload`，multipart 字段 `file`（单个 `.md`）：
+后端先写临时目录，再经 `CardStageFutureEvent` 复制到 notes 的 `cards/`，随后走同一扫描链路；
+界面多选文件时按文件逐个请求，避免多个文件超过单次请求上限。
 
 **attachment-importer**：`POST /api/plugins/attachment-importer/import-folder`，请求体 `{path}`；
 `path` 必须是绝对文件夹路径；后端递归复制其中的 png/jpg/jpeg/webp 到待管理附件目录，
 不立即解析，随后由现有 10 秒定时任务接管、改名并生成笔记与图片卡片。
+另有 `POST /api/plugins/attachment-importer/import-upload`，multipart 字段 `file`（单个图片）：
+后端先写临时目录，再经 `AttachmentStageFutureEvent` 复制到待管理附件目录，随后走同一扫描链路；
+界面多选文件时按文件逐个请求。
 
 **state-reset**：`POST /api/plugins/state-reset/reset`，发布一次重置事件，不返回结果体。
 
@@ -697,8 +703,8 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | favorite | 笔记工具 ★ + 列表筛选 `favorites`（`hideNoteManagement: true`），**没有自己的页面** | `frontend/plugins/favorite/index.ts:24-42` |
 | memory-cycle | 卡片工具 🧠（`loadState/isEnabled/toggle/cardComponent`）+ 侧栏入口（order 1，徽标=今日到期数）+ `/review` 路由 | `frontend/plugins/memory-cycle/index.ts:16-47` |
 | baidu-sync | 设置面板 + 侧栏入口（order 2）+ `/baidu-sync` 路由 | `frontend/plugins/baidu-sync/index.ts:11-28` |
-| card-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/card-importer/index.ts:6-8` |
-| attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
+| card-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入 / HTTP 上传与结果统计 | `frontend/plugins/card-importer/index.ts:6-8` |
+| attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入 / HTTP 上传与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
 | graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 页面底部相关笔记工具 + 隐藏自动标签筛选 + 顶栏 NLP 搜索 | `frontend/plugins/graphify/index.ts` |
 | ai-summary | 设置面板 + 标题下方可收起 AI 总结工具；打开笔记后按缓存状态自动生成或刷新 | `frontend/plugins/ai-summary/index.ts` |
@@ -755,6 +761,17 @@ pnpm -r build                                   # 各包构建（插件 build �
 ```
 
 **数据**：默认 `%USERPROFILE%\.thisnote\notes`；删库/换库就是换这个目录（不要在应用运行时手工改索引文件）。
+
+**Docker（Ubuntu 22.04）**
+
+```powershell
+docker compose up -d --build       # thisnote:local，默认 http://127.0.0.1:8081
+```
+
+- 单镜像：最终运行层为 `eclipse-temurin:21-jre-jammy`（Ubuntu 22.04），内含 Nginx、Java 后端和 `graphifyy[openai]==0.9.92`。
+- 部署入口：`docker-compose.yml`；镜像与 Nginx 配置：`docker/Dockerfile`、`docker/nginx.conf`、`docker/entrypoint.sh`；说明：`docker/README.md`。
+- 当前部署要求**不挂载数据**：笔记与日志位于容器内 `/app/data`，容器停止/启动保留数据，但删除或重建容器会丢失数据；备份/恢复命令见 `docker/README.md`。
+- 当前停用插件由 `docker/plugins-disabled.txt` 固化（`baidu-sync`、`guide`）；端口可用 `THISNOTE_HTTP_PORT` 覆盖。
 
 ---
 

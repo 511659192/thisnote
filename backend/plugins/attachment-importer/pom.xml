@@ -17,7 +17,7 @@
     <plugin.id>attachment-importer</plugin.id>
   </properties>
 
-  <description>自动扫描待管理附件；也支持按绝对文件夹路径复制图片，后续生成笔记与卡片</description>
+  <description>自动扫描待管理附件；也支持按绝对文件夹路径复制或浏览器 HTTP 上传图片，后续生成笔记与卡片</description>
 
   <dependencies>
     <dependency>

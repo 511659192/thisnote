@@ -16,9 +16,7 @@ function resolveBaseUrl(): string {
   if (fromStorage) return fromStorage
   // Packaged app: sidecar on the default port. Dev: Vite proxies /api to the same place.
   if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-    if (window.location.port === '5173' || window.location.port === '') {
-      return ''
-    }
+    return ''
   }
   return `http://127.0.0.1:${DEFAULT_PORT}`
 }
