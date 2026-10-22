@@ -15,8 +15,9 @@ spring:
   # 交付形态 = app jar + runtime/plugins/，丢一个 jar 进去就能装）。开发模式见 application-dev.yml。
   sbp:
     enabled: true
-    # 插件目录：相对应用工作目录（约定从 backend/ 启动，即 backend/runtime/plugins/）。
-    plugins-root: D:/projects/thisnote/backend/runtime/plugins
+    # 插件目录：默认相对应用工作目录（约定从 backend/ 启动，即 backend/runtime/plugins/）。
+    # 可用 THISNOTE_PLUGINS_ROOT 指定相对或绝对路径。
+    plugins-root: ${THISNOTE_PLUGINS_ROOT:runtime/plugins}
     # 插件界面产物由界面侧工具构建并交付到 frontend/runtime/plugins/<id>/；公共 URL 仍为 /plugin-assets/<id>/。
     # 官方管理端点（PluginManagerController）：/sbp/list、/sbp/start|stop|reload/{id}、/sbp/reload-all。
     # 界面上的插件管理页走我们自己的 /api/plugins/get 等动作接口（那边有插件级启停与停用闸门），

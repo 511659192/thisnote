@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
-import { http } from '@thisnote/plugin-api'
+import { ConfirmDialog, http } from '@thisnote/plugin-api'
 import {
   graphifyApi,
   type GraphifyGraph,
@@ -36,6 +36,17 @@ const nodeCount = computed(() => graph.value?.nodes?.length ?? 0)
 const edgeCount = computed(() => graph.value?.links?.length ?? 0)
 const tagOverview = computed(() => buildTagStats(graph.value))
 
+type ConfirmationKind = 'rebuild' | 'relabel'
+
+interface GraphifyConfirmation {
+  kind: ConfirmationKind
+  title: string
+  message: string
+  confirmLabel: string
+}
+
+const confirmation = ref<GraphifyConfirmation | null>(null)
+
 let pollTimer: number | null = null
 let lastLoadedAt: string | null | undefined
 let statusRequestVersion = 0
@@ -43,6 +54,17 @@ let statusRequestVersion = 0
 function openRouteInNewTab(location: RouteLocationRaw): void {
   const resolved = router.resolve(location)
   window.open(new URL(resolved.href, window.location.href).href, '_blank', 'noopener,noreferrer')
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '未知'
+  const normalized = value.replace(/(\.\d{3})\d+/, '$1')
+  const date = new Date(normalized)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (part: number) => String(part).padStart(2, '0')
+  const datePart = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  const timePart = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  return `${datePart} ${timePart}`
 }
 
 async function loadGraph(): Promise<void> {
@@ -83,15 +105,49 @@ async function refreshStatus(): Promise<void> {
   }
 }
 
-async function startIndex(force: boolean): Promise<void> {
-  if (force && !window.confirm('强制重建会绕过 Graphify 语义缓存，可能重新调用模型并产生 API 费用。继续吗？')) {
-    return
+function requestForceRebuild(): void {
+  if (requesting.value || status.value?.running) return
+  confirmation.value = {
+    kind: 'rebuild',
+    title: '强制重建知识图谱？',
+    message: '将绕过 Graphify 语义缓存，重新抽取全部笔记并重建社区关系。此操作会调用模型，可能产生 API 费用，耗时也明显高于普通更新。',
+    confirmLabel: '强制重建',
   }
+}
+
+function requestRelabel(): void {
+  if (requesting.value || status.value?.running || !status.value?.graphAvailable) return
+  confirmation.value = {
+    kind: 'relabel',
+    title: '重新命名社区？',
+    message: '这会再次调用模型生成社区名称，可能产生 API 费用；已有社区名称会被替换。',
+    confirmLabel: '重新命名',
+  }
+}
+
+async function confirmGraphifyAction(): Promise<void> {
+  const action = confirmation.value
+  if (!action || requesting.value) return
+  if (action.kind === 'rebuild') {
+    await startIndex(true)
+  } else {
+    await relabelCommunities()
+  }
+  confirmation.value = null
+}
+
+async function startIndex(force: boolean): Promise<void> {
+  if (requesting.value || status.value?.running) return
   requesting.value = true
   error.value = ''
   message.value = ''
   try {
-    await graphifyApi.index(force)
+    const result = await graphifyApi.index(force)
+    if (result.accepted) {
+      message.value = force ? '已提交强制重建任务' : '已提交索引任务'
+    } else {
+      error.value = '索引任务未被接受'
+    }
     await refreshStatus()
   } catch (e) {
     error.value = '提交索引任务失败：' + (e as Error).message
@@ -125,12 +181,17 @@ function firstNoteForTag(kind: 'concept' | 'community', label: string): string |
 }
 
 async function relabelCommunities(): Promise<void> {
-  if (!window.confirm('重新命名社区会调用配置的模型 API，可能产生费用。继续吗？')) return
+  if (requesting.value || status.value?.running || !status.value?.graphAvailable) return
   requesting.value = true
   error.value = ''
   message.value = ''
   try {
-    await graphifyApi.relabelCommunities()
+    const result = await graphifyApi.relabelCommunities()
+    if (result.accepted) {
+      message.value = '已提交社区命名任务'
+    } else {
+      error.value = '社区命名任务未被接受'
+    }
     await refreshStatus()
   } catch (e) {
     error.value = '提交社区命名任务失败：' + (e as Error).message
@@ -199,13 +260,13 @@ onBeforeUnmount(() => {
         <button :disabled="requesting || status?.running" @click="startIndex(false)">
           {{ status?.indexed ? '更新图谱' : '开始首次索引' }}
         </button>
-        <button :disabled="requesting || status?.running" class="secondary" @click="startIndex(true)">
+        <button :disabled="requesting || status?.running" class="secondary" @click="requestForceRebuild">
           强制重建
         </button>
         <button
           :disabled="requesting || status?.running || !status?.graphAvailable"
           class="secondary"
-          @click="relabelCommunities"
+          @click="requestRelabel"
         >重新命名社区</button>
       </div>
     </header>
@@ -213,7 +274,7 @@ onBeforeUnmount(() => {
     <section class="status-card">
       <div class="status-line">
         <strong>阶段：{{ status?.stage ?? (loading ? '读取状态…' : '状态不可用') }}</strong>
-        <span v-if="status?.indexed">最近完成：{{ status.lastCompletedAt || '未知' }}</span>
+        <span v-if="status?.indexed">最近完成：{{ formatDateTime(status.lastCompletedAt) }}</span>
         <span v-if="status?.queuedNotes">待处理笔记：{{ status.queuedNotes }}</span>
       </div>
       <div
@@ -289,6 +350,17 @@ onBeforeUnmount(() => {
       <h2>还没有图谱</h2>
       <p>先在设置面板中配置 Provider 和 API key，再手动开始首次索引。</p>
     </section>
+
+    <ConfirmDialog
+      v-if="confirmation"
+      :open="true"
+      :title="confirmation.title"
+      :message="confirmation.message"
+      :confirm-label="confirmation.confirmLabel"
+      :busy="requesting"
+      @cancel="confirmation = null"
+      @confirm="confirmGraphifyAction"
+    />
   </main>
 </template>
 

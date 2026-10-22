@@ -45,7 +45,7 @@ function register(): void {
     pluginId: GRAPHIFY_PLUGIN_ID,
     title: '相关笔记',
     glyph: '🏷',
-    placement: 'below-title',
+    placement: 'page-footer',
     order: 10,
     component: GraphifyNoteTool,
   })

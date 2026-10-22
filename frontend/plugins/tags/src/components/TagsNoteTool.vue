@@ -5,11 +5,12 @@ import { tagsApi, TAGS_PLUGIN_ID } from '../api/tagsApi'
 import { refreshActiveTagFilter } from '../tagFilter'
 import { buildTagUsage, loadTagState, noteTags, updateNoteTags } from '../tagStore'
 
-const props = defineProps<{ noteId: string }>()
+const props = defineProps<{ noteId: string; placement?: 'title' | 'below-title' | 'page-footer' }>()
 const AUTO_TAG_MIN = 10
+const TAG_PREVIEW_COUNT = 8
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
-const collapsed = ref(false)
+const expanded = ref(false)
 const fontSize = ref(15)
 const busy = ref(false)
 const draft = ref('')
@@ -19,9 +20,11 @@ const autoEnabled = ref(true)
 const tags = computed(() => noteTags[props.noteId] ?? [])
 const hasTags = computed(() => tags.value.length > 0)
 const tagSummary = computed(() => tags.value.join('；'))
+const visibleTags = computed(() => expanded.value ? tags.value : tags.value.slice(0, TAG_PREVIEW_COUNT))
+const canExpand = computed(() => tags.value.length > TAG_PREVIEW_COUNT)
 const autoAttempted = new Set<string>()
 let autoPollVersion = 0
-let collapseInitialized = false
+
 const availableTags = computed(() => {
   const query = draft.value.trim().toLocaleLowerCase('zh-CN')
   const selected = new Set(tags.value)
@@ -35,10 +38,6 @@ async function ensureTagState(): Promise<void> {
     const [, settings] = await Promise.all([loadTagState(true), tagsApi.settings()])
     autoEnabled.value = settings.autoEnabled
     fontSize.value = typeof settings.fontSize === 'number' && Number.isInteger(settings.fontSize) && settings.fontSize >= 10 && settings.fontSize <= 32 ? settings.fontSize : 15
-    if (!collapseInitialized) {
-      collapseInitialized = true
-      collapsed.value = tags.value.length > 8
-    }
     loadError.value = ''
     if (autoEnabled.value && !autoAttempted.has(props.noteId) && tags.value.length < AUTO_TAG_MIN) {
       autoAttempted.add(props.noteId)
@@ -59,7 +58,6 @@ function closeOnOutsidePointerDown(event: PointerEvent): void {
   const target = event.target
   if (target instanceof Node && root.value?.contains(target)) return
   open.value = false
-  collapseInitialized = false
 }
 
 onMounted(() => {
@@ -72,13 +70,14 @@ onBeforeUnmount(() => {
 })
 watch(() => props.noteId, () => {
   open.value = false
+  expanded.value = false
   draft.value = ''
   error.value = ''
   void ensureTagState()
 })
 
-function toggleCollapsed(): void {
-  collapsed.value = !collapsed.value
+function toggleExpanded(): void {
+  expanded.value = !expanded.value
 }
 
 async function toggleEditor(): Promise<void> {
@@ -180,7 +179,7 @@ async function removeTag(tag: string): Promise<void> {
 </script>
 
 <template>
-  <div ref="root" class="tags-note-tool" :style="{ '--tag-font-size': `${fontSize}px` }" @click.stop>
+  <div ref="root" class="tags-note-tool" :class="{ 'popover-above': props.placement === 'page-footer', 'page-footer-tool': props.placement === 'page-footer', expanded }" :style="{ '--tag-font-size': `${fontSize}px` }" @click.stop>
     <button
       type="button"
       class="tag-toggle"
@@ -193,14 +192,14 @@ async function removeTag(tag: string): Promise<void> {
       <span v-if="hasTags" class="tag-count">{{ tags.length }}</span>
     </button>
     <button
-      v-if="hasTags"
+      v-if="canExpand"
       type="button"
       class="tag-collapse"
-      :aria-expanded="!collapsed"
-      :title="collapsed ? '展开标签' : '收起标签'"
-      :aria-label="collapsed ? '展开标签' : '收起标签'"
-      @click.stop="toggleCollapsed"
-    >{{ collapsed ? '▸' : '▾' }}</button>
+      :aria-expanded="expanded"
+      :title="expanded ? '收起标签' : '展开全部标签'"
+      :aria-label="expanded ? '收起标签' : '展开全部标签'"
+      @click.stop="toggleExpanded"
+    >{{ expanded ? '▾' : '▸' }}</button>
     <button
       v-if="!autoEnabled || tags.length < AUTO_TAG_MIN"
       type="button"
@@ -213,14 +212,15 @@ async function removeTag(tag: string): Promise<void> {
 
 
     <span
-      v-if="hasTags && !collapsed"
+      v-if="hasTags"
       class="tag-strip"
+      :class="{ expanded }"
       role="group"
       :title="tagSummary"
       :aria-label="'笔记标签：' + tagSummary"
     >
       <span
-        v-for="tag in tags"
+        v-for="tag in visibleTags"
         :key="tag"
         class="tag"
         :title="'标签：' + tag"
@@ -287,7 +287,7 @@ async function removeTag(tag: string): Promise<void> {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px 8px;
   width: 100%;
   min-width: 0;
@@ -296,6 +296,18 @@ async function removeTag(tag: string): Promise<void> {
   border: 1px solid var(--c-border);
   border-radius: 8px;
   font-size: var(--tag-font-size, 15px);
+}
+
+.tags-note-tool.page-footer-tool {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.tags-note-tool.popover-above .tag-popover {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .tag-count {
@@ -312,10 +324,27 @@ async function removeTag(tag: string): Promise<void> {
 
 .tag-strip {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px 6px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.tags-note-tool.expanded {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.tag-strip.expanded {
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.tag-strip .tag {
+  flex: 0 0 auto;
 }
 
 .tag-toggle {

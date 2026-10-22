@@ -41,7 +41,7 @@ function register(): void {
     pluginId: TAGS_PLUGIN_ID,
     title: '标签',
     glyph: '🏷',
-    placement: 'below-title',
+    placement: 'page-footer',
     order: 0,
     component: TagsNoteTool,
   })

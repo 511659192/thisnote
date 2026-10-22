@@ -42,7 +42,7 @@ thisnote（韧知笔记）是一个**本机运行的个人笔记工具**，形�
 | 插件 dev server 端口 | favorite `7111`、memory-cycle `7112`、notes `7113`、baidu-sync `7114`、card-importer `7115`、attachment-importer `7116`、state-reset `7117`、graphify `7118`、tags `7119`、ai `7120`、guide `7121`、ai-summary `7122`、ai-title `7123` | `frontend/host/src/plugins/devPorts.ts` |
 | 后端插件模块数 | 13（notes + ai + 11 个功能插件） | `backend/pom.xml` |
 | 数据根目录 | 启动时优先读取 `~/.thisnote/settings.json` 的 `dataRoot`，否则用 `${thisnote.data-root:${user.home}/.thisnote}`；笔记根 = `<data-root>/notes`，修改后重启生效 | `DataRootSettings.java`; `NotesConfig.java:18-22` |
-| 后端插件目录（生产） | `D:/projects/thisnote/backend/runtime/plugins`（**写死的绝对路径**） | `backend/app/src/main/resources/application.yml:19` |
+| 后端插件目录（生产） | 默认 `runtime/plugins`（从 `backend/` 启动时为 `backend/runtime/plugins`）；`THISNOTE_PLUGINS_ROOT` 可覆盖相对或绝对路径 | `backend/app/src/main/resources/application.yml:18-20` |
 | 后端插件目录（dev） | `backend/plugins-dev`（相对工作目录） | `backend/app/src/main/resources/application-dev.yml:22` |
 | 界面资源 URL | `/plugin-assets/<pluginId>/plugin.js` 与 `plugin.css` | `frontend/host/src/plugins/loader.ts:120-124,184-199` |
 | 后端日志 | `${user.home}/.thisnote/logs/backend.log` | `backend/app/src/main/resources/application.yml:48` |
@@ -219,7 +219,7 @@ host（qiankun 主应用，:5173）
 
 ### 5.4 装载、启停、交付
 
-- **生产（默认 profile）**：插件从 `backend/runtime/plugins/*.jar` 装载；`plugin.properties` 的
+- **生产（默认 profile）**：插件默认从相对工作目录的 `runtime/plugins/*.jar` 装载（从 `backend/` 启动即 `backend/runtime/plugins/`），可由 `THISNOTE_PLUGINS_ROOT` 覆盖；`plugin.properties` 的
   `plugin.version=@project.version@` 由 Maven 过滤注入（父 POM 的 `plugins` profile，`backend/pom.xml:144-176`），
   **版本单源**，jar 契约测试会断言它等于 Maven 构建版本。
 - **开发（`--spring.profiles.active=dev`）**：`runtime-mode: DEVELOPMENT`，插件从 `backend/plugins-dev/<id>/`
@@ -512,7 +512,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 - 顶栏自然语言查询先由 `GraphifyGraphReader.searchCandidates` 从标题、概念、社区和图中派生信号召回最多 24 篇候选，再由 `GraphifySearchAiClient` 通过所选 AI profile 生成简短结论并重排最多 5 篇笔记；AI 只允许返回候选内的笔记 ID，候选外 ID 会被过滤。查询不改写图谱或索引状态，但会把用户问题及候选笔记的标题、概念和社区发送给所选 Provider。
 - Graphify CLI 是抽取与图处理引擎；项目侧只保留笔记投影、进程/Provider 适配和索引状态编排，不在 Java 中重写文本分块、语义抽取、社区聚类、语义缓存或 `graph.html` 生成。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
-- 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由。
+- 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由；默认单行展示前 3 条，超出后展开全部。
 - API key 只保存在 AI 插件的 `.credentials.json`，按 profile id 索引且不由 API 返回；Graphify 通过事件取得所选 profile 的运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
   文件未加密；百度备份当前也会包含该凭据文件，排除需要使用者自行处理。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
 - completion profile 当前支持 OpenCode Go；默认 model/endpoint 只在 `AiSettingsRepository` 定义，并由 AI settings API 返回给界面初始化。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；不创建隐式默认 profile，旧单配置与旧凭据不做迁移。
@@ -576,7 +576,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   标签仍只写入 tags 插件自己的 `tags.json`。
 - 打开笔记时若 `autoEnabled=true` 且标签少于 10 个，标签工具自动执行一次抽取；关闭自动后不发起自动请求，
   标签工具始终显示 ✦ 图标，只能由用户点击该图标手动抽取。
-- 笔记页标题下方显示标签工具；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页提供「按出现次数」和「关联笔记」两个页签：前者按正文实际命中次数排行，后者展示全部已分配标签并按覆盖笔记数排行；两者都显示出现次数与覆盖笔记数，列表默认展示前 100 个并可展开查看全部筛选结果，气泡图固定展示前 100 个，可从全部笔记中移除某个标签。点击标签在新浏览器标签页打开该标签关联的第一篇笔记，并带上 `tag=<tag>` 查询参数，新页面由 tags 插件从 URL 恢复标签筛选。
+- 笔记页底部显示标签工具，默认单行展示前 8 个标签、超出后展开全部；点击 `#标签` 会通过宿主列表筛选回到 `/notes`。标签页提供「按出现次数」和「关联笔记」两个页签：前者按正文实际命中次数排行，后者展示全部已分配标签并按覆盖笔记数排行；两者都显示出现次数与覆盖笔记数，列表默认展示前 100 个并可展开查看全部筛选结果，气泡图固定展示前 100 个，可从全部笔记中移除某个标签。点击标签在新浏览器标签页打开该标签关联的第一篇笔记，并带上 `tag=<tag>` 查询参数，新页面由 tags 插件从 URL 恢复标签筛选。
 - 笔记删除或状态重置由主容器事件驱动；插件停用后标签工具、标签页和筛选入口一起下线，数据保留。
 
 ---
@@ -631,7 +631,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | 插槽 | 注册函数 | 消费方 |
 |---|---|---|
 | 卡片工具 | `registerCardPlugin` | `NoteCard`（`activeCardPlugins()`） |
-| 笔记工具 | `registerNoteTool` | `NoteView`（`activeNoteTools()`，如 ★；`placement: 'below-title'` 的组件渲染到标题下方） |
+| 笔记工具 | `registerNoteTool` | `NoteView`（`activeNoteTools()`，如 ★；`below-title` 渲染到标题下方，`page-footer` 渲染到页面底部） |
 | 设置面板 | `registerPluginSettings` | 设置页「插件管理」展开区 |
 | 侧栏入口 | `registerNavEntry` | notes 侧栏（`activeNavEntries()`，带徽标） |
 | 插件路由 | `registerPluginRoute` | `loader.syncPluginRoutes` |
@@ -646,7 +646,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 
 - 行内动作 / 批量动作都使用 `NoteRef`（`{noteId,title,cardIds}`）：状态的读写、`loadState`、`isActive`、`toggle` 全在插件里，
   核心只渲染注册表并把所选笔记递进去（favorite、memory-cycle 各在自己的 `src/actions.ts`）。
-- 笔记工具默认渲染在标题右侧；插件可声明 `placement: 'below-title'`，宿主会把它放进标题下方的独立区域，组件仍只接收 `noteId`；
+- 笔记工具默认渲染在标题右侧；插件可声明 `placement: 'below-title'` 或 `'page-footer'`，宿主分别放进标题下方或页面底部，组件接收 `noteId` 与可选 `placement`；
   同一位置的多个工具可用可选 `order` 稳定排序。
 
 - **插件状态变化事件**（`pluginState.ts`）：插件改完自己的数据（收藏、记忆曲线…）调
@@ -700,10 +700,10 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 | card-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/card-importer/index.ts:6-8` |
 | attachment-importer | 设置面板：自动导入说明 + 绝对路径文件夹导入与结果统计 | `frontend/plugins/attachment-importer/index.ts:6-8` |
 | state-reset | 只有设置面板（重置按钮 + 二次确认） | `frontend/plugins/state-reset/index.ts:6-8` |
-| graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 标题下方相关笔记工具 + 隐藏自动标签筛选 + 顶栏 NLP 搜索 | `frontend/plugins/graphify/index.ts` |
+| graphify | 设置面板 + 侧栏入口（order 3）+ `/graphify` 路由（概念/社区按边数分组排行）+ 页面底部相关笔记工具 + 隐藏自动标签筛选 + 顶栏 NLP 搜索 | `frontend/plugins/graphify/index.ts` |
 | ai-summary | 设置面板 + 标题下方可收起 AI 总结工具；打开笔记后按缓存状态自动生成或刷新 | `frontend/plugins/ai-summary/index.ts` |
 | ai-title | 设置面板 + 笔记标题右侧「AI 标题」按钮；生成可收起的 1–3 个候选并选择替换 | `frontend/plugins/ai-title/index.ts` |
-| tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 标题下方标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
+| tags | 侧栏入口（order 4）+ `/tags` 标签管理页 + 页面底部标签工具 + 隐藏标签筛选 | `frontend/plugins/tags/index.ts` |
 | guide | 从侧栏或顶栏在当前宿主右侧主内容区打开 `/guide`；指南内的笔记、设置和功能入口统一在新浏览器页签打开，支持前进/后退、点击跳步 | `frontend/plugins/guide/index.ts` |
 | ai | 只有设置面板：Provider、模型、API key、连接测试 | `frontend/plugins/ai/index.ts` |
 | notes | 侧栏主面板（「笔记 / 功能」分组，功能组末位为设置）+ 列表头（标题搜索）+ 隐藏筛选 `title` + 两条路由 | `frontend/plugins/notes/index.ts:35-65` |
@@ -733,6 +733,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 cd backend
 mvn package                                     # 产出 app/target/thisnote-backend.jar，并把插件 jar 拷到 runtime/plugins/
 java -jar app/target/thisnote-backend.jar       # 默认 profile，端口 45917（日志见 backend/app/backend-run.log:20-22）
+# 可选：$env:THISNOTE_PLUGINS_ROOT='D:\path\to\plugins'
 ```
 
 插件开发模式：
@@ -786,9 +787,8 @@ vitest 配置为 `environment: 'node'`、只收 `tests/**/*.test.ts`（`frontend
    现在 `memoryCycleApi.ts` 直接按数组使用，复习页不再报 `item.page.cards is not iterable`。
 3. ~~顶栏全局搜索的「摘要命中」实际不生效~~（已修复：summary 匹配/摘要片段属不可达死代码，
     2026-10-18 删除；2026-10-21 顶栏入口改由 Graphify 的 NLP 搜索注册，`GlobalSearch.vue` 不再注册）。
-4. **生产插件目录是写死的绝对路径**：`D:/projects/thisnote/backend/runtime/plugins`
-   （`backend/app/src/main/resources/application.yml:19`）。换机器/换目录/换用户名即找不到插件；
-   dev profile 用相对路径 `plugins-dev` 才不会踩到（`backend/app/src/main/resources/application-dev.yml:22`）。
+4. ~~**生产插件目录是写死的绝对路径**~~（已修复：默认相对工作目录 `runtime/plugins`，
+   可用 `THISNOTE_PLUGINS_ROOT` 覆盖；`backend/app/src/main/resources/application.yml:18-20`）。
 5. **引用了不存在的文档**：`backend/app/pom.xml:21,31` 指向 `docs/PLUGIN_PLATFORM.md`，
    `frontend/host/vitest.config.ts:7` 指向 `docs/GAPS.md`；仓库里没有 `docs/`，且 `.gitignore:44` 忽略 `docs/`。
 6. ~~**`backend/runtime/plugins/disabled.txt` 仍是旧插件 id `memory-curve`**~~（已清理，当前仅含 `baidu-sync`）。

@@ -38,10 +38,13 @@ const notesForList = computed(() => {
 /** 插件贡献的笔记工具（按插件启用状态过滤）。 */
 const noteToolList = computed(() => activeNoteTools())
 const titleNoteTools = computed(() =>
-  noteToolList.value.filter((tool) => tool.placement !== 'below-title'),
+  noteToolList.value.filter((tool) => !tool.placement || tool.placement === 'title'),
 )
 const belowTitleNoteTools = computed(() =>
   noteToolList.value.filter((tool) => tool.placement === 'below-title'),
+)
+const pageFooterNoteTools = computed(() =>
+  noteToolList.value.filter((tool) => tool.placement === 'page-footer'),
 )
 type NoteManagementFilter = ReturnType<typeof activeNoteListFilters>[number] & { hideNoteManagement?: boolean }
 const allowNoteManagement = computed(() => {
@@ -382,6 +385,16 @@ onBeforeUnmount(() => {
           </header>
 
           <NotePage ref="pageRef" @context="onPageContext" />
+
+          <div v-if="pageFooterNoteTools.length" class="note-tools-page-footer" :class="{ 'single-tool': pageFooterNoteTools.length === 1 }">
+            <div v-for="tool in pageFooterNoteTools" :key="tool.pluginId" class="note-tool-footer-slot">
+              <component
+                :is="tool.component"
+                :note-id="nodes.current.noteId"
+                :placement="tool.placement"
+              />
+            </div>
+          </div>
         </div>
       </template>
 
@@ -479,6 +492,44 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--space-2);
 }
+.note-tools-page-footer {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
+.note-tool-footer-slot {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 7px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.note-tool-footer-slot > * {
+  width: 100%;
+  min-width: 0;
+}
+
+.note-tools-page-footer.single-tool {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 700px) {
+  .note-tools-page-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .note-tools-below-title {
   display: flex;
   flex-wrap: wrap;
