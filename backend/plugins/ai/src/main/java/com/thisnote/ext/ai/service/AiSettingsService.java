@@ -19,12 +19,17 @@ import java.util.Map;
 public class AiSettingsService {
 
     public static final String OPENCODE_GO_PROVIDER = "opencode-go";
+    public static final String DEEPSEEK_PROVIDER = "deepseek";
     public static final int DEFAULT_MAX_TEXT_CHARS = 1_000_000;
     public static final int MIN_MAX_TEXT_CHARS = 1_000;
     public static final int MAX_MAX_TEXT_CHARS = 1_000_000;
 
-    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider(AiSettingsRepository.DEFAULT_MODEL, AiSettingsRepository.DEFAULT_ENDPOINT));
-    private static final Map<String, String> PROVIDER_LABELS = Map.of(OPENCODE_GO_PROVIDER, "OpenCode Go");
+    private static final Map<String, Provider> PROVIDERS = Map.of(
+            OPENCODE_GO_PROVIDER, new Provider(AiSettingsRepository.DEFAULT_MODEL, AiSettingsRepository.DEFAULT_ENDPOINT),
+            DEEPSEEK_PROVIDER, new Provider(AiSettingsRepository.DEEPSEEK_MODEL, AiSettingsRepository.DEEPSEEK_ENDPOINT));
+    private static final Map<String, String> PROVIDER_LABELS = Map.of(
+            OPENCODE_GO_PROVIDER, "OpenCode Go",
+            DEEPSEEK_PROVIDER, "DeepSeek");
 
     private final AiSettingsRepository settingsRepository;
     private final AiProviderClient providerClient;

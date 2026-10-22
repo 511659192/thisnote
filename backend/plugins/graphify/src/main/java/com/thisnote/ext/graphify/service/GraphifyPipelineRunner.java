@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 final class GraphifyPipelineRunner {
 
+    private static final String OPENCODE_GO_EXTRACT_TOKEN_BUDGET = "12000";
+
     private final FileHelper fileHelper;
     private final GraphifyProcessRunner processRunner;
     private final Path corpusDir;
@@ -57,11 +59,16 @@ final class GraphifyPipelineRunner {
                             String apiKey,
                             boolean force) throws Exception {
         String backend = GraphifySettingsService.graphifyBackend(settings.provider());
-        log.info("Graphify extract 开始：corpus={}, backend={}, model={}, force={}",
-                corpusDir, backend, settings.model(), force);
+        String tokenBudget = GraphifySettingsService.OPENCODE_GO_PROVIDER.equals(settings.provider())
+                ? OPENCODE_GO_EXTRACT_TOKEN_BUDGET : null;
+        log.info("Graphify extract 开始：corpus={}, backend={}, model={}, force={}, tokenBudget={}",
+                corpusDir, backend, settings.model(), force, tokenBudget);
         List<String> extract = new ArrayList<>(List.of(
                 "extract", corpusDir.toAbsolutePath().toString(),
                 "--backend", backend, "--model", settings.model()));
+        if (tokenBudget != null) {
+            extract.addAll(List.of("--token-budget", tokenBudget));
+        }
         if (force) {
             extract.add("--force");
         }

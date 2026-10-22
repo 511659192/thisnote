@@ -19,8 +19,11 @@ import java.util.Map;
 public class GraphifySettingsService {
 
     public static final String OPENCODE_GO_PROVIDER = "opencode-go";
+    public static final String DEEPSEEK_PROVIDER = "deepseek";
 
-    private static final Map<String, Provider> PROVIDERS = Map.of(OPENCODE_GO_PROVIDER, new Provider(List.of("OPENAI_API_KEY")));
+    private static final Map<String, Provider> PROVIDERS = Map.of(
+            OPENCODE_GO_PROVIDER, new Provider(List.of("OPENAI_API_KEY")),
+            DEEPSEEK_PROVIDER, new Provider(List.of("DEEPSEEK_API_KEY")));
     private static final List<String> ENVIRONMENT_KEY_NAMES_TO_CLEAR = List.of("GEMINI_API_KEY", "GOOGLE_API_KEY", "MOONSHOT_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY",
                                                                                "OLLAMA_API_KEY");
 

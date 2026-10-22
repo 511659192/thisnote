@@ -66,6 +66,16 @@ function onSelectionChange(event: Event): void {
   selectProfile((event.target as HTMLSelectElement).value)
 }
 
+function onProviderChange(event: Event): void {
+  const provider = (event.target as HTMLSelectElement).value
+  draft.value.provider = provider
+  const defaults = providerDefaults.value.find((item) => item.id === provider)
+  if (defaults) {
+    draft.value.model = defaults.defaultModel
+    draft.value.endpoint = defaults.defaultEndpoint
+  }
+}
+
 function newProfile(): void {
   selectedId.value = ''
   isNew.value = true
@@ -221,7 +231,7 @@ onMounted(load)
 
         <label>
           <span>Provider</span>
-          <select v-model="draft.provider">
+          <select :value="draft.provider" @change="onProviderChange">
             <option v-for="item in providerDefaults" :key="item.id" :value="item.id">
               {{ item.label }}
             </option>
@@ -244,6 +254,9 @@ onMounted(load)
           <small class="muted">按字符计算，不是 token。</small>
         </label>
 
+        <p v-if="draft.provider === 'deepseek'" class="muted">
+          DeepSeek 使用官方 Chat Completions；API key 按当前配置保存在本机。
+        </p>
         <p v-if="draft.provider === 'opencode-go'" class="muted">
           OpenCode Go 使用 Chat Completions；endpoint 可覆盖默认地址。
         </p>

@@ -513,15 +513,15 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
   通过 `AttachmentChangedEvent` 失效附件相关笔记，本身不保存凭据。
 - 所有笔记被删除时不调用 Graphify 抽取；插件递归清除整个 `corpus/` 生成内容（包括日期目录中的历史 graph、manifest、报告和缓存），并将索引状态置为空语料，避免缩图保护把正常清空误判成失败。
 - thisnote 启动 Graphify 子进程时设置 `GRAPHIFY_NO_AUTO_REFRESH=1`，避免后台调用改写用户目录里的 Agent skill 副本。
-- Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 使用 `openai` extra；缺少对应包时无法验证 provider。
+- Graphify headless API 后端依赖 CLI 可选 extra：OpenCode Go 与 DeepSeek 使用 `openai` extra；缺少对应包时无法验证 provider。
 - 通过主容器消息管道查询笔记与卡片，将标题、卡片正文及引用图片投影到 `notes/plugins/graphify/corpus/`；不直接扫描 Notes 插件目录，也不通过 HTTP 调用 notes。`GraphifyCorpusProjector` 按 Markdown 图片引用的精确偏移替换目标，`GraphifyGraphReader` 按 `graph.json` 的 mtime + size 缓存解析结果，`GraphifyChangeQueue` 负责 2 秒防抖队列，`GraphifyPipelineRunner` 负责 CLI 执行与输出备份；Graphify 原生输出由 CLI 写入，应用只登记并发布变更事件，不重写原文件，`GraphifyIndexService` 负责索引编排与状态。Graphify `extract` 用语义缓存，首次完成社区命名；重新抽取可手动强制，社区重新命名需显式触发 `label`。
 - 顶栏自然语言查询先由 `GraphifyGraphReader.searchCandidates` 从标题、概念、社区和图中派生信号召回最多 24 篇候选，再由 `GraphifySearchAiClient` 通过所选 AI profile 生成简短结论并重排最多 5 篇笔记；AI 只允许返回候选内的笔记 ID，候选外 ID 会被过滤。查询不改写图谱或索引状态，但会把用户问题及候选笔记的标题、概念和社区发送给所选 Provider。
 - Graphify CLI 是抽取与图处理引擎；项目侧只保留笔记投影、进程/Provider 适配和索引状态编排，不在 Java 中重写文本分块、语义抽取、社区聚类、语义缓存或 `graph.html` 生成。
 - `graph.json` 的 `source_file` 首级目录用于把节点 `label` 投影为只读概念标签，把 `community_name` 投影为只读社区标签；纯哈希、`paste-<id>` 附件名及 `Paste note` / `Image attachment` 等机械占位名不作为标签。`index-state.json` 保存卡片和附件到笔记的事件映射。
 - 笔记页「相关笔记」只从 `graph.json` 派生，不修改索引数据：跨笔记关系、共同概念（低频概念加权）和同社区共同计分，返回最多 5 条并附中文关联理由；默认单行展示前 3 条，超出后展开全部。
-- API key 只保存在 AI 插件的 `.credentials.json`，按 profile id 索引且不由 API 返回；Graphify 通过事件取得所选 profile 的运行时凭据，OpenCode Go 子进程使用短期本机代理 token。
+- API key 只保存在 AI 插件的 `.credentials.json`，按 profile id 索引且不由 API 返回；Graphify 通过事件取得所选 profile 的运行时凭据；OpenCode Go 子进程使用短期本机代理 token，DeepSeek 则直接注入 `DEEPSEEK_API_KEY`。
   文件未加密；百度备份当前也会包含该凭据文件，排除需要使用者自行处理。提供商接收参与索引的笔记文字与图片；“测试连接”只提交合成文本。
-- completion profile 当前支持 OpenCode Go；默认 model/endpoint 只在 `AiSettingsRepository` 定义，并由 AI settings API 返回给界面初始化。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识，并通过 Chat Completions 接口调用模型；不创建隐式默认 profile，旧单配置与旧凭据不做迁移。
+- completion profile 当前支持 OpenCode Go 与 DeepSeek；默认 model/endpoint 只在 `AiSettingsRepository` 定义，并由 AI settings API 返回给界面初始化。OpenCode Go 使用本机回环转发器补充会话 ID 与客户端标识；DeepSeek 使用官方 `https://api.deepseek.com/chat/completions`、默认模型 `deepseek-v4-flash` 和 profile 自带的 API key。两者都通过 Chat Completions 接口调用模型；不创建隐式默认 profile，旧单配置与旧凭据不做迁移。
 - 图片超过 5 MiB 时仍作为引用进入语料，但 Graphify 不会将其像素发送给模型，界面状态会显示告警。图谱页提供 `graph.json` 与 Graphify `graph.html`；该 HTML 从 unpkg 加载 `vis-network`，需要网络访问。
 - 图谱标签、交互图笔记节点和「相关笔记」的跳转都在新浏览器标签页打开；图谱标签打开该标签关联的第一篇笔记，并通过 `graphTag=<kind>:<label>` 恢复笔记列表筛选。
 
@@ -557,7 +557,7 @@ Provider 默认 model/endpoint；每个 profile 含 `keyConfigured`，但不返�
 **ai**
 - AI 是不可停用的基础能力插件，硬依赖 `notes`，独占 Provider、模型与 API key 配置；
   Graphify、tags、ai-summary 与 ai-title 都在 `plugin.dependencies` 中声明依赖 `ai,notes`。
-- AI 插件集中管理多个命名 completion profile，当前支持 OpenCode Go；业务插件只保存所选 `aiProfileId`。
+- AI 插件集中管理多个命名 completion profile，当前支持 OpenCode Go 与 DeepSeek；业务插件只保存所选 `aiProfileId`。
 - profile 数量允许为零；此时 Tags/Graphify/ai-summary/ai-title 设置页显示 AI 不可用原因，执行时返回明确业务错误。
 - Provider 默认 model/endpoint 以 `AiSettingsRepository` 为唯一来源；Graphify 不保存模型副本。
 - AI 插件只响应通用能力事件，不包含笔记、标签或其他业务语义；插件通过 `AiProfilesFutureEvent` 查询可用配置。

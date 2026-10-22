@@ -24,7 +24,10 @@ final class OpenCodeGoProxy
         implements AutoCloseable {
 
     private static final String UPSTREAM_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
-    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
 
     private final HttpServer server;
     private final ExecutorService executor;

@@ -19,6 +19,8 @@ public class AiSettingsRepository {
 
     public static final String DEFAULT_MODEL = "deepseek-v4.1-flash";
     public static final String DEFAULT_ENDPOINT = "https://opencode.ai/inference/go/openai/v1/chat/completions";
+    public static final String DEEPSEEK_MODEL = "deepseek-v4-flash";
+    public static final String DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 
     private final FileHelper fileHelper;
     private final Path settingsFile;
